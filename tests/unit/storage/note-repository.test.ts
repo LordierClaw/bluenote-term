@@ -2,7 +2,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 
 import { UsageError } from "../../../src/core/errors"
 import { parseNoteFile } from "../../../src/storage/frontmatter"
@@ -100,6 +100,44 @@ test("repository wraps note read filesystem failures in a UsageError", async () 
       },
     )
   } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("repository archive rolls back the destination file when removing the source fails", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-archive-rollback-"))
+  const inboxPath = path.join(rootPath, "notes", "inbox")
+  const archivePath = path.join(rootPath, "notes", "archive")
+  const sourcePath = path.join(inboxPath, "note-123.md")
+  const archivedPath = path.join(archivePath, "note-123.md")
+
+  try {
+    await mkdir(inboxPath, { recursive: true })
+    await mkdir(archivePath, { recursive: true })
+    await writeFile(
+      sourcePath,
+      `---\nid: note-123\nschemaVersion: 1\ntitle: Example title\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:15:00.000Z\nupdatedAt: 2026-05-21T10:15:00.000Z\n---\nHello from BlueNote.\n`,
+      "utf8",
+    )
+    await chmod(inboxPath, 0o555)
+
+    const repository = createNoteRepository(rootPath)
+
+    assert.throws(
+      () => repository.archive(sourcePath, "2026-05-21T12:30:00.000Z"),
+      (error) => {
+        assert.ok(error instanceof UsageError)
+        assert.match(error.message, /Could not archive note 'notes[\\/]inbox[\\/]note-123\.md'\./)
+        assert.equal(error.hint, "Ensure the note exists inside BLUENOTE_ROOT and the archive path is writable.")
+
+        return true
+      },
+    )
+
+    await access(sourcePath)
+    await assert.rejects(() => access(archivedPath))
+  } finally {
+    await chmod(inboxPath, 0o755).catch(() => undefined)
     await rm(rootPath, { recursive: true, force: true })
   }
 })

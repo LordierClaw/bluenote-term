@@ -1,3 +1,5 @@
+import path from "node:path"
+
 import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions } from "../config/root"
 import { InvalidFrontmatterError } from "./errors"
 import { rebuildIndexStore } from "../index/index-store"
@@ -11,6 +13,10 @@ export interface RebuildIndexesSummary {
   validationErrors: string[]
   metadataDatabasePath?: string
   searchIndexPath?: string
+}
+
+function isArchivedNote(note: ParsedNote): boolean {
+  return note.frontmatter.archivedAt !== undefined || note.sourcePath.startsWith(`notes${path.sep}archive${path.sep}`)
 }
 
 export function rebuildIndexes(options: ResolveBlueNoteRootOptions = {}): RebuildIndexesSummary {
@@ -59,7 +65,8 @@ export function rebuildIndexes(options: ResolveBlueNoteRootOptions = {}): Rebuil
     }
   }
 
-  const rebuilt = rebuildIndexStore({ rootPath, notes })
+  const activeNotes = notes.filter((note) => !isArchivedNote(note))
+  const rebuilt = rebuildIndexStore({ rootPath, notes: activeNotes })
 
   return {
     rootPath,

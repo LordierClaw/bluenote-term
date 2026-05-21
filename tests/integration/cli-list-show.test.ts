@@ -1,80 +1,62 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import os from "node:os"
 import path from "node:path"
-import { mkdir, mkdtemp, rm } from "node:fs/promises"
-
-const workspaceRoot = path.resolve(import.meta.dir, "../..")
-const cliPath = path.join(workspaceRoot, "bin", "bn.ts")
-
-function runCli(args: string[], managedRoot: string) {
-  return Bun.spawnSync(["bun", "run", cliPath, ...args], {
-    cwd: workspaceRoot,
-    env: {
-      ...process.env,
-      BLUENOTE_ROOT: managedRoot,
-    },
-    stdout: "pipe",
-    stderr: "pipe",
-  })
-}
-
-async function writeNote(rootPath: string, relativePath: string, markdown: string) {
-  const notePath = path.join(rootPath, relativePath)
-  await mkdir(path.dirname(notePath), { recursive: true })
-  await Bun.write(notePath, markdown)
-}
+import { createManagedRootHarness } from "../helpers/cli"
+import { noteMarkdown } from "../helpers/note-fixtures"
 
 test("bn list shows existing note summaries", async () => {
-  const managedRoot = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-list-"))
+  const harness = await createManagedRootHarness("bluenote-cli-list-")
 
   try {
-    await writeNote(
-      managedRoot,
+    await harness.writeNote(
       path.join("notes", "inbox", "alpha.md"),
-      `---\nid: note-alpha\nschemaVersion: 1\ntitle: Alpha Note\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:15:00.000Z\nupdatedAt: 2026-05-21T10:15:00.000Z\n---\nAlpha body.\n`,
+      noteMarkdown({ id: "note-alpha", title: "Alpha Note", body: "Alpha body.\n" }),
     )
-    await writeNote(
-      managedRoot,
+    await harness.writeNote(
       path.join("notes", "journal", "beta.md"),
-      `---\nid: note-beta\nschemaVersion: 1\ntitle: Beta Note\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T11:15:00.000Z\nupdatedAt: 2026-05-21T11:15:00.000Z\n---\nBeta body.\n`,
+      noteMarkdown({
+        id: "note-beta",
+        title: "Beta Note",
+        body: "Beta body.\n",
+        createdAt: "2026-05-21T11:15:00.000Z",
+      }),
     )
 
-    const rebuildResult = runCli(["rebuild"], managedRoot)
+    const rebuildResult = harness.run(["rebuild"])
 
     assert.equal(rebuildResult.exitCode, 0)
-    assert.equal(rebuildResult.stderr.toString(), "")
+    assert.equal(rebuildResult.stderr, "")
 
-    const result = runCli(["list"], managedRoot)
+    const result = harness.run(["list"])
 
     assert.equal(result.exitCode, 0)
-    assert.equal(result.stderr.toString(), "")
-    assert.match(result.stdout.toString(), /note-alpha\s+Alpha Note\s+notes[\\/]inbox[\\/]alpha\.md/)
-    assert.match(result.stdout.toString(), /note-beta\s+Beta Note\s+notes[\\/]journal[\\/]beta\.md/)
+    assert.equal(result.stderr, "")
+    assert.match(result.stdout, /note-alpha\s+Alpha Note\s+notes[\\/]inbox[\\/]alpha\.md/)
+    assert.match(result.stdout, /note-beta\s+Beta Note\s+notes[\\/]journal[\\/]beta\.md/)
   } finally {
-    await rm(managedRoot, { recursive: true, force: true })
+    await harness.cleanup()
   }
 })
 
 test("bn show <selector> prints the matching note", async () => {
-  const managedRoot = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-show-"))
-  const markdown = `---\nid: show-note\nschemaVersion: 1\ntitle: Example Show Note\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:15:00.000Z\nupdatedAt: 2026-05-21T10:15:00.000Z\n---\nVisible body.\n`
+  const harness = await createManagedRootHarness("bluenote-cli-show-")
+  const markdown = noteMarkdown({ id: "show-note", title: "Example Show Note", body: "Visible body.\n" })
 
   try {
-    await writeNote(managedRoot, path.join("notes", "inbox", "show-note.md"), markdown)
+    await harness.writeNote(path.join("notes", "inbox", "show-note.md"), markdown)
 
-    const result = runCli(["show", "show-note"], managedRoot)
+    const result = harness.run(["show", "show-note"])
 
     assert.equal(result.exitCode, 0)
-    assert.equal(result.stderr.toString(), "")
-    assert.equal(result.stdout.toString(), markdown)
+    assert.equal(result.stderr, "")
+    assert.equal(result.stdout, markdown)
   } finally {
-    await rm(managedRoot, { recursive: true, force: true })
+    await harness.cleanup()
   }
 })
 
 test("bn show preserves the stored note formatting exactly", async () => {
-  const managedRoot = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-show-formatting-"))
+  const harness = await createManagedRootHarness("bluenote-cli-show-formatting-")
   const markdown = `---
 title: "Formatting Example"
 id: formatting-note
@@ -91,113 +73,120 @@ Body line two.
 `
 
   try {
-    await writeNote(managedRoot, path.join("notes", "inbox", "formatting-note.md"), markdown)
+    await harness.writeNote(path.join("notes", "inbox", "formatting-note.md"), markdown)
 
-    const result = runCli(["show", "formatting-note"], managedRoot)
+    const result = harness.run(["show", "formatting-note"])
 
     assert.equal(result.exitCode, 0)
-    assert.equal(result.stderr.toString(), "")
-    assert.equal(result.stdout.toString(), markdown)
+    assert.equal(result.stderr, "")
+    assert.equal(result.stdout, markdown)
   } finally {
-    await rm(managedRoot, { recursive: true, force: true })
+    await harness.cleanup()
   }
 })
 
 test("bn show resolves a title-derived slug selector", async () => {
-  const managedRoot = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-show-slug-"))
-  const markdown = `---\nid: slug-note\nschemaVersion: 1\ntitle: Example Show Note\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:15:00.000Z\nupdatedAt: 2026-05-21T10:15:00.000Z\n---\nVisible body.\n`
+  const harness = await createManagedRootHarness("bluenote-cli-show-slug-")
+  const markdown = noteMarkdown({ id: "slug-note", title: "Example Show Note", body: "Visible body.\n" })
 
   try {
-    await writeNote(managedRoot, path.join("notes", "inbox", "slug-note.md"), markdown)
+    await harness.writeNote(path.join("notes", "inbox", "slug-note.md"), markdown)
 
-    const result = runCli(["show", "  ExAmPlE-sHoW-nOtE  "], managedRoot)
+    const result = harness.run(["show", "  ExAmPlE-sHoW-nOtE  "])
 
     assert.equal(result.exitCode, 0)
-    assert.equal(result.stderr.toString(), "")
-    assert.equal(result.stdout.toString(), markdown)
+    assert.equal(result.stderr, "")
+    assert.equal(result.stdout, markdown)
   } finally {
-    await rm(managedRoot, { recursive: true, force: true })
+    await harness.cleanup()
   }
 })
 
 test("bn show resolves a managed-root-relative path selector", async () => {
-  const managedRoot = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-show-path-"))
+  const harness = await createManagedRootHarness("bluenote-cli-show-path-")
   const relativePath = path.join("notes", "journal", "show-path.md")
-  const markdown = `---\nid: path-note\nschemaVersion: 1\ntitle: Path Show Note\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:15:00.000Z\nupdatedAt: 2026-05-21T10:15:00.000Z\n---\nPath body.\n`
+  const markdown = noteMarkdown({ id: "path-note", title: "Path Show Note", body: "Path body.\n" })
 
   try {
-    await writeNote(managedRoot, relativePath, markdown)
+    await harness.writeNote(relativePath, markdown)
 
-    const result = runCli(["show", relativePath], managedRoot)
+    const result = harness.run(["show", relativePath])
 
     assert.equal(result.exitCode, 0)
-    assert.equal(result.stderr.toString(), "")
-    assert.equal(result.stdout.toString(), markdown)
+    assert.equal(result.stderr, "")
+    assert.equal(result.stdout, markdown)
   } finally {
-    await rm(managedRoot, { recursive: true, force: true })
+    await harness.cleanup()
   }
 })
 
 test("bn show surfaces ambiguous selector failures", async () => {
-  const managedRoot = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-show-ambiguous-"))
+  const harness = await createManagedRootHarness("bluenote-cli-show-ambiguous-")
 
   try {
-    await writeNote(
-      managedRoot,
+    await harness.writeNote(
       path.join("notes", "inbox", "shared-a.md"),
-      `---\nid: shared-a\nschemaVersion: 1\ntitle: Shared Title\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:19:00.000Z\nupdatedAt: 2026-05-21T10:19:00.000Z\n---\nShared A body.\n`,
+      noteMarkdown({
+        id: "shared-a",
+        title: "Shared Title",
+        body: "Shared A body.\n",
+        createdAt: "2026-05-21T10:19:00.000Z",
+      }),
     )
-    await writeNote(
-      managedRoot,
+    await harness.writeNote(
       path.join("notes", "archive", "shared-b.md"),
-      `---\nid: shared-b\nschemaVersion: 1\ntitle: Shared Title\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:20:00.000Z\nupdatedAt: 2026-05-21T10:20:00.000Z\n---\nShared B body.\n`,
+      noteMarkdown({
+        id: "shared-b",
+        title: "Shared Title",
+        body: "Shared B body.\n",
+        createdAt: "2026-05-21T10:20:00.000Z",
+      }),
     )
 
-    const result = runCli(["show", "shared-title"], managedRoot)
+    const result = harness.run(["show", "shared-title"])
 
     assert.equal(result.exitCode, 2)
-    assert.equal(result.stdout.toString(), "")
-    assert.match(result.stderr.toString(), /Ambiguous note selector: shared-title\./)
-    assert.match(result.stderr.toString(), /notes[\\/]inbox[\\/]shared-a\.md/)
-    assert.match(result.stderr.toString(), /notes[\\/]archive[\\/]shared-b\.md/)
-    assert.match(result.stderr.toString(), /Hint: Use a note ID or managed-root-relative path to disambiguate\./)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Ambiguous note selector: shared-title\./)
+    assert.match(result.stderr, /notes[\\/]inbox[\\/]shared-a\.md/)
+    assert.match(result.stderr, /notes[\\/]archive[\\/]shared-b\.md/)
+    assert.match(result.stderr, /Hint: Use a note ID or managed-root-relative path to disambiguate\./)
   } finally {
-    await rm(managedRoot, { recursive: true, force: true })
+    await harness.cleanup()
   }
 })
 
 test("bn show reports selector-not-found errors", async () => {
-  const managedRoot = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-show-missing-"))
+  const harness = await createManagedRootHarness("bluenote-cli-show-missing-")
 
   try {
-    await writeNote(
-      managedRoot,
+    await harness.writeNote(
       path.join("notes", "inbox", "present.md"),
-      `---\nid: present-note\nschemaVersion: 1\ntitle: Present Note\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:15:00.000Z\nupdatedAt: 2026-05-21T10:15:00.000Z\n---\nVisible body.\n`,
+      noteMarkdown({ id: "present-note", title: "Present Note", body: "Visible body.\n" }),
     )
 
-    const result = runCli(["show", "does-not-exist"], managedRoot)
+    const result = harness.run(["show", "does-not-exist"])
 
     assert.equal(result.exitCode, 1)
-    assert.equal(result.stdout.toString(), "")
-    assert.match(result.stderr.toString(), /Could not find a note matching selector 'does-not-exist'\./)
-    assert.match(result.stderr.toString(), /Hint: Use bn list to inspect available notes\./)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Could not find a note matching selector 'does-not-exist'\./)
+    assert.match(result.stderr, /Hint: Use bn list to inspect available notes\./)
   } finally {
-    await rm(managedRoot, { recursive: true, force: true })
+    await harness.cleanup()
   }
 })
 
 test("bn show requires a selector argument", async () => {
-  const managedRoot = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-show-usage-"))
+  const harness = await createManagedRootHarness("bluenote-cli-show-usage-")
 
   try {
-    const result = runCli(["show"], managedRoot)
+    const result = harness.run(["show"])
 
     assert.equal(result.exitCode, 1)
-    assert.equal(result.stdout.toString(), "")
-    assert.match(result.stderr.toString(), /Missing required selector for show\./)
-    assert.match(result.stderr.toString(), /Hint: Run bn show <id\|path\|slug>\./)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Missing required selector for show\./)
+    assert.match(result.stderr, /Hint: Run bn show <id\|path\|slug>\./)
   } finally {
-    await rm(managedRoot, { recursive: true, force: true })
+    await harness.cleanup()
   }
 })

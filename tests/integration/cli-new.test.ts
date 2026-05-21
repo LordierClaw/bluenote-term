@@ -2,45 +2,27 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
-import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises"
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises"
 
 import { parseNoteFile } from "../../src/storage/frontmatter"
-import { MANAGED_ROOT_LAYOUT } from "../../src/storage/root-layout"
-
-const workspaceRoot = path.resolve(import.meta.dir, "../..")
-const cliPath = path.join(workspaceRoot, "bin", "bn.ts")
-
-function runCli(args: string[], managedRoot: string) {
-  return Bun.spawnSync(["bun", "run", cliPath, ...args], {
-    cwd: workspaceRoot,
-    env: {
-      ...process.env,
-      BLUENOTE_ROOT: managedRoot,
-    },
-    stdout: "pipe",
-    stderr: "pipe",
-  })
-}
+import { assertManagedRootLayout, createManagedRootHarness, runCli } from "../helpers/cli"
 
 test("bn new --title \"Example\" creates a note, initializes the managed root, and returns a created path", async () => {
-  const managedRoot = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-new-"))
+  const harness = await createManagedRootHarness("bluenote-cli-new-")
 
   try {
-    const result = runCli(["new", "--title", "Example"], managedRoot)
+    const result = harness.run(["new", "--title", "Example"])
 
     assert.equal(result.exitCode, 0)
-    assert.equal(result.stderr.toString(), "")
-    assert.match(result.stdout.toString(), /^Created note: notes\/inbox\/.+\.md\n$/)
+    assert.equal(result.stderr, "")
+    assert.match(result.stdout, /^Created note: notes\/inbox\/.+\.md\n$/)
 
-    for (const relativePath of MANAGED_ROOT_LAYOUT) {
-      const stats = await stat(path.join(managedRoot, relativePath))
-      assert.equal(stats.isDirectory(), true, `${relativePath} should be a directory`)
-    }
+    await assertManagedRootLayout(harness.rootPath)
 
-    const noteFiles = await readdir(path.join(managedRoot, "notes", "inbox"))
+    const noteFiles = await readdir(path.join(harness.rootPath, "notes", "inbox"))
     assert.equal(noteFiles.length, 1)
 
-    const notePath = path.join(managedRoot, "notes", "inbox", noteFiles[0])
+    const notePath = path.join(harness.rootPath, "notes", "inbox", noteFiles[0])
     const markdown = await readFile(notePath, "utf8")
     const parsedNote = parseNoteFile(markdown, path.join("notes", "inbox", noteFiles[0]))
 
@@ -51,31 +33,31 @@ test("bn new --title \"Example\" creates a note, initializes the managed root, a
     assert.equal(parsedNote.frontmatter.id.endsWith(".md"), false)
     assert.equal(parsedNote.body, "")
   } finally {
-    await rm(managedRoot, { recursive: true, force: true })
+    await harness.cleanup()
   }
 })
 
 test("repeated note creation produces distinct IDs", async () => {
-  const managedRoot = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-new-distinct-"))
+  const harness = await createManagedRootHarness("bluenote-cli-new-distinct-")
 
   try {
-    const firstResult = runCli(["new", "--title", "Example"], managedRoot)
-    const secondResult = runCli(["new", "--title", "Example"], managedRoot)
+    const firstResult = harness.run(["new", "--title", "Example"])
+    const secondResult = harness.run(["new", "--title", "Example"])
 
     assert.equal(firstResult.exitCode, 0)
     assert.equal(secondResult.exitCode, 0)
 
-    const noteFiles = await readdir(path.join(managedRoot, "notes", "inbox"))
+    const noteFiles = await readdir(path.join(harness.rootPath, "notes", "inbox"))
     assert.equal(noteFiles.length, 2)
 
-    const firstMarkdown = await readFile(path.join(managedRoot, "notes", "inbox", noteFiles[0]), "utf8")
-    const secondMarkdown = await readFile(path.join(managedRoot, "notes", "inbox", noteFiles[1]), "utf8")
+    const firstMarkdown = await readFile(path.join(harness.rootPath, "notes", "inbox", noteFiles[0]), "utf8")
+    const secondMarkdown = await readFile(path.join(harness.rootPath, "notes", "inbox", noteFiles[1]), "utf8")
     const firstParsed = parseNoteFile(firstMarkdown, path.join("notes", "inbox", noteFiles[0]))
     const secondParsed = parseNoteFile(secondMarkdown, path.join("notes", "inbox", noteFiles[1]))
 
     assert.notEqual(firstParsed.frontmatter.id, secondParsed.frontmatter.id)
   } finally {
-    await rm(managedRoot, { recursive: true, force: true })
+    await harness.cleanup()
   }
 })
 
@@ -86,12 +68,12 @@ test("bn new surfaces repository filesystem failures as CLI errors", async () =>
   try {
     await writeFile(blockedRoot, "not a directory")
 
-    const result = runCli(["new", "--title", "Example"], blockedRoot)
+    const result = runCli(["new", "--title", "Example"], { rootPath: blockedRoot })
 
     assert.equal(result.exitCode, 1)
-    assert.equal(result.stdout.toString(), "")
+    assert.equal(result.stdout, "")
     assert.equal(
-      result.stderr.toString(),
+      result.stderr,
       [
         "Could not initialize BlueNote root at '" + path.resolve(blockedRoot) + "'.",
         "Hint: Ensure BLUENOTE_ROOT points to a writable directory path.",

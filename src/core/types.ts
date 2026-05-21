@@ -5,6 +5,7 @@ export type AppErrorCode =
   | "AMBIGUOUS_SELECTOR"
   | "EDITOR_LAUNCH_FAILED"
   | "INDEX_UNAVAILABLE"
+  | "INDEX_VALIDATION_FAILED"
 
 export type CliExitCode = 0 | 1 | 2
 

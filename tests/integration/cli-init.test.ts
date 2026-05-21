@@ -4,71 +4,37 @@ import os from "node:os"
 import path from "node:path"
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises"
 
-import { MANAGED_ROOT_LAYOUT } from "../../src/storage/root-layout"
-
-const workspaceRoot = path.resolve(import.meta.dir, "../..")
-const cliPath = path.join(workspaceRoot, "bin", "bn.ts")
-
-async function assertManagedRootLayout(rootPath: string) {
-  for (const relativePath of MANAGED_ROOT_LAYOUT) {
-    const stats = await stat(path.join(rootPath, relativePath))
-    assert.equal(stats.isDirectory(), true, `${relativePath} should be created by bn init`)
-  }
-}
+import { assertManagedRootLayout, createManagedRootHarness, runCli } from "../helpers/cli"
 
 test("bn init exits 0 and reports the initialized root", async () => {
-  const managedRoot = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-init-"))
+  const harness = await createManagedRootHarness("bluenote-cli-init-")
 
   try {
-    const result = Bun.spawnSync(["bun", "run", cliPath, "init"], {
-      cwd: workspaceRoot,
-      env: {
-        ...process.env,
-        BLUENOTE_ROOT: managedRoot,
-      },
-      stdout: "pipe",
-      stderr: "pipe",
-    })
+    const result = harness.run(["init"])
 
     assert.equal(result.exitCode, 0)
-    assert.equal(result.stderr.toString(), "")
-    assert.match(result.stdout.toString(), new RegExp(`Initialized BlueNote root: ${managedRoot.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}`))
-    await assertManagedRootLayout(managedRoot)
+    assert.equal(result.stderr, "")
+    assert.match(result.stdout, new RegExp(`Initialized BlueNote root: ${harness.escapeForRegExp(harness.rootPath)}`))
+    await assertManagedRootLayout(harness.rootPath)
   } finally {
-    await rm(managedRoot, { recursive: true, force: true })
+    await harness.cleanup()
   }
 })
 
 test("bn init is idempotent on subsequent runs", async () => {
-  const managedRoot = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-init-idempotent-"))
+  const harness = await createManagedRootHarness("bluenote-cli-init-idempotent-")
 
   try {
-    const firstResult = Bun.spawnSync(["bun", "run", cliPath, "init"], {
-      cwd: workspaceRoot,
-      env: {
-        ...process.env,
-        BLUENOTE_ROOT: managedRoot,
-      },
-      stdout: "pipe",
-      stderr: "pipe",
-    })
-    const secondResult = Bun.spawnSync(["bun", "run", cliPath, "init"], {
-      cwd: workspaceRoot,
-      env: {
-        ...process.env,
-        BLUENOTE_ROOT: managedRoot,
-      },
-      stdout: "pipe",
-      stderr: "pipe",
-    })
+    const firstResult = harness.run(["init"])
+    const secondResult = harness.run(["init"])
 
     assert.equal(firstResult.exitCode, 0)
     assert.equal(secondResult.exitCode, 0)
-    assert.equal(secondResult.stderr.toString(), "")
-    assert.match(secondResult.stdout.toString(), new RegExp(`Initialized BlueNote root: ${managedRoot.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}`))
-    await assertManagedRootLayout(managedRoot)
+    assert.equal(secondResult.stderr, "")
+    assert.match(secondResult.stdout, new RegExp(`Initialized BlueNote root: ${harness.escapeForRegExp(harness.rootPath)}`))
+    await assertManagedRootLayout(harness.rootPath)
   } finally {
-    await rm(managedRoot, { recursive: true, force: true })
+    await harness.cleanup()
   }
 })
 
@@ -79,21 +45,13 @@ test("bn init reports a user-facing error when BLUENOTE_ROOT points to a file", 
   try {
     await writeFile(blockedRoot, "not a directory")
 
-    const result = Bun.spawnSync(["bun", "run", cliPath, "init"], {
-      cwd: workspaceRoot,
-      env: {
-        ...process.env,
-        BLUENOTE_ROOT: blockedRoot,
-      },
-      stdout: "pipe",
-      stderr: "pipe",
-    })
+    const result = runCli(["init"], { rootPath: blockedRoot })
 
     assert.equal(result.exitCode, 1)
-    assert.equal(result.stdout.toString(), "")
-    assert.match(result.stderr.toString(), /Could not initialize BlueNote root at/)
-    assert.match(result.stderr.toString(), /Hint: Ensure BLUENOTE_ROOT points to a writable directory path\./)
-    assert.doesNotMatch(result.stderr.toString(), /at runCli|Error:|stack/i)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Could not initialize BlueNote root at/)
+    assert.match(result.stderr, /Hint: Ensure BLUENOTE_ROOT points to a writable directory path\./)
+    assert.doesNotMatch(result.stderr, /at runCli|Error:|stack/i)
   } finally {
     await rm(tempRoot, { recursive: true, force: true })
   }

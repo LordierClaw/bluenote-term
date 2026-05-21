@@ -32,6 +32,7 @@ function toCanonicalFrontmatter(frontmatter: NoteFrontmatter): NoteFrontmatter {
     tags: [...frontmatter.tags],
     createdAt: frontmatter.createdAt,
     updatedAt: frontmatter.updatedAt,
+    ...(frontmatter.archivedAt === undefined ? {} : { archivedAt: frontmatter.archivedAt }),
   }
 }
 

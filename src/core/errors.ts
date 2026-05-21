@@ -48,12 +48,19 @@ export class IndexUnavailableError extends AppError {
   }
 }
 
+export class IndexValidationFailedError extends AppError {
+  constructor(message: string, options: AppErrorOptions = {}) {
+    super("INDEX_VALIDATION_FAILED", message, options)
+  }
+}
+
 export function isValidationOrDataError(
   error: unknown,
-): error is InvalidFrontmatterError | AmbiguousSelectorError | IndexUnavailableError {
+): error is InvalidFrontmatterError | AmbiguousSelectorError | IndexUnavailableError | IndexValidationFailedError {
   return (
     error instanceof InvalidFrontmatterError ||
     error instanceof AmbiguousSelectorError ||
-    error instanceof IndexUnavailableError
+    error instanceof IndexUnavailableError ||
+    error instanceof IndexValidationFailedError
   )
 }

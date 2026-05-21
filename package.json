@@ -18,9 +18,10 @@
     "dev:tui": "bun run ./src/tui/app.ts",
     "check:env": "bun run ./scripts/check-env.ts",
     "smoke:opentui": "bun run ./scripts/smoke-opentui.ts",
-    "smoke:cli": "bun run ./bin/bn.ts --help",
+    "smoke:cli": "bun run ./scripts/smoke-cli.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
+    "test:e2e": "bun test tests/e2e",
     "check": "bun run typecheck && bun run test && bun run smoke:opentui && bun run smoke:cli"
   },
   "dependencies": {

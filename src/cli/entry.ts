@@ -4,6 +4,7 @@ import {
   UsageError,
 } from "../core/errors"
 import type { CliResult } from "../core/types"
+import { archiveNote } from "../core/archive-note"
 import { createNote } from "../core/create-note"
 import { editNote } from "../core/edit-note"
 import { initRoot } from "../core/init-root"
@@ -47,22 +48,22 @@ function readFlagValue(args: string[], flagName: string): string | undefined {
 export function formatHelp(version: string): string {
   return [
     `BlueNote v${version}`,
-    "Scaffold status: preparation phase",
+    "Local-first terminal notes for Phase 1 CLI workflows",
     "",
     "Usage:",
-    "  bn [command]",
+    "  bn <command> [options]",
     "",
     "Commands:",
     "  --help       Show this message",
     "  --version    Print the current version",
     "  init         Initialize the managed BlueNote root",
-    "  new          Create a new note in notes/inbox",
-    "  edit         Open a matching note in $EDITOR",
+    "  new          --title <title>  Create a new note in notes/inbox",
     "  list         List note summaries",
-    "  search       Search indexed notes",
-    "  show         Print a matching note",
+    "  show         <id|path|slug>   Print a matching note",
+    "  search       <query>          Search indexed notes",
+    "  edit         <id|path|slug>   Open a matching note in $EDITOR",
+    "  archive      <id|path|slug>   Archive a matching note",
     "  rebuild      Rebuild derived metadata and search indexes",
-    "  tui          Show the TUI scaffold status",
   ].join("\n") + "\n"
 }
 
@@ -120,6 +121,24 @@ export function runCli(args: string[], version: string): CliResult {
       return {
         exitCode: 0,
         stdout: `Edited note: ${summary.relativePath}\n`,
+        stderr: "",
+      }
+    }
+
+    if (command === "archive") {
+      const selector = commandArgs[0]
+
+      if (!selector) {
+        throw new UsageError("Missing required selector for archive.", {
+          hint: "Run bn archive <id|path|slug>.",
+        })
+      }
+
+      const summary = archiveNote({ selector })
+
+      return {
+        exitCode: 0,
+        stdout: `Archived note: ${summary.relativePath}\n`,
         stderr: "",
       }
     }

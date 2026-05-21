@@ -8,6 +8,7 @@ export interface NoteFrontmatter {
   tags: string[]
   createdAt: string
   updatedAt: string
+  archivedAt?: string
 }
 
 export interface ParsedNote {
@@ -26,7 +27,9 @@ const REQUIRED_FIELDS = [
   "updatedAt",
 ] as const
 
-const REQUIRED_FIELD_SET = new Set<string>(REQUIRED_FIELDS)
+const OPTIONAL_FIELDS = ["archivedAt"] as const
+
+const ALLOWED_FIELD_SET = new Set<string>([...REQUIRED_FIELDS, ...OPTIONAL_FIELDS])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -42,7 +45,11 @@ function assertStringField(record: Record<string, unknown>, field: keyof NoteFro
   return value
 }
 
-function assertTimestampField(record: Record<string, unknown>, field: "createdAt" | "updatedAt", sourcePath: string): string {
+function assertTimestampField(
+  record: Record<string, unknown>,
+  field: "createdAt" | "updatedAt" | "archivedAt",
+  sourcePath: string,
+): string {
   const value = assertStringField(record, field, sourcePath)
 
   try {
@@ -84,7 +91,7 @@ export function validateNoteFrontmatter(frontmatter: unknown, sourcePath: string
   }
 
   for (const field of Object.keys(frontmatter)) {
-    if (!REQUIRED_FIELD_SET.has(field)) {
+    if (!ALLOWED_FIELD_SET.has(field)) {
       throw new InvalidFrontmatterError(`Invalid frontmatter in ${sourcePath}: unknown field '${field}'.`)
     }
   }
@@ -103,5 +110,8 @@ export function validateNoteFrontmatter(frontmatter: unknown, sourcePath: string
     tags: assertTagsField(frontmatter, sourcePath),
     createdAt: assertTimestampField(frontmatter, "createdAt", sourcePath),
     updatedAt: assertTimestampField(frontmatter, "updatedAt", sourcePath),
+    ...(frontmatter.archivedAt === undefined
+      ? {}
+      : { archivedAt: assertTimestampField(frontmatter, "archivedAt", sourcePath) }),
   }
 }
