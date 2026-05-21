@@ -6,6 +6,11 @@ import {
 import type { CliResult } from "../core/types"
 import { createNote } from "../core/create-note"
 import { initRoot } from "../core/init-root"
+import { listNotes } from "../core/list-notes"
+import { selectNote } from "../core/select-note"
+import { resolveBlueNoteRoot } from "../config/root"
+import { serializeNoteFile } from "../storage/frontmatter"
+import { createNoteRepository } from "../storage/note-repository"
 
 export function formatCliError(error: AppError): CliResult {
   const messageLines = [error.message]
@@ -52,6 +57,8 @@ export function formatHelp(version: string): string {
     "  --version    Print the current version",
     "  init         Initialize the managed BlueNote root",
     "  new          Create a new note in notes/inbox",
+    "  list         List note summaries",
+    "  show         Print a matching note",
     "  tui          Show the TUI scaffold status",
   ].join("\n") + "\n"
 }
@@ -92,6 +99,41 @@ export function runCli(args: string[], version: string): CliResult {
       return {
         exitCode: 0,
         stdout: `Created note: ${summary.relativePath}\n`,
+        stderr: "",
+      }
+    }
+
+    if (command === "list") {
+      const summaries = listNotes()
+      const stdout = summaries.map((summary) => `${summary.id}\t${summary.title}\t${summary.relativePath}`).join("\n")
+
+      return {
+        exitCode: 0,
+        stdout: stdout === "" ? "" : `${stdout}\n`,
+        stderr: "",
+      }
+    }
+
+    if (command === "show") {
+      const selector = commandArgs[0]
+
+      if (!selector) {
+        throw new UsageError("Missing required selector for show.", {
+          hint: "Run bn show <id|path|slug>.",
+        })
+      }
+
+      const rootPath = resolveBlueNoteRoot()
+      const repository = createNoteRepository(rootPath)
+      const selected = selectNote({ repository, selector })
+
+      return {
+        exitCode: 0,
+        stdout: serializeNoteFile({
+          frontmatter: selected.frontmatter,
+          body: selected.body,
+          sourcePath: selected.sourcePath,
+        }),
         stderr: "",
       }
     }

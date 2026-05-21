@@ -1,5 +1,5 @@
 import path from "node:path"
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
 
 import { UsageError } from "../core/errors"
 import { assertPathInsideRoot, toRootRelativePath } from "../platform/path-safety"
@@ -19,24 +19,45 @@ export interface StoredNoteRecord {
 export interface NoteRepository {
   create(input: CreateStoredNoteInput): StoredNoteRecord
   read(notePath: string): ParsedNote
+  list(): ParsedNote[]
 }
 
 const DEFAULT_INBOX_RELATIVE_PATH = path.join("notes", "inbox")
+const NOTES_RELATIVE_PATH = "notes"
 
-function wrapRepositoryError(action: "create" | "read", relativePath: string, error: unknown): never {
+function wrapRepositoryError(action: "create" | "read" | "list", relativePath: string, error: unknown): never {
   const message =
     action === "create"
       ? `Could not create note '${relativePath}'.`
-      : `Could not read note '${relativePath}'.`
+      : action === "read"
+        ? `Could not read note '${relativePath}'.`
+        : `Could not list notes in '${relativePath}'.`
   const hint =
     action === "create"
       ? "Ensure BLUENOTE_ROOT points to a writable directory path."
-      : "Ensure the note exists inside BLUENOTE_ROOT and is readable."
+      : action === "read"
+        ? "Ensure the note exists inside BLUENOTE_ROOT and is readable."
+        : "Ensure BLUENOTE_ROOT points to a readable managed root."
 
   throw new UsageError(message, {
     hint,
     cause: error,
   })
+}
+
+function collectMarkdownFiles(rootPath: string, currentPath: string, files: string[]): void {
+  for (const entry of readdirSync(currentPath, { withFileTypes: true })) {
+    const entryPath = path.join(currentPath, entry.name)
+
+    if (entry.isDirectory()) {
+      collectMarkdownFiles(rootPath, entryPath, files)
+      continue
+    }
+
+    if (entry.isFile() && entry.name.endsWith(".md")) {
+      files.push(assertPathInsideRoot(rootPath, entryPath))
+    }
+  }
 }
 
 export function createNoteRepository(rootPath: string): NoteRepository {
@@ -78,6 +99,21 @@ export function createNoteRepository(rootPath: string): NoteRepository {
       }
 
       return parseNoteFile(markdown, relativePath)
+    },
+
+    list() {
+      const notesPath = assertPathInsideRoot(normalizedRootPath, path.join(normalizedRootPath, NOTES_RELATIVE_PATH))
+      const notePaths: string[] = []
+
+      try {
+        collectMarkdownFiles(normalizedRootPath, notesPath, notePaths)
+      } catch (error) {
+        wrapRepositoryError("list", NOTES_RELATIVE_PATH, error)
+      }
+
+      notePaths.sort((left, right) => left.localeCompare(right))
+
+      return notePaths.map((notePath) => this.read(notePath))
     },
   }
 }
