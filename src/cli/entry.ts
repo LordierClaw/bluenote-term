@@ -5,6 +5,7 @@ import {
 } from "../core/errors"
 import type { CliResult } from "../core/types"
 import { createNote } from "../core/create-note"
+import { editNote } from "../core/edit-note"
 import { initRoot } from "../core/init-root"
 import { listNotes } from "../core/list-notes"
 import { rebuildIndexes } from "../core/rebuild-indexes"
@@ -56,6 +57,7 @@ export function formatHelp(version: string): string {
     "  --version    Print the current version",
     "  init         Initialize the managed BlueNote root",
     "  new          Create a new note in notes/inbox",
+    "  edit         Open a matching note in $EDITOR",
     "  list         List note summaries",
     "  search       Search indexed notes",
     "  show         Print a matching note",
@@ -100,6 +102,24 @@ export function runCli(args: string[], version: string): CliResult {
       return {
         exitCode: 0,
         stdout: `Created note: ${summary.relativePath}\n`,
+        stderr: "",
+      }
+    }
+
+    if (command === "edit") {
+      const selector = commandArgs[0]
+
+      if (!selector) {
+        throw new UsageError("Missing required selector for edit.", {
+          hint: "Run bn edit <id|path|slug>.",
+        })
+      }
+
+      const summary = editNote({ selector })
+
+      return {
+        exitCode: 0,
+        stdout: `Edited note: ${summary.relativePath}\n`,
         stderr: "",
       }
     }
