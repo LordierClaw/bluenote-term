@@ -1,14 +1,10 @@
 import {
   AppError,
   isValidationOrDataError,
+  UsageError,
 } from "../core/errors"
+import type { CliResult } from "../core/types"
 import { initRoot } from "../core/init-root"
-
-export interface CliResult {
-  exitCode: number
-  stdout: string
-  stderr: string
-}
 
 export function formatCliError(error: AppError): CliResult {
   const messageLines = [error.message]
@@ -41,37 +37,45 @@ export function formatHelp(version: string): string {
 }
 
 export function runCli(args: string[], version: string): CliResult {
-  const [command] = args
+  try {
+    const [command] = args
 
-  if (!command || command === "--help" || command === "help") {
-    return { exitCode: 0, stdout: formatHelp(version), stderr: "" }
-  }
-
-  if (command === "--version" || command === "version") {
-    return { exitCode: 0, stdout: `${version}\n`, stderr: "" }
-  }
-
-  if (command === "init") {
-    const summary = initRoot()
-
-    return {
-      exitCode: 0,
-      stdout: `${summary.message}\n`,
-      stderr: "",
+    if (!command || command === "--help" || command === "help") {
+      return { exitCode: 0, stdout: formatHelp(version), stderr: "" }
     }
-  }
 
-  if (command === "tui") {
-    return {
-      exitCode: 0,
-      stdout: "BlueNote TUI scaffold is present; full implementation starts in Phase 2.\n",
-      stderr: "",
+    if (command === "--version" || command === "version") {
+      return { exitCode: 0, stdout: `${version}\n`, stderr: "" }
     }
-  }
 
-  return {
-    exitCode: 1,
-    stdout: "",
-    stderr: `Unknown command: ${command}\nUse --help to see available commands.\n`,
+    if (command === "init") {
+      const summary = initRoot()
+
+      return {
+        exitCode: 0,
+        stdout: `${summary.message}\n`,
+        stderr: "",
+      }
+    }
+
+    if (command === "tui") {
+      return {
+        exitCode: 0,
+        stdout: "BlueNote TUI scaffold is present; full implementation starts in Phase 2.\n",
+        stderr: "",
+      }
+    }
+
+    return formatCliError(
+      new UsageError(`Unknown command: ${command}`, {
+        hint: "Use --help to see available commands.",
+      }),
+    )
+  } catch (error) {
+    if (error instanceof AppError) {
+      return formatCliError(error)
+    }
+
+    throw error
   }
 }

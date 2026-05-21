@@ -1,10 +1,10 @@
-import type { AppErrorOptions } from "./types"
+import type { AppErrorCode, AppErrorOptions } from "./types"
 
 export class AppError extends Error {
-  readonly code: string
+  readonly code: AppErrorCode
   readonly hint?: string
 
-  constructor(code: string, message: string, options: AppErrorOptions = {}) {
+  constructor(code: AppErrorCode, message: string, options: AppErrorOptions = {}) {
     super(message, "cause" in options ? { cause: options.cause } : undefined)
     this.name = new.target.name
     this.code = code
