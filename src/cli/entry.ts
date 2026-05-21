@@ -7,10 +7,7 @@ import type { CliResult } from "../core/types"
 import { createNote } from "../core/create-note"
 import { initRoot } from "../core/init-root"
 import { listNotes } from "../core/list-notes"
-import { selectNote } from "../core/select-note"
-import { resolveBlueNoteRoot } from "../config/root"
-import { serializeNoteFile } from "../storage/frontmatter"
-import { createNoteRepository } from "../storage/note-repository"
+import { showNote } from "../core/show-note"
 
 export function formatCliError(error: AppError): CliResult {
   const messageLines = [error.message]
@@ -123,17 +120,9 @@ export function runCli(args: string[], version: string): CliResult {
         })
       }
 
-      const rootPath = resolveBlueNoteRoot()
-      const repository = createNoteRepository(rootPath)
-      const selected = selectNote({ repository, selector })
-
       return {
         exitCode: 0,
-        stdout: serializeNoteFile({
-          frontmatter: selected.frontmatter,
-          body: selected.body,
-          sourcePath: selected.sourcePath,
-        }),
+        stdout: showNote({ selector }),
         stderr: "",
       }
     }

@@ -19,6 +19,7 @@ export interface StoredNoteRecord {
 export interface NoteRepository {
   create(input: CreateStoredNoteInput): StoredNoteRecord
   read(notePath: string): ParsedNote
+  readRaw(notePath: string): string
   list(): ParsedNote[]
 }
 
@@ -99,6 +100,17 @@ export function createNoteRepository(rootPath: string): NoteRepository {
       }
 
       return parseNoteFile(markdown, relativePath)
+    },
+
+    readRaw(notePath) {
+      const normalizedNotePath = assertPathInsideRoot(normalizedRootPath, notePath)
+      const relativePath = toRootRelativePath(normalizedRootPath, normalizedNotePath)
+
+      try {
+        return readFileSync(normalizedNotePath, "utf8")
+      } catch (error) {
+        wrapRepositoryError("read", relativePath, error)
+      }
     },
 
     list() {

@@ -35,6 +35,15 @@ test("selectNote resolves a unique title-derived slug match", () => {
   assert.equal(selected.sourcePath, path.join("notes", "journal", "project-retro.md"))
 })
 
+test("selectNote normalizes slug selectors before matching", () => {
+  const repository = createNoteRepository(fixtureRoot)
+
+  const selected = selectNote({ repository, selector: "  PrOjEcT-rEtRoSpEcTiVe  " })
+
+  assert.equal(selected.frontmatter.id, "project-retro")
+  assert.equal(selected.sourcePath, path.join("notes", "journal", "project-retro.md"))
+})
+
 test("selectNote raises AmbiguousSelectorError when a slug matches multiple notes", () => {
   const repository = createNoteRepository(fixtureRoot)
 

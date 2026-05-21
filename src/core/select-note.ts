@@ -21,6 +21,10 @@ function normalizeSelectorPath(selector: string): string {
   return path.normalize(selector)
 }
 
+function normalizeSlugSelector(selector: string): string {
+  return selector.trim().toLowerCase()
+}
+
 function assertSingleMatch(selector: string, matches: ParsedNote[]): ParsedNote {
   if (matches.length === 1) {
     return matches[0]
@@ -36,6 +40,7 @@ function assertSingleMatch(selector: string, matches: ParsedNote[]): ParsedNote 
 
 export function selectNote(options: SelectNoteOptions): ParsedNote {
   const notes = options.repository.list()
+  const normalizedSlugSelector = normalizeSlugSelector(options.selector)
 
   const exactIdMatches = notes.filter((note) => note.frontmatter.id === options.selector)
   if (exactIdMatches.length > 0) {
@@ -48,7 +53,7 @@ export function selectNote(options: SelectNoteOptions): ParsedNote {
     return assertSingleMatch(options.selector, exactPathMatches)
   }
 
-  const slugMatches = notes.filter((note) => slugifyTitle(note.frontmatter.title) === options.selector)
+  const slugMatches = notes.filter((note) => slugifyTitle(note.frontmatter.title) === normalizedSlugSelector)
   if (slugMatches.length > 0) {
     return assertSingleMatch(options.selector, slugMatches)
   }
