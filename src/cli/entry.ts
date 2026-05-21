@@ -4,6 +4,7 @@ import {
   UsageError,
 } from "../core/errors"
 import type { CliResult } from "../core/types"
+import { createNote } from "../core/create-note"
 import { initRoot } from "../core/init-root"
 
 export function formatCliError(error: AppError): CliResult {
@@ -20,6 +21,24 @@ export function formatCliError(error: AppError): CliResult {
   }
 }
 
+function readFlagValue(args: string[], flagName: string): string | undefined {
+  const flagIndex = args.indexOf(flagName)
+
+  if (flagIndex === -1) {
+    return undefined
+  }
+
+  const value = args[flagIndex + 1]
+
+  if (value === undefined || value.startsWith("--")) {
+    throw new UsageError(`Missing value for ${flagName}.`, {
+      hint: `Pass ${flagName} "...".`,
+    })
+  }
+
+  return value
+}
+
 export function formatHelp(version: string): string {
   return [
     `BlueNote v${version}`,
@@ -32,13 +51,14 @@ export function formatHelp(version: string): string {
     "  --help       Show this message",
     "  --version    Print the current version",
     "  init         Initialize the managed BlueNote root",
+    "  new          Create a new note in notes/inbox",
     "  tui          Show the TUI scaffold status",
   ].join("\n") + "\n"
 }
 
 export function runCli(args: string[], version: string): CliResult {
   try {
-    const [command] = args
+    const [command, ...commandArgs] = args
 
     if (!command || command === "--help" || command === "help") {
       return { exitCode: 0, stdout: formatHelp(version), stderr: "" }
@@ -54,6 +74,24 @@ export function runCli(args: string[], version: string): CliResult {
       return {
         exitCode: 0,
         stdout: `Initialized BlueNote root: ${summary.rootPath}\n`,
+        stderr: "",
+      }
+    }
+
+    if (command === "new") {
+      const title = readFlagValue(commandArgs, "--title")
+
+      if (!title) {
+        throw new UsageError("Missing required --title for new note.", {
+          hint: 'Run bn new --title "Example".',
+        })
+      }
+
+      const summary = createNote({ title })
+
+      return {
+        exitCode: 0,
+        stdout: `Created note: ${summary.relativePath}\n`,
         stderr: "",
       }
     }
