@@ -10,7 +10,9 @@ test("ensureManagedRoot creates the full managed root layout", async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "bluenote-root-layout-"))
 
   try {
-    await ensureManagedRoot(tempRoot)
+    const resolvedRoot = await ensureManagedRoot(tempRoot)
+
+    assert.equal(resolvedRoot, path.resolve(tempRoot))
 
     for (const relativePath of MANAGED_ROOT_LAYOUT) {
       const fullPath = path.join(tempRoot, relativePath)
