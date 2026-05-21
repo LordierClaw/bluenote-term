@@ -1,6 +1,6 @@
 import os from "node:os"
 import path from "node:path"
-import { mkdir, mkdtemp, rm, stat } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises"
 
 import { MANAGED_ROOT_LAYOUT } from "../../src/storage/root-layout"
 
@@ -13,28 +13,52 @@ export type CliRunResult = {
   stderr: string
 }
 
+export type CliEnvOverrides = Record<string, string | undefined>
+
 export type ManagedRootHarness = {
   rootPath: string
-  run(args: string[], extraEnv?: Record<string, string>): CliRunResult
-  runScript(relativeScriptPath: string, extraEnv?: Record<string, string>): CliRunResult
+  run(args: string[], extraEnv?: CliEnvOverrides): CliRunResult
+  runScript(relativeScriptPath: string, extraEnv?: CliEnvOverrides): CliRunResult
   writeNote(relativePath: string, markdown: string): Promise<void>
+  writeFakeEditorScript(markdown: string, fileName?: string): Promise<string>
   cleanup(): Promise<void>
   escapeForRegExp(value: string): string
 }
 
+export type BlockedRootFixture = {
+  blockedRoot: string
+  cleanup(): Promise<void>
+}
+
 type RunWorkspaceCommandOptions = {
   rootPath?: string
-  extraEnv?: Record<string, string>
+  extraEnv?: CliEnvOverrides
+}
+
+function buildCommandEnv(rootPath?: string, extraEnv: CliEnvOverrides = {}): Record<string, string> {
+  const envEntries = Object.entries({
+    ...process.env,
+    ...(rootPath ? { BLUENOTE_ROOT: rootPath } : {}),
+  }).filter((entry): entry is [string, string] => typeof entry[1] === "string")
+
+  const env = Object.fromEntries(envEntries)
+
+  for (const [key, value] of Object.entries(extraEnv)) {
+    if (value === undefined) {
+      delete env[key]
+      continue
+    }
+
+    env[key] = value
+  }
+
+  return env
 }
 
 function runWorkspaceCommand(command: string[], { rootPath, extraEnv = {} }: RunWorkspaceCommandOptions = {}): CliRunResult {
   const result = Bun.spawnSync(command, {
     cwd: workspaceRoot,
-    env: {
-      ...process.env,
-      ...(rootPath ? { BLUENOTE_ROOT: rootPath } : {}),
-      ...extraEnv,
-    },
+    env: buildCommandEnv(rootPath, extraEnv),
     stdout: "pipe",
     stderr: "pipe",
   })
@@ -69,6 +93,19 @@ export async function assertManagedRootLayout(rootPath: string) {
   }
 }
 
+export async function createBlockedRootFixture(prefix = "bluenote-blocked-root-"): Promise<BlockedRootFixture> {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), prefix))
+  const blockedRoot = path.join(tempRoot, "blocked-root")
+  await writeFile(blockedRoot, "not a directory")
+
+  return {
+    blockedRoot,
+    cleanup() {
+      return rm(tempRoot, { recursive: true, force: true })
+    },
+  }
+}
+
 export async function createManagedRootHarness(prefix = "bluenote-test-"): Promise<ManagedRootHarness> {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), prefix))
 
@@ -84,6 +121,12 @@ export async function createManagedRootHarness(prefix = "bluenote-test-"): Promi
       const absolutePath = path.join(rootPath, relativePath)
       await mkdir(path.dirname(absolutePath), { recursive: true })
       await Bun.write(absolutePath, markdown)
+    },
+    async writeFakeEditorScript(markdown, fileName = "fake-editor.sh") {
+      const editorScriptPath = path.join(rootPath, fileName)
+      await writeFile(editorScriptPath, `#!/bin/sh\ncat <<'EOF' > "$1"\n${markdown}EOF\n`, "utf8")
+      await Bun.$`chmod 755 ${editorScriptPath}`.quiet()
+      return editorScriptPath
     },
     cleanup() {
       return rm(rootPath, { recursive: true, force: true })

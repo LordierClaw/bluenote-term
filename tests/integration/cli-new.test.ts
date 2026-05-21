@@ -2,10 +2,10 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
-import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, readdir, readFile } from "node:fs/promises"
 
 import { parseNoteFile } from "../../src/storage/frontmatter"
-import { assertManagedRootLayout, createManagedRootHarness, runCli } from "../helpers/cli"
+import { assertManagedRootLayout, createBlockedRootFixture, createManagedRootHarness, runCli } from "../helpers/cli"
 
 test("bn new --title \"Example\" creates a note, initializes the managed root, and returns a created path", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-new-")
@@ -62,25 +62,22 @@ test("repeated note creation produces distinct IDs", async () => {
 })
 
 test("bn new surfaces repository filesystem failures as CLI errors", async () => {
-  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-new-error-"))
-  const blockedRoot = path.join(tempRoot, "blocked-root")
+  const fixture = await createBlockedRootFixture("bluenote-cli-new-error-")
 
   try {
-    await writeFile(blockedRoot, "not a directory")
-
-    const result = runCli(["new", "--title", "Example"], { rootPath: blockedRoot })
+    const result = runCli(["new", "--title", "Example"], { rootPath: fixture.blockedRoot })
 
     assert.equal(result.exitCode, 1)
     assert.equal(result.stdout, "")
     assert.equal(
       result.stderr,
       [
-        "Could not initialize BlueNote root at '" + path.resolve(blockedRoot) + "'.",
+        "Could not initialize BlueNote root at '" + path.resolve(fixture.blockedRoot) + "'.",
         "Hint: Ensure BLUENOTE_ROOT points to a writable directory path.",
         "",
       ].join("\n"),
     )
   } finally {
-    await rm(tempRoot, { recursive: true, force: true })
+    await fixture.cleanup()
   }
 })

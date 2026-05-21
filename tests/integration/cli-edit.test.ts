@@ -1,7 +1,6 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import path from "node:path"
-import { chmod, writeFile } from "node:fs/promises"
 
 import { createManagedRootHarness } from "../helpers/cli"
 import { noteMarkdown } from "../helpers/note-fixtures"
@@ -16,16 +15,10 @@ test("bn edit <selector> launches the editor for the resolved note and rebuilds 
     body: "Updated body with zebra tokens.\n",
     updatedAt: "2026-05-21T11:45:00.000Z",
   })
-  const editorScriptPath = path.join(harness.rootPath, "fake-editor.sh")
 
   try {
     await harness.writeNote(relativePath, initialMarkdown)
-    await writeFile(
-      editorScriptPath,
-      `#!/bin/sh\ncat <<'EOF' > "$1"\n${updatedMarkdown}EOF\n`,
-      "utf8",
-    )
-    await chmod(editorScriptPath, 0o755)
+    const editorScriptPath = await harness.writeFakeEditorScript(updatedMarkdown)
 
     const rebuildResult = harness.run(["rebuild"])
     assert.equal(rebuildResult.exitCode, 0)
@@ -49,8 +42,9 @@ test("bn edit <selector> launches the editor for the resolved note and rebuilds 
   }
 })
 
-test("bn edit fails when $EDITOR is unset", async () => {
+test("bn edit fails when $EDITOR is unset even if the parent environment defines it", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-edit-missing-editor-")
+  const originalEditor = process.env.EDITOR
 
   try {
     await harness.writeNote(
@@ -58,12 +52,18 @@ test("bn edit fails when $EDITOR is unset", async () => {
       noteMarkdown({ id: "present-note", title: "Present Note", body: "Visible body.\n" }),
     )
 
-    const result = harness.run(["edit", "present-note"])
+    process.env.EDITOR = "/bin/true"
+    const result = harness.run(["edit", "present-note"], { EDITOR: undefined })
 
     assert.equal(result.exitCode, 1)
     assert.equal(result.stdout, "")
     assert.match(result.stderr, /EDITOR is not set/)
   } finally {
+    if (originalEditor === undefined) {
+      delete process.env.EDITOR
+    } else {
+      process.env.EDITOR = originalEditor
+    }
     await harness.cleanup()
   }
 })

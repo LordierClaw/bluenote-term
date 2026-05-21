@@ -34,3 +34,7 @@ export function noteMarkdown({
     sourcePath: "tests/fixtures/generated.md",
   })
 }
+
+export function timestampFieldPattern(fieldName: string): RegExp {
+  return new RegExp(`${fieldName}: '?\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z'?`)
+}

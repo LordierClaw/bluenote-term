@@ -1,15 +1,15 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import path from "node:path"
-import { access, chmod, readFile, writeFile } from "node:fs/promises"
+import { access, readFile } from "node:fs/promises"
 
 import { createManagedRootHarness, type CliRunResult } from "../helpers/cli"
-import { noteMarkdown } from "../helpers/note-fixtures"
+import { noteMarkdown, timestampFieldPattern } from "../helpers/note-fixtures"
 
 test("Phase 1 CLI workflow stays consistent across init, create, rebuild, list, search, show, edit, and archive", async () => {
   const harness = await createManagedRootHarness("bluenote-phase-1-e2e-")
 
-  const runOk = (step: string, args: string[], extraEnv?: Record<string, string>): CliRunResult => {
+  const runOk = (step: string, args: string[], extraEnv?: Record<string, string | undefined>): CliRunResult => {
     const result = harness.run(args, extraEnv)
 
     assert.equal(result.exitCode, 0, `${step} should exit 0`)
@@ -55,7 +55,6 @@ test("Phase 1 CLI workflow stays consistent across init, create, rebuild, list, 
     const showResult = runOk("bn show reference-note", ["show", "reference-note"])
     assert.equal(showResult.stdout, await readFile(path.join(harness.rootPath, secondNoteRelativePath), "utf8"))
 
-    const editorScriptPath = path.join(harness.rootPath, "fake-editor.sh")
     const editedMarkdown = noteMarkdown({
       id: "reference-note",
       title: "Reference Note Edited",
@@ -63,8 +62,7 @@ test("Phase 1 CLI workflow stays consistent across init, create, rebuild, list, 
       createdAt: "2026-05-21T10:15:00.000Z",
       updatedAt: "2026-05-21T11:45:00.000Z",
     })
-    await writeFile(editorScriptPath, `#!/bin/sh\ncat <<'EOF' > "$1"\n${editedMarkdown}EOF\n`, "utf8")
-    await chmod(editorScriptPath, 0o755)
+    const editorScriptPath = await harness.writeFakeEditorScript(editedMarkdown)
 
     const editResult = runOk("bn edit reference-note", ["edit", "reference-note"], { EDITOR: editorScriptPath })
     assert.match(editResult.stdout, /Edited note: notes[\\/]journal[\\/]reference-note\.md/)
@@ -79,7 +77,7 @@ test("Phase 1 CLI workflow stays consistent across init, create, rebuild, list, 
     const archivedRelativePath = path.join("notes", "archive", "reference-note.md")
     assert.equal(await Bun.file(path.join(harness.rootPath, secondNoteRelativePath)).exists(), false)
     const archivedMarkdown = await readFile(path.join(harness.rootPath, archivedRelativePath), "utf8")
-    assert.match(archivedMarkdown, /archivedAt: 2026-05-21T/)
+    assert.match(archivedMarkdown, timestampFieldPattern("archivedAt"))
     assert.match(archivedMarkdown, /Edited zebra tokens stay searchable before archive\./)
 
     const finalListResult = runOk("bn list after archive", ["list"])

@@ -2,7 +2,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import path from "node:path"
 import { createManagedRootHarness } from "../helpers/cli"
-import { noteMarkdown } from "../helpers/note-fixtures"
+import { noteMarkdown, timestampFieldPattern } from "../helpers/note-fixtures"
 
 test("bn archive <selector> moves the note into notes/archive, prints the archive path, and hides it from list/search", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-archive-")
@@ -32,7 +32,7 @@ test("bn archive <selector> moves the note into notes/archive, prints the archiv
 
     const showResult = harness.run(["show", path.join("notes", "archive", "archive-target.md")])
     assert.equal(showResult.exitCode, 0)
-    assert.match(showResult.stdout, /archivedAt: 2026-05-21T/)
+    assert.match(showResult.stdout, timestampFieldPattern("archivedAt"))
 
     const listResult = harness.run(["list"])
     assert.equal(listResult.exitCode, 0)
