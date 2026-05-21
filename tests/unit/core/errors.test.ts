@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 
 import {
   AmbiguousSelectorError,
+  AppError,
   EditorLaunchError,
   IndexUnavailableError,
   InvalidFrontmatterError,
@@ -54,4 +55,11 @@ test("distinct core error classes exist for domain failure cases", () => {
     assert.equal(instance.code, code)
     assert.match(instance.message, /.+/)
   }
+})
+
+test("AppError preserves explicitly provided falsy causes", () => {
+  const error = new AppError("TEST_ERROR", "message", { cause: "" })
+
+  assert.equal("cause" in error, true)
+  assert.equal(error.cause, "")
 })

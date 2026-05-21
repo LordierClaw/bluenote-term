@@ -5,7 +5,7 @@ export class AppError extends Error {
   readonly hint?: string
 
   constructor(code: string, message: string, options: AppErrorOptions = {}) {
-    super(message, options.cause ? { cause: options.cause } : undefined)
+    super(message, "cause" in options ? { cause: options.cause } : undefined)
     this.name = new.target.name
     this.code = code
     this.hint = options.hint
