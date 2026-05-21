@@ -127,6 +127,7 @@ export function rebuildIndexStore(input: RebuildIndexStoreInput): RebuildIndexSt
 export function loadIndexStore(rootPath: string): LoadedIndexStore {
   const metadataDatabasePath = getMetadataDatabasePath(rootPath)
   const searchIndexPath = getSearchIndexPath(rootPath)
+  const rebuildHint = "Run bn rebuild to recreate .bluenote artifacts from note files."
 
   let metadataBytes: Uint8Array
   let searchJson: string
@@ -136,67 +137,78 @@ export function loadIndexStore(rootPath: string): LoadedIndexStore {
     searchJson = readFileSync(searchIndexPath, "utf8")
   } catch (error) {
     throw new IndexUnavailableError("Derived indexes are unavailable.", {
-      hint: "Run bn rebuild to recreate .bluenote artifacts from note files.",
+      hint: rebuildHint,
       cause: error,
     })
   }
 
-  const db = new SQL.Database(metadataBytes)
-  const result = db.exec(`
-    SELECT id, title, relativePath, mode, tagsJson, createdAt, updatedAt
-    FROM notes
-    ORDER BY relativePath ASC
-  `)
-  db.close()
+  try {
+    const db = new SQL.Database(metadataBytes)
 
-  const summaries: IndexedNoteSummary[] = []
-  const values = result[0]?.values ?? []
+    try {
+      const result = db.exec(`
+        SELECT id, title, relativePath, mode, tagsJson, createdAt, updatedAt
+        FROM notes
+        ORDER BY relativePath ASC
+      `)
 
-  for (const row of values) {
-    const [id, title, relativePath, mode, tagsJson, createdAt, updatedAt] = row as [
-      string,
-      string,
-      string,
-      string,
-      string,
-      string,
-      string,
-    ]
+      const summaries: IndexedNoteSummary[] = []
+      const values = result[0]?.values ?? []
 
-    summaries.push({
-      id,
-      title,
-      relativePath,
-      mode,
-      tags: JSON.parse(tagsJson) as string[],
-      createdAt,
-      updatedAt,
-    })
-  }
+      for (const row of values) {
+        const [id, title, relativePath, mode, tagsJson, createdAt, updatedAt] = row as [
+          string,
+          string,
+          string,
+          string,
+          string,
+          string,
+          string,
+        ]
 
-  const searchEngine = MiniSearch.loadJSON<SearchIndexMatch>(searchJson, {
-    fields: [...SEARCH_FIELDS],
-    storeFields: [...SEARCH_STORE_FIELDS],
-  })
-
-  return {
-    listSummaries() {
-      return summaries.map((summary) => ({
-        ...summary,
-        tags: [...summary.tags],
-      }))
-    },
-
-    search(query: string) {
-      if (query.trim() === "") {
-        return []
+        summaries.push({
+          id,
+          title,
+          relativePath,
+          mode,
+          tags: JSON.parse(tagsJson) as string[],
+          createdAt,
+          updatedAt,
+        })
       }
 
-      return searchEngine.search(query).map((match) => ({
-        id: String(match.id),
-        title: String(match.title),
-        relativePath: String(match.relativePath),
-      }))
-    },
+      const searchEngine = MiniSearch.loadJSON<SearchIndexMatch>(searchJson, {
+        fields: [...SEARCH_FIELDS],
+        storeFields: [...SEARCH_STORE_FIELDS],
+      })
+
+      return {
+        listSummaries() {
+          return summaries.map((summary) => ({
+            ...summary,
+            tags: [...summary.tags],
+          }))
+        },
+
+        search(query: string) {
+          if (query.trim() === "") {
+            return []
+          }
+
+          return searchEngine.search(query).map((match) => ({
+            id: String(match.id),
+            title: String(match.title),
+            relativePath: String(match.relativePath),
+          }))
+        },
+      }
+    } finally {
+      db.close()
+    }
+  } catch (error) {
+    throw new IndexUnavailableError("Derived indexes are unavailable.", {
+      hint: rebuildHint,
+      cause: error,
+    })
   }
 }

@@ -2,8 +2,9 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
-import { access, mkdtemp, rm } from "node:fs/promises"
+import { access, mkdtemp, rm, writeFile } from "node:fs/promises"
 
+import { IndexUnavailableError } from "../../../src/core/errors"
 import { createSearchDocuments } from "../../../src/index/search-documents"
 import { loadIndexStore, rebuildIndexStore } from "../../../src/index/index-store"
 import { parseNoteFile } from "../../../src/storage/frontmatter"
@@ -71,6 +72,64 @@ test("derived artifacts can be deleted and recreated from note files", async () 
     const store = await loadIndexStore(rootPath)
     assert.deepEqual(store.search("project comet").map((result) => result.id), ["note-alpha"])
     assert.deepEqual(createSearchDocuments([NOTE_ALPHA]).map((document) => document.id), ["note-alpha"])
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("loadIndexStore wraps corrupt metadata artifacts as IndexUnavailableError with rebuild hint", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-index-store-corrupt-metadata-"))
+
+  try {
+    const rebuilt = await rebuildIndexStore({
+      rootPath,
+      notes: [NOTE_ALPHA],
+    })
+
+    await writeFile(rebuilt.metadataDatabasePath, "not-a-sqlite-database", "utf8")
+
+    let caughtError: unknown
+    try {
+      loadIndexStore(rootPath)
+      assert.fail("Expected loadIndexStore to throw for corrupt metadata artifacts")
+    } catch (error) {
+      caughtError = error
+    }
+
+    assert.ok(caughtError instanceof IndexUnavailableError)
+    assert.equal(caughtError.message, "Derived indexes are unavailable.")
+    assert.equal(caughtError.hint, "Run bn rebuild to recreate .bluenote artifacts from note files.")
+    assert.notEqual(caughtError.cause, undefined)
+    assert.equal(caughtError.cause instanceof IndexUnavailableError, false)
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("loadIndexStore wraps corrupt search artifacts as IndexUnavailableError with rebuild hint", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-index-store-corrupt-search-"))
+
+  try {
+    const rebuilt = await rebuildIndexStore({
+      rootPath,
+      notes: [NOTE_ALPHA],
+    })
+
+    await writeFile(rebuilt.searchIndexPath, "{not-valid-json", "utf8")
+
+    let caughtError: unknown
+    try {
+      loadIndexStore(rootPath)
+      assert.fail("Expected loadIndexStore to throw for corrupt search artifacts")
+    } catch (error) {
+      caughtError = error
+    }
+
+    assert.ok(caughtError instanceof IndexUnavailableError)
+    assert.equal(caughtError.message, "Derived indexes are unavailable.")
+    assert.equal(caughtError.hint, "Run bn rebuild to recreate .bluenote artifacts from note files.")
+    assert.notEqual(caughtError.cause, undefined)
+    assert.equal(caughtError.cause instanceof IndexUnavailableError, false)
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }
