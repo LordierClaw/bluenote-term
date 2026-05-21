@@ -1,7 +1,26 @@
+import {
+  AppError,
+  isValidationOrDataError,
+} from "../core/errors"
+
 export interface CliResult {
   exitCode: number
   stdout: string
   stderr: string
+}
+
+export function formatCliError(error: AppError): CliResult {
+  const messageLines = [error.message]
+
+  if (error.hint) {
+    messageLines.push(`Hint: ${error.hint}`)
+  }
+
+  return {
+    exitCode: isValidationOrDataError(error) ? 2 : 1,
+    stdout: "",
+    stderr: `${messageLines.join("\n")}\n`,
+  }
 }
 
 export function formatHelp(version: string): string {
