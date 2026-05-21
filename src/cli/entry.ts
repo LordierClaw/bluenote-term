@@ -2,6 +2,7 @@ import {
   AppError,
   isValidationOrDataError,
 } from "../core/errors"
+import { initRoot } from "../core/init-root"
 
 export interface CliResult {
   exitCode: number
@@ -34,6 +35,7 @@ export function formatHelp(version: string): string {
     "Commands:",
     "  --help       Show this message",
     "  --version    Print the current version",
+    "  init         Initialize the managed BlueNote root",
     "  tui          Show the TUI scaffold status",
   ].join("\n") + "\n"
 }
@@ -47,6 +49,16 @@ export function runCli(args: string[], version: string): CliResult {
 
   if (command === "--version" || command === "version") {
     return { exitCode: 0, stdout: `${version}\n`, stderr: "" }
+  }
+
+  if (command === "init") {
+    const summary = initRoot()
+
+    return {
+      exitCode: 0,
+      stdout: `${summary.message}\n`,
+      stderr: "",
+    }
   }
 
   if (command === "tui") {
