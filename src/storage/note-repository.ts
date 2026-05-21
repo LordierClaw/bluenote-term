@@ -1,6 +1,7 @@
 import path from "node:path"
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 
+import { UsageError } from "../core/errors"
 import { assertPathInsideRoot, toRootRelativePath } from "../platform/path-safety"
 import { parseNoteFile, serializeNoteFile } from "./frontmatter"
 import type { NoteFrontmatter, ParsedNote } from "./note-schema"
@@ -22,6 +23,22 @@ export interface NoteRepository {
 
 const DEFAULT_INBOX_RELATIVE_PATH = path.join("notes", "inbox")
 
+function wrapRepositoryError(action: "create" | "read", relativePath: string, error: unknown): never {
+  const message =
+    action === "create"
+      ? `Could not create note '${relativePath}'.`
+      : `Could not read note '${relativePath}'.`
+  const hint =
+    action === "create"
+      ? "Ensure BLUENOTE_ROOT points to a writable directory path."
+      : "Ensure the note exists inside BLUENOTE_ROOT and is readable."
+
+  throw new UsageError(message, {
+    hint,
+    cause: error,
+  })
+}
+
 export function createNoteRepository(rootPath: string): NoteRepository {
   const normalizedRootPath = path.resolve(rootPath)
 
@@ -36,8 +53,12 @@ export function createNoteRepository(rootPath: string): NoteRepository {
         sourcePath: relativePath,
       })
 
-      mkdirSync(inboxPath, { recursive: true })
-      writeFileSync(notePath, markdown, "utf8")
+      try {
+        mkdirSync(inboxPath, { recursive: true })
+        writeFileSync(notePath, markdown, "utf8")
+      } catch (error) {
+        wrapRepositoryError("create", relativePath, error)
+      }
 
       return {
         notePath,
@@ -48,7 +69,13 @@ export function createNoteRepository(rootPath: string): NoteRepository {
     read(notePath) {
       const normalizedNotePath = assertPathInsideRoot(normalizedRootPath, notePath)
       const relativePath = toRootRelativePath(normalizedRootPath, normalizedNotePath)
-      const markdown = readFileSync(normalizedNotePath, "utf8")
+      let markdown: string
+
+      try {
+        markdown = readFileSync(normalizedNotePath, "utf8")
+      } catch (error) {
+        wrapRepositoryError("read", relativePath, error)
+      }
 
       return parseNoteFile(markdown, relativePath)
     },

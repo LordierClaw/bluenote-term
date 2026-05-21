@@ -2,6 +2,7 @@ import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions } from "../config/
 import { systemClock, type Clock } from "../platform/clock"
 import { uuidGenerator, type IdGenerator } from "../platform/ids"
 import { createNoteRepository } from "../storage/note-repository"
+import { ensureManagedRoot } from "../storage/root-layout"
 
 export interface CreateNoteOptions extends ResolveBlueNoteRootOptions {
   title: string
@@ -18,7 +19,7 @@ export interface CreateNoteSummary {
 }
 
 export function createNote(options: CreateNoteOptions): CreateNoteSummary {
-  const rootPath = resolveBlueNoteRoot(options)
+  const rootPath = ensureManagedRoot(resolveBlueNoteRoot(options))
   const clock = options.clock ?? systemClock
   const ids = options.ids ?? uuidGenerator
   const timestamp = clock.now().toISOString()
