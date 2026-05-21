@@ -20,9 +20,9 @@ export function resolveBlueNoteRoot(options: ResolveBlueNoteRootOptions = {}): s
   let rootPath: string
 
   if (override !== undefined) {
-    rootPath = override!
+    rootPath = override
   } else if (envRoot !== undefined) {
-    rootPath = envRoot!
+    rootPath = envRoot
   } else {
     rootPath = path.join(homeDir, ".bluenote")
   }
