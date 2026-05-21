@@ -1,7 +1,21 @@
-import yaml from "js-yaml"
+import { createRequire } from "node:module"
 
 import { InvalidFrontmatterError } from "../core/errors"
 import { type NoteFrontmatter, type ParsedNote, validateNoteFrontmatter } from "./note-schema"
+
+type YamlApi = {
+  load(input: string, options: { schema: unknown }): unknown
+  dump(input: NoteFrontmatter, options: {
+    indent: number
+    lineWidth: number
+    noRefs: boolean
+    schema: unknown
+  }): string
+  JSON_SCHEMA: unknown
+}
+
+const require = createRequire(import.meta.url)
+const yaml = require("js-yaml") as YamlApi
 
 const FRONTMATTER_PATTERN = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/
 
