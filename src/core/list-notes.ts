@@ -1,5 +1,5 @@
 import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions } from "../config/root"
-import { createNoteRepository } from "../storage/note-repository"
+import { loadIndexStore } from "../index/index-store"
 
 export interface NoteSummary {
   id: string
@@ -8,11 +8,11 @@ export interface NoteSummary {
 }
 
 export function listNotes(options: ResolveBlueNoteRootOptions = {}): NoteSummary[] {
-  const repository = createNoteRepository(resolveBlueNoteRoot(options))
+  const store = loadIndexStore(resolveBlueNoteRoot(options))
 
-  return repository.list().map((note) => ({
-    id: note.frontmatter.id,
-    title: note.frontmatter.title,
-    relativePath: note.sourcePath,
+  return store.listSummaries().map((summary) => ({
+    id: summary.id,
+    title: summary.title,
+    relativePath: summary.relativePath,
   }))
 }

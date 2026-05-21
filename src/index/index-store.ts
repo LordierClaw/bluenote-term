@@ -17,6 +17,7 @@ const METADATA_FILENAME = "metadata.sqlite"
 const SEARCH_FILENAME = "search-index.json"
 const SEARCH_FIELDS = ["title", "body", "tags"] as const
 const SEARCH_STORE_FIELDS = ["id", "title", "relativePath"] as const
+const REBUILD_INDEX_HINT = "Run bn rebuild to recreate .bluenote artifacts from note files."
 
 export interface IndexedNoteSummary {
   id: string
@@ -127,7 +128,6 @@ export function rebuildIndexStore(input: RebuildIndexStoreInput): RebuildIndexSt
 export function loadIndexStore(rootPath: string): LoadedIndexStore {
   const metadataDatabasePath = getMetadataDatabasePath(rootPath)
   const searchIndexPath = getSearchIndexPath(rootPath)
-  const rebuildHint = "Run bn rebuild to recreate .bluenote artifacts from note files."
 
   let metadataBytes: Uint8Array
   let searchJson: string
@@ -137,7 +137,7 @@ export function loadIndexStore(rootPath: string): LoadedIndexStore {
     searchJson = readFileSync(searchIndexPath, "utf8")
   } catch (error) {
     throw new IndexUnavailableError("Derived indexes are unavailable.", {
-      hint: rebuildHint,
+      hint: REBUILD_INDEX_HINT,
       cause: error,
     })
   }
@@ -207,7 +207,7 @@ export function loadIndexStore(rootPath: string): LoadedIndexStore {
     }
   } catch (error) {
     throw new IndexUnavailableError("Derived indexes are unavailable.", {
-      hint: rebuildHint,
+      hint: REBUILD_INDEX_HINT,
       cause: error,
     })
   }

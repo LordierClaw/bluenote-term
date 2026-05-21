@@ -8,6 +8,7 @@ import { createNote } from "../core/create-note"
 import { initRoot } from "../core/init-root"
 import { listNotes } from "../core/list-notes"
 import { rebuildIndexes } from "../core/rebuild-indexes"
+import { searchNotes } from "../core/search-notes"
 import { showNote } from "../core/show-note"
 
 export function formatCliError(error: AppError): CliResult {
@@ -56,6 +57,7 @@ export function formatHelp(version: string): string {
     "  init         Initialize the managed BlueNote root",
     "  new          Create a new note in notes/inbox",
     "  list         List note summaries",
+    "  search       Search indexed notes",
     "  show         Print a matching note",
     "  rebuild      Rebuild derived metadata and search indexes",
     "  tui          Show the TUI scaffold status",
@@ -105,6 +107,25 @@ export function runCli(args: string[], version: string): CliResult {
     if (command === "list") {
       const summaries = listNotes()
       const stdout = summaries.map((summary) => `${summary.id}\t${summary.title}\t${summary.relativePath}`).join("\n")
+
+      return {
+        exitCode: 0,
+        stdout: stdout === "" ? "" : `${stdout}\n`,
+        stderr: "",
+      }
+    }
+
+    if (command === "search") {
+      const query = commandArgs.join(" ").trim()
+
+      if (query === "") {
+        throw new UsageError("Missing required query for search.", {
+          hint: 'Run bn search "keywords".',
+        })
+      }
+
+      const matches = searchNotes(query)
+      const stdout = matches.map((match) => `${match.id}\t${match.titleSnippet}\t${match.pathSnippet}`).join("\n")
 
       return {
         exitCode: 0,

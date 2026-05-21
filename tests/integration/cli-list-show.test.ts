@@ -40,6 +40,11 @@ test("bn list shows existing note summaries", async () => {
       `---\nid: note-beta\nschemaVersion: 1\ntitle: Beta Note\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T11:15:00.000Z\nupdatedAt: 2026-05-21T11:15:00.000Z\n---\nBeta body.\n`,
     )
 
+    const rebuildResult = runCli(["rebuild"], managedRoot)
+
+    assert.equal(rebuildResult.exitCode, 0)
+    assert.equal(rebuildResult.stderr.toString(), "")
+
     const result = runCli(["list"], managedRoot)
 
     assert.equal(result.exitCode, 0)
