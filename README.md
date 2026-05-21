@@ -1,22 +1,21 @@
 # BlueNote
 
-BlueNote is a terminal-native, local-first note tool being prepared for implementation with Bun, TypeScript, and OpenTUI.
+BlueNote is a terminal-native, local-first note tool under active Phase 1 CLI development with Bun, TypeScript, and OpenTUI.
 
 ## Status
 
-This repository is currently in **Phase 0: project preparation**.
+This repository now includes Phase 1 CLI implementation and verification work, building on the earlier **Phase 0: project preparation** pass.
 
 Current goals:
-- normalize repository and Git hygiene
-- establish runtime/tooling conventions
-- prepare Hermes project guidance
-- split product/architecture docs into maintainable files
-- scaffold the directory layout for future implementation
+- keep repository and Git hygiene aligned with active CLI work
+- maintain runtime/tooling conventions
+- keep Hermes and project docs aligned with the implemented workflow
+- verify the command-first Phase 1 CLI workflow with tests and smoke checks
 
 ## Runtime
 
-- Bun `1.3+` preferred for TUI/dev workflows and the current scaffold CLI entrypoint
-- Node.js `20+` compatibility target for shared core pieces; repo-entry scripts remain Bun-first in Phase 0
+- Bun `1.3+` preferred for TUI/dev workflows and the current CLI scripts
+- Node.js `20+` compatibility target for shared core pieces; repo-entry scripts are currently Bun-first
 
 ## Commands
 
@@ -40,4 +39,4 @@ bun run smoke:cli
 
 ## Current implementation note
 
-Feature work has not started yet. The CLI and TUI files currently provide a scaffold/placeholder baseline only.
+The repository now includes a working Phase 1 CLI flow plus automated verification. Some surrounding project history and planning artifacts still reference the earlier preparation pass, so docs are being normalized alongside the implementation work.

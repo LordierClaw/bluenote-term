@@ -32,6 +32,17 @@ Out of scope for this plan:
 
 ---
 
+## Planning history note
+
+The main Phase 1 implementation plan already covers the core verification/build-out topics:
+- CLI smoke verification in Task 11
+- real end-to-end CLI workflow coverage via the actual entrypoint in Task 13
+- helper/harness normalization in Task 14
+
+The later follow-up plan at `docs/plans/2026-05-21-phase-1-feedback-followup-implementation.md` records the additional audit plus brittle-assertion/env-stability verification pass that was added after feedback changed execution expectations.
+
+---
+
 ## Execution rules
 
 - Keep each task tightly scoped.

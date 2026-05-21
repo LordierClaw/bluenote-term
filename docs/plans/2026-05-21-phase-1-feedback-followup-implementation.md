@@ -55,6 +55,41 @@ For each currently changed file, classify it as:
 **Step 4: Do not implement further until the audit result is written down**
 The output of this task is a branch-state decision list, not code churn.
 
+### Audit result
+
+Verification run on current branch:
+- `bun test tests/e2e/phase-1-cli-workflow.test.ts`
+- `bun test tests/integration/cli-edit.test.ts tests/integration/cli-archive.test.ts`
+- Result: PASS
+
+Checklist against updated feedback:
+- [x] Real e2e test uses the actual CLI entrypoint — `tests/helpers/cli.ts` runs `bun run <repo>/bin/bn.ts`, and `tests/e2e/phase-1-cli-workflow.test.ts` exercises the full workflow through that entrypoint.
+- [x] No fake repository/index mocking in e2e coverage — the e2e workflow creates on-disk notes, runs `rebuild`, checks `.bluenote/metadata.sqlite` and `.bluenote/search-index.json`, and asserts `list/search/show/edit/archive` behavior without repository or index stubs.
+- [x] Test cleanup reduces duplication instead of only moving it around — `tests/helpers/cli.ts` centralizes managed-root setup, CLI invocation, cleanup, fake-editor creation, and blocked-root fixtures; `tests/helpers/note-fixtures.ts` centralizes canonical note Markdown generation and timestamp matching.
+- [x] Assertions are stable, not date-brittle or env-brittle — archive timestamps use `timestampFieldPattern(...)` instead of wall-clock exact matches, fixture notes use explicit timestamps, and the missing-editor integration test proves `EDITOR: undefined` removes inherited environment state.
+- [x] Docs/plan alignment is explicit — `docs/plans/2026-05-21-phase-1-cli-storage-implementation.md` already contains dedicated smoke coverage in Task 11 plus explicit real-e2e and test-cleanup tasks in Tasks 13 and 14; the remaining documentation work is only to cross-reference this feedback follow-up so the planning history stays clear.
+
+Keep/fix/revert decisions before further implementation:
+- Keep/fix/revert decision for the audit write-up itself: `docs/plans/2026-05-21-phase-1-feedback-followup-implementation.md` — **keep but adjust**; this audit write-up belongs here, and the later Task 4 docs-alignment pass records the small follow-up note.
+- Audited branch files relevant to the feedback scope:
+  - `tests/e2e/phase-1-cli-workflow.test.ts` — **keep as-is**
+  - `tests/helpers/cli.ts` — **keep as-is**
+  - `tests/helpers/note-fixtures.ts` — **keep as-is**
+  - `tests/integration/cli-edit.test.ts` — **keep as-is**
+  - `tests/integration/cli-archive.test.ts` — **keep as-is**
+  - `tests/integration/cli-init.test.ts` — **keep as-is**
+  - `tests/integration/cli-new.test.ts` — **keep as-is**
+  - `package.json` — **keep as-is**
+  - `scripts/smoke-cli.ts` — **keep as-is**
+  - `docs/plans/2026-05-21-phase-1-cli-storage-implementation.md` — **keep as-is** for scope coverage; Task 4 should only add a light cross-reference to this feedback follow-up if needed for planning-history clarity.
+  - `docs/plans/2026-05-21-phase-1-cli-storage-design.md` — **keep as-is**; design still matches the implemented command-first CLI direction.
+
+Branch-state decision for Task 1:
+- Keep the current real CLI/e2e and integration harness changes.
+- Do not revert the current test helpers or smoke coverage.
+- No additional e2e-contract or harness-cleanup gaps were confirmed during this audit, so Tasks 2 and 3 should stay verification-only unless later review uncovers a concrete missing contract or brittle harness behavior.
+- Reserve Task 4 for minimal planning-history alignment, not for re-describing already documented e2e and cleanup scope.
+
 ---
 
 ## Task 2: Lock down the real e2e contract with explicit failing coverage if needed
@@ -94,6 +129,12 @@ Expected: PASS.
 git add tests/e2e/phase-1-cli-workflow.test.ts tests/helpers/cli.ts tests/helpers/note-fixtures.ts && git commit -m "test: align phase 1 e2e workflow with feedback"
 ```
 Only commit if code changed during this task.
+
+### Task 2 verification result
+
+- Re-ran `bun test tests/e2e/phase-1-cli-workflow.test.ts` on the current branch: PASS.
+- Verified the required real-e2e contract is already covered: the harness invokes the actual `bin/bn.ts` entrypoint, assertions check real filesystem artifacts plus explicit stdout/stderr and exit codes, archive behavior is verified in both `list` and `search`, and the workflow uses no repository/index mocks.
+- Outcome: no remaining real e2e contract gap was found, so no test or helper code change was required for Task 2.
 
 ---
 
@@ -141,6 +182,16 @@ git add tests/helpers/cli.ts tests/helpers/note-fixtures.ts tests/integration/cl
 ```
 Only commit if code changed during this task.
 
+### Task 3 verification result
+
+- Re-ran `bun test tests/integration/cli-init.test.ts tests/integration/cli-new.test.ts tests/integration/cli-edit.test.ts tests/integration/cli-archive.test.ts`: PASS.
+- Re-verified the cleanup goals across the current harness:
+  - `tests/helpers/cli.ts` already supports subprocess env unsetting via `buildCommandEnv(...)` deleting keys whose override value is `undefined`, and `tests/integration/cli-edit.test.ts` explicitly covers the `EDITOR` leak case.
+  - `tests/helpers/note-fixtures.ts` already provides `timestampFieldPattern(...)`, and archive coverage uses it instead of wall-clock-equality assertions.
+  - Managed temp-root, fake-editor, and blocked-root setup is centralized in `tests/helpers/cli.ts` where it removes repetition, while individual tests still keep setup/assertion details inline enough to preserve intent.
+  - `scripts/smoke-cli.ts` stays small and explicit, so additional helper abstraction is not needed there.
+- Outcome: no remaining test-harness cleanup gap was found, so no code change was required for Task 3 beyond recording this verification result.
+
 ---
 
 ## Task 4: Align docs and planning artifacts with the feedback-adjusted scope
@@ -175,6 +226,20 @@ Expected: PASS; docs should not claim behavior that the tests do not prove.
 git add docs/plans/2026-05-21-phase-1-cli-storage-implementation.md docs/plans/2026-05-21-phase-1-feedback-followup-implementation.md README.md && git commit -m "docs: align phase 1 workflow plan with feedback"
 ```
 Only commit if docs changed during this task.
+
+### Task 4 verification result
+
+- Added a short planning-history note to `docs/plans/2026-05-21-phase-1-cli-storage-implementation.md` instead of re-describing scope that was already explicit in Tasks 11, 13, and the helper-normalization parts of Task 14.
+- Confirmed the earlier Phase 1 implementation plan already documents:
+  - CLI smoke verification in Task 11,
+  - real end-to-end CLI workflow coverage through the actual entrypoint in Task 13,
+  - helper/harness cleanup and fixture deduplication in Task 14.
+- Kept the brittle-assertion and env-stability verification history in this follow-up plan, because that detail was validated during the later feedback-driven audit rather than spelled out in the original implementation plan.
+- Updated `README.md` because its Phase 0 / placeholder-only implementation note was misleading relative to the current branch, which now contains Phase 1 CLI implementation and verification artifacts.
+- Re-ran the Task 4 verification commands after the doc edits:
+  - `bun test tests/e2e/phase-1-cli-workflow.test.ts`
+  - `bun run smoke:cli`
+  - Result: PASS
 
 ---
 
