@@ -21,6 +21,7 @@ export interface NoteRepository {
   read(notePath: string): ParsedNote
   readRaw(notePath: string): string
   list(): ParsedNote[]
+  listNotePaths(): StoredNoteRecord[]
 }
 
 const DEFAULT_INBOX_RELATIVE_PATH = path.join("notes", "inbox")
@@ -114,6 +115,10 @@ export function createNoteRepository(rootPath: string): NoteRepository {
     },
 
     list() {
+      return this.listNotePaths().map((record) => this.read(record.notePath))
+    },
+
+    listNotePaths() {
       const notesPath = assertPathInsideRoot(normalizedRootPath, path.join(normalizedRootPath, NOTES_RELATIVE_PATH))
       const notePaths: string[] = []
 
@@ -125,7 +130,10 @@ export function createNoteRepository(rootPath: string): NoteRepository {
 
       notePaths.sort((left, right) => left.localeCompare(right))
 
-      return notePaths.map((notePath) => this.read(notePath))
+      return notePaths.map((notePath) => ({
+        notePath,
+        relativePath: toRootRelativePath(normalizedRootPath, notePath),
+      }))
     },
   }
 }

@@ -7,6 +7,7 @@ import type { CliResult } from "../core/types"
 import { createNote } from "../core/create-note"
 import { initRoot } from "../core/init-root"
 import { listNotes } from "../core/list-notes"
+import { rebuildIndexes } from "../core/rebuild-indexes"
 import { showNote } from "../core/show-note"
 
 export function formatCliError(error: AppError): CliResult {
@@ -56,6 +57,7 @@ export function formatHelp(version: string): string {
     "  new          Create a new note in notes/inbox",
     "  list         List note summaries",
     "  show         Print a matching note",
+    "  rebuild      Rebuild derived metadata and search indexes",
     "  tui          Show the TUI scaffold status",
   ].join("\n") + "\n"
 }
@@ -123,6 +125,24 @@ export function runCli(args: string[], version: string): CliResult {
       return {
         exitCode: 0,
         stdout: showNote({ selector }),
+        stderr: "",
+      }
+    }
+
+    if (command === "rebuild") {
+      const summary = rebuildIndexes()
+
+      if (summary.validationErrors.length > 0) {
+        return {
+          exitCode: 2,
+          stdout: "",
+          stderr: `Validation failed while rebuilding indexes.\n${summary.validationErrors.join("\n")}\n`,
+        }
+      }
+
+      return {
+        exitCode: 0,
+        stdout: `Rebuilt indexes for ${summary.noteCount} note(s).\n`,
         stderr: "",
       }
     }
