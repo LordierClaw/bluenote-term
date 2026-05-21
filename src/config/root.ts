@@ -14,13 +14,18 @@ export function resolveBlueNoteRoot(options: ResolveBlueNoteRootOptions = {}): s
   const env = options.env ?? process.env
   const cwd = options.cwd ?? process.cwd()
   const homeDir = options.homeDir ?? os.homedir()
-  const hasOverride = options.override !== undefined
-  const hasEnvRoot = env.BLUENOTE_ROOT !== undefined
-  const rootPath = hasOverride
-    ? options.override
-    : hasEnvRoot
-      ? env.BLUENOTE_ROOT
-      : path.join(homeDir, ".bluenote")
+  const override = options.override
+  const envRoot = env.BLUENOTE_ROOT
+  const hasOverride = override !== undefined
+  let rootPath: string
+
+  if (override !== undefined) {
+    rootPath = override!
+  } else if (envRoot !== undefined) {
+    rootPath = envRoot!
+  } else {
+    rootPath = path.join(homeDir, ".bluenote")
+  }
 
   if (rootPath === "") {
     throw new UsageError(hasOverride ? "BlueNote root override must not be empty." : "BLUENOTE_ROOT must not be empty.")
