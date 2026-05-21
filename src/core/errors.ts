@@ -48,7 +48,9 @@ export class IndexUnavailableError extends AppError {
   }
 }
 
-export function isValidationOrDataError(error: unknown): error is InvalidFrontmatterError | AmbiguousSelectorError | IndexUnavailableError {
+export function isValidationOrDataError(
+  error: unknown,
+): error is InvalidFrontmatterError | AmbiguousSelectorError | IndexUnavailableError {
   return (
     error instanceof InvalidFrontmatterError ||
     error instanceof AmbiguousSelectorError ||
