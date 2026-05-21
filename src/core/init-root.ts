@@ -3,7 +3,6 @@ import { ensureManagedRoot } from "../storage/root-layout"
 
 export interface InitRootSummary {
   rootPath: string
-  message: string
 }
 
 export function initRoot(options: ResolveBlueNoteRootOptions = {}): InitRootSummary {
@@ -11,6 +10,5 @@ export function initRoot(options: ResolveBlueNoteRootOptions = {}): InitRootSumm
 
   return {
     rootPath,
-    message: `Initialized BlueNote root: ${rootPath}`,
   }
 }

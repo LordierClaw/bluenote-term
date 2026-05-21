@@ -53,7 +53,7 @@ export function runCli(args: string[], version: string): CliResult {
 
       return {
         exitCode: 0,
-        stdout: `${summary.message}\n`,
+        stdout: `Initialized BlueNote root: ${summary.rootPath}\n`,
         stderr: "",
       }
     }
