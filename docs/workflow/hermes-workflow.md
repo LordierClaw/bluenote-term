@@ -3,7 +3,8 @@
 ## Project-local expectations
 
 - `AGENTS.md` is the primary project-local instruction file.
-- `.hermes/plans/` stores planning artifacts generated during repo work.
+- `docs/plans/` stores planning artifacts generated during repo work.
+- `.hermes/plans/` is a legacy location and should not receive new plan files.
 - `.hermes/skills/opentui/` is intentionally kept in this repo as current Hermes/OpenTUI skill context.
 - `.agents/` is not part of the clean scaffold baseline and should stay removed unless intentionally reintroduced.
 

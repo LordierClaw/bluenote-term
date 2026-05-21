@@ -109,7 +109,7 @@ This is the proposed structure after the preparation pass:
 
 Notes:
 
-- Keep `.hermes/plans/` committed if you want project planning history in-repo; otherwise ignore everything under `.hermes/` except plans. Decide this explicitly.
+- Keep plan history in `docs/plans/` as part of the repo; treat `.hermes/plans/` as a legacy location rather than an active source of new plans.
 - Do **not** commit `node_modules/`.
 - Do **not** keep duplicated local skill vendor trees unless they are intentionally part of the project.
 
@@ -558,7 +558,7 @@ find . -maxdepth 3 \( -path './.git' -o -path './node_modules' \) -prune -o -pri
 ## Open questions for execution
 
 1. Do you want the default branch renamed to `main` if it is currently `master`?
-2. Should `.hermes/plans/` be committed as part of the repo, or should plans remain local-only?
+2. Should `docs/plans/` be treated as the canonical in-repo home for all plans, with `.hermes/plans/` considered legacy-only?
 3. Do you want `.agents/` and `.hermes/skills/` preserved in-repo as project infrastructure, or treated as local caches to remove?
 4. Should `skills-lock.json` be kept as an intentional dependency pin for agent workflows?
 5. Do you want `CLAUDE.md` / `.cursorrules` compatibility files, or should `AGENTS.md` be the single source of truth?

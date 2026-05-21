@@ -24,10 +24,11 @@ BlueNote is a terminal-native, local-first note tool. This repository is current
 
 ## Hermes-specific repo conventions
 
-- Keep project plans in `.hermes/plans/`.
+- Keep project plans in `docs/plans/`.
+- Treat `.hermes/plans/` as a legacy location; migrate older plan files into `docs/plans/` instead of writing new plans there.
 - Keep the current `.hermes/skills/opentui/` skill assets in-repo for this project unless the user says otherwise.
 - `.agents/` is not part of the desired clean scaffold and should be removed unless the user explicitly reintroduces it.
-- Do not remove `.hermes/plans/` or `.hermes/skills/` without explicit user approval.
+- Do not remove `.hermes/skills/` without explicit user approval.
 - Prefer `AGENTS.md` as the project-local source of truth for agent behavior.
 
 ## Verification expectations

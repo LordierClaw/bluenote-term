@@ -36,7 +36,7 @@ bun run smoke:cli
 - `docs/architecture/` — runtime, storage, and indexing references
 - `docs/phases/` — staged implementation roadmap
 - `docs/workflow/` — developer + Hermes workflow conventions
-- `.hermes/plans/` — saved planning artifacts
+- `docs/plans/` — saved planning artifacts and implementation/design plans
 
 ## Current implementation note
 
