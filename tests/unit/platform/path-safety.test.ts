@@ -2,6 +2,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import path from "node:path"
 
+import { UsageError } from "../../../src/core/errors"
 import {
   assertPathInsideRoot,
   toRootRelativePath,
@@ -13,7 +14,11 @@ test("path safety helper rejects paths escaping the managed root", () => {
 
   assert.throws(
     () => assertPathInsideRoot(rootPath, escapingPath),
-    /outside the managed root/,
+    (error: unknown) => {
+      assert.ok(error instanceof UsageError)
+      assert.match(error.message, /outside the managed root/)
+      return true
+    },
   )
 })
 

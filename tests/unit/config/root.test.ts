@@ -2,6 +2,7 @@ import test from "node:test"
 import assert from "node:assert/strict"
 import path from "node:path"
 
+import { UsageError } from "../../../src/core/errors"
 import { resolveBlueNoteRoot } from "../../../src/config/root"
 
 test("default root resolves to ~/.bluenote when no override is provided", () => {
@@ -33,4 +34,35 @@ test("relative override paths resolve to absolute paths", () => {
   })
 
   assert.equal(resolvedRoot, path.resolve("/tmp/working-directory", "relative-root"))
+})
+
+test("empty explicit override is rejected instead of silently resolving to cwd", () => {
+  assert.throws(
+    () => resolveBlueNoteRoot({
+      override: "",
+      env: {},
+      homeDir: "/tmp/test-home",
+      cwd: "/tmp/working-directory",
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof UsageError)
+      assert.match(error.message, /must not be empty/)
+      return true
+    },
+  )
+})
+
+test("empty BLUENOTE_ROOT environment override is rejected instead of silently resolving to cwd", () => {
+  assert.throws(
+    () => resolveBlueNoteRoot({
+      env: { BLUENOTE_ROOT: "" },
+      homeDir: "/tmp/test-home",
+      cwd: "/tmp/working-directory",
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof UsageError)
+      assert.match(error.message, /must not be empty/)
+      return true
+    },
+  )
 })

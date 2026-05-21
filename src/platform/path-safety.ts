@@ -1,5 +1,7 @@
 import path from "node:path"
 
+import { UsageError } from "../core/errors"
+
 export function assertPathInsideRoot(rootPath: string, targetPath: string): string {
   const normalizedRootPath = path.resolve(rootPath)
   const normalizedTargetPath = path.resolve(targetPath)
@@ -9,11 +11,12 @@ export function assertPathInsideRoot(rootPath: string, targetPath: string): stri
     return normalizedTargetPath
   }
 
-  throw new Error(`Target path '${normalizedTargetPath}' is outside the managed root '${normalizedRootPath}'.`)
+  throw new UsageError(`Target path '${normalizedTargetPath}' is outside the managed root '${normalizedRootPath}'.`)
 }
 
 export function toRootRelativePath(rootPath: string, targetPath: string): string {
-  const normalizedTargetPath = assertPathInsideRoot(rootPath, targetPath)
+  const normalizedRootPath = path.resolve(rootPath)
+  const normalizedTargetPath = assertPathInsideRoot(normalizedRootPath, targetPath)
 
-  return path.relative(path.resolve(rootPath), normalizedTargetPath)
+  return path.relative(normalizedRootPath, normalizedTargetPath)
 }
