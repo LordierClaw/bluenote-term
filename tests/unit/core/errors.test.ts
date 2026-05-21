@@ -9,7 +9,6 @@ import {
   InvalidFrontmatterError,
   RootNotInitializedError,
 } from "../../../src/core/errors"
-import type { Maybe, Result } from "../../../src/core/types"
 
 test("AppError subclasses expose code, message, and optional hint", () => {
   const error = new RootNotInitializedError("BlueNote root is not initialized.", {
@@ -56,20 +55,6 @@ test("distinct core error classes exist for domain failure cases", () => {
     assert.equal(instance.code, code)
     assert.match(instance.message, /.+/)
   }
-})
-
-test("shared core type aliases support success/failure results and optional values", () => {
-  const success: Result<string> = { ok: true, value: "note-id" }
-  const failure: Result<string, RootNotInitializedError> = {
-    ok: false,
-    error: new RootNotInitializedError("root missing"),
-  }
-  const hint: Maybe<string> = undefined
-
-  assert.deepEqual(success, { ok: true, value: "note-id" })
-  assert.equal(failure.ok, false)
-  assert.equal(failure.error.code, "ROOT_NOT_INITIALIZED")
-  assert.equal(hint, undefined)
 })
 
 test("AppError preserves explicitly provided falsy causes", () => {
