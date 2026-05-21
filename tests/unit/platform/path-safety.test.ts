@@ -29,3 +29,15 @@ test("path safety helper accepts paths inside the managed root", () => {
   assert.equal(assertPathInsideRoot(rootPath, targetPath), targetPath)
   assert.equal(toRootRelativePath(rootPath, targetPath), path.join("notes", "inbox", "note.md"))
 })
+
+test("path safety helper rejects an empty managed root path", () => {
+  assert.throws(() => assertPathInsideRoot("", "/tmp/bluenote-root/note.md"), {
+    message: "Managed root path must not be empty.",
+  })
+})
+
+test("path safety helper rejects an empty target path", () => {
+  assert.throws(() => assertPathInsideRoot("/tmp/bluenote-root", ""), {
+    message: "Target path must not be empty.",
+  })
+})

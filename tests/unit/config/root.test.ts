@@ -34,3 +34,32 @@ test("relative override paths resolve to absolute paths", () => {
 
   assert.equal(resolvedRoot, path.resolve("/tmp/working-directory", "relative-root"))
 })
+
+test("empty BLUENOTE_ROOT environment override is rejected", () => {
+  assert.throws(
+    () =>
+      resolveBlueNoteRoot({
+        env: { BLUENOTE_ROOT: "" },
+        homeDir: "/tmp/test-home",
+        cwd: "/tmp/working-directory",
+      }),
+    {
+      message: "BLUENOTE_ROOT must not be empty.",
+    },
+  )
+})
+
+test("empty explicit override is rejected", () => {
+  assert.throws(
+    () =>
+      resolveBlueNoteRoot({
+        override: "",
+        env: {},
+        homeDir: "/tmp/test-home",
+        cwd: "/tmp/working-directory",
+      }),
+    {
+      message: "BlueNote root override must not be empty.",
+    },
+  )
+})
