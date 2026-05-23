@@ -29,9 +29,23 @@ export function writeStateManifest(rootPath: string, manifest: StateManifest = c
   return manifestPath
 }
 
+function isStateManifest(value: unknown): value is StateManifest {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { schemaVersion?: unknown }).schemaVersion === "number"
+  )
+}
+
 export function readStateManifest(rootPath: string): StateManifest {
   try {
-    return JSON.parse(readFileSync(getStateManifestPath(rootPath), "utf8")) as StateManifest
+    const manifest = JSON.parse(readFileSync(getStateManifestPath(rootPath), "utf8")) as unknown
+
+    if (!isStateManifest(manifest)) {
+      throw new Error("Invalid state manifest structure.")
+    }
+
+    return manifest
   } catch (error) {
     throw new RootNotInitializedError("BlueNote root is not initialized.", {
       hint: "Run 'bn init' to create a valid .state/manifest.json.",

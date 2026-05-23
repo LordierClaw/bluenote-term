@@ -65,3 +65,22 @@ test("readStateManifest raises a root-initialization error when manifest data is
     await rm(rootPath, { recursive: true, force: true })
   }
 })
+
+test("readStateManifest raises a root-initialization error when manifest JSON has an invalid structure", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-state-manifest-invalid-structure-"))
+
+  try {
+    await writeStateManifest(rootPath)
+    await writeFile(getStateManifestPath(rootPath), JSON.stringify({ schemaVersion: "oops" }), "utf8")
+
+    assert.throws(() => readStateManifest(rootPath), (error: unknown) => {
+      assert.ok(error instanceof RootNotInitializedError)
+      assert.equal(error.message, "BlueNote root is not initialized.")
+      assert.equal(error.hint, "Run 'bn init' to create a valid .state/manifest.json.")
+      assert.doesNotMatch(error.message, /oops|TypeError|SyntaxError/i)
+      return true
+    })
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
