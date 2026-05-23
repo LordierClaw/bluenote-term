@@ -132,18 +132,30 @@ test("listing notes rejects duplicate basenames across the notes tree", async ()
   }
 })
 
-test("create keeps a pre-existing note file when sidecar persistence fails", async () => {
+test("create rejects an existing note key without mutating the existing note", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-integration-"))
 
   try {
     ensureManagedRoot(rootPath)
     const repository = createNoteRepository(rootPath)
     const notePath = getInboxNotePath(rootPath, FIXED_FRONTMATTER.id)
-    const stateNotesPath = getStateNotesPath(rootPath)
+    const sidecarPath = path.join(getStateNotesPath(rootPath), `${FIXED_FRONTMATTER.id}.json`)
 
     await writeFile(notePath, "Existing body.\n", "utf8")
-    await rm(stateNotesPath, { recursive: true, force: true })
-    await writeFile(stateNotesPath, "not-a-directory", "utf8")
+    await writeFile(
+      sidecarPath,
+      JSON.stringify({
+        key: FIXED_FRONTMATTER.id,
+        title: "Existing title",
+        description: "Existing body.",
+        relativePath: path.join("notes", "inbox", "note-123.md"),
+        createdAt: FIXED_FRONTMATTER.createdAt,
+        updatedAt: FIXED_FRONTMATTER.updatedAt,
+        archivedAt: null,
+        namingVersion: 1,
+      }) + "\n",
+      "utf8",
+    )
 
     assert.throws(
       () =>
@@ -154,7 +166,8 @@ test("create keeps a pre-existing note file when sidecar persistence fails", asy
       /Could not create note 'notes[\\/]inbox[\\/]note-123\.md'\./,
     )
 
-    assert.equal(await readFile(notePath, "utf8"), "Replacement body.\n")
+    assert.equal(await readFile(notePath, "utf8"), "Existing body.\n")
+    assert.equal(JSON.parse(await readFile(sidecarPath, "utf8")).title, "Existing title")
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }
@@ -222,7 +235,7 @@ test("archived notes preserve the key while moving the note path", async () => {
   }
 })
 
-test("archive preserves the original failure when sidecar rollback also fails", async () => {
+test("archive keeps sidecar metadata on the source note when source removal fails", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-integration-"))
 
   try {
@@ -233,24 +246,8 @@ test("archive preserves the original failure when sidecar rollback also fails", 
       body: "Archive me.\n",
     })
     const sidecarPath = path.join(getStateNotesPath(rootPath), "note-123.json")
-    const originalWriteFileSync = fs.writeFileSync
     const originalRmSync = fs.rmSync
     const sourceRemovalFailure = new Error("simulated source removal failure")
-    const rollbackWriteFailure = new Error("simulated sidecar rollback failure")
-
-    const writeMock = spyOn(fs, "writeFileSync").mockImplementation((...args: Parameters<typeof fs.writeFileSync>) => {
-      const [targetPath, data] = args
-
-      if (
-        path.resolve(String(targetPath)) === path.resolve(sidecarPath) &&
-        typeof data === "string" &&
-        data.includes('"archivedAt": null')
-      ) {
-        throw rollbackWriteFailure
-      }
-
-      return originalWriteFileSync(...args)
-    })
 
     const rmMock = spyOn(fs, "rmSync").mockImplementation((...args: Parameters<typeof fs.rmSync>) => {
       const [targetPath] = args
@@ -268,19 +265,11 @@ test("archive preserves the original failure when sidecar rollback also fails", 
         (error: unknown) => {
           assert.equal(error instanceof Error, true)
           assert.match((error as Error).message, /Could not archive note 'notes[\\/]inbox[\\/]note-123\.md'\./)
-          assert.equal((error as Error).cause instanceof AggregateError, true)
-          const aggregateCause = (error as Error).cause as AggregateError
-          assert.equal(aggregateCause.errors.length, 2)
-          assert.equal(aggregateCause.errors[0], sourceRemovalFailure)
-          assert.equal(aggregateCause.errors[1] instanceof Error, true)
-          assert.match((aggregateCause.errors[1] as Error).message, /Could not write sidecar '.state[\\/]notes[\\/]note-123\.json'\./)
-          assert.equal((aggregateCause.errors[1] as Error).cause, rollbackWriteFailure)
-          assert.match(aggregateCause.message, /rollback/i)
+          assert.equal((error as Error).cause, sourceRemovalFailure)
           return true
         },
       )
     } finally {
-      writeMock.mockRestore()
       rmMock.mockRestore()
     }
 
@@ -288,8 +277,8 @@ test("archive preserves the original failure when sidecar rollback also fails", 
     await assert.rejects(() => access(getArchiveNotePath(rootPath, "note-123")))
 
     const sidecar = JSON.parse(await readFile(sidecarPath, "utf8"))
-    assert.equal(sidecar.relativePath, path.join("notes", "archive", "note-123.md"))
-    assert.equal(sidecar.archivedAt, "2026-05-21T12:30:00.000Z")
+    assert.equal(sidecar.relativePath, path.join("notes", "inbox", "note-123.md"))
+    assert.equal(sidecar.archivedAt, null)
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }

@@ -162,19 +162,26 @@ export function createNoteRepository(rootPath: string): NoteRepository {
 
       const notePath = getInboxNotePath(normalizedRootPath, input.frontmatter.id)
       const relativePath = toRootRelativePath(normalizedRootPath, notePath)
+      const sidecarPath = sidecars.getSidecarPath(input.frontmatter.id)
+
+      if (existsSync(notePath) || existsSync(sidecarPath)) {
+        throw new UsageError(`Could not create note '${relativePath}'.`, {
+          hint: "A note with the same path/key already exists. Use a different id or remove/archive the existing note first.",
+        })
+      }
+
       const markdown = serializePlainNote({
         body: input.body,
         sourcePath: relativePath,
       })
       const sidecar = buildSidecar(input.frontmatter, relativePath, input.body, input.frontmatter.archivedAt ?? null)
-      const noteExistedBeforeCreate = existsSync(notePath)
 
       try {
         mkdirSync(path.dirname(notePath), { recursive: true })
         writeFileSync(notePath, markdown, "utf8")
         sidecars.write(sidecar)
       } catch (error) {
-        if (!noteExistedBeforeCreate && existsSync(notePath)) {
+        if (existsSync(notePath)) {
           rmSync(notePath, { force: true })
         }
 
@@ -245,7 +252,7 @@ export function createNoteRepository(rootPath: string): NoteRepository {
         archivedAt,
       }
       let wroteArchivedCopy = false
-      let wroteArchivedSidecar = false
+      let removedSourceNote = false
 
       try {
         mkdirSync(path.dirname(archivedNotePath), { recursive: true })
@@ -256,18 +263,26 @@ export function createNoteRepository(rootPath: string): NoteRepository {
 
         writeFileSync(archivedNotePath, markdown, "utf8")
         wroteArchivedCopy = true
-        sidecars.write(archivedSidecar)
-        wroteArchivedSidecar = true
 
         if (archivedNotePath !== normalizedNotePath) {
           rmSync(normalizedNotePath)
+          removedSourceNote = true
         }
+
+        sidecars.write(archivedSidecar)
       } catch (error) {
         const rollbackErrors: unknown[] = []
 
-        if (wroteArchivedSidecar) {
+        if (removedSourceNote && archivedNotePath !== normalizedNotePath) {
           try {
-            sidecars.write(existingSidecar)
+            writeFileSync(
+              normalizedNotePath,
+              serializePlainNote({
+                body: existing.body,
+                sourcePath: currentRelativePath,
+              }),
+              "utf8",
+            )
           } catch (rollbackError) {
             rollbackErrors.push(rollbackError)
           }
