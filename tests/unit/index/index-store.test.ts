@@ -2,7 +2,10 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
-import { access, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+
+// @ts-expect-error sql.js does not ship TypeScript declarations in this project.
+import initSqlJs from "sql.js"
 
 import { IndexUnavailableError } from "../../../src/core/errors"
 import { createSearchDocuments } from "../../../src/index/search-documents"
@@ -28,6 +31,17 @@ const NOTE_BETA = {
   createdAt: "2026-05-21T11:15:00.000Z",
   updatedAt: "2026-05-21T11:15:00.000Z",
   archivedAt: null,
+}
+
+const NOTE_ARCHIVED = {
+  key: "note-archived",
+  title: "Archived Note",
+  description: "Archived nebula summary",
+  body: "Archived body mentions hidden comet trails.\n",
+  relativePath: path.join("notes", "archive", "note-archived.md"),
+  createdAt: "2026-05-21T12:15:00.000Z",
+  updatedAt: "2026-05-21T12:15:00.000Z",
+  archivedAt: "2026-05-22T09:30:00.000Z",
 }
 
 test("rebuildIndexStore writes rebuildable derived artifacts under .state and preserves sidecar metadata", async () => {
@@ -119,6 +133,39 @@ test("derived artifacts can be deleted and recreated from canonical note index r
         relativePath: path.join("notes", "inbox", "note-alpha.md"),
       },
     ])
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("loadIndexStore preserves archived metadata in derived artifacts without surfacing archived notes as active results", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-index-store-archived-"))
+  const SQL = await initSqlJs()
+
+  try {
+    const rebuilt = rebuildIndexStore({
+      rootPath,
+      notes: [NOTE_ALPHA, NOTE_ARCHIVED],
+    })
+
+    const store = loadIndexStore(rootPath)
+    assert.deepEqual(store.listSummaries().map((summary) => summary.key), ["note-alpha"])
+    assert.deepEqual(store.search("hidden").map((result) => result.key), [])
+
+    const metadataBytes = new Uint8Array(await readFile(rebuilt.metadataDatabasePath))
+    const db = new SQL.Database(metadataBytes)
+
+    try {
+      const archivedRows = db.exec(`
+        SELECT key, archivedAt
+        FROM notes
+        WHERE key = 'note-archived'
+      `)
+
+      assert.deepEqual(archivedRows[0]?.values ?? [], [["note-archived", NOTE_ARCHIVED.archivedAt]])
+    } finally {
+      db.close()
+    }
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }

@@ -117,7 +117,18 @@ export function rebuildIndexes(options: ResolveBlueNoteRootOptions = {}): Rebuil
       continue
     }
 
+    const sidecarPath = sidecars.getSidecarPath(expectedKey)
+
     try {
+      if (!existsSync(sidecarPath)) {
+        const legacyNote = readLegacyFrontmatterNote(rawNote, record.relativePath)
+
+        if (legacyNote !== null) {
+          notes.push(legacyNote)
+          continue
+        }
+      }
+
       const sidecar = sidecars.read(expectedKey)
       const plainNote = parsePlainNote(rawNote, record.relativePath)
       let isValid = true
@@ -151,13 +162,6 @@ export function rebuildIndexes(options: ResolveBlueNoteRootOptions = {}): Rebuil
         archivedAt: sidecar.archivedAt,
       })
     } catch (error) {
-      const legacyNote = readLegacyFrontmatterNote(rawNote, record.relativePath)
-
-      if (legacyNote !== null) {
-        notes.push(legacyNote)
-        continue
-      }
-
       validationErrors.push(...collectErrorMessages(error))
     }
   }

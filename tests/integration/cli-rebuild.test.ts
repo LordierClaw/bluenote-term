@@ -123,7 +123,33 @@ test("bn rebuild falls back to legacy frontmatter notes without sidecars", async
   }
 })
 
-test("bn rebuild preserves archived sidecar notes in derived summaries and search artifacts", async () => {
+test("bn rebuild fails for legacy frontmatter notes when an invalid sidecar already exists", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-rebuild-legacy-invalid-sidecar-")
+
+  try {
+    const relativePath = path.join("notes", "inbox", "legacy-invalid-sidecar.md")
+    await harness.writeNote(
+      relativePath,
+      noteMarkdown({
+        id: "legacy-invalid-sidecar",
+        title: "Legacy Invalid Sidecar",
+        body: "Legacy frontmatter should not bypass corrupt sidecar metadata.\n",
+      }),
+    )
+    await harness.writeNote(path.join(".state", "notes", "legacy-invalid-sidecar.json"), "{not-valid-json\n")
+
+    const result = harness.run(["rebuild"])
+
+    assert.equal(result.exitCode, 2)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Validation failed while rebuilding indexes\./)
+    assert.match(result.stderr, /Could not parse sidecar '\.state[\\/]notes[\\/]legacy-invalid-sidecar\.json'\./)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test("bn rebuild preserves archived sidecar notes in derived artifacts without surfacing them as active results", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-rebuild-archived-")
 
   try {
@@ -149,19 +175,8 @@ test("bn rebuild preserves archived sidecar notes in derived summaries and searc
     assert.match(result.stdout, /Rebuilt indexes for 1 note\(s\)\./)
 
     const store = loadIndexStore(harness.rootPath)
-    assert.deepEqual(store.listSummaries(), [
-      {
-        key: "archived-note",
-        id: "archived-note",
-        title: "Archived Note",
-        description: "Archived lunar summary",
-        relativePath,
-        createdAt: "2026-05-21T10:15:00.000Z",
-        updatedAt: "2026-05-21T10:15:00.000Z",
-        archivedAt,
-      },
-    ])
-    assert.deepEqual(store.search("lunar").map((match) => match.key), ["archived-note"])
+    assert.deepEqual(store.listSummaries(), [])
+    assert.deepEqual(store.search("lunar").map((match) => match.key), [])
   } finally {
     await harness.cleanup()
   }

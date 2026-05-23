@@ -252,8 +252,15 @@ export function createNoteRepository(rootPath: string): NoteRepository {
         wrapRepositoryError("read", relativePath, error)
       }
 
+      const sidecarPath = sidecars.getSidecarPath(key)
+
       try {
         const plainNote = parsePlainNote(markdown, relativePath)
+
+        if (!existsSync(sidecarPath)) {
+          return parseNoteFile(markdown, relativePath)
+        }
+
         const sidecar = sidecars.read(key)
 
         if (path.normalize(sidecar.relativePath) !== path.normalize(relativePath)) {
@@ -271,11 +278,7 @@ export function createNoteRepository(rootPath: string): NoteRepository {
           throw error
         }
 
-        try {
-          return parseNoteFile(markdown, relativePath)
-        } catch {
-          wrapRepositoryError("read", relativePath, error)
-        }
+        wrapRepositoryError("read", relativePath, error)
       }
     },
 

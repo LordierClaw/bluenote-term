@@ -216,6 +216,9 @@ export function loadIndexStore(rootPath: string): LoadedIndexStore {
         })
       }
 
+      const activeSummaries = summaries.filter((summary) => summary.archivedAt === null)
+      const activeKeys = new Set(activeSummaries.map((summary) => summary.key))
+
       const searchEngine = MiniSearch.loadJSON<SearchIndexMatch>(searchJson, {
         fields: [...SEARCH_FIELDS],
         storeFields: [...SEARCH_STORE_FIELDS],
@@ -223,7 +226,7 @@ export function loadIndexStore(rootPath: string): LoadedIndexStore {
 
       return {
         listSummaries() {
-          return summaries.map((summary) => ({ ...summary }))
+          return activeSummaries.map((summary) => ({ ...summary }))
         },
 
         search(query: string) {
@@ -231,13 +234,15 @@ export function loadIndexStore(rootPath: string): LoadedIndexStore {
             return []
           }
 
-          return searchEngine.search(query).map((match) => ({
-            key: String(match.key),
-            id: String(match.id),
-            title: String(match.title),
-            description: String(match.description),
-            relativePath: String(match.relativePath),
-          }))
+          return searchEngine.search(query)
+            .filter((match) => activeKeys.has(String(match.key)))
+            .map((match) => ({
+              key: String(match.key),
+              id: String(match.id),
+              title: String(match.title),
+              description: String(match.description),
+              relativePath: String(match.relativePath),
+            }))
         },
       }
     } finally {
