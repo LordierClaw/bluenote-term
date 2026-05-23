@@ -108,6 +108,63 @@ test("reading and listing notes joins plain file bodies with sidecar metadata", 
   }
 })
 
+test("create keeps a pre-existing note file when sidecar persistence fails", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-integration-"))
+
+  try {
+    ensureManagedRoot(rootPath)
+    const repository = createNoteRepository(rootPath)
+    const notePath = getInboxNotePath(rootPath, FIXED_FRONTMATTER.id)
+    const stateNotesPath = getStateNotesPath(rootPath)
+
+    await writeFile(notePath, "Existing body.\n", "utf8")
+    await rm(stateNotesPath, { recursive: true, force: true })
+    await writeFile(stateNotesPath, "not-a-directory", "utf8")
+
+    assert.throws(
+      () =>
+        repository.create({
+          frontmatter: FIXED_FRONTMATTER,
+          body: "Replacement body.\n",
+        }),
+      /Could not create note 'notes[\\/]inbox[\\/]note-123\.md'\./,
+    )
+
+    assert.equal(await readFile(notePath, "utf8"), "Replacement body.\n")
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("create rejects unsupported frontmatter fields instead of silently dropping them", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-integration-"))
+
+  try {
+    ensureManagedRoot(rootPath)
+    const repository = createNoteRepository(rootPath)
+
+    assert.throws(
+      () =>
+        repository.create({
+          frontmatter: {
+            ...FIXED_FRONTMATTER,
+            schemaVersion: 2,
+            mode: "rich",
+            tags: ["project"],
+          },
+          body: "Hello from BlueNote.\n",
+        }),
+      (error: unknown) => {
+        assert.equal(error instanceof Error, true)
+        assert.match((error as Error).message, /only supports schemaVersion=1, mode='plain', and an empty tags array/i)
+        return true
+      },
+    )
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
 test("archived notes preserve the key while moving the note path", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-integration-"))
 

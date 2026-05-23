@@ -34,6 +34,21 @@ const NOTE_SCHEMA_VERSION = 1
 const NOTE_MODE = "plain"
 const NOTE_NAMING_VERSION = 1
 
+function assertCreateFrontmatterIsSupported(frontmatter: NoteFrontmatter): void {
+  if (
+    frontmatter.schemaVersion !== NOTE_SCHEMA_VERSION ||
+    frontmatter.mode !== NOTE_MODE ||
+    frontmatter.tags.length > 0
+  ) {
+    throw new UsageError(
+      `Could not create note '${frontmatter.id}': create only supports schemaVersion=${NOTE_SCHEMA_VERSION}, mode='${NOTE_MODE}', and an empty tags array.`,
+      {
+        hint: "Pass canonical plain-note frontmatter or extend note persistence to round-trip additional metadata.",
+      },
+    )
+  }
+}
+
 function wrapRepositoryError(action: "create" | "read" | "list" | "archive", relativePath: string, error: unknown): never {
   const message =
     action === "create"
@@ -122,6 +137,8 @@ export function createNoteRepository(rootPath: string): NoteRepository {
 
   return {
     create(input) {
+      assertCreateFrontmatterIsSupported(input.frontmatter)
+
       const notePath = getInboxNotePath(normalizedRootPath, input.frontmatter.id)
       const relativePath = toRootRelativePath(normalizedRootPath, notePath)
       const markdown = serializePlainNote({
@@ -129,13 +146,14 @@ export function createNoteRepository(rootPath: string): NoteRepository {
         sourcePath: relativePath,
       })
       const sidecar = buildSidecar(input.frontmatter, relativePath, input.body, input.frontmatter.archivedAt ?? null)
+      const noteExistedBeforeCreate = existsSync(notePath)
 
       try {
         mkdirSync(path.dirname(notePath), { recursive: true })
         writeFileSync(notePath, markdown, "utf8")
         sidecars.write(sidecar)
       } catch (error) {
-        if (existsSync(notePath)) {
+        if (!noteExistedBeforeCreate && existsSync(notePath)) {
           rmSync(notePath, { force: true })
         }
 
