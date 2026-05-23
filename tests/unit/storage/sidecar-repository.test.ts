@@ -99,3 +99,35 @@ test("sidecar repository rejects invalid stored sidecars", async () => {
     await rm(rootPath, { recursive: true, force: true })
   }
 })
+
+test("sidecar repository rejects keys that escape .state/notes", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-sidecar-repository-invalid-key-"))
+
+  try {
+    const repository = createSidecarRepository(rootPath)
+
+    assert.throws(() => repository.getSidecarPath("../escaped"), /outside the managed root/i)
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("sidecar repository write rejects non-object runtime input without raw type errors", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-sidecar-repository-non-object-write-"))
+
+  try {
+    const repository = createSidecarRepository(rootPath)
+
+    assert.throws(
+      () => repository.write(null as never),
+      (error: unknown) => {
+        assert.ok(error instanceof InvalidFrontmatterError)
+        assert.match(error.message, /expected a json object/i)
+        assert.doesNotMatch(String(error), /TypeError/)
+        return true
+      },
+    )
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})

@@ -28,9 +28,10 @@ function wrapSidecarRepositoryError(action: "read" | "write", relativePath: stri
 
 export function createSidecarRepository(rootPath: string): SidecarRepository {
   const normalizedRootPath = path.resolve(rootPath)
+  const normalizedStateNotesPath = path.join(normalizedRootPath, STATE_NOTES_DIRECTORY)
 
   function getSidecarPath(key: string): string {
-    return assertPathInsideRoot(normalizedRootPath, path.join(normalizedRootPath, STATE_NOTES_DIRECTORY, `${key}.json`))
+    return assertPathInsideRoot(normalizedStateNotesPath, path.join(normalizedStateNotesPath, `${key}.json`))
   }
 
   return {
@@ -61,7 +62,7 @@ export function createSidecarRepository(rootPath: string): SidecarRepository {
     },
 
     write(sidecar) {
-      const canonicalSidecar = validateNoteSidecar(sidecar, path.join(STATE_NOTES_DIRECTORY, `${sidecar.key}.json`))
+      const canonicalSidecar = validateNoteSidecar(sidecar, path.join(STATE_NOTES_DIRECTORY, "<unknown>.json"))
       const sidecarPath = getSidecarPath(canonicalSidecar.key)
 
       try {
