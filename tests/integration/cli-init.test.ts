@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import path from "node:path"
-import { access, readFile } from "node:fs/promises"
+import { access, mkdir, readFile } from "node:fs/promises"
 
 import { STORAGE_SCHEMA_VERSION } from "../../src/config/root"
 import { assertManagedRootLayout, createBlockedRootFixture, createManagedRootHarness, runCli } from "../helpers/cli"
@@ -57,5 +57,23 @@ test("bn init reports a user-facing error when BLUENOTE_ROOT points to a file", 
     assert.doesNotMatch(result.stderr, /at runCli|Error:|stack/i)
   } finally {
     await fixture.cleanup()
+  }
+})
+
+test("bn init reports a user-facing error when writing .state\/manifest.json fails", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-init-manifest-error-")
+
+  try {
+    await mkdir(path.join(harness.rootPath, ".state", "manifest.json"), { recursive: true })
+
+    const result = harness.run(["init"])
+
+    assert.equal(result.exitCode, 1)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Could not initialize BlueNote root at/)
+    assert.match(result.stderr, /Hint: Ensure BLUENOTE_ROOT points to a writable directory path\./)
+    assert.doesNotMatch(result.stderr, /manifest\.json|EISDIR|Error:|stack/i)
+  } finally {
+    await harness.cleanup()
   }
 })
