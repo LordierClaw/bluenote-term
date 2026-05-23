@@ -40,10 +40,11 @@ function assertCreateFrontmatterIsSupported(frontmatter: NoteFrontmatter): void 
   if (
     frontmatter.schemaVersion !== NOTE_SCHEMA_VERSION ||
     frontmatter.mode !== NOTE_MODE ||
-    frontmatter.tags.length > 0
+    frontmatter.tags.length > 0 ||
+    frontmatter.archivedAt !== undefined
   ) {
     throw new UsageError(
-      `Could not create note '${frontmatter.id}': create only supports schemaVersion=${NOTE_SCHEMA_VERSION}, mode='${NOTE_MODE}', and an empty tags array.`,
+      `Could not create note '${frontmatter.id}': create only supports schemaVersion=${NOTE_SCHEMA_VERSION}, mode='${NOTE_MODE}', an empty tags array, and no archivedAt value.`,
       {
         hint: "Pass canonical plain-note frontmatter or extend note persistence to round-trip additional metadata.",
       },
@@ -364,6 +365,10 @@ export function createNoteRepository(rootPath: string): NoteRepository {
     listNotePaths() {
       const notesPath = getNotesPath(normalizedRootPath)
       const notePaths: string[] = []
+
+      if (!existsSync(notesPath)) {
+        return []
+      }
 
       try {
         collectMarkdownFiles(normalizedRootPath, notesPath, notePaths)

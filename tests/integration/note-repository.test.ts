@@ -220,6 +220,47 @@ test("create rejects unknown frontmatter fields instead of silently dropping the
   }
 })
 
+test("create rejects archivedAt on create input", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-integration-"))
+
+  try {
+    ensureManagedRoot(rootPath)
+    const repository = createNoteRepository(rootPath)
+
+    assert.throws(
+      () =>
+        repository.create({
+          frontmatter: {
+            ...FIXED_FRONTMATTER,
+            archivedAt: "2026-05-21T12:30:00.000Z",
+          },
+          body: "Hello from BlueNote.\n",
+        }),
+      (error: unknown) => {
+        assert.equal(error instanceof Error, true)
+        assert.match((error as Error).message, /archivedAt/i)
+        return true
+      },
+    )
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+
+test("list and listNotePaths return empty results on a fresh root", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-fresh-root-"))
+
+  try {
+    const repository = createNoteRepository(rootPath)
+
+    assert.deepEqual(repository.listNotePaths(), [])
+    assert.deepEqual(repository.list(), [])
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
 test("create rejects duplicate basenames that already exist elsewhere in notes tree", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-integration-"))
 
