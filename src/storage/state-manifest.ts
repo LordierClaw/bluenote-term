@@ -6,6 +6,7 @@ import {
   STATE_MANIFEST_FILENAME,
   STORAGE_SCHEMA_VERSION,
 } from "../config/root"
+import { RootNotInitializedError } from "../core/errors"
 
 export interface StateManifest {
   schemaVersion: number
@@ -29,5 +30,12 @@ export function writeStateManifest(rootPath: string, manifest: StateManifest = c
 }
 
 export function readStateManifest(rootPath: string): StateManifest {
-  return JSON.parse(readFileSync(getStateManifestPath(rootPath), "utf8")) as StateManifest
+  try {
+    return JSON.parse(readFileSync(getStateManifestPath(rootPath), "utf8")) as StateManifest
+  } catch (error) {
+    throw new RootNotInitializedError("BlueNote root is not initialized.", {
+      hint: "Run 'bn init' to create a valid .state/manifest.json.",
+      cause: error,
+    })
+  }
 }
