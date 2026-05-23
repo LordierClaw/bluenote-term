@@ -1,5 +1,5 @@
 export interface ShortNoteSuffixOptions {
-  length?: number
+  suffixLength?: number
   randomSource?: () => number
 }
 
@@ -29,13 +29,13 @@ export function slugifyNoteTitle(title: string): string {
 }
 
 export function createShortNoteSuffix(options: ShortNoteSuffixOptions = {}): string {
-  const length = options.length ?? DEFAULT_SUFFIX_LENGTH
+  const suffixLength = options.suffixLength ?? DEFAULT_SUFFIX_LENGTH
   const randomSource = options.randomSource ?? defaultRandomSource
   const token = Math.abs(randomSource() >>> 0)
     .toString(36)
-    .padStart(length, "0")
+    .padStart(suffixLength, "0")
 
-  return token.slice(-length)
+  return token.slice(-suffixLength)
 }
 
 export function createNoteKey(title: string, options: CreateNoteKeyOptions = {}): string {
