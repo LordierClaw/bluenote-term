@@ -1,9 +1,11 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import path from "node:path"
-import { mkdir, readFile } from "node:fs/promises"
+import { chmod, mkdir, readFile } from "node:fs/promises"
 
+import { loadIndexStore } from "../../src/index/index-store"
 import { createManagedRootHarness } from "../helpers/cli"
+import { noteMarkdown } from "../helpers/note-fixtures"
 
 function sidecarJson(input: {
   key: string
@@ -78,6 +80,88 @@ test("bn rebuild exits 2 and reports a missing sidecar for a plain note", async 
     assert.equal(result.stdout, "")
     assert.match(result.stderr, /Validation failed while rebuilding indexes\./)
     assert.match(result.stderr, /Could not read sidecar '\.state[\\/]notes[\\/]missing-sidecar\.json'\./)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test("bn rebuild falls back to legacy frontmatter notes without sidecars", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-rebuild-legacy-frontmatter-")
+
+  try {
+    await harness.writeNote(
+      path.join("notes", "inbox", "legacy-note.md"),
+      noteMarkdown({
+        id: "legacy-note",
+        title: "Legacy Note",
+        body: "Legacy frontmatter body mentions meteor trails.\n",
+      }),
+    )
+
+    const result = harness.run(["rebuild"])
+
+    assert.equal(result.exitCode, 0)
+    assert.equal(result.stderr, "")
+    assert.match(result.stdout, /Rebuilt indexes for 1 note\(s\)\./)
+
+    const store = loadIndexStore(harness.rootPath)
+    assert.deepEqual(store.listSummaries(), [
+      {
+        key: "legacy-note",
+        id: "legacy-note",
+        title: "Legacy Note",
+        description: "Legacy frontmatter body mentions meteor trails.",
+        relativePath: path.join("notes", "inbox", "legacy-note.md"),
+        createdAt: "2026-05-21T10:15:00.000Z",
+        updatedAt: "2026-05-21T10:15:00.000Z",
+        archivedAt: null,
+      },
+    ])
+    assert.deepEqual(store.search("meteor").map((match) => match.key), ["legacy-note"])
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test("bn rebuild preserves archived sidecar notes in derived summaries and search artifacts", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-rebuild-archived-")
+
+  try {
+    const archivedAt = "2026-05-22T09:30:00.000Z"
+    const relativePath = path.join("notes", "archive", "archived-note.md")
+
+    await harness.writeNote(relativePath, "Archived body keeps lunar breadcrumb text.\n")
+    await harness.writeNote(
+      path.join(".state", "notes", "archived-note.json"),
+      sidecarJson({
+        key: "archived-note",
+        title: "Archived Note",
+        description: "Archived lunar summary",
+        relativePath,
+        archivedAt,
+      }),
+    )
+
+    const result = harness.run(["rebuild"])
+
+    assert.equal(result.exitCode, 0)
+    assert.equal(result.stderr, "")
+    assert.match(result.stdout, /Rebuilt indexes for 1 note\(s\)\./)
+
+    const store = loadIndexStore(harness.rootPath)
+    assert.deepEqual(store.listSummaries(), [
+      {
+        key: "archived-note",
+        id: "archived-note",
+        title: "Archived Note",
+        description: "Archived lunar summary",
+        relativePath,
+        createdAt: "2026-05-21T10:15:00.000Z",
+        updatedAt: "2026-05-21T10:15:00.000Z",
+        archivedAt,
+      },
+    ])
+    assert.deepEqual(store.search("lunar").map((match) => match.key), ["archived-note"])
   } finally {
     await harness.cleanup()
   }
@@ -167,6 +251,27 @@ test("bn rebuild exits 2 and surfaces invalid sidecar validation errors", async 
     assert.match(result.stderr, /Validation failed while rebuilding indexes\./)
     assert.match(result.stderr, /Invalid sidecar metadata in \.state[\\/]notes[\\/]broken-sidecar\.json: missing required field 'description'\./)
   } finally {
+    await harness.cleanup()
+  }
+})
+
+test("bn rebuild exits 2 with a controlled error when .state/notes cannot be scanned", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-rebuild-sidecar-scan-")
+  const sidecarDirectoryPath = path.join(harness.rootPath, ".state", "notes")
+
+  try {
+    await harness.writeNote(path.join("notes", "inbox", "alpha-note.md"), "Alpha body.\n")
+    assert.equal(harness.run(["rebuild"]).exitCode, 2)
+    await chmod(sidecarDirectoryPath, 0o000)
+
+    const result = harness.run(["rebuild"])
+
+    assert.equal(result.exitCode, 2)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Validation failed while rebuilding indexes\./)
+    assert.match(result.stderr, /Could not scan sidecar directory '\.state[\\/]notes'\./)
+  } finally {
+    await chmod(sidecarDirectoryPath, 0o755).catch(() => undefined)
     await harness.cleanup()
   }
 })

@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 
 import { UsageError } from "../core/errors"
 import { assertPathInsideRoot, toRootRelativePath } from "../platform/path-safety"
+import { parseNoteFile } from "./frontmatter"
 import { type PlainNote, validateNoteFrontmatter } from "./note-schema"
 import type { NoteFrontmatter, ParsedNote } from "./note-schema"
 import { parsePlainNote, serializePlainNote } from "./plain-note"
@@ -247,6 +248,11 @@ export function createNoteRepository(rootPath: string): NoteRepository {
 
       try {
         markdown = readFileSync(normalizedNotePath, "utf8")
+      } catch (error) {
+        wrapRepositoryError("read", relativePath, error)
+      }
+
+      try {
         const plainNote = parsePlainNote(markdown, relativePath)
         const sidecar = sidecars.read(key)
 
@@ -265,7 +271,11 @@ export function createNoteRepository(rootPath: string): NoteRepository {
           throw error
         }
 
-        wrapRepositoryError("read", relativePath, error)
+        try {
+          return parseNoteFile(markdown, relativePath)
+        } catch {
+          wrapRepositoryError("read", relativePath, error)
+        }
       }
     },
 

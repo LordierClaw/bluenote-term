@@ -2,10 +2,13 @@ import path from "node:path"
 import { existsSync, readdirSync } from "node:fs"
 
 import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions, STATE_NOTES_DIRECTORY } from "../config/root"
+import { UsageError } from "./errors"
 import { rebuildIndexStore, type IndexedNoteRecord } from "../index/index-store"
+import { parseNoteFile } from "../storage/frontmatter"
 import { parsePlainNote } from "../storage/plain-note"
 import { createSidecarRepository } from "../storage/sidecar-repository"
 import { createNoteRepository } from "../storage/note-repository"
+import type { ParsedNote } from "../storage/note-schema"
 import { ensureManagedRoot } from "../storage/root-layout"
 
 export interface RebuildIndexesSummary {
@@ -14,10 +17,6 @@ export interface RebuildIndexesSummary {
   validationErrors: string[]
   metadataDatabasePath?: string
   searchIndexPath?: string
-}
-
-function isArchivedNote(note: IndexedNoteRecord): boolean {
-  return note.archivedAt !== null || note.relativePath.startsWith(`notes${path.sep}archive${path.sep}`)
 }
 
 function keyFromRelativePath(relativePath: string): string {
@@ -62,17 +61,32 @@ function listSidecarKeys(rootPath: string): string[] {
     return []
   }
 
-  return readdirSync(sidecarDirectoryPath, { withFileTypes: true })
-    .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
-    .map((entry) => path.basename(entry.name, ".json"))
-    .sort((left, right) => left.localeCompare(right))
+  try {
+    return readdirSync(sidecarDirectoryPath, { withFileTypes: true })
+      .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
+      .map((entry) => path.basename(entry.name, ".json"))
+      .sort((left, right) => left.localeCompare(right))
+  } catch (error) {
+    throw new UsageError(`Could not scan sidecar directory '${STATE_NOTES_DIRECTORY}'.`, {
+      hint: "Ensure BLUENOTE_ROOT/.state/notes exists as a readable directory.",
+      cause: error,
+    })
+  }
+}
+
+function readLegacyFrontmatterNote(rawNote: string, relativePath: string) {
+  try {
+    return parseNoteFile(rawNote, relativePath)
+  } catch {
+    return null
+  }
 }
 
 export function rebuildIndexes(options: ResolveBlueNoteRootOptions = {}): RebuildIndexesSummary {
   const rootPath = ensureManagedRoot(resolveBlueNoteRoot(options))
   const repository = createNoteRepository(rootPath)
   const sidecars = createSidecarRepository(rootPath)
-  const notes: IndexedNoteRecord[] = []
+  const notes: Array<IndexedNoteRecord | ParsedNote> = []
   const validationErrors: string[] = []
   let noteRecords
 
@@ -94,10 +108,18 @@ export function rebuildIndexes(options: ResolveBlueNoteRootOptions = {}): Rebuil
 
   for (const record of noteRecords) {
     const expectedKey = keyFromRelativePath(record.relativePath)
+    let rawNote: string
+
+    try {
+      rawNote = repository.readRaw(record.notePath)
+    } catch (error) {
+      validationErrors.push(...collectErrorMessages(error))
+      continue
+    }
 
     try {
       const sidecar = sidecars.read(expectedKey)
-      const plainNote = parsePlainNote(repository.readRaw(record.notePath), record.relativePath)
+      const plainNote = parsePlainNote(rawNote, record.relativePath)
       let isValid = true
 
       if (sidecar.key !== expectedKey) {
@@ -129,23 +151,34 @@ export function rebuildIndexes(options: ResolveBlueNoteRootOptions = {}): Rebuil
         archivedAt: sidecar.archivedAt,
       })
     } catch (error) {
+      const legacyNote = readLegacyFrontmatterNote(rawNote, record.relativePath)
+
+      if (legacyNote !== null) {
+        notes.push(legacyNote)
+        continue
+      }
+
       validationErrors.push(...collectErrorMessages(error))
     }
   }
 
-  for (const sidecarKey of listSidecarKeys(rootPath)) {
-    if (noteRelativePathByKey.has(sidecarKey)) {
-      continue
-    }
+  try {
+    for (const sidecarKey of listSidecarKeys(rootPath)) {
+      if (noteRelativePathByKey.has(sidecarKey)) {
+        continue
+      }
 
-    try {
-      const sidecar = sidecars.read(sidecarKey)
-      validationErrors.push(
-        `Sidecar '${path.join(STATE_NOTES_DIRECTORY, `${sidecarKey}.json`)}' points to missing note '${sidecar.relativePath}'.`,
-      )
-    } catch (error) {
-      validationErrors.push(...collectErrorMessages(error))
+      try {
+        const sidecar = sidecars.read(sidecarKey)
+        validationErrors.push(
+          `Sidecar '${path.join(STATE_NOTES_DIRECTORY, `${sidecarKey}.json`)}' points to missing note '${sidecar.relativePath}'.`,
+        )
+      } catch (error) {
+        validationErrors.push(...collectErrorMessages(error))
+      }
     }
+  } catch (error) {
+    validationErrors.push(...collectErrorMessages(error))
   }
 
   if (validationErrors.length > 0) {
@@ -156,8 +189,7 @@ export function rebuildIndexes(options: ResolveBlueNoteRootOptions = {}): Rebuil
     }
   }
 
-  const activeNotes = notes.filter((note) => !isArchivedNote(note))
-  const rebuilt = rebuildIndexStore({ rootPath, notes: activeNotes })
+  const rebuilt = rebuildIndexStore({ rootPath, notes })
 
   return {
     rootPath,
