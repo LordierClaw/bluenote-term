@@ -1,5 +1,5 @@
 import path from "node:path"
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
 
 import { STATE_NOTES_DIRECTORY } from "../config/root"
 import { UsageError } from "../core/errors"
@@ -36,6 +36,22 @@ function wrapSidecarRepositoryError(action: "read" | "write", relativePath: stri
     hint,
     cause: error,
   })
+}
+
+function getTemporarySidecarPath(sidecarPath: string): string {
+  return `${sidecarPath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
+}
+
+function removeTemporarySidecar(sidecarPath: string): void {
+  if (!existsSync(sidecarPath)) {
+    return
+  }
+
+  try {
+    rmSync(sidecarPath, { force: true })
+  } catch {
+    // Best-effort cleanup: preserve the original filesystem failure and error shape.
+  }
 }
 
 export function createSidecarRepository(rootPath: string): SidecarRepository {
@@ -76,11 +92,14 @@ export function createSidecarRepository(rootPath: string): SidecarRepository {
     write(sidecar) {
       const canonicalSidecar = validateNoteSidecar(sidecar, getWriteValidationSourcePath(sidecar))
       const sidecarPath = getSidecarPath(canonicalSidecar.key)
+      const temporarySidecarPath = getTemporarySidecarPath(sidecarPath)
 
       try {
         mkdirSync(path.dirname(sidecarPath), { recursive: true })
-        writeFileSync(sidecarPath, JSON.stringify(canonicalSidecar, null, 2) + "\n", "utf8")
+        writeFileSync(temporarySidecarPath, JSON.stringify(canonicalSidecar, null, 2) + "\n", "utf8")
+        renameSync(temporarySidecarPath, sidecarPath)
       } catch (error) {
+        removeTemporarySidecar(temporarySidecarPath)
         wrapSidecarRepositoryError("write", path.join(STATE_NOTES_DIRECTORY, `${canonicalSidecar.key}.json`), error)
       }
 

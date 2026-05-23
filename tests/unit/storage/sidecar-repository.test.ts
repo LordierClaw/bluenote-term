@@ -1,10 +1,12 @@
 import test from "node:test"
 import assert from "node:assert/strict"
+import * as fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { spyOn } from "bun:test"
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 
-import { InvalidFrontmatterError } from "../../../src/core/errors"
+import { InvalidFrontmatterError, UsageError } from "../../../src/core/errors"
 import { createSidecarRepository } from "../../../src/storage/sidecar-repository"
 
 const FIXED_SIDECAR = {
@@ -30,6 +32,94 @@ test("sidecar repository writes and reads sidecars under .state/notes", async ()
     const sidecarJson = await readFile(sidecarPath, "utf8")
     assert.deepEqual(JSON.parse(sidecarJson), FIXED_SIDECAR)
 
+    assert.deepEqual(repository.read(FIXED_SIDECAR.key), FIXED_SIDECAR)
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("sidecar repository create-path write failures do not leave a partial sidecar behind", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-sidecar-repository-create-rollback-"))
+
+  try {
+    const repository = createSidecarRepository(rootPath)
+    const sidecarPath = repository.getSidecarPath(FIXED_SIDECAR.key)
+    const originalWriteFileSync = fs.writeFileSync
+    const simulatedFailure = new Error("simulated partial sidecar write failure")
+    const writeMock = spyOn(fs, "writeFileSync").mockImplementation((...args: Parameters<typeof fs.writeFileSync>) => {
+      const [targetPath, _data, options] = args
+      const targetPathString = String(targetPath)
+
+      if (targetPathString.startsWith(`${sidecarPath}.`) && targetPathString.endsWith(".tmp")) {
+        originalWriteFileSync(targetPath, "{\n  \"key\": \"note-work-24-abc123\"", options)
+        throw simulatedFailure
+      }
+
+      return originalWriteFileSync(...args)
+    })
+
+    try {
+      assert.throws(
+        () => repository.write(FIXED_SIDECAR),
+        (error: unknown) => {
+          assert.ok(error instanceof UsageError)
+          assert.match(error.message, /Could not write sidecar '.*note-work-24-abc123\.json'\./)
+          assert.equal(error.cause, simulatedFailure)
+          return true
+        },
+      )
+    } finally {
+      writeMock.mockRestore()
+    }
+
+    await assert.rejects(() => access(sidecarPath))
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("sidecar repository overwrite-path write failures preserve the existing sidecar contents", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-sidecar-repository-overwrite-rollback-"))
+
+  try {
+    const repository = createSidecarRepository(rootPath)
+    const sidecarPath = repository.write(FIXED_SIDECAR)
+    const originalJson = await readFile(sidecarPath, "utf8")
+    const updatedSidecar = {
+      ...FIXED_SIDECAR,
+      title: "Archived Note Work #24",
+      relativePath: "notes/archive/note-work-24-abc123.md",
+      archivedAt: "2026-05-24T12:30:00.000Z",
+    }
+    const originalWriteFileSync = fs.writeFileSync
+    const simulatedFailure = new Error("simulated partial sidecar overwrite failure")
+    const writeMock = spyOn(fs, "writeFileSync").mockImplementation((...args: Parameters<typeof fs.writeFileSync>) => {
+      const [targetPath, _data, options] = args
+      const targetPathString = String(targetPath)
+
+      if (targetPathString.startsWith(`${sidecarPath}.`) && targetPathString.endsWith(".tmp")) {
+        originalWriteFileSync(targetPath, "{\n  \"key\": \"note-work-24-abc123\",\n  \"title\": \"corrupted", options)
+        throw simulatedFailure
+      }
+
+      return originalWriteFileSync(...args)
+    })
+
+    try {
+      assert.throws(
+        () => repository.write(updatedSidecar),
+        (error: unknown) => {
+          assert.ok(error instanceof UsageError)
+          assert.match(error.message, /Could not write sidecar '.*note-work-24-abc123\.json'\./)
+          assert.equal(error.cause, simulatedFailure)
+          return true
+        },
+      )
+    } finally {
+      writeMock.mockRestore()
+    }
+
+    assert.equal(await readFile(sidecarPath, "utf8"), originalJson)
     assert.deepEqual(repository.read(FIXED_SIDECAR.key), FIXED_SIDECAR)
   } finally {
     await rm(rootPath, { recursive: true, force: true })
