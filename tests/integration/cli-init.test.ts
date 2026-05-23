@@ -1,7 +1,9 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import path from "node:path"
+import { access, readFile } from "node:fs/promises"
 
+import { STORAGE_SCHEMA_VERSION } from "../../src/config/root"
 import { assertManagedRootLayout, createBlockedRootFixture, createManagedRootHarness, runCli } from "../helpers/cli"
 
 test("bn init exits 0 and reports the initialized root", async () => {
@@ -14,6 +16,12 @@ test("bn init exits 0 and reports the initialized root", async () => {
     assert.equal(result.stderr, "")
     assert.match(result.stdout, new RegExp(`Initialized BlueNote root: ${harness.escapeForRegExp(harness.rootPath)}`))
     await assertManagedRootLayout(harness.rootPath)
+    await access(path.join(harness.rootPath, ".state", "notes"))
+    await access(path.join(harness.rootPath, ".state", "manifest.json"))
+
+    const manifestJson = await readFile(path.join(harness.rootPath, ".state", "manifest.json"), "utf8")
+    assert.deepEqual(JSON.parse(manifestJson), { schemaVersion: STORAGE_SCHEMA_VERSION })
+    await assert.rejects(access(path.join(harness.rootPath, ".bluenote")))
   } finally {
     await harness.cleanup()
   }

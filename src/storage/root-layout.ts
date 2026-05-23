@@ -1,6 +1,7 @@
 import path from "node:path"
 import { mkdirSync } from "node:fs"
 
+import { STATE_DIRECTORY, STATE_NOTES_DIRECTORY } from "../config/root"
 import { UsageError } from "../core/errors"
 
 export const MANAGED_ROOT_LAYOUT = [
@@ -9,10 +10,8 @@ export const MANAGED_ROOT_LAYOUT = [
   "notes/archive",
   "scratches",
   "templates",
-  ".bluenote",
-  ".bluenote/recovery",
-  ".bluenote/tmp",
-  ".bluenote/logs",
+  STATE_DIRECTORY,
+  STATE_NOTES_DIRECTORY,
 ] as const
 
 export function ensureManagedRoot(rootPath: string): string {

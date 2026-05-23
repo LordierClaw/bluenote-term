@@ -3,6 +3,12 @@ import path from "node:path"
 
 import { UsageError } from "../core/errors"
 
+export const DEFAULT_BLUENOTE_ROOT_DIRECTORY = ".bluenote"
+export const STATE_DIRECTORY = ".state"
+export const STATE_NOTES_DIRECTORY = path.join(STATE_DIRECTORY, "notes")
+export const STATE_MANIFEST_FILENAME = "manifest.json"
+export const STORAGE_SCHEMA_VERSION = 2
+
 export interface ResolveBlueNoteRootOptions {
   override?: string
   env?: NodeJS.ProcessEnv
@@ -24,7 +30,7 @@ export function resolveBlueNoteRoot(options: ResolveBlueNoteRootOptions = {}): s
   } else if (envRoot !== undefined) {
     rootPath = envRoot
   } else {
-    rootPath = path.join(homeDir, ".bluenote")
+    rootPath = path.join(homeDir, DEFAULT_BLUENOTE_ROOT_DIRECTORY)
   }
 
   if (rootPath === "") {
