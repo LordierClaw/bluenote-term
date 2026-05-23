@@ -34,6 +34,8 @@ const NOTE_SCHEMA_VERSION = 1
 const NOTE_MODE = "plain"
 const NOTE_NAMING_VERSION = 1
 
+class NoteMetadataPathMismatchError extends UsageError {}
+
 function assertCreateFrontmatterIsSupported(frontmatter: NoteFrontmatter): void {
   if (
     frontmatter.schemaVersion !== NOTE_SCHEMA_VERSION ||
@@ -116,6 +118,10 @@ function keyFromNotePath(notePath: string): string {
 function noteKeyExists(rootPath: string, key: string): boolean {
   const notesPath = getNotesPath(rootPath)
   const notePaths: string[] = []
+
+  if (!existsSync(notesPath)) {
+    return false
+  }
 
   collectMarkdownFiles(rootPath, notesPath, notePaths)
 
@@ -244,7 +250,7 @@ export function createNoteRepository(rootPath: string): NoteRepository {
         const sidecar = sidecars.read(key)
 
         if (path.normalize(sidecar.relativePath) !== path.normalize(relativePath)) {
-          throw new UsageError(
+          throw new NoteMetadataPathMismatchError(
             `Note metadata for '${sidecar.key}' points to '${sidecar.relativePath}' instead of '${relativePath}'.`,
             {
               hint: "Rebuild or repair the note sidecar so its relativePath matches the note file.",
@@ -254,7 +260,7 @@ export function createNoteRepository(rootPath: string): NoteRepository {
 
         return buildParsedNote(sidecar, plainNote)
       } catch (error) {
-        if (error instanceof UsageError && error.message.startsWith("Note metadata for '")) {
+        if (error instanceof NoteMetadataPathMismatchError) {
           throw error
         }
 

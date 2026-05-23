@@ -60,6 +60,26 @@ test("creating a note writes a plain markdown file and matching sidecar", async 
   }
 })
 
+test("creating a note succeeds from a fresh root without pre-created notes directories", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-fresh-root-"))
+
+  try {
+    const repository = createNoteRepository(rootPath)
+    const created = repository.create({
+      frontmatter: FIXED_FRONTMATTER,
+      body: "Hello from a fresh root.\n",
+    })
+
+    assert.equal(created.notePath, getInboxNotePath(rootPath, "note-123"))
+    assert.equal(await readFile(created.notePath, "utf8"), "Hello from a fresh root.\n")
+
+    const sidecarPath = path.join(getStateNotesPath(rootPath), "note-123.json")
+    assert.equal(JSON.parse(await readFile(sidecarPath, "utf8")).relativePath, path.join("notes", "inbox", "note-123.md"))
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
 test("reading and listing notes joins plain file bodies with sidecar metadata", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-integration-"))
 
