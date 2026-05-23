@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 
 import { UsageError } from "../core/errors"
 import { assertPathInsideRoot, toRootRelativePath } from "../platform/path-safety"
-import { type PlainNote } from "./note-schema"
+import { type PlainNote, validateNoteFrontmatter } from "./note-schema"
 import type { NoteFrontmatter, ParsedNote } from "./note-schema"
 import { parsePlainNote, serializePlainNote } from "./plain-note"
 import { createSidecarRepository } from "./sidecar-repository"
@@ -47,6 +47,18 @@ function assertCreateFrontmatterIsSupported(frontmatter: NoteFrontmatter): void 
       },
     )
   }
+}
+
+function getCreateValidationSourcePath(frontmatter: unknown): string {
+  if (typeof frontmatter === "object" && frontmatter !== null) {
+    const candidateId = (frontmatter as { id?: unknown }).id
+
+    if (typeof candidateId === "string" && candidateId.length > 0) {
+      return path.join("notes", "inbox", `${candidateId}.md`)
+    }
+  }
+
+  return path.join("notes", "inbox", "<unknown>.md")
 }
 
 function wrapRepositoryError(action: "create" | "read" | "list" | "archive", relativePath: string, error: unknown): never {
@@ -99,6 +111,15 @@ function deriveDescription(body: string, fallbackTitle: string): string {
 
 function keyFromNotePath(notePath: string): string {
   return path.basename(notePath, ".md")
+}
+
+function noteKeyExists(rootPath: string, key: string): boolean {
+  const notesPath = getNotesPath(rootPath)
+  const notePaths: string[] = []
+
+  collectMarkdownFiles(rootPath, notesPath, notePaths)
+
+  return notePaths.some((notePath) => keyFromNotePath(notePath) === key)
 }
 
 function assertUniqueNoteKeys(rootPath: string, notePaths: readonly string[]): void {
@@ -158,15 +179,16 @@ export function createNoteRepository(rootPath: string): NoteRepository {
 
   return {
     create(input) {
-      assertCreateFrontmatterIsSupported(input.frontmatter)
+      const canonicalFrontmatter = validateNoteFrontmatter(input.frontmatter, getCreateValidationSourcePath(input.frontmatter))
+      assertCreateFrontmatterIsSupported(canonicalFrontmatter)
 
-      const notePath = getInboxNotePath(normalizedRootPath, input.frontmatter.id)
+      const notePath = getInboxNotePath(normalizedRootPath, canonicalFrontmatter.id)
       const relativePath = toRootRelativePath(normalizedRootPath, notePath)
-      const sidecarPath = sidecars.getSidecarPath(input.frontmatter.id)
+      const sidecarPath = sidecars.getSidecarPath(canonicalFrontmatter.id)
 
-      if (existsSync(notePath) || existsSync(sidecarPath)) {
+      if (existsSync(notePath) || existsSync(sidecarPath) || noteKeyExists(normalizedRootPath, canonicalFrontmatter.id)) {
         throw new UsageError(`Could not create note '${relativePath}'.`, {
-          hint: "A note with the same path/key already exists. Use a different id or remove/archive the existing note first.",
+          hint: "A note with the same basename/key already exists somewhere under notes/ or in sidecar metadata. Use a different id or remove/archive the existing note first.",
         })
       }
 
@@ -174,15 +196,31 @@ export function createNoteRepository(rootPath: string): NoteRepository {
         body: input.body,
         sourcePath: relativePath,
       })
-      const sidecar = buildSidecar(input.frontmatter, relativePath, input.body, input.frontmatter.archivedAt ?? null)
+      const sidecar = buildSidecar(canonicalFrontmatter, relativePath, input.body, canonicalFrontmatter.archivedAt ?? null)
+      let wroteNoteFile = false
 
       try {
         mkdirSync(path.dirname(notePath), { recursive: true })
-        writeFileSync(notePath, markdown, "utf8")
+        writeFileSync(notePath, markdown, { encoding: "utf8", flag: "wx" })
+        wroteNoteFile = true
         sidecars.write(sidecar)
       } catch (error) {
-        if (existsSync(notePath)) {
-          rmSync(notePath, { force: true })
+        const rollbackErrors: unknown[] = []
+
+        if (wroteNoteFile && existsSync(notePath)) {
+          try {
+            rmSync(notePath, { force: true })
+          } catch (rollbackError) {
+            rollbackErrors.push(rollbackError)
+          }
+        }
+
+        if (rollbackErrors.length > 0) {
+          wrapRepositoryError(
+            "create",
+            relativePath,
+            new AggregateError([error, ...rollbackErrors], "Create failed and rollback also failed."),
+          )
         }
 
         wrapRepositoryError("create", relativePath, error)
@@ -261,7 +299,7 @@ export function createNoteRepository(rootPath: string): NoteRepository {
           throw new Error(`Archive destination already exists: ${archivedRelativePath}.`)
         }
 
-        writeFileSync(archivedNotePath, markdown, "utf8")
+        writeFileSync(archivedNotePath, markdown, { encoding: "utf8", flag: "wx" })
         wroteArchivedCopy = true
 
         if (archivedNotePath !== normalizedNotePath) {

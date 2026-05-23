@@ -173,7 +173,7 @@ test("create rejects an existing note key without mutating the existing note", a
   }
 })
 
-test("create rejects unsupported frontmatter fields instead of silently dropping them", async () => {
+test("create rejects unknown frontmatter fields instead of silently dropping them", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-integration-"))
 
   try {
@@ -185,18 +185,47 @@ test("create rejects unsupported frontmatter fields instead of silently dropping
         repository.create({
           frontmatter: {
             ...FIXED_FRONTMATTER,
-            schemaVersion: 2,
-            mode: "rich",
-            tags: ["project"],
-          },
+            extraField: "should fail",
+          } as unknown as (typeof FIXED_FRONTMATTER & { extraField: string }),
           body: "Hello from BlueNote.\n",
         }),
       (error: unknown) => {
         assert.equal(error instanceof Error, true)
-        assert.match((error as Error).message, /only supports schemaVersion=1, mode='plain', and an empty tags array/i)
+        assert.match((error as Error).message, /unknown field 'extraField'/i)
         return true
       },
     )
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("create rejects duplicate basenames that already exist elsewhere in notes tree", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-integration-"))
+
+  try {
+    ensureManagedRoot(rootPath)
+    const repository = createNoteRepository(rootPath)
+    const existingNotePath = path.join(rootPath, "notes", "journal", "project-a", `${FIXED_FRONTMATTER.id}.md`)
+
+    await mkdir(path.dirname(existingNotePath), { recursive: true })
+    await writeFile(existingNotePath, "Existing elsewhere.\n", "utf8")
+
+    assert.throws(
+      () =>
+        repository.create({
+          frontmatter: FIXED_FRONTMATTER,
+          body: "Hello from BlueNote.\n",
+        }),
+      (error: unknown) => {
+        assert.equal(error instanceof Error, true)
+        assert.match((error as Error).message, /Could not create note 'notes[\\/]inbox[\\/]note-123\.md'\./)
+        assert.match(String((error as Error & { hint?: string }).hint), /same basename\/key already exists somewhere under notes\//i)
+        return true
+      },
+    )
+
+    await assert.rejects(() => access(getInboxNotePath(rootPath, FIXED_FRONTMATTER.id)))
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }
