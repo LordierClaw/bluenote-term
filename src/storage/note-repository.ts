@@ -101,6 +101,27 @@ function keyFromNotePath(notePath: string): string {
   return path.basename(notePath, ".md")
 }
 
+function assertUniqueNoteKeys(rootPath: string, notePaths: readonly string[]): void {
+  const firstRelativePathByKey = new Map<string, string>()
+
+  for (const notePath of notePaths) {
+    const key = keyFromNotePath(notePath)
+    const relativePath = toRootRelativePath(rootPath, notePath)
+    const firstRelativePath = firstRelativePathByKey.get(key)
+
+    if (firstRelativePath !== undefined) {
+      throw new UsageError(
+        `Found duplicate note key '${key}' for '${firstRelativePath}' and '${relativePath}'. Note basenames must be globally unique across the notes tree.`,
+        {
+          hint: "Rename or remove one of the duplicate note files so each note basename/key is unique under notes/.",
+        },
+      )
+    }
+
+    firstRelativePathByKey.set(key, relativePath)
+  }
+}
+
 function buildSidecar(frontmatter: NoteFrontmatter, relativePath: string, body: string, archivedAt: string | null): NoteSidecar {
   return {
     key: frontmatter.id,
@@ -242,12 +263,30 @@ export function createNoteRepository(rootPath: string): NoteRepository {
           rmSync(normalizedNotePath)
         }
       } catch (error) {
+        const rollbackErrors: unknown[] = []
+
         if (wroteArchivedSidecar) {
-          sidecars.write(existingSidecar)
+          try {
+            sidecars.write(existingSidecar)
+          } catch (rollbackError) {
+            rollbackErrors.push(rollbackError)
+          }
         }
 
         if (wroteArchivedCopy && archivedNotePath !== normalizedNotePath && existsSync(archivedNotePath)) {
-          rmSync(archivedNotePath, { force: true })
+          try {
+            rmSync(archivedNotePath, { force: true })
+          } catch (rollbackError) {
+            rollbackErrors.push(rollbackError)
+          }
+        }
+
+        if (rollbackErrors.length > 0) {
+          wrapRepositoryError(
+            "archive",
+            currentRelativePath,
+            new AggregateError([error, ...rollbackErrors], "Archive failed and rollback also failed."),
+          )
         }
 
         wrapRepositoryError("archive", currentRelativePath, error)
@@ -274,6 +313,7 @@ export function createNoteRepository(rootPath: string): NoteRepository {
       }
 
       notePaths.sort((left, right) => left.localeCompare(right))
+      assertUniqueNoteKeys(normalizedRootPath, notePaths)
 
       return notePaths.map((notePath) => ({
         notePath,
