@@ -31,6 +31,17 @@ test("validateNoteSidecar accepts the canonical sidecar JSON shape", () => {
   })
 })
 
+test("validateNoteSidecar rejects non-object sidecar input with a validation error", () => {
+  assert.throws(
+    () => validateNoteSidecar("not-an-object", ".state/notes/note-work-24-abc123.json"),
+    (error: unknown) => {
+      assert.ok(error instanceof InvalidFrontmatterError)
+      assert.match(error.message, /expected a JSON object/i)
+      return true
+    },
+  )
+})
+
 test("validateNoteSidecar rejects missing required fields", () => {
   assert.throws(
     () =>

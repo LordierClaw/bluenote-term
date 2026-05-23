@@ -1,3 +1,4 @@
+import { InvalidFrontmatterError } from "../core/errors"
 import {
   assertKnownFields,
   assertNumberField,
@@ -43,7 +44,7 @@ export function validateNoteSidecar(sidecar: unknown, sourcePath: string): NoteS
   const validationKind = "sidecar metadata"
 
   if (!isRecord(sidecar)) {
-    throw new Error(`Invalid ${validationKind} in ${sourcePath}: expected a JSON object.`)
+    throw new InvalidFrontmatterError(`Invalid ${validationKind} in ${sourcePath}: expected a JSON object.`)
   }
 
   assertKnownFields(sidecar, REQUIRED_SIDECAR_FIELDS, sourcePath, validationKind)
