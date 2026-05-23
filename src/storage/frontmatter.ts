@@ -1,6 +1,7 @@
 import { createRequire } from "node:module"
 
 import { InvalidFrontmatterError } from "../core/errors"
+import { normalizePlainNoteBody } from "./plain-note"
 import { type NoteFrontmatter, type ParsedNote, validateNoteFrontmatter } from "./note-schema"
 
 type YamlApi = {
@@ -19,10 +20,6 @@ const yaml = require("js-yaml") as YamlApi
 
 const FRONTMATTER_PATTERN = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/
 
-function normalizeMarkdown(markdownText: string): string {
-  return markdownText.replace(/\r\n/g, "\n")
-}
-
 function toCanonicalFrontmatter(frontmatter: NoteFrontmatter): NoteFrontmatter {
   return {
     id: frontmatter.id,
@@ -37,7 +34,7 @@ function toCanonicalFrontmatter(frontmatter: NoteFrontmatter): NoteFrontmatter {
 }
 
 export function parseNoteFile(markdownText: string, sourcePath: string): ParsedNote {
-  const normalizedMarkdown = normalizeMarkdown(markdownText)
+  const normalizedMarkdown = normalizePlainNoteBody(markdownText)
   const match = normalizedMarkdown.match(FRONTMATTER_PATTERN)
 
   if (!match) {
@@ -67,7 +64,7 @@ export function serializeNoteFile(parsedNote: ParsedNote): string {
   const frontmatter = toCanonicalFrontmatter(
     validateNoteFrontmatter(parsedNote.frontmatter, parsedNote.sourcePath),
   )
-  const body = normalizeMarkdown(parsedNote.body)
+  const body = normalizePlainNoteBody(parsedNote.body)
   const serializedFrontmatter = yaml.dump(frontmatter, {
     indent: 2,
     lineWidth: -1,
