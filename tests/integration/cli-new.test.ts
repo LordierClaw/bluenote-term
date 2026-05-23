@@ -1,61 +1,105 @@
 import test from "node:test"
 import assert from "node:assert/strict"
-import os from "node:os"
 import path from "node:path"
-import { mkdtemp, readdir, readFile } from "node:fs/promises"
+import { readdir, readFile } from "node:fs/promises"
 
-import { parseNoteFile } from "../../src/storage/frontmatter"
 import { assertManagedRootLayout, createBlockedRootFixture, createManagedRootHarness, runCli } from "../helpers/cli"
 
-test("bn new --title \"Example\" creates a note, initializes the managed root, and returns a created path", async () => {
+const FIXED_TIMESTAMP = "2026-05-24T12:00:00.000Z"
+
+function extractCreatedKey(stdout: string): string {
+  const match = stdout.match(/^Created note\nKey: (.+)\nPath: notes[\\/]inbox[\\/](.+)\.md\n$/)
+
+  assert.notEqual(match, null)
+  assert.equal(match?.[1], match?.[2])
+
+  return match?.[1] ?? ""
+}
+
+test("bn new --title \"Example\" creates a plain note plus sidecar and prints key + path", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-new-")
 
   try {
-    const result = harness.run(["new", "--title", "Example"])
+    const result = harness.run(["new", "--title", "Example"], {
+      BLUENOTE_TEST_NOW: FIXED_TIMESTAMP,
+      BLUENOTE_TEST_RANDOM_SEQUENCE: "0x12345678",
+    })
 
     assert.equal(result.exitCode, 0)
     assert.equal(result.stderr, "")
-    assert.match(result.stdout, /^Created note: notes\/inbox\/.+\.md\n$/)
+    assert.equal(result.stdout, "Created note\nKey: example-51u7i0\nPath: notes/inbox/example-51u7i0.md\n")
 
     await assertManagedRootLayout(harness.rootPath)
 
     const noteFiles = await readdir(path.join(harness.rootPath, "notes", "inbox"))
-    assert.equal(noteFiles.length, 1)
+    assert.deepEqual(noteFiles, ["example-51u7i0.md"])
 
     const notePath = path.join(harness.rootPath, "notes", "inbox", noteFiles[0])
     const markdown = await readFile(notePath, "utf8")
-    const parsedNote = parseNoteFile(markdown, path.join("notes", "inbox", noteFiles[0]))
+    assert.equal(markdown, "")
 
-    assert.equal(parsedNote.frontmatter.title, "Example")
-    assert.equal(parsedNote.frontmatter.schemaVersion, 1)
-    assert.equal(parsedNote.frontmatter.mode, "plain")
-    assert.deepEqual(parsedNote.frontmatter.tags, [])
-    assert.equal(parsedNote.frontmatter.id.endsWith(".md"), false)
-    assert.equal(parsedNote.body, "")
+    const sidecar = JSON.parse(await readFile(path.join(harness.rootPath, ".state", "notes", "example-51u7i0.json"), "utf8"))
+    assert.deepEqual(sidecar, {
+      key: "example-51u7i0",
+      title: "Example",
+      description: "",
+      relativePath: path.join("notes", "inbox", "example-51u7i0.md"),
+      createdAt: FIXED_TIMESTAMP,
+      updatedAt: FIXED_TIMESTAMP,
+      archivedAt: null,
+      namingVersion: 1,
+    })
   } finally {
     await harness.cleanup()
   }
 })
 
-test("repeated note creation produces distinct IDs", async () => {
+test("bn new auto-rebuilds indexes so the created note appears in bn list immediately", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-new-rebuild-")
+
+  try {
+    const createResult = harness.run(["new", "--title", "Mission Log"], {
+      BLUENOTE_TEST_NOW: FIXED_TIMESTAMP,
+      BLUENOTE_TEST_RANDOM_SEQUENCE: "0x12345678",
+    })
+
+    assert.equal(createResult.exitCode, 0)
+    assert.equal(createResult.stderr, "")
+    assert.equal(extractCreatedKey(createResult.stdout), "mission-log-51u7i0")
+
+    const listResult = harness.run(["list"])
+
+    assert.equal(listResult.exitCode, 0)
+    assert.equal(listResult.stderr, "")
+    assert.equal(
+      listResult.stdout,
+      "Mission Log\tmission-log-51u7i0\t\tnotes/inbox/mission-log-51u7i0.md\n",
+    )
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test("repeated note creation produces distinct keys", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-new-distinct-")
 
   try {
-    const firstResult = harness.run(["new", "--title", "Example"])
-    const secondResult = harness.run(["new", "--title", "Example"])
+    const firstResult = harness.run(["new", "--title", "Example"], {
+      BLUENOTE_TEST_NOW: FIXED_TIMESTAMP,
+      BLUENOTE_TEST_RANDOM_SEQUENCE: "0x12345678",
+    })
+    const secondResult = harness.run(["new", "--title", "Example"], {
+      BLUENOTE_TEST_NOW: FIXED_TIMESTAMP,
+      BLUENOTE_TEST_RANDOM_SEQUENCE: "0x76543210",
+    })
 
     assert.equal(firstResult.exitCode, 0)
     assert.equal(secondResult.exitCode, 0)
+    assert.equal(extractCreatedKey(firstResult.stdout), "example-51u7i0")
+    assert.equal(extractCreatedKey(secondResult.stdout), "example-wtycr4")
 
     const noteFiles = await readdir(path.join(harness.rootPath, "notes", "inbox"))
-    assert.equal(noteFiles.length, 2)
-
-    const firstMarkdown = await readFile(path.join(harness.rootPath, "notes", "inbox", noteFiles[0]), "utf8")
-    const secondMarkdown = await readFile(path.join(harness.rootPath, "notes", "inbox", noteFiles[1]), "utf8")
-    const firstParsed = parseNoteFile(firstMarkdown, path.join("notes", "inbox", noteFiles[0]))
-    const secondParsed = parseNoteFile(secondMarkdown, path.join("notes", "inbox", noteFiles[1]))
-
-    assert.notEqual(firstParsed.frontmatter.id, secondParsed.frontmatter.id)
+    assert.deepEqual(noteFiles.sort(), ["example-51u7i0.md", "example-wtycr4.md"])
   } finally {
     await harness.cleanup()
   }

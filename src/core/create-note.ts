@@ -1,6 +1,11 @@
+import path from "node:path"
+
 import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions } from "../config/root"
+import { createNoteDescription } from "../domain/note-description"
+import { createNoteKey } from "../domain/note-key"
+import { rebuildIndexes } from "./rebuild-indexes"
 import { systemClock, type Clock } from "../platform/clock"
-import { uuidGenerator, type IdGenerator } from "../platform/ids"
+import type { IdGenerator } from "../platform/ids"
 import { createNoteRepository } from "../storage/note-repository"
 import { ensureManagedRoot } from "../storage/root-layout"
 
@@ -12,22 +17,67 @@ export interface CreateNoteOptions extends ResolveBlueNoteRootOptions {
 }
 
 export interface CreateNoteSummary {
-  id: string
+  key: string
+  title: string
+  description: string
   rootPath: string
   notePath: string
   relativePath: string
 }
 
+function readTestTimestamp(): Date | null {
+  const value = process.env.BLUENOTE_TEST_NOW
+
+  if (!value) {
+    return null
+  }
+
+  return new Date(value)
+}
+
+function createRandomSourceFromEnvironment(): (() => number) | undefined {
+  const sequence = process.env.BLUENOTE_TEST_RANDOM_SEQUENCE
+
+  if (!sequence) {
+    return undefined
+  }
+
+  const draws = sequence
+    .split(",")
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0)
+    .map((value) => Number(value))
+
+  return () => draws.shift() ?? 0
+}
+
 export function createNote(options: CreateNoteOptions): CreateNoteSummary {
   const rootPath = ensureManagedRoot(resolveBlueNoteRoot(options))
-  const clock = options.clock ?? systemClock
-  const ids = options.ids ?? uuidGenerator
+  const clock =
+    options.clock ??
+    (() => {
+      const testTimestamp = readTestTimestamp()
+
+      return testTimestamp === null
+        ? systemClock
+        : {
+            now() {
+              return new Date(testTimestamp)
+            },
+          }
+    })()
   const timestamp = clock.now().toISOString()
-  const id = ids.generate()
   const repository = createNoteRepository(rootPath)
+  const randomSource = createRandomSourceFromEnvironment()
+  const existingKeys = new Set(repository.listNotePaths().map((record) => path.basename(record.relativePath, ".md")))
+  const key = createNoteKey(options.title, {
+    isUnique: (candidate) => !existingKeys.has(candidate),
+    randomSource,
+  })
+  const description = createNoteDescription(options.body ?? "")
   const created = repository.create({
     frontmatter: {
-      id,
+      id: key,
       schemaVersion: 1,
       title: options.title,
       mode: "plain",
@@ -38,8 +88,12 @@ export function createNote(options: CreateNoteOptions): CreateNoteSummary {
     body: options.body ?? "",
   })
 
+  rebuildIndexes({ override: rootPath })
+
   return {
-    id,
+    key,
+    title: options.title,
+    description,
     rootPath,
     notePath: created.notePath,
     relativePath: created.relativePath,

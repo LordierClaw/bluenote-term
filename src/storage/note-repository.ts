@@ -2,6 +2,7 @@ import path from "node:path"
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 
 import { UsageError } from "../core/errors"
+import { createNoteDescription } from "../domain/note-description"
 import { assertPathInsideRoot, toRootRelativePath } from "../platform/path-safety"
 import { parseNoteFile } from "./frontmatter"
 import { type PlainNote, validateNoteFrontmatter } from "./note-schema"
@@ -104,13 +105,8 @@ function collectMarkdownFiles(rootPath: string, currentPath: string, files: stri
   }
 }
 
-function deriveDescription(body: string, fallbackTitle: string): string {
-  const firstNonEmptyLine = body
-    .split("\n")
-    .map((line) => line.trim())
-    .find((line) => line.length > 0)
-
-  return firstNonEmptyLine ?? fallbackTitle
+function deriveDescription(body: string): string {
+  return createNoteDescription(body)
 }
 
 function keyFromNotePath(notePath: string): string {
@@ -155,7 +151,7 @@ function buildSidecar(frontmatter: NoteFrontmatter, relativePath: string, body: 
   return {
     key: frontmatter.id,
     title: frontmatter.title,
-    description: deriveDescription(body, frontmatter.title),
+    description: deriveDescription(body),
     relativePath,
     createdAt: frontmatter.createdAt,
     updatedAt: frontmatter.updatedAt,

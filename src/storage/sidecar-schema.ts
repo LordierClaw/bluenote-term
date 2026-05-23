@@ -40,6 +40,16 @@ function assertArchivedAtField(record: Record<string, unknown>, sourcePath: stri
   return assertTimestampField(record, "archivedAt", sourcePath, "sidecar metadata")
 }
 
+function assertDescriptionField(record: Record<string, unknown>, sourcePath: string): string {
+  const value = record.description
+
+  if (typeof value !== "string") {
+    throw new InvalidFrontmatterError(`Invalid sidecar metadata in ${sourcePath}: 'description' must be a string.`)
+  }
+
+  return value
+}
+
 export function validateNoteSidecar(sidecar: unknown, sourcePath: string): NoteSidecar {
   const validationKind = "sidecar metadata"
 
@@ -53,7 +63,7 @@ export function validateNoteSidecar(sidecar: unknown, sourcePath: string): NoteS
   return {
     key: assertStringField(sidecar, "key", sourcePath, validationKind),
     title: assertStringField(sidecar, "title", sourcePath, validationKind),
-    description: assertStringField(sidecar, "description", sourcePath, validationKind),
+    description: assertDescriptionField(sidecar, sourcePath),
     relativePath: assertStringField(sidecar, "relativePath", sourcePath, validationKind),
     createdAt: assertTimestampField(sidecar, "createdAt", sourcePath, validationKind),
     updatedAt: assertTimestampField(sidecar, "updatedAt", sourcePath, validationKind),

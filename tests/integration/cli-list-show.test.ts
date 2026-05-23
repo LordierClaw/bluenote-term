@@ -1,26 +1,85 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import path from "node:path"
-import { createManagedRootHarness } from "../helpers/cli"
-import { noteMarkdown } from "../helpers/note-fixtures"
+import { mkdir, writeFile } from "node:fs/promises"
 
-test("bn list shows existing note summaries", async () => {
+import { createManagedRootHarness } from "../helpers/cli"
+
+async function writePlainNoteWithSidecar(
+  rootPath: string,
+  {
+    key,
+    title,
+    description,
+    relativePath,
+    body,
+    archivedAt = null,
+    createdAt = "2026-05-21T10:15:00.000Z",
+    updatedAt = createdAt,
+  }: {
+    key: string
+    title: string
+    description: string
+    relativePath: string
+    body: string
+    archivedAt?: string | null
+    createdAt?: string
+    updatedAt?: string
+  },
+) {
+  const notePath = path.join(rootPath, relativePath)
+  const sidecarPath = path.join(rootPath, ".state", "notes", `${key}.json`)
+
+  await mkdir(path.dirname(notePath), { recursive: true })
+  await mkdir(path.dirname(sidecarPath), { recursive: true })
+  await writeFile(notePath, body, "utf8")
+  await writeFile(
+    sidecarPath,
+    JSON.stringify(
+      {
+        key,
+        title,
+        description,
+        relativePath,
+        createdAt,
+        updatedAt,
+        archivedAt,
+        namingVersion: 1,
+      },
+      null,
+      2,
+    ) + "\n",
+    "utf8",
+  )
+}
+
+test("bn list shows title, key, description, and path for active notes only", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-list-")
 
   try {
-    await harness.writeNote(
-      path.join("notes", "inbox", "alpha.md"),
-      noteMarkdown({ id: "note-alpha", title: "Alpha Note", body: "Alpha body.\n" }),
-    )
-    await harness.writeNote(
-      path.join("notes", "journal", "beta.md"),
-      noteMarkdown({
-        id: "note-beta",
-        title: "Beta Note",
-        body: "Beta body.\n",
-        createdAt: "2026-05-21T11:15:00.000Z",
-      }),
-    )
+    await writePlainNoteWithSidecar(harness.rootPath, {
+      key: "alpha-note",
+      title: "Alpha Note",
+      description: "Alpha summary",
+      relativePath: path.join("notes", "inbox", "alpha-note.md"),
+      body: "Alpha body.\n",
+    })
+    await writePlainNoteWithSidecar(harness.rootPath, {
+      key: "beta-note",
+      title: "Beta Note",
+      description: "Nebula planning note",
+      relativePath: path.join("notes", "journal", "beta-note.md"),
+      body: "Beta body.\n",
+      createdAt: "2026-05-21T11:15:00.000Z",
+    })
+    await writePlainNoteWithSidecar(harness.rootPath, {
+      key: "archived-note",
+      title: "Archived Note",
+      description: "Should not appear in list",
+      relativePath: path.join("notes", "archive", "archived-note.md"),
+      body: "Archived body.\n",
+      archivedAt: "2026-05-22T09:30:00.000Z",
+    })
 
     const rebuildResult = harness.run(["rebuild"])
 
@@ -31,55 +90,49 @@ test("bn list shows existing note summaries", async () => {
 
     assert.equal(result.exitCode, 0)
     assert.equal(result.stderr, "")
-    assert.match(result.stdout, /note-alpha\s+Alpha Note\s+notes[\\/]inbox[\\/]alpha\.md/)
-    assert.match(result.stdout, /note-beta\s+Beta Note\s+notes[\\/]journal[\\/]beta\.md/)
+    assert.equal(
+      result.stdout,
+      [
+        "Alpha Note\talpha-note\tAlpha summary\tnotes/inbox/alpha-note.md",
+        "Beta Note\tbeta-note\tNebula planning note\tnotes/journal/beta-note.md",
+        "",
+      ].join("\n"),
+    )
+    assert.doesNotMatch(result.stdout, /Archived Note/)
   } finally {
     await harness.cleanup()
   }
 })
 
-test("bn show <selector> prints the matching note", async () => {
+test("bn show <selector> prints title, key, path, description, and body", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-show-")
-  const markdown = noteMarkdown({ id: "show-note", title: "Example Show Note", body: "Visible body.\n" })
 
   try {
-    await harness.writeNote(path.join("notes", "inbox", "show-note.md"), markdown)
+    await writePlainNoteWithSidecar(harness.rootPath, {
+      key: "show-note",
+      title: "Example Show Note",
+      description: "Visible body. More detail.",
+      relativePath: path.join("notes", "inbox", "show-note.md"),
+      body: "Visible body.\nSecond line.\n",
+    })
 
     const result = harness.run(["show", "show-note"])
 
     assert.equal(result.exitCode, 0)
     assert.equal(result.stderr, "")
-    assert.equal(result.stdout, markdown)
-  } finally {
-    await harness.cleanup()
-  }
-})
-
-test("bn show preserves the stored note formatting exactly", async () => {
-  const harness = await createManagedRootHarness("bluenote-cli-show-formatting-")
-  const markdown = `---
-title: "Formatting Example"
-id: formatting-note
-schemaVersion: 1
-mode: plain
-tags: [alpha, beta]
-createdAt: "2026-05-21T10:15:00.000Z"
-updatedAt: "2026-05-21T10:15:00.000Z"
----
-
-Body line one.
-
-Body line two.
-`
-
-  try {
-    await harness.writeNote(path.join("notes", "inbox", "formatting-note.md"), markdown)
-
-    const result = harness.run(["show", "formatting-note"])
-
-    assert.equal(result.exitCode, 0)
-    assert.equal(result.stderr, "")
-    assert.equal(result.stdout, markdown)
+    assert.equal(
+      result.stdout,
+      [
+        "Title: Example Show Note",
+        "Key: show-note",
+        "Path: notes/inbox/show-note.md",
+        "Description: Visible body. More detail.",
+        "",
+        "Visible body.",
+        "Second line.",
+        "",
+      ].join("\n"),
+    )
   } finally {
     await harness.cleanup()
   }
@@ -87,16 +140,21 @@ Body line two.
 
 test("bn show resolves a title-derived slug selector", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-show-slug-")
-  const markdown = noteMarkdown({ id: "slug-note", title: "Example Show Note", body: "Visible body.\n" })
 
   try {
-    await harness.writeNote(path.join("notes", "inbox", "slug-note.md"), markdown)
+    await writePlainNoteWithSidecar(harness.rootPath, {
+      key: "slug-note",
+      title: "Example Show Note",
+      description: "Visible body.",
+      relativePath: path.join("notes", "inbox", "slug-note.md"),
+      body: "Visible body.\n",
+    })
 
     const result = harness.run(["show", "  ExAmPlE-sHoW-nOtE  "])
 
     assert.equal(result.exitCode, 0)
     assert.equal(result.stderr, "")
-    assert.equal(result.stdout, markdown)
+    assert.match(result.stdout, /^Title: Example Show Note\nKey: slug-note\nPath: notes[\\/]inbox[\\/]slug-note\.md\nDescription: Visible body\.\n\nVisible body\.\n$/)
   } finally {
     await harness.cleanup()
   }
@@ -105,16 +163,21 @@ test("bn show resolves a title-derived slug selector", async () => {
 test("bn show resolves a managed-root-relative path selector", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-show-path-")
   const relativePath = path.join("notes", "journal", "show-path.md")
-  const markdown = noteMarkdown({ id: "path-note", title: "Path Show Note", body: "Path body.\n" })
 
   try {
-    await harness.writeNote(relativePath, markdown)
+    await writePlainNoteWithSidecar(harness.rootPath, {
+      key: "show-path",
+      title: "Path Show Note",
+      description: "Path body.",
+      relativePath,
+      body: "Path body.\n",
+    })
 
     const result = harness.run(["show", relativePath])
 
     assert.equal(result.exitCode, 0)
     assert.equal(result.stderr, "")
-    assert.equal(result.stdout, markdown)
+    assert.match(result.stdout, /^Title: Path Show Note\nKey: show-path\nPath: notes[\\/]journal[\\/]show-path\.md\nDescription: Path body\.\n\nPath body\.\n$/)
   } finally {
     await harness.cleanup()
   }
@@ -124,24 +187,22 @@ test("bn show surfaces ambiguous selector failures", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-show-ambiguous-")
 
   try {
-    await harness.writeNote(
-      path.join("notes", "inbox", "shared-a.md"),
-      noteMarkdown({
-        id: "shared-a",
-        title: "Shared Title",
-        body: "Shared A body.\n",
-        createdAt: "2026-05-21T10:19:00.000Z",
-      }),
-    )
-    await harness.writeNote(
-      path.join("notes", "archive", "shared-b.md"),
-      noteMarkdown({
-        id: "shared-b",
-        title: "Shared Title",
-        body: "Shared B body.\n",
-        createdAt: "2026-05-21T10:20:00.000Z",
-      }),
-    )
+    await writePlainNoteWithSidecar(harness.rootPath, {
+      key: "shared-a",
+      title: "Shared Title",
+      description: "Shared A body.",
+      relativePath: path.join("notes", "inbox", "shared-a.md"),
+      body: "Shared A body.\n",
+      createdAt: "2026-05-21T10:19:00.000Z",
+    })
+    await writePlainNoteWithSidecar(harness.rootPath, {
+      key: "shared-b",
+      title: "Shared Title",
+      description: "Shared B body.",
+      relativePath: path.join("notes", "archive", "shared-b.md"),
+      body: "Shared B body.\n",
+      createdAt: "2026-05-21T10:20:00.000Z",
+    })
 
     const result = harness.run(["show", "shared-title"])
 
@@ -150,7 +211,7 @@ test("bn show surfaces ambiguous selector failures", async () => {
     assert.match(result.stderr, /Ambiguous note selector: shared-title\./)
     assert.match(result.stderr, /notes[\\/]inbox[\\/]shared-a\.md/)
     assert.match(result.stderr, /notes[\\/]archive[\\/]shared-b\.md/)
-    assert.match(result.stderr, /Hint: Use a note ID or managed-root-relative path to disambiguate\./)
+    assert.match(result.stderr, /Hint: Use a note key or managed-root-relative path to disambiguate\./)
   } finally {
     await harness.cleanup()
   }
@@ -160,10 +221,13 @@ test("bn show reports selector-not-found errors", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-show-missing-")
 
   try {
-    await harness.writeNote(
-      path.join("notes", "inbox", "present.md"),
-      noteMarkdown({ id: "present-note", title: "Present Note", body: "Visible body.\n" }),
-    )
+    await writePlainNoteWithSidecar(harness.rootPath, {
+      key: "present",
+      title: "Present Note",
+      description: "Visible body.",
+      relativePath: path.join("notes", "inbox", "present.md"),
+      body: "Visible body.\n",
+    })
 
     const result = harness.run(["show", "does-not-exist"])
 
@@ -185,7 +249,7 @@ test("bn show requires a selector argument", async () => {
     assert.equal(result.exitCode, 1)
     assert.equal(result.stdout, "")
     assert.match(result.stderr, /Missing required selector for show\./)
-    assert.match(result.stderr, /Hint: Run bn show <id\|path\|slug>\./)
+    assert.match(result.stderr, /Hint: Run bn show <key\|path\|slug>\./)
   } finally {
     await harness.cleanup()
   }

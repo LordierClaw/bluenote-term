@@ -48,7 +48,7 @@ function readFlagValue(args: string[], flagName: string): string | undefined {
 export function formatHelp(version: string): string {
   return [
     `BlueNote v${version}`,
-    "Local-first terminal notes for Phase 1 CLI workflows",
+    "Local-first terminal notes for Phase 2 storage + UX workflows",
     "",
     "Usage:",
     "  bn <command> [options]",
@@ -57,9 +57,9 @@ export function formatHelp(version: string): string {
     "  --help       Show this message",
     "  --version    Print the current version",
     "  init         Initialize the managed BlueNote root",
-    "  new          --title <title>  Create a new note in notes/inbox",
-    "  list         List note summaries",
-    "  show         <id|path|slug>   Print a matching note",
+    "  new          --title <title>  Create a new note in notes/inbox and print its key/path",
+    "  list         List active notes as title, key, description, and path",
+    "  show         <key|path|slug>  Print a matching note summary and body",
     "  search       <query>          Search indexed notes",
     "  edit         <id|path|slug>   Open a matching note in $EDITOR",
     "  archive      <id|path|slug>   Archive a matching note",
@@ -102,7 +102,7 @@ export function runCli(args: string[], version: string): CliResult {
 
       return {
         exitCode: 0,
-        stdout: `Created note: ${summary.relativePath}\n`,
+        stdout: `Created note\nKey: ${summary.key}\nPath: ${summary.relativePath}\n`,
         stderr: "",
       }
     }
@@ -145,7 +145,9 @@ export function runCli(args: string[], version: string): CliResult {
 
     if (command === "list") {
       const summaries = listNotes()
-      const stdout = summaries.map((summary) => `${summary.id}\t${summary.title}\t${summary.relativePath}`).join("\n")
+      const stdout = summaries
+        .map((summary) => `${summary.title}\t${summary.key}\t${summary.description}\t${summary.relativePath}`)
+        .join("\n")
 
       return {
         exitCode: 0,
@@ -178,13 +180,15 @@ export function runCli(args: string[], version: string): CliResult {
 
       if (!selector) {
         throw new UsageError("Missing required selector for show.", {
-          hint: "Run bn show <id|path|slug>.",
+          hint: "Run bn show <key|path|slug>.",
         })
       }
 
+      const shown = showNote({ selector })
+
       return {
         exitCode: 0,
-        stdout: showNote({ selector }),
+        stdout: `Title: ${shown.title}\nKey: ${shown.key}\nPath: ${shown.relativePath}\nDescription: ${shown.description}\n\n${shown.body}`,
         stderr: "",
       }
     }

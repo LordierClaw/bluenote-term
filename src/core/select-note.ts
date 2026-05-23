@@ -33,7 +33,7 @@ function assertSingleMatch(selector: string, matches: ParsedNote[]): ParsedNote 
   throw new AmbiguousSelectorError(
     `Ambiguous note selector: ${selector}. Matches: ${matches.map((note) => note.sourcePath).join(", ")}.`,
     {
-      hint: "Use a note ID or managed-root-relative path to disambiguate.",
+      hint: "Use a note key or managed-root-relative path to disambiguate.",
     },
   )
 }
