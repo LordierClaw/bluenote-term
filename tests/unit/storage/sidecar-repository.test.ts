@@ -55,6 +55,7 @@ test("sidecar repository rejects missing required sidecar fields when writing", 
         } as never),
       (error: unknown) => {
         assert.ok(error instanceof InvalidFrontmatterError)
+        assert.match(error.message, /note-work-24-abc123\.json/i)
         assert.match(error.message, /relativePath/i)
         return true
       },

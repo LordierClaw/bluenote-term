@@ -13,6 +13,18 @@ export interface SidecarRepository {
   write(sidecar: NoteSidecar): string
 }
 
+function getWriteValidationSourcePath(sidecar: unknown): string {
+  if (typeof sidecar === "object" && sidecar !== null) {
+    const candidateKey = (sidecar as { key?: unknown }).key
+
+    if (typeof candidateKey === "string") {
+      return path.join(STATE_NOTES_DIRECTORY, `${candidateKey}.json`)
+    }
+  }
+
+  return path.join(STATE_NOTES_DIRECTORY, "<unknown>.json")
+}
+
 function wrapSidecarRepositoryError(action: "read" | "write", relativePath: string, error: unknown): never {
   const message = action === "read" ? `Could not read sidecar '${relativePath}'.` : `Could not write sidecar '${relativePath}'.`
   const hint =
@@ -62,7 +74,7 @@ export function createSidecarRepository(rootPath: string): SidecarRepository {
     },
 
     write(sidecar) {
-      const canonicalSidecar = validateNoteSidecar(sidecar, path.join(STATE_NOTES_DIRECTORY, "<unknown>.json"))
+      const canonicalSidecar = validateNoteSidecar(sidecar, getWriteValidationSourcePath(sidecar))
       const sidecarPath = getSidecarPath(canonicalSidecar.key)
 
       try {

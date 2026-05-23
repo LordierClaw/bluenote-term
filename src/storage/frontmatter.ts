@@ -1,7 +1,7 @@
 import { createRequire } from "node:module"
 
 import { InvalidFrontmatterError } from "../core/errors"
-import { normalizePlainNoteBody } from "./plain-note"
+import { parsePlainNote, serializePlainNote } from "./plain-note"
 import { type NoteFrontmatter, type ParsedNote, validateNoteFrontmatter } from "./note-schema"
 
 type YamlApi = {
@@ -34,7 +34,7 @@ function toCanonicalFrontmatter(frontmatter: NoteFrontmatter): NoteFrontmatter {
 }
 
 export function parseNoteFile(markdownText: string, sourcePath: string): ParsedNote {
-  const normalizedMarkdown = normalizePlainNoteBody(markdownText)
+  const { body: normalizedMarkdown } = parsePlainNote(markdownText, sourcePath)
   const match = normalizedMarkdown.match(FRONTMATTER_PATTERN)
 
   if (!match) {
@@ -64,7 +64,7 @@ export function serializeNoteFile(parsedNote: ParsedNote): string {
   const frontmatter = toCanonicalFrontmatter(
     validateNoteFrontmatter(parsedNote.frontmatter, parsedNote.sourcePath),
   )
-  const body = normalizePlainNoteBody(parsedNote.body)
+  const body = serializePlainNote(parsedNote)
   const serializedFrontmatter = yaml.dump(frontmatter, {
     indent: 2,
     lineWidth: -1,
