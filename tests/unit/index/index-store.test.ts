@@ -1,4 +1,4 @@
-import test from "node:test"
+import { test } from "bun:test"
 import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
@@ -7,53 +7,91 @@ import { access, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { IndexUnavailableError } from "../../../src/core/errors"
 import { createSearchDocuments } from "../../../src/index/search-documents"
 import { loadIndexStore, rebuildIndexStore } from "../../../src/index/index-store"
-import { parseNoteFile } from "../../../src/storage/frontmatter"
 
-const NOTE_ALPHA = parseNoteFile(
-  `---\nid: note-alpha\nschemaVersion: 1\ntitle: Alpha Note\nmode: plain\ntags: [alpha]\ncreatedAt: 2026-05-21T10:15:00.000Z\nupdatedAt: 2026-05-21T10:15:00.000Z\n---\nAlpha body mentions project comet.\n`,
-  path.join("notes", "inbox", "alpha.md"),
-)
+const NOTE_ALPHA = {
+  key: "note-alpha",
+  title: "Alpha Note",
+  description: "Alpha summary",
+  body: "Alpha body mentions project comet.\n",
+  relativePath: path.join("notes", "inbox", "note-alpha.md"),
+  createdAt: "2026-05-21T10:15:00.000Z",
+  updatedAt: "2026-05-21T10:15:00.000Z",
+  archivedAt: null,
+}
 
-const NOTE_BETA = parseNoteFile(
-  `---\nid: note-beta\nschemaVersion: 1\ntitle: Beta Note\nmode: plain\ntags: [beta]\ncreatedAt: 2026-05-21T11:15:00.000Z\nupdatedAt: 2026-05-21T11:15:00.000Z\n---\nBeta body mentions nebula plans.\n`,
-  path.join("notes", "journal", "beta.md"),
-)
+const NOTE_BETA = {
+  key: "note-beta",
+  title: "Beta Note",
+  description: "Nebula planning note",
+  body: "Beta body mentions launch windows.\n",
+  relativePath: path.join("notes", "journal", "note-beta.md"),
+  createdAt: "2026-05-21T11:15:00.000Z",
+  updatedAt: "2026-05-21T11:15:00.000Z",
+  archivedAt: null,
+}
 
-test("rebuildIndexStore writes rebuildable derived artifacts under .bluenote", async () => {
+test("rebuildIndexStore writes rebuildable derived artifacts under .state and preserves sidecar metadata", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-index-store-"))
 
   try {
-    const result = await rebuildIndexStore({
+    const result = rebuildIndexStore({
       rootPath,
       notes: [NOTE_ALPHA, NOTE_BETA],
     })
 
     assert.equal(result.noteCount, 2)
-    assert.equal(result.metadataDatabasePath, path.join(rootPath, ".bluenote", "metadata.sqlite"))
-    assert.equal(result.searchIndexPath, path.join(rootPath, ".bluenote", "search-index.json"))
+    assert.equal(result.metadataDatabasePath, path.join(rootPath, ".state", "metadata.sqlite"))
+    assert.equal(result.searchIndexPath, path.join(rootPath, ".state", "search-index.json"))
 
     await access(result.metadataDatabasePath)
     await access(result.searchIndexPath)
 
-    const store = await loadIndexStore(rootPath)
+    const store = loadIndexStore(rootPath)
     const summaries = store.listSummaries()
-    const searchResults = store.search("nebula")
 
+    assert.deepEqual(summaries, [
+      {
+        key: "note-alpha",
+        id: "note-alpha",
+        title: "Alpha Note",
+        description: "Alpha summary",
+        relativePath: path.join("notes", "inbox", "note-alpha.md"),
+        createdAt: "2026-05-21T10:15:00.000Z",
+        updatedAt: "2026-05-21T10:15:00.000Z",
+        archivedAt: null,
+      },
+      {
+        key: "note-beta",
+        id: "note-beta",
+        title: "Beta Note",
+        description: "Nebula planning note",
+        relativePath: path.join("notes", "journal", "note-beta.md"),
+        createdAt: "2026-05-21T11:15:00.000Z",
+        updatedAt: "2026-05-21T11:15:00.000Z",
+        archivedAt: null,
+      },
+    ])
+
+    assert.deepEqual(store.search("comet").map((result) => result.key), ["note-alpha"])
+    assert.deepEqual(store.search("Nebula planning").map((result) => result.key), ["note-beta"])
     assert.deepEqual(
-      summaries.map((summary) => summary.id),
-      ["note-alpha", "note-beta"],
+      store.search("note-beta").map((result) => result.key).includes("note-beta"),
+      true,
     )
-    assert.deepEqual(searchResults.map((result) => result.id), ["note-beta"])
+    assert.deepEqual(
+      store.search("journal/note-beta").map((result) => result.key).includes("note-beta"),
+      true,
+    )
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }
 })
 
-test("derived artifacts can be deleted and recreated from note files", async () => {
+test("derived artifacts can be deleted and recreated from canonical note index records", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-index-store-rebuild-"))
 
   try {
-    const initial = await rebuildIndexStore({
+    const initial = rebuildIndexStore({
       rootPath,
       notes: [NOTE_ALPHA],
     })
@@ -61,7 +99,7 @@ test("derived artifacts can be deleted and recreated from note files", async () 
     await rm(initial.metadataDatabasePath, { force: true })
     await rm(initial.searchIndexPath, { force: true })
 
-    const recreated = await rebuildIndexStore({
+    const recreated = rebuildIndexStore({
       rootPath,
       notes: [NOTE_ALPHA],
     })
@@ -69,9 +107,18 @@ test("derived artifacts can be deleted and recreated from note files", async () 
     await access(recreated.metadataDatabasePath)
     await access(recreated.searchIndexPath)
 
-    const store = await loadIndexStore(rootPath)
-    assert.deepEqual(store.search("project comet").map((result) => result.id), ["note-alpha"])
-    assert.deepEqual(createSearchDocuments([NOTE_ALPHA]).map((document) => document.id), ["note-alpha"])
+    const store = loadIndexStore(rootPath)
+    assert.deepEqual(store.search("Alpha summary").map((result) => result.key), ["note-alpha"])
+    assert.deepEqual(createSearchDocuments([NOTE_ALPHA]), [
+      {
+        id: "note-alpha",
+        key: "note-alpha",
+        title: "Alpha Note",
+        description: "Alpha summary",
+        body: "Alpha body mentions project comet.\n",
+        relativePath: path.join("notes", "inbox", "note-alpha.md"),
+      },
+    ])
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }
@@ -81,7 +128,7 @@ test("loadIndexStore wraps corrupt metadata artifacts as IndexUnavailableError w
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-index-store-corrupt-metadata-"))
 
   try {
-    const rebuilt = await rebuildIndexStore({
+    const rebuilt = rebuildIndexStore({
       rootPath,
       notes: [NOTE_ALPHA],
     })
@@ -98,7 +145,7 @@ test("loadIndexStore wraps corrupt metadata artifacts as IndexUnavailableError w
 
     assert.ok(caughtError instanceof IndexUnavailableError)
     assert.equal(caughtError.message, "Derived indexes are unavailable.")
-    assert.equal(caughtError.hint, "Run bn rebuild to recreate .bluenote artifacts from note files.")
+    assert.equal(caughtError.hint, "Run bn rebuild to recreate .state artifacts from note files and sidecars.")
     assert.notEqual(caughtError.cause, undefined)
     assert.equal(caughtError.cause instanceof IndexUnavailableError, false)
   } finally {
@@ -110,7 +157,7 @@ test("loadIndexStore wraps corrupt search artifacts as IndexUnavailableError wit
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-index-store-corrupt-search-"))
 
   try {
-    const rebuilt = await rebuildIndexStore({
+    const rebuilt = rebuildIndexStore({
       rootPath,
       notes: [NOTE_ALPHA],
     })
@@ -127,7 +174,7 @@ test("loadIndexStore wraps corrupt search artifacts as IndexUnavailableError wit
 
     assert.ok(caughtError instanceof IndexUnavailableError)
     assert.equal(caughtError.message, "Derived indexes are unavailable.")
-    assert.equal(caughtError.hint, "Run bn rebuild to recreate .bluenote artifacts from note files.")
+    assert.equal(caughtError.hint, "Run bn rebuild to recreate .state artifacts from note files and sidecars.")
     assert.notEqual(caughtError.cause, undefined)
     assert.equal(caughtError.cause instanceof IndexUnavailableError, false)
   } finally {
