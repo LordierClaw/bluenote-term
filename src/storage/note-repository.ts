@@ -3,8 +3,12 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 
 import { UsageError } from "../core/errors"
 import { assertPathInsideRoot, toRootRelativePath } from "../platform/path-safety"
-import { parseNoteFile, serializeNoteFile } from "./frontmatter"
+import { type PlainNote } from "./note-schema"
 import type { NoteFrontmatter, ParsedNote } from "./note-schema"
+import { parsePlainNote, serializePlainNote } from "./plain-note"
+import { createSidecarRepository } from "./sidecar-repository"
+import type { NoteSidecar } from "./sidecar-schema"
+import { getArchiveNotePath, getInboxNotePath, getNotesPath } from "./root-layout"
 
 export interface CreateStoredNoteInput {
   frontmatter: NoteFrontmatter
@@ -25,9 +29,10 @@ export interface NoteRepository {
   listNotePaths(): StoredNoteRecord[]
 }
 
-const DEFAULT_INBOX_RELATIVE_PATH = path.join("notes", "inbox")
-const DEFAULT_ARCHIVE_RELATIVE_PATH = path.join("notes", "archive")
 const NOTES_RELATIVE_PATH = "notes"
+const NOTE_SCHEMA_VERSION = 1
+const NOTE_MODE = "plain"
+const NOTE_NAMING_VERSION = 1
 
 function wrapRepositoryError(action: "create" | "read" | "list" | "archive", relativePath: string, error: unknown): never {
   const message =
@@ -68,24 +73,72 @@ function collectMarkdownFiles(rootPath: string, currentPath: string, files: stri
   }
 }
 
+function deriveDescription(body: string, fallbackTitle: string): string {
+  const firstNonEmptyLine = body
+    .split("\n")
+    .map((line) => line.trim())
+    .find((line) => line.length > 0)
+
+  return firstNonEmptyLine ?? fallbackTitle
+}
+
+function keyFromNotePath(notePath: string): string {
+  return path.basename(notePath, ".md")
+}
+
+function buildSidecar(frontmatter: NoteFrontmatter, relativePath: string, body: string, archivedAt: string | null): NoteSidecar {
+  return {
+    key: frontmatter.id,
+    title: frontmatter.title,
+    description: deriveDescription(body, frontmatter.title),
+    relativePath,
+    createdAt: frontmatter.createdAt,
+    updatedAt: frontmatter.updatedAt,
+    archivedAt,
+    namingVersion: NOTE_NAMING_VERSION,
+  }
+}
+
+function buildParsedNote(sidecar: NoteSidecar, plainNote: PlainNote): ParsedNote {
+  return {
+    body: plainNote.body,
+    sourcePath: plainNote.sourcePath,
+    frontmatter: {
+      id: sidecar.key,
+      schemaVersion: NOTE_SCHEMA_VERSION,
+      title: sidecar.title,
+      mode: NOTE_MODE,
+      tags: [],
+      createdAt: sidecar.createdAt,
+      updatedAt: sidecar.updatedAt,
+      ...(sidecar.archivedAt === null ? {} : { archivedAt: sidecar.archivedAt }),
+    },
+  }
+}
+
 export function createNoteRepository(rootPath: string): NoteRepository {
   const normalizedRootPath = path.resolve(rootPath)
+  const sidecars = createSidecarRepository(normalizedRootPath)
 
   return {
     create(input) {
-      const inboxPath = assertPathInsideRoot(normalizedRootPath, path.join(normalizedRootPath, DEFAULT_INBOX_RELATIVE_PATH))
-      const notePath = assertPathInsideRoot(inboxPath, path.join(inboxPath, `${input.frontmatter.id}.md`))
+      const notePath = getInboxNotePath(normalizedRootPath, input.frontmatter.id)
       const relativePath = toRootRelativePath(normalizedRootPath, notePath)
-      const markdown = serializeNoteFile({
-        frontmatter: input.frontmatter,
+      const markdown = serializePlainNote({
         body: input.body,
         sourcePath: relativePath,
       })
+      const sidecar = buildSidecar(input.frontmatter, relativePath, input.body, input.frontmatter.archivedAt ?? null)
 
       try {
-        mkdirSync(inboxPath, { recursive: true })
+        mkdirSync(path.dirname(notePath), { recursive: true })
         writeFileSync(notePath, markdown, "utf8")
+        sidecars.write(sidecar)
       } catch (error) {
+        if (existsSync(notePath)) {
+          rmSync(notePath, { force: true })
+        }
+
         wrapRepositoryError("create", relativePath, error)
       }
 
@@ -98,15 +151,31 @@ export function createNoteRepository(rootPath: string): NoteRepository {
     read(notePath) {
       const normalizedNotePath = assertPathInsideRoot(normalizedRootPath, notePath)
       const relativePath = toRootRelativePath(normalizedRootPath, normalizedNotePath)
+      const key = keyFromNotePath(normalizedNotePath)
       let markdown: string
 
       try {
         markdown = readFileSync(normalizedNotePath, "utf8")
+        const plainNote = parsePlainNote(markdown, relativePath)
+        const sidecar = sidecars.read(key)
+
+        if (path.normalize(sidecar.relativePath) !== path.normalize(relativePath)) {
+          throw new UsageError(
+            `Note metadata for '${sidecar.key}' points to '${sidecar.relativePath}' instead of '${relativePath}'.`,
+            {
+              hint: "Rebuild or repair the note sidecar so its relativePath matches the note file.",
+            },
+          )
+        }
+
+        return buildParsedNote(sidecar, plainNote)
       } catch (error) {
+        if (error instanceof UsageError && error.message.startsWith("Note metadata for '")) {
+          throw error
+        }
+
         wrapRepositoryError("read", relativePath, error)
       }
-
-      return parseNoteFile(markdown, relativePath)
     },
 
     readRaw(notePath) {
@@ -124,24 +193,23 @@ export function createNoteRepository(rootPath: string): NoteRepository {
       const normalizedNotePath = assertPathInsideRoot(normalizedRootPath, notePath)
       const currentRelativePath = toRootRelativePath(normalizedRootPath, normalizedNotePath)
       const existing = this.read(normalizedNotePath)
-      const archiveDirectoryPath = assertPathInsideRoot(
-        normalizedRootPath,
-        path.join(normalizedRootPath, DEFAULT_ARCHIVE_RELATIVE_PATH),
-      )
-      const archivedNotePath = assertPathInsideRoot(archiveDirectoryPath, path.join(archiveDirectoryPath, path.basename(normalizedNotePath)))
+      const existingSidecar = sidecars.read(existing.frontmatter.id)
+      const archivedNotePath = getArchiveNotePath(normalizedRootPath, existing.frontmatter.id)
       const archivedRelativePath = toRootRelativePath(normalizedRootPath, archivedNotePath)
-      const markdown = serializeNoteFile({
-        frontmatter: {
-          ...existing.frontmatter,
-          archivedAt,
-        },
+      const markdown = serializePlainNote({
         body: existing.body,
         sourcePath: archivedRelativePath,
       })
+      const archivedSidecar: NoteSidecar = {
+        ...existingSidecar,
+        relativePath: archivedRelativePath,
+        archivedAt,
+      }
       let wroteArchivedCopy = false
+      let wroteArchivedSidecar = false
 
       try {
-        mkdirSync(archiveDirectoryPath, { recursive: true })
+        mkdirSync(path.dirname(archivedNotePath), { recursive: true })
 
         if (archivedNotePath !== normalizedNotePath && existsSync(archivedNotePath)) {
           throw new Error(`Archive destination already exists: ${archivedRelativePath}.`)
@@ -149,11 +217,17 @@ export function createNoteRepository(rootPath: string): NoteRepository {
 
         writeFileSync(archivedNotePath, markdown, "utf8")
         wroteArchivedCopy = true
+        sidecars.write(archivedSidecar)
+        wroteArchivedSidecar = true
 
         if (archivedNotePath !== normalizedNotePath) {
           rmSync(normalizedNotePath)
         }
       } catch (error) {
+        if (wroteArchivedSidecar) {
+          sidecars.write(existingSidecar)
+        }
+
         if (wroteArchivedCopy && archivedNotePath !== normalizedNotePath && existsSync(archivedNotePath)) {
           rmSync(archivedNotePath, { force: true })
         }
@@ -172,7 +246,7 @@ export function createNoteRepository(rootPath: string): NoteRepository {
     },
 
     listNotePaths() {
-      const notesPath = assertPathInsideRoot(normalizedRootPath, path.join(normalizedRootPath, NOTES_RELATIVE_PATH))
+      const notesPath = getNotesPath(normalizedRootPath)
       const notePaths: string[] = []
 
       try {
