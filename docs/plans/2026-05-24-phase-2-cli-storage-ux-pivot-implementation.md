@@ -916,6 +916,172 @@ Only if a final small polish change was required.
 
 ---
 
+## Task 15E: Resolve root-only permission-test debt blocking full verification
+
+**Root cause summary:**
+The remaining failing tests are not approved-design regressions. They reproduce on the pre-alignment baseline and all four rely on Unix permission mutations (`chmod 000/400/555`) to force write/remove/scan failures. In this session the repo runs as `root`, so those permission toggles do not reliably fail. The suite debt is therefore in the tests and testability seams, not in the newly aligned Phase 2 contract.
+
+**Goal:**
+Replace environment-sensitive permission tricks with deterministic, process-local failure injection so `bun test` is green even when the suite runs as `root`.
+
+---
+
+### Task 15E1: Make rebuild sidecar-scan failure tests deterministic
+
+**Files:**
+- Modify/Test: `tests/integration/cli-rebuild.test.ts`
+- Modify/Test as needed: `tests/helpers/cli.ts`
+- Modify/Test as needed: `src/core/rebuild-indexes.ts`
+
+**Step 1: Write the failing test update first**
+Change the rebuild failure case so it no longer depends on `chmod(.state/notes, 0o000)`. Instead, add a deterministic test seam that forces sidecar-directory scanning to fail for one invocation and prove the CLI still returns:
+- exit code `2`
+- `Validation failed while rebuilding indexes.`
+- `Could not scan sidecar directory '.state/notes'.`
+
+**Step 2: Run the targeted test — confirm it fails**
+Command:
+```bash
+bun test tests/integration/cli-rebuild.test.ts
+```
+Expected: FAIL until the deterministic scan-failure seam exists.
+
+**Step 3: Implement the minimum seam**
+Prefer the narrowest solution that does not widen production behavior, for example:
+- inject the directory-listing function into rebuild logic, or
+- add a test-only env seam consumed in the CLI/test harness,
+provided the seam is tightly scoped and does not leak user-facing behavior.
+
+**Step 4: Run the targeted test — confirm it passes**
+Command:
+```bash
+bun test tests/integration/cli-rebuild.test.ts
+```
+Expected: PASS.
+
+**Step 5: Commit**
+```bash
+git add tests/integration/cli-rebuild.test.ts tests/helpers/cli.ts src/core/rebuild-indexes.ts && git commit -m "test: make rebuild failure coverage deterministic"
+```
+Adjust the `git add` set if the final seam lives elsewhere.
+
+---
+
+### Task 15E2: Make migration rollback failure tests deterministic
+
+**Files:**
+- Modify/Test: `tests/integration/cli-migrate.test.ts`
+- Modify/Test: `tests/unit/storage/migration.test.ts`
+- Modify/Test as needed: `src/storage/migration.ts`
+- Modify/Test as needed: `src/index/index-store.ts`
+- Modify/Test as needed: `tests/helpers/cli.ts`
+
+**Step 1: Write the failing test update first**
+Replace the `chmod(metadata.sqlite, 0o400)` rollback trigger with deterministic failure injection at the derived-index rebuild/write boundary. Prove both CLI and unit migration paths still surface rollback-safe behavior:
+- CLI exits `1` with rollback guidance
+- unit migration throws a rollback/rebuild failure
+- legacy note content is restored
+- partial migrated note/sidecar/derived artifacts are absent after rollback
+
+**Step 2: Run the targeted tests — confirm they fail**
+Command:
+```bash
+bun test tests/integration/cli-migrate.test.ts tests/unit/storage/migration.test.ts
+```
+Expected: FAIL until the deterministic rebuild-failure seam exists.
+
+**Step 3: Implement the minimum seam**
+Inject or wrap the rebuild/index-write dependency so tests can force one rebuild failure without chmod-based filesystem assumptions. Keep the rollback path unchanged except for the testability seam.
+
+**Step 4: Run the targeted tests — confirm they pass**
+Command:
+```bash
+bun test tests/integration/cli-migrate.test.ts tests/unit/storage/migration.test.ts
+```
+Expected: PASS.
+
+**Step 5: Commit**
+```bash
+git add tests/integration/cli-migrate.test.ts tests/unit/storage/migration.test.ts src/storage/migration.ts src/index/index-store.ts tests/helpers/cli.ts && git commit -m "test: stabilize migration rollback coverage"
+```
+Adjust the `git add` set if the final seam does not touch every listed file.
+
+---
+
+### Task 15E3: Make archive rollback failure coverage deterministic
+
+**Files:**
+- Modify/Test: `tests/unit/storage/note-repository.test.ts`
+- Modify/Test as needed: `src/storage/note-repository.ts`
+
+**Step 1: Write the failing test update first**
+Replace the `chmod(notes/inbox, 0o555)` source-removal trigger with deterministic failure injection around the note-removal step. Prove the repository still:
+- throws `UsageError`
+- preserves the source note
+- removes the destination archive copy when rollback succeeds
+
+**Step 2: Run the targeted test — confirm it fails**
+Command:
+```bash
+bun test tests/unit/storage/note-repository.test.ts
+```
+Expected: FAIL until the deterministic removal-failure seam exists.
+
+**Step 3: Implement the minimum seam**
+Introduce the narrowest injectable filesystem operation needed for the archive path, or mock the fs boundary already used by the repository, without changing user-facing behavior.
+
+**Step 4: Run the targeted test — confirm it passes**
+Command:
+```bash
+bun test tests/unit/storage/note-repository.test.ts
+```
+Expected: PASS.
+
+**Step 5: Commit**
+```bash
+git add tests/unit/storage/note-repository.test.ts src/storage/note-repository.ts && git commit -m "test: stabilize archive rollback coverage"
+```
+
+---
+
+### Task 15E4: Re-run the full verification gate and confirm branch-finish readiness
+
+**Files:**
+- Review/modify as needed: files touched in Tasks 15E1–15E3
+
+**Step 1: Run focused debt-cleanup verification**
+Command:
+```bash
+bun test tests/integration/cli-rebuild.test.ts tests/integration/cli-migrate.test.ts tests/unit/storage/migration.test.ts tests/unit/storage/note-repository.test.ts
+```
+Expected: PASS.
+
+**Step 2: Run the full gate again**
+Command:
+```bash
+bun run typecheck
+bun test
+bun run smoke:opentui
+bun run smoke:cli
+bun test tests/e2e
+bun test tests/integration
+git status --short
+```
+Expected: PASS and clean status.
+
+**Step 3: Run final review passes again**
+Run:
+- code-quality review focused on seam minimality and test determinism
+- branch-finish readiness review confirming no remaining blockers
+
+**Step 4: Commit only if a final tiny polish is needed**
+```bash
+git add . && git commit -m "chore: finish verification suite stabilization"
+```
+Only if Step 3 required a final polish.
+
+---
+
 ## Stop condition
 
 Do not execute further Phase 2 implementation work from this amendment until the user explicitly approves the updated plan.
