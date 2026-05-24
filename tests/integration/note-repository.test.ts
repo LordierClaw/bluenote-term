@@ -292,6 +292,71 @@ test("create rejects duplicate basenames that already exist elsewhere in notes t
   }
 })
 
+test("archive migrates a legacy frontmatter note without an existing sidecar", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-integration-"))
+
+  try {
+    ensureManagedRoot(rootPath)
+    const repository = createNoteRepository(rootPath)
+    const legacyNotePath = getInboxNotePath(rootPath, "legacy-note")
+
+    await writeFile(
+      legacyNotePath,
+      [
+        "---",
+        "id: legacy-note",
+        "schemaVersion: 1",
+        "title: Legacy Note",
+        "mode: plain",
+        "tags: []",
+        "createdAt: 2026-05-21T10:15:00.000Z",
+        "updatedAt: 2026-05-21T10:15:00.000Z",
+        "---",
+        "Legacy body.",
+        "",
+      ].join("\n"),
+      "utf8",
+    )
+
+    const archived = repository.archive(legacyNotePath, "2026-05-21T12:30:00.000Z")
+
+    assert.equal(archived.notePath, getArchiveNotePath(rootPath, "legacy-note"))
+    assert.equal(archived.relativePath, path.join("notes", "archive", "legacy-note.md"))
+    await assert.rejects(() => access(legacyNotePath))
+
+    const archivedMarkdown = await readFile(archived.notePath, "utf8")
+    assert.equal(archivedMarkdown, "Legacy body.\n")
+
+    const sidecar = JSON.parse(await readFile(path.join(getStateNotesPath(rootPath), "legacy-note.json"), "utf8"))
+    assert.deepEqual(sidecar, {
+      key: "legacy-note",
+      title: "Legacy Note",
+      description: "Legacy body.",
+      relativePath: path.join("notes", "archive", "legacy-note.md"),
+      createdAt: "2026-05-21T10:15:00.000Z",
+      updatedAt: "2026-05-21T10:15:00.000Z",
+      archivedAt: "2026-05-21T12:30:00.000Z",
+      namingVersion: 1,
+    })
+
+    const loaded = repository.read(archived.notePath)
+    assert.deepEqual(loaded.frontmatter, {
+      id: "legacy-note",
+      schemaVersion: 1,
+      title: "Legacy Note",
+      mode: "plain",
+      tags: [],
+      createdAt: "2026-05-21T10:15:00.000Z",
+      updatedAt: "2026-05-21T10:15:00.000Z",
+      archivedAt: "2026-05-21T12:30:00.000Z",
+    })
+    assert.equal(loaded.body, "Legacy body.\n")
+    assert.equal(loaded.sourcePath, path.join("notes", "archive", "legacy-note.md"))
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
 test("archived notes preserve the key while moving the note path", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-integration-"))
 

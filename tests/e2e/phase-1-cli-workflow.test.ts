@@ -23,12 +23,14 @@ test("Phase 1 CLI workflow stays consistent across init, create, rebuild, list, 
     assert.match(initResult.stdout, new RegExp(`Initialized BlueNote root: ${harness.escapeForRegExp(harness.rootPath)}`))
 
     const newResult = runOk("bn new", ["new", "--title", "Workflow Example"])
-    assert.match(newResult.stdout, /^Created note: notes\/inbox\/.+\.md\n$/)
+    assert.match(newResult.stdout, /^Created note\nKey: .+\nPath: notes\/inbox\/.+\.md\n$/)
 
-    const createdRelativePath = newResult.stdout.trim().replace(/^Created note: /, "")
-    const createdAbsolutePath = path.join(harness.rootPath, createdRelativePath)
+    const createdRelativePathMatch = newResult.stdout.match(/^Created note\nKey: .+\nPath: (notes\/inbox\/.+\.md)\n$/)
+    const createdRelativePath = createdRelativePathMatch?.[1]
+    assert.notEqual(createdRelativePath, undefined)
+    const createdAbsolutePath = path.join(harness.rootPath, createdRelativePath ?? "")
     const createdMarkdown = await readFile(createdAbsolutePath, "utf8")
-    assert.match(createdMarkdown, /title: Workflow Example/)
+    assert.equal(createdMarkdown, "")
 
     const secondNoteRelativePath = path.join("notes", "journal", "reference-note.md")
     await harness.writeNote(secondNoteRelativePath, noteMarkdown({
@@ -42,18 +44,29 @@ test("Phase 1 CLI workflow stays consistent across init, create, rebuild, list, 
     const rebuildResult = runOk("bn rebuild", ["rebuild"])
     assert.match(rebuildResult.stdout, /Rebuilt indexes for 2 note\(s\)\./)
 
-    await access(path.join(harness.rootPath, ".bluenote", "metadata.sqlite"))
-    await access(path.join(harness.rootPath, ".bluenote", "search-index.json"))
+    await access(path.join(harness.rootPath, ".state", "metadata.sqlite"))
+    await access(path.join(harness.rootPath, ".state", "search-index.json"))
 
     const listResult = runOk("bn list", ["list"])
-    assert.match(listResult.stdout, /Workflow Example\s+notes[\\/]inbox[\\/]/)
-    assert.match(listResult.stdout, /reference-note\s+Reference Note\s+notes[\\/]journal[\\/]reference-note\.md/)
+    assert.match(listResult.stdout, /Workflow Example\s+workflow-example-[a-z0-9]+\s+\s*notes[\\/]inbox[\\/]workflow-example-[a-z0-9]+\.md/)
+    assert.match(listResult.stdout, /Reference Note\s+reference-note\s+Reference zebra tokens remain searchable while active\.\s+notes[\\/]journal[\\/]reference-note\.md/)
 
     const searchResult = runOk("bn search zebra tokens", ["search", "zebra", "tokens"])
     assert.match(searchResult.stdout, /reference-note\s+Reference Note\s+notes[\\/]journal[\\/]reference-note\.md/)
 
     const showResult = runOk("bn show reference-note", ["show", "reference-note"])
-    assert.equal(showResult.stdout, await readFile(path.join(harness.rootPath, secondNoteRelativePath), "utf8"))
+    assert.equal(
+      showResult.stdout,
+      [
+        "Title: Reference Note",
+        "Key: reference-note",
+        `Path: ${secondNoteRelativePath.replaceAll(path.sep, "/")}`,
+        "Description: Reference zebra tokens … searchable while active.",
+        "",
+        "Reference zebra tokens remain searchable while active.",
+        "",
+      ].join("\n"),
+    )
 
     const editedMarkdown = noteMarkdown({
       id: "reference-note",
@@ -77,11 +90,15 @@ test("Phase 1 CLI workflow stays consistent across init, create, rebuild, list, 
     const archivedRelativePath = path.join("notes", "archive", "reference-note.md")
     assert.equal(await Bun.file(path.join(harness.rootPath, secondNoteRelativePath)).exists(), false)
     const archivedMarkdown = await readFile(path.join(harness.rootPath, archivedRelativePath), "utf8")
-    assert.match(archivedMarkdown, timestampFieldPattern("archivedAt"))
-    assert.match(archivedMarkdown, /Edited zebra tokens stay searchable before archive\./)
+    assert.equal(archivedMarkdown, "Edited zebra tokens stay searchable before archive.\n")
+
+    const archivedSidecar = JSON.parse(
+      await readFile(path.join(harness.rootPath, ".state", "notes", "reference-note.json"), "utf8"),
+    )
+    assert.match(`archivedAt: ${archivedSidecar.archivedAt}`, timestampFieldPattern("archivedAt"))
 
     const finalListResult = runOk("bn list after archive", ["list"])
-    assert.match(finalListResult.stdout, /Workflow Example\s+notes[\\/]inbox[\\/]/)
+    assert.match(finalListResult.stdout, /Workflow Example\s+workflow-example-[a-z0-9]+\s+\s*notes[\\/]inbox[\\/]workflow-example-[a-z0-9]+\.md/)
     assert.doesNotMatch(finalListResult.stdout, /reference-note/)
 
     const finalSearchResult = runOk("bn search after archive", ["search", "Edited zebra tokens"])

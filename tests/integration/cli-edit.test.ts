@@ -32,7 +32,18 @@ test("bn edit <selector> launches the editor for the resolved note and rebuilds 
 
     const showResult = harness.run(["show", "edit-note"])
     assert.equal(showResult.exitCode, 0)
-    assert.equal(showResult.stdout, updatedMarkdown)
+    assert.equal(
+      showResult.stdout,
+      [
+        "Title: Edited Note",
+        "Key: edit-note",
+        `Path: ${relativePath.replaceAll(path.sep, "/")}`,
+        "Description: Updated body with zebra tokens.",
+        "",
+        "Updated body with zebra tokens.",
+        "",
+      ].join("\n"),
+    )
 
     const searchResult = harness.run(["search", "zebra tokens"])
     assert.equal(searchResult.exitCode, 0)

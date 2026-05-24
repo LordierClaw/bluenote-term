@@ -293,7 +293,15 @@ export function createNoteRepository(rootPath: string): NoteRepository {
       const normalizedNotePath = assertPathInsideRoot(normalizedRootPath, notePath)
       const currentRelativePath = toRootRelativePath(normalizedRootPath, normalizedNotePath)
       const existing = this.read(normalizedNotePath)
-      const existingSidecar = sidecars.read(existing.frontmatter.id)
+      const existingSidecarPath = sidecars.getSidecarPath(existing.frontmatter.id)
+      const existingSidecar = existsSync(existingSidecarPath)
+        ? sidecars.read(existing.frontmatter.id)
+        : buildSidecar(
+            existing.frontmatter,
+            currentRelativePath,
+            existing.body,
+            existing.frontmatter.archivedAt ?? null,
+          )
       const archivedNotePath = getArchiveNotePath(normalizedRootPath, existing.frontmatter.id)
       const archivedRelativePath = toRootRelativePath(normalizedRootPath, archivedNotePath)
       const markdown = serializePlainNote({
