@@ -1,0 +1,96 @@
+import path from "node:path"
+import { mkdirSync, rmSync, writeFileSync } from "node:fs"
+
+import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions, STATE_RECOVERY_DIRECTORY } from "../config/root"
+import { createNoteKey } from "../domain/note-key"
+import { createNoteRepository } from "../storage/note-repository"
+import { selectNote } from "./select-note"
+import { UsageError } from "./errors"
+
+export interface RenameNoteHooks {
+  onRecoveryArtifactStaged?: (artifactPath: string) => void
+}
+
+export interface RenameNoteOptions extends ResolveBlueNoteRootOptions {
+  selector: string
+  title: string
+  body: string
+  updatedAt: string
+  randomSource?: () => number
+  hooks?: RenameNoteHooks
+}
+
+export interface RenameNoteSummary {
+  previousKey: string
+  key: string
+  previousRelativePath: string
+  relativePath: string
+  notePath: string
+}
+
+function buildRecoveryArtifactPath(rootPath: string, previousKey: string, nextKey: string): string {
+  const safePreviousKey = previousKey.replace(/[^a-z0-9-]+/gi, "-")
+  const safeNextKey = nextKey.replace(/[^a-z0-9-]+/gi, "-")
+  return path.join(rootPath, STATE_RECOVERY_DIRECTORY, `${Date.now()}-${safePreviousKey}-to-${safeNextKey}.json`)
+}
+
+export function renameNote(options: RenameNoteOptions): RenameNoteSummary {
+  const rootPath = resolveBlueNoteRoot(options)
+  const repository = createNoteRepository(rootPath)
+  const selected = selectNote({ repository, selector: options.selector })
+  const currentKey = selected.frontmatter.id
+
+  let nextKey: string
+
+  try {
+    nextKey = createNoteKey(options.title, {
+      isUnique: (candidate) => candidate === currentKey || !repository.keyExists(candidate),
+      maxAttempts: 1,
+      randomSource: options.randomSource,
+    })
+  } catch (error) {
+    throw new UsageError(`Could not rename note '${selected.sourcePath}'.`, {
+      hint: "The generated key already exists. Change the title and retry, or remove the conflicting note first.",
+      cause: error,
+    })
+  }
+
+  const recoveryArtifactPath = buildRecoveryArtifactPath(rootPath, currentKey, nextKey)
+  const recoveryArtifact = {
+    previousKey: currentKey,
+    nextKey,
+    previousRelativePath: selected.sourcePath,
+    nextRelativePath: path.join(path.dirname(selected.sourcePath), `${nextKey}.md`),
+    stagedAt: options.updatedAt,
+  }
+
+  try {
+    mkdirSync(path.dirname(recoveryArtifactPath), { recursive: true })
+    writeFileSync(recoveryArtifactPath, JSON.stringify(recoveryArtifact, null, 2) + "\n", "utf8")
+    options.hooks?.onRecoveryArtifactStaged?.(recoveryArtifactPath)
+
+    const renamed = repository.rename(path.join(rootPath, selected.sourcePath), {
+      nextKey,
+      title: options.title,
+      body: options.body,
+      updatedAt: options.updatedAt,
+    })
+
+    try {
+      rmSync(recoveryArtifactPath, { force: true })
+    } catch {
+      // Best-effort cleanup: a stale recovery artifact is safer than reporting a successful rename as failed.
+    }
+
+    return renamed
+  } catch (error) {
+    if (error instanceof UsageError) {
+      throw error
+    }
+
+    throw new UsageError(`Could not rename note '${selected.sourcePath}'.`, {
+      hint: "Inspect .state/recovery/ for the staged rename artifact, then repair or retry the rename.",
+      cause: error,
+    })
+  }
+}

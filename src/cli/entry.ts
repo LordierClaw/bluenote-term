@@ -124,10 +124,14 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
       }
 
       const summary = editNote({ selector })
+      const renameLine =
+        summary.previousKey !== undefined && summary.key !== undefined && summary.previousKey !== summary.key
+          ? `Renamed key: ${summary.previousKey} -> ${summary.key}\n`
+          : ""
 
       return {
         exitCode: 0,
-        stdout: `Edited note: ${summary.relativePath}\n`,
+        stdout: `Edited note: ${summary.relativePath}\n${renameLine}`,
         stderr: "",
       }
     }

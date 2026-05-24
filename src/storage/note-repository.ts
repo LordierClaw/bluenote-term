@@ -22,10 +22,29 @@ export interface StoredNoteRecord {
   relativePath: string
 }
 
+export interface SyncStoredNoteInput {
+  title: string
+  body: string
+  updatedAt: string
+}
+
+export interface RenameStoredNoteInput extends SyncStoredNoteInput {
+  nextKey: string
+}
+
+export interface RenamedStoredNoteRecord extends StoredNoteRecord {
+  previousKey: string
+  key: string
+  previousRelativePath: string
+}
+
 export interface NoteRepository {
   create(input: CreateStoredNoteInput): StoredNoteRecord
   read(notePath: string): ParsedNote
   readRaw(notePath: string): string
+  syncEditedNote(notePath: string, input: SyncStoredNoteInput): StoredNoteRecord
+  rename(notePath: string, input: RenameStoredNoteInput): RenamedStoredNoteRecord
+  keyExists(key: string): boolean
   archive(notePath: string, archivedAt: string): StoredNoteRecord
   list(): ParsedNote[]
   listNotePaths(): StoredNoteRecord[]
@@ -113,6 +132,17 @@ function keyFromNotePath(notePath: string): string {
   return path.basename(notePath, ".md")
 }
 
+function notePathFromRelativePath(rootPath: string, relativePath: string): string {
+  return assertPathInsideRoot(rootPath, path.join(rootPath, relativePath))
+}
+
+function createPlainNoteMarkdown(relativePath: string, body: string): string {
+  return serializePlainNote({
+    body,
+    sourcePath: relativePath,
+  })
+}
+
 function noteKeyExists(rootPath: string, key: string): boolean {
   const notesPath = getNotesPath(rootPath)
   const notePaths: string[] = []
@@ -175,6 +205,10 @@ function buildParsedNote(sidecar: NoteSidecar, plainNote: PlainNote): ParsedNote
       ...(sidecar.archivedAt === null ? {} : { archivedAt: sidecar.archivedAt }),
     },
   }
+}
+
+function buildExistingSidecar(note: ParsedNote): NoteSidecar {
+  return buildSidecar(note.frontmatter, note.sourcePath, note.body, note.frontmatter.archivedAt ?? null)
 }
 
 export function createNoteRepository(rootPath: string): NoteRepository {
@@ -287,6 +321,167 @@ export function createNoteRepository(rootPath: string): NoteRepository {
       } catch (error) {
         wrapRepositoryError("read", relativePath, error)
       }
+    },
+
+    syncEditedNote(notePath, input) {
+      const normalizedNotePath = assertPathInsideRoot(normalizedRootPath, notePath)
+      const relativePath = toRootRelativePath(normalizedRootPath, normalizedNotePath)
+      const existing = this.read(normalizedNotePath)
+      const existingSidecarPath = sidecars.getSidecarPath(existing.frontmatter.id)
+      const existingSidecar = existsSync(existingSidecarPath) ? sidecars.read(existing.frontmatter.id) : buildExistingSidecar(existing)
+      const previousMarkdown = createPlainNoteMarkdown(relativePath, existing.body)
+      const updatedMarkdown = createPlainNoteMarkdown(relativePath, input.body)
+      const updatedSidecar: NoteSidecar = {
+        ...existingSidecar,
+        title: input.title,
+        description: deriveDescription(input.body),
+        relativePath,
+        updatedAt: input.updatedAt,
+      }
+      let wroteUpdatedNote = false
+
+      try {
+        writeFileSync(normalizedNotePath, updatedMarkdown, "utf8")
+        wroteUpdatedNote = true
+        sidecars.write(updatedSidecar)
+      } catch (error) {
+        const rollbackErrors: unknown[] = []
+
+        if (wroteUpdatedNote) {
+          try {
+            writeFileSync(normalizedNotePath, previousMarkdown, "utf8")
+          } catch (rollbackError) {
+            rollbackErrors.push(rollbackError)
+          }
+        }
+
+        throw new UsageError(`Could not update note '${relativePath}'.`, {
+          hint: "Ensure the note and its sidecar are writable inside BLUENOTE_ROOT.",
+          cause:
+            rollbackErrors.length > 0
+              ? new AggregateError([error, ...rollbackErrors], "Update failed and rollback also failed.")
+              : error,
+        })
+      }
+
+      return {
+        notePath: normalizedNotePath,
+        relativePath,
+      }
+    },
+
+    rename(notePath, input) {
+      const normalizedNotePath = assertPathInsideRoot(normalizedRootPath, notePath)
+      const previousRelativePath = toRootRelativePath(normalizedRootPath, normalizedNotePath)
+      const existing = this.read(normalizedNotePath)
+      const previousKey = existing.frontmatter.id
+      const nextRelativePath = path.join(path.dirname(previousRelativePath), `${input.nextKey}.md`)
+      const nextNotePath = notePathFromRelativePath(normalizedRootPath, nextRelativePath)
+      const previousSidecarPath = sidecars.getSidecarPath(previousKey)
+      const nextSidecarPath = sidecars.getSidecarPath(input.nextKey)
+      const existingSidecar = existsSync(previousSidecarPath) ? sidecars.read(previousKey) : buildExistingSidecar(existing)
+
+      if (
+        input.nextKey !== previousKey &&
+        (existsSync(nextNotePath) || existsSync(nextSidecarPath) || noteKeyExists(normalizedRootPath, input.nextKey))
+      ) {
+        throw new UsageError(`Could not rename note '${previousRelativePath}'.`, {
+          hint: `The generated key '${input.nextKey}' already exists. Change the title and retry, or remove the conflicting note first.`,
+        })
+      }
+
+      const nextSidecar: NoteSidecar = {
+        ...existingSidecar,
+        key: input.nextKey,
+        title: input.title,
+        description: deriveDescription(input.body),
+        relativePath: nextRelativePath,
+        updatedAt: input.updatedAt,
+      }
+
+      let wroteNextNote = false
+      let wroteNextSidecar = false
+      let removedPreviousNote = false
+      let removedPreviousSidecar = false
+
+      try {
+        mkdirSync(path.dirname(nextNotePath), { recursive: true })
+        writeFileSync(nextNotePath, createPlainNoteMarkdown(nextRelativePath, input.body), {
+          encoding: "utf8",
+          flag: nextNotePath === normalizedNotePath ? "w" : "wx",
+        })
+        wroteNextNote = true
+
+        sidecars.write(nextSidecar)
+        wroteNextSidecar = true
+
+        if (nextNotePath !== normalizedNotePath) {
+          rmSync(normalizedNotePath)
+          removedPreviousNote = true
+        }
+
+        if (nextSidecarPath !== previousSidecarPath && existsSync(previousSidecarPath)) {
+          rmSync(previousSidecarPath)
+          removedPreviousSidecar = true
+        }
+      } catch (error) {
+        const rollbackErrors: unknown[] = []
+
+        if (removedPreviousNote) {
+          try {
+            writeFileSync(normalizedNotePath, createPlainNoteMarkdown(previousRelativePath, existing.body), "utf8")
+          } catch (rollbackError) {
+            rollbackErrors.push(rollbackError)
+          }
+        }
+
+        if (removedPreviousSidecar) {
+          try {
+            sidecars.write(existingSidecar)
+          } catch (rollbackError) {
+            rollbackErrors.push(rollbackError)
+          }
+        }
+
+        if (wroteNextNote && nextNotePath !== normalizedNotePath && existsSync(nextNotePath)) {
+          try {
+            rmSync(nextNotePath, { force: true })
+          } catch (rollbackError) {
+            rollbackErrors.push(rollbackError)
+          }
+        }
+
+        if (wroteNextSidecar && nextSidecarPath !== previousSidecarPath && existsSync(nextSidecarPath)) {
+          try {
+            rmSync(nextSidecarPath, { force: true })
+          } catch (rollbackError) {
+            rollbackErrors.push(rollbackError)
+          }
+        }
+
+        throw new UsageError(`Could not rename note '${previousRelativePath}'.`, {
+          hint:
+            input.nextKey === previousKey
+              ? "Ensure the edited note and its sidecar are writable inside BLUENOTE_ROOT."
+              : `Ensure the generated key '${input.nextKey}' is free and the note plus sidecar are writable inside BLUENOTE_ROOT.`,
+          cause:
+            rollbackErrors.length > 0
+              ? new AggregateError([error, ...rollbackErrors], "Rename failed and rollback also failed.")
+              : error,
+        })
+      }
+
+      return {
+        notePath: nextNotePath,
+        relativePath: nextRelativePath,
+        previousKey,
+        key: input.nextKey,
+        previousRelativePath,
+      }
+    },
+
+    keyExists(key) {
+      return noteKeyExists(normalizedRootPath, key) || existsSync(sidecars.getSidecarPath(key))
     },
 
     archive(notePath, archivedAt) {
