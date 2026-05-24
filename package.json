@@ -15,6 +15,9 @@
   },
   "scripts": {
     "cli": "bun run ./bin/bn.ts",
+    "completion:bash": "bun run ./bin/bn.ts completion bash",
+    "completion:zsh": "bun run ./bin/bn.ts completion zsh",
+    "completion:fish": "bun run ./bin/bn.ts completion fish",
     "dev:tui": "bun run ./src/tui/app.ts",
     "check:env": "bun run ./scripts/check-env.ts",
     "smoke:opentui": "bun run ./scripts/smoke-opentui.ts",

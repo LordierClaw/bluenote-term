@@ -101,13 +101,13 @@ test("formatSearchMatches renders grouped note blocks with optional excerpts", (
       key: "moonbeam-title",
       title: "Moonbeam Launch",
       relativePath: path.join("notes", "inbox", "moonbeam-title.md"),
-      match: { label: "title" },
+      match: { source: "title", label: "title" },
     },
     {
       key: "content-match",
       title: "Incident Notes",
       relativePath: path.join("notes", "journal", "content-match.md"),
-      match: { label: "content line 2", excerpt: "...Second line mentions moonbeam during deployment..." },
+      match: { source: "content", label: "content line 2", excerpt: "...Second line mentions moonbeam during deployment..." },
     },
   ])
 

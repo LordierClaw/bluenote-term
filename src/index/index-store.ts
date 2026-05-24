@@ -63,6 +63,7 @@ export interface SearchIndexMatch {
 
 export interface LoadedIndexStore {
   listSummaries(): IndexedNoteSummary[]
+  listAllSummaries(): IndexedNoteSummary[]
   search(query: string): SearchIndexMatch[]
 }
 
@@ -230,6 +231,10 @@ export function loadIndexStore(rootPath: string): LoadedIndexStore {
       return {
         listSummaries() {
           return activeSummaries.map((summary) => ({ ...summary }))
+        },
+
+        listAllSummaries() {
+          return summaries.map((summary) => ({ ...summary }))
         },
 
         search(query: string) {

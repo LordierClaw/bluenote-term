@@ -13,6 +13,7 @@ import { listNotes } from "../core/list-notes"
 import { rebuildIndexes } from "../core/rebuild-indexes"
 import { searchNotes, type SearchNoteMatch } from "../core/search-notes"
 import { showNote } from "../core/show-note"
+import { runCompletionBackendCli, runCompletionCli } from "./completion"
 
 export interface CliRuntimeOptions {
   createNoteOptions?: Pick<Parameters<typeof createNote>[0], "clock" | "randomSource">
@@ -70,6 +71,7 @@ export function formatHelp(version: string): string {
     "  archive      <id|path|slug>   Archive a matching note",
     "  delete       <key|path> --force  Permanently remove a matching note and sidecar",
     "  rebuild      Rebuild derived metadata and search indexes",
+    "  completion   <bash|zsh|fish>  Print shell completion setup",
   ].join("\n") + "\n"
 }
 
@@ -115,6 +117,14 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
         stdout: `Initialized BlueNote root: ${summary.rootPath}\n`,
         stderr: "",
       }
+    }
+
+    if (command === "completion") {
+      return runCompletionCli(commandArgs)
+    }
+
+    if (command === "complete") {
+      return runCompletionBackendCli(commandArgs)
     }
 
     if (command === "new") {
