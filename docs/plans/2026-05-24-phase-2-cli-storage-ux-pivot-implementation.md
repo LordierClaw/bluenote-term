@@ -532,6 +532,57 @@ git add src/core/migrate-storage.ts src/cli/entry.ts src/storage/migration.ts te
 
 ---
 
+## Task 12A: Restore full `bun test` compatibility before late-phase verification
+
+**Files:**
+- Modify: `tests/e2e/phase-1-cli-workflow.test.ts`
+- Modify: `tests/unit/storage/archive-note.test.ts`
+- Modify as needed: remaining `tests/**/*.test.ts` files still importing `node:test` in Bun-run suites
+- Modify as needed: shared test helpers under `tests/helpers/`
+
+**Step 1: Reproduce and classify the full-suite failures first**
+Run the full suite and sort failures into:
+- stale expectation drift caused by Phase 2 output/storage changes
+- Bun compatibility failures from `node:test` imports in Bun-run test files
+- truly unrelated pre-existing failures, if any
+
+**Step 2: Add/adjust failing tests only where expectations are now wrong**
+Cover:
+- grouped search output in the existing Phase 1 e2e workflow
+- archive failure behavior after the repository/index refactor
+- Bun-native test imports for any suite that still breaks under `bun test`
+- any helper cleanup needed to keep env/file setup deterministic
+
+**Step 3: Run the focused red-phase slices — confirm the intended failures**
+Commands:
+```bash
+bun test tests/e2e/phase-1-cli-workflow.test.ts tests/unit/storage/archive-note.test.ts
+bun test
+```
+Expected: FAIL first on the known stale expectations / import-compatibility issues.
+
+**Step 4: Implement the minimum cleanup to make the repo-wide Bun suite green**
+- update stale assertions to the current Phase 2 CLI/search/archive contracts
+- switch remaining incompatible test files from `node:test` to `bun:test` where required for Bun execution
+- keep changes narrowly scoped to test compatibility and expectation alignment; do not smuggle in new product behavior
+
+**Step 5: Re-run the verification gate for cleanup**
+Commands:
+```bash
+bun run typecheck
+bun test
+bun run smoke:opentui
+bun run smoke:cli
+```
+Expected: PASS, or any remaining failure must be explicitly proven unrelated before proceeding.
+
+**Step 6: Commit**
+```bash
+git add tests tests/helpers scripts/smoke-cli.ts && git commit -m "test: restore full bun test compatibility"
+```
+
+---
+
 ## Task 13: Refresh smoke coverage and add a real Phase 2 e2e workflow
 
 **Files:**
