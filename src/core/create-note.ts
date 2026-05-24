@@ -1,6 +1,7 @@
 import path from "node:path"
 
 import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions } from "../config/root"
+import { IndexValidationFailedError } from "./errors"
 import { createNoteDescription } from "../domain/note-description"
 import { createNoteKey } from "../domain/note-key"
 import { rebuildIndexes } from "./rebuild-indexes"
@@ -88,7 +89,16 @@ export function createNote(options: CreateNoteOptions): CreateNoteSummary {
     body: options.body ?? "",
   })
 
-  rebuildIndexes({ override: rootPath })
+  const rebuildSummary = rebuildIndexes({ override: rootPath })
+
+  if (rebuildSummary.validationErrors.length > 0) {
+    throw new IndexValidationFailedError(
+      [`Created note '${key}', but derived indexes could not be rebuilt.`, ...rebuildSummary.validationErrors].join("\n"),
+      {
+        hint: "Run bn rebuild after fixing the reported validation errors.",
+      },
+    )
+  }
 
   return {
     key,

@@ -4,6 +4,7 @@ import path from "node:path"
 import { mkdir, writeFile } from "node:fs/promises"
 
 import { createManagedRootHarness } from "../helpers/cli"
+import { noteMarkdown } from "../helpers/note-fixtures"
 
 async function writePlainNoteWithSidecar(
   rootPath: string,
@@ -129,6 +130,42 @@ test("bn show <selector> prints title, key, path, description, and body", async 
         "Description: Visible body. More detail.",
         "",
         "Visible body.",
+        "Second line.",
+        "",
+      ].join("\n"),
+    )
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test("bn show falls back to legacy frontmatter notes without sidecars", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-show-legacy-")
+  const relativePath = path.join("notes", "inbox", "legacy-show.md")
+
+  try {
+    await harness.writeNote(
+      relativePath,
+      noteMarkdown({
+        id: "legacy-show",
+        title: "Legacy Show Note",
+        body: "Legacy visible body.\nSecond line.\n",
+      }),
+    )
+
+    const result = harness.run(["show", "legacy-show"])
+
+    assert.equal(result.exitCode, 0)
+    assert.equal(result.stderr, "")
+    assert.equal(
+      result.stdout,
+      [
+        "Title: Legacy Show Note",
+        "Key: legacy-show",
+        "Path: notes/inbox/legacy-show.md",
+        "Description: Legacy visible body. Second line.",
+        "",
+        "Legacy visible body.",
         "Second line.",
         "",
       ].join("\n"),

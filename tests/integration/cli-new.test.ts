@@ -80,6 +80,38 @@ test("bn new auto-rebuilds indexes so the created note appears in bn list immedi
   }
 })
 
+test("bn new reports auto-rebuild validation failures after creating the note", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-new-rebuild-error-")
+
+  try {
+    await harness.writeNote(path.join("notes", "inbox", "orphaned.md"), "Orphaned note body.\n")
+
+    const result = harness.run(["new", "--title", "Fresh Note"], {
+      BLUENOTE_TEST_NOW: FIXED_TIMESTAMP,
+      BLUENOTE_TEST_RANDOM_SEQUENCE: "0x12345678",
+    })
+
+    assert.equal(result.exitCode, 2)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Created note 'fresh-note-51u7i0', but derived indexes could not be rebuilt\./)
+    assert.match(result.stderr, /Could not read sidecar '\.state[\\/]notes[\\/]orphaned\.json'\./)
+    assert.match(result.stderr, /Hint: Run bn rebuild after fixing the reported validation errors\./)
+
+    const createdNotePath = path.join(harness.rootPath, "notes", "inbox", "fresh-note-51u7i0.md")
+    assert.equal(await readFile(createdNotePath, "utf8"), "")
+
+    const createdSidecar = JSON.parse(
+      await readFile(path.join(harness.rootPath, ".state", "notes", "fresh-note-51u7i0.json"), "utf8"),
+    )
+    assert.equal(createdSidecar.key, "fresh-note-51u7i0")
+
+    const metadataDatabasePath = path.join(harness.rootPath, ".state", "metadata.sqlite")
+    await assert.rejects(() => readFile(metadataDatabasePath, "utf8"))
+  } finally {
+    await harness.cleanup()
+  }
+})
+
 test("repeated note creation produces distinct keys", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-new-distinct-")
 
