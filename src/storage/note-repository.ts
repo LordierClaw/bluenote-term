@@ -46,6 +46,7 @@ export interface NoteRepository {
   rename(notePath: string, input: RenameStoredNoteInput): RenamedStoredNoteRecord
   keyExists(key: string): boolean
   archive(notePath: string, archivedAt: string): StoredNoteRecord
+  delete(notePath: string): StoredNoteRecord
   list(): ParsedNote[]
   listNotePaths(): StoredNoteRecord[]
 }
@@ -85,7 +86,7 @@ function getCreateValidationSourcePath(frontmatter: unknown): string {
   return path.join("notes", "inbox", "<unknown>.md")
 }
 
-function wrapRepositoryError(action: "create" | "read" | "list" | "archive", relativePath: string, error: unknown): never {
+function wrapRepositoryError(action: "create" | "read" | "list" | "archive" | "delete", relativePath: string, error: unknown): never {
   const message =
     action === "create"
       ? `Could not create note '${relativePath}'.`
@@ -93,7 +94,9 @@ function wrapRepositoryError(action: "create" | "read" | "list" | "archive", rel
         ? `Could not read note '${relativePath}'.`
         : action === "archive"
           ? `Could not archive note '${relativePath}'.`
-          : `Could not list notes in '${relativePath}'.`
+          : action === "delete"
+            ? `Could not delete note '${relativePath}'.`
+            : `Could not list notes in '${relativePath}'.`
   const hint =
     action === "create"
       ? "Ensure BLUENOTE_ROOT points to a writable directory path."
@@ -101,7 +104,9 @@ function wrapRepositoryError(action: "create" | "read" | "list" | "archive", rel
         ? "Ensure the note exists inside BLUENOTE_ROOT and is readable."
         : action === "archive"
           ? "Ensure the note exists inside BLUENOTE_ROOT and the archive path is writable."
-          : "Ensure BLUENOTE_ROOT points to a readable managed root."
+          : action === "delete"
+            ? "Ensure the note exists inside BLUENOTE_ROOT and any matching sidecar is writable."
+            : "Ensure BLUENOTE_ROOT points to a readable managed root."
 
   throw new UsageError(message, {
     hint,
@@ -567,6 +572,61 @@ export function createNoteRepository(rootPath: string): NoteRepository {
       return {
         notePath: archivedNotePath,
         relativePath: archivedRelativePath,
+      }
+    },
+
+    delete(notePath) {
+      const normalizedNotePath = assertPathInsideRoot(normalizedRootPath, notePath)
+      const relativePath = toRootRelativePath(normalizedRootPath, normalizedNotePath)
+      const existing = this.read(normalizedNotePath)
+      const sidecarPath = sidecars.getSidecarPath(existing.frontmatter.id)
+      const previousRaw = readFileSync(normalizedNotePath, "utf8")
+      const existingSidecar = existsSync(sidecarPath) ? sidecars.read(existing.frontmatter.id) : undefined
+      let removedNote = false
+      let removedSidecar = false
+
+      try {
+        rmSync(normalizedNotePath)
+        removedNote = true
+
+        if (existsSync(sidecarPath)) {
+          rmSync(sidecarPath)
+          removedSidecar = true
+        }
+      } catch (error) {
+        const rollbackErrors: unknown[] = []
+
+        if (removedNote && !existsSync(normalizedNotePath)) {
+          try {
+            mkdirSync(path.dirname(normalizedNotePath), { recursive: true })
+            writeFileSync(normalizedNotePath, previousRaw, "utf8")
+          } catch (rollbackError) {
+            rollbackErrors.push(rollbackError)
+          }
+        }
+
+        if (removedSidecar && existingSidecar !== undefined && !existsSync(sidecarPath)) {
+          try {
+            sidecars.write(existingSidecar)
+          } catch (rollbackError) {
+            rollbackErrors.push(rollbackError)
+          }
+        }
+
+        if (rollbackErrors.length > 0) {
+          wrapRepositoryError(
+            "delete",
+            relativePath,
+            new AggregateError([error, ...rollbackErrors], "Delete failed and rollback also failed."),
+          )
+        }
+
+        wrapRepositoryError("delete", relativePath, error)
+      }
+
+      return {
+        notePath: normalizedNotePath,
+        relativePath,
       }
     },
 

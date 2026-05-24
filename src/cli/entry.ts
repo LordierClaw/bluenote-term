@@ -6,6 +6,7 @@ import {
 import type { CliResult } from "../core/types"
 import { archiveNote } from "../core/archive-note"
 import { createNote } from "../core/create-note"
+import { deleteNote } from "../core/delete-note"
 import { editNote } from "../core/edit-note"
 import { initRoot } from "../core/init-root"
 import { listNotes } from "../core/list-notes"
@@ -67,6 +68,7 @@ export function formatHelp(version: string): string {
     "  search       <query>          Search indexed notes",
     "  edit         <id|path|slug>   Open a matching note in $EDITOR",
     "  archive      <id|path|slug>   Archive a matching note",
+    "  delete       <key|path> --force  Permanently remove a matching note and sidecar",
     "  rebuild      Rebuild derived metadata and search indexes",
   ].join("\n") + "\n"
 }
@@ -150,6 +152,27 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
       return {
         exitCode: 0,
         stdout: `Archived note: ${summary.relativePath}\n`,
+        stderr: "",
+      }
+    }
+
+    if (command === "delete") {
+      const selector = commandArgs[0]
+
+      if (!selector) {
+        throw new UsageError("Missing required selector for delete.", {
+          hint: "Run bn delete <key|path> --force.",
+        })
+      }
+
+      const summary = deleteNote({
+        selector,
+        force: commandArgs.includes("--force"),
+      })
+
+      return {
+        exitCode: 0,
+        stdout: `Deleted note: ${summary.relativePath}\n`,
         stderr: "",
       }
     }

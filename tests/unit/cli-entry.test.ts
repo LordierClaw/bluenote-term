@@ -20,6 +20,7 @@ test("formatHelp lists all Phase 2 commands with actionable usage", () => {
   assert.match(help, /search\s+<query>/)
   assert.match(help, /edit\s+<id\|path\|slug>/)
   assert.match(help, /archive\s+<id\|path\|slug>/)
+  assert.match(help, /delete\s+<key\|path>\s+--force\s+Permanently remove a matching note and sidecar/)
   assert.match(help, /rebuild\s+Rebuild derived metadata and search indexes/)
 })
 
@@ -83,4 +84,13 @@ test("runCli accepts injected create-note dependencies for deterministic new-not
 
     await rm(rootPath, { recursive: true, force: true })
   }
+})
+
+test("runCli rejects delete without --force", () => {
+  const result = runCli(["delete", "example-note"], "0.1.0")
+
+  assert.equal(result.exitCode, 1)
+  assert.equal(result.stdout, "")
+  assert.match(result.stderr, /Deleting notes requires --force\./)
+  assert.match(result.stderr, /Run bn delete <key\|path> --force to confirm permanent removal\./)
 })

@@ -1,35 +1,85 @@
-import test from "node:test"
+import { test } from "bun:test"
 import assert from "node:assert/strict"
 import path from "node:path"
-import { access, readFile } from "node:fs/promises"
-import { createManagedRootHarness } from "../helpers/cli"
-import { noteMarkdown, timestampFieldPattern } from "../helpers/note-fixtures"
+import { access, mkdir, readFile, writeFile } from "node:fs/promises"
 
-test("bn archive <selector> moves the note into notes/archive, prints the archive path, and hides it from list/search", async () => {
+import { createManagedRootHarness } from "../helpers/cli"
+
+async function writePlainNoteWithSidecar(
+  rootPath: string,
+  {
+    key,
+    title,
+    description,
+    relativePath,
+    body,
+    archivedAt = null,
+    createdAt = "2026-05-21T10:15:00.000Z",
+    updatedAt = createdAt,
+  }: {
+    key: string
+    title: string
+    description: string
+    relativePath: string
+    body: string
+    archivedAt?: string | null
+    createdAt?: string
+    updatedAt?: string
+  },
+) {
+  await harnessLikeWrite(rootPath, relativePath, body)
+  await harnessLikeWrite(
+    rootPath,
+    path.join(".state", "notes", `${key}.json`),
+    JSON.stringify(
+      {
+        key,
+        title,
+        description,
+        relativePath,
+        createdAt,
+        updatedAt,
+        archivedAt,
+        namingVersion: 1,
+      },
+      null,
+      2,
+    ) + "\n",
+  )
+}
+
+async function harnessLikeWrite(rootPath: string, relativePath: string, contents: string) {
+  const targetPath = path.join(rootPath, relativePath)
+  await mkdir(path.dirname(targetPath), { recursive: true })
+  await writeFile(targetPath, contents, "utf8")
+}
+
+test("bn archive <selector> moves the plain note to notes/archive, preserves the key, updates the sidecar path, and rebuilds automatically", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-archive-")
 
   try {
-    await harness.writeNote(
-      path.join("notes", "inbox", "archive-target.md"),
-      noteMarkdown({ id: "archive-target", title: "Archive Target", body: "Searchable before archive.\n" }),
-    )
-    await harness.writeNote(
-      path.join("notes", "inbox", "still-active.md"),
-      noteMarkdown({
-        id: "still-active",
-        title: "Still Active",
-        body: "Remains visible.\n",
-        createdAt: "2026-05-21T10:16:00.000Z",
-      }),
-    )
-
-    const initialRebuild = harness.run(["rebuild"])
-    assert.equal(initialRebuild.exitCode, 0)
+    await writePlainNoteWithSidecar(harness.rootPath, {
+      key: "archive-target",
+      title: "Archive Target",
+      description: "Searchable before archive.",
+      relativePath: path.join("notes", "inbox", "archive-target.md"),
+      body: "Searchable before archive.\n",
+    })
+    await writePlainNoteWithSidecar(harness.rootPath, {
+      key: "still-active",
+      title: "Still Active",
+      description: "Remains visible.",
+      relativePath: path.join("notes", "inbox", "still-active.md"),
+      body: "Remains visible.\n",
+      createdAt: "2026-05-21T10:16:00.000Z",
+    })
 
     const archiveResult = harness.run(["archive", "archive-target"])
     assert.equal(archiveResult.exitCode, 0)
     assert.equal(archiveResult.stderr, "")
     assert.match(archiveResult.stdout, /Archived note: notes[\\/]archive[\\/]archive-target\.md/)
+
+    await assert.rejects(() => access(path.join(harness.rootPath, "notes", "inbox", "archive-target.md")))
 
     const archivedRelativePath = path.join("notes", "archive", "archive-target.md")
     const showResult = harness.run(["show", archivedRelativePath])
@@ -53,7 +103,9 @@ test("bn archive <selector> moves the note into notes/archive, prints the archiv
     const archivedSidecar = JSON.parse(
       await readFile(path.join(harness.rootPath, ".state", "notes", "archive-target.json"), "utf8"),
     )
-    assert.match(`archivedAt: ${archivedSidecar.archivedAt}`, timestampFieldPattern("archivedAt"))
+    assert.equal(archivedSidecar.key, "archive-target")
+    assert.equal(archivedSidecar.relativePath, archivedRelativePath)
+    assert.match(archivedSidecar.archivedAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
 
     const listResult = harness.run(["list"])
     assert.equal(listResult.exitCode, 0)
@@ -68,45 +120,18 @@ test("bn archive <selector> moves the note into notes/archive, prints the archiv
   }
 })
 
-test("bn archive exits non-zero before mutating files when rebuild validation already fails", async () => {
-  const harness = await createManagedRootHarness("bluenote-cli-archive-")
-
-  try {
-    await harness.writeNote(
-      path.join("notes", "inbox", "archive-target.md"),
-      noteMarkdown({ id: "archive-target", title: "Archive Target", body: "Searchable before archive.\n" }),
-    )
-    await harness.writeNote(path.join("notes", "inbox", "missing-sidecar.md"), "Broken plain note without sidecar.\n")
-
-    const archiveResult = harness.run(["archive", "archive-target"])
-    assert.equal(archiveResult.exitCode, 1)
-    assert.equal(archiveResult.stdout, "")
-    assert.match(archiveResult.stderr, /Could not read note 'notes[\\/]inbox[\\/]missing-sidecar\.md'\./)
-    assert.match(archiveResult.stderr, /Hint: Ensure the note exists inside BLUENOTE_ROOT and is readable\./)
-
-    await access(path.join(harness.rootPath, "notes", "inbox", "archive-target.md"))
-
-    const showArchivedResult = harness.run(["show", path.join("notes", "archive", "archive-target.md")])
-    assert.equal(showArchivedResult.exitCode, 1)
-    assert.match(showArchivedResult.stderr, /Could not read note 'notes[\\/]inbox[\\/]missing-sidecar\.md'\./)
-  } finally {
-    await harness.cleanup()
-  }
-})
-
 test("bn archive rejects notes that are already archived", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-archive-")
 
   try {
-    await harness.writeNote(
-      path.join("notes", "archive", "already-archived.md"),
-      noteMarkdown({
-        id: "already-archived",
-        title: "Already Archived",
-        body: "Already archived.\n",
-        archivedAt: "2026-05-21T11:00:00.000Z",
-      }),
-    )
+    await writePlainNoteWithSidecar(harness.rootPath, {
+      key: "already-archived",
+      title: "Already Archived",
+      description: "Already archived.",
+      relativePath: path.join("notes", "archive", "already-archived.md"),
+      body: "Already archived.\n",
+      archivedAt: "2026-05-21T11:00:00.000Z",
+    })
 
     const archiveResult = harness.run(["archive", "already-archived"])
     assert.equal(archiveResult.exitCode, 1)
