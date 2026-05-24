@@ -56,7 +56,7 @@ test("bn list and bn search prefer derived index data when available", async () 
 
     const listResult = harness.run(["list"])
     assert.equal(listResult.exitCode, 0)
-    assert.match(listResult.stdout, /note-alpha\s+Alpha Note\s+notes[\\/]inbox[\\/]alpha\.md/)
+    assert.match(listResult.stdout, /Alpha Note\s+note-alpha\s+Alpha body mentions comet\.\s+notes[\\/]inbox[\\/]alpha\.md/)
 
     const searchResult = harness.run(["search", "comet"])
     assert.equal(searchResult.exitCode, 0)
