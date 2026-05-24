@@ -1,4 +1,4 @@
-import test from "node:test"
+import { test } from "bun:test"
 import assert from "node:assert/strict"
 import path from "node:path"
 import { access, readFile } from "node:fs/promises"
@@ -52,7 +52,10 @@ test("Phase 1 CLI workflow stays consistent across init, create, rebuild, list, 
     assert.match(listResult.stdout, /Reference Note\s+reference-note\s+Reference zebra tokens remain searchable while active\.\s+notes[\\/]journal[\\/]reference-note\.md/)
 
     const searchResult = runOk("bn search zebra tokens", ["search", "zebra", "tokens"])
-    assert.match(searchResult.stdout, /reference-note\s+Reference Note\s+notes[\\/]journal[\\/]reference-note\.md/)
+    assert.match(searchResult.stdout, /Reference Note/)
+    assert.match(searchResult.stdout, /key: reference-note/)
+    assert.match(searchResult.stdout, /path: notes[\\/]journal[\\/]reference-note\.md/)
+    assert.match(searchResult.stdout, /match: description/)
 
     const showResult = runOk("bn show reference-note", ["show", "reference-note"])
     assert.equal(
@@ -82,7 +85,11 @@ test("Phase 1 CLI workflow stays consistent across init, create, rebuild, list, 
     assert.equal(await readFile(path.join(harness.rootPath, secondNoteRelativePath), "utf8"), editedMarkdown)
 
     const postEditSearchResult = runOk("bn search Edited zebra tokens", ["search", "Edited zebra tokens"])
-    assert.match(postEditSearchResult.stdout, /reference-note\s+Reference Note Edited\s+notes[\\/]journal[\\/]reference-note\.md/)
+    assert.match(postEditSearchResult.stdout, /Reference Note/)
+    assert.match(postEditSearchResult.stdout, /key: reference-note/)
+    assert.match(postEditSearchResult.stdout, /path: notes[\\/]journal[\\/]reference-note\.md/)
+    assert.match(postEditSearchResult.stdout, /match: content(?: line \d+)?/)
+    assert.match(postEditSearchResult.stdout, /Reference Note Edited/)
 
     const archiveResult = runOk("bn archive reference-note", ["archive", "reference-note"])
     assert.match(archiveResult.stdout, /Archived note: notes[\\/]archive[\\/]reference-note\.md/)
@@ -90,7 +97,7 @@ test("Phase 1 CLI workflow stays consistent across init, create, rebuild, list, 
     const archivedRelativePath = path.join("notes", "archive", "reference-note.md")
     assert.equal(await Bun.file(path.join(harness.rootPath, secondNoteRelativePath)).exists(), false)
     const archivedMarkdown = await readFile(path.join(harness.rootPath, archivedRelativePath), "utf8")
-    assert.equal(archivedMarkdown, "Edited zebra tokens stay searchable before archive.\n")
+    assert.equal(archivedMarkdown, editedMarkdown)
 
     const archivedSidecar = JSON.parse(
       await readFile(path.join(harness.rootPath, ".state", "notes", "reference-note.json"), "utf8"),
@@ -102,7 +109,7 @@ test("Phase 1 CLI workflow stays consistent across init, create, rebuild, list, 
     assert.doesNotMatch(finalListResult.stdout, /reference-note/)
 
     const finalSearchResult = runOk("bn search after archive", ["search", "Edited zebra tokens"])
-    assert.equal(finalSearchResult.stdout, "")
+    assert.equal(finalSearchResult.stdout, 'No notes matched "Edited zebra tokens".\n')
   } finally {
     await harness.cleanup()
   }

@@ -1,11 +1,11 @@
-import test from "node:test"
+import { test } from "bun:test"
 import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
 import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 
 import { UsageError } from "../../../src/core/errors"
-import { parseNoteFile } from "../../../src/storage/frontmatter"
+import { parsePlainNote } from "../../../src/storage/plain-note"
 import { createNoteRepository } from "../../../src/storage/note-repository"
 
 const FIXED_FRONTMATTER = {
@@ -39,7 +39,7 @@ test("repository writes a new note to notes/inbox", async () => {
   }
 })
 
-test("note file contains valid frontmatter and body", async () => {
+test("note file contains the canonical plain-note body", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-frontmatter-"))
 
   try {
@@ -50,10 +50,10 @@ test("note file contains valid frontmatter and body", async () => {
     })
 
     const markdown = await readFile(created.notePath, "utf8")
-    const parsedNote = parseNoteFile(markdown, created.relativePath)
+    const parsedNote = parsePlainNote(markdown, created.relativePath)
 
-    assert.deepEqual(parsedNote.frontmatter, FIXED_FRONTMATTER)
     assert.equal(parsedNote.body, "A body line.\nAnother line.\n")
+    assert.equal(markdown, "A body line.\nAnother line.\n")
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }

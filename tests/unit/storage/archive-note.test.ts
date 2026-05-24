@@ -1,16 +1,23 @@
-import test from "node:test"
+import { test } from "bun:test"
 import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
 import { access, mkdir, mkdtemp, rm } from "node:fs/promises"
 
 import { archiveNote } from "../../../src/core/archive-note"
+import { sidecarJson } from "../../helpers/note-fixtures"
 import { createNoteRepository } from "../../../src/storage/note-repository"
 
 async function writeNote(rootPath: string, relativePath: string, markdown: string) {
   const notePath = path.join(rootPath, relativePath)
   await mkdir(path.dirname(notePath), { recursive: true })
   await Bun.write(notePath, markdown)
+}
+
+async function writeSidecar(rootPath: string, key: string, json: string) {
+  const sidecarPath = path.join(rootPath, ".state", "notes", `${key}.json`)
+  await mkdir(path.dirname(sidecarPath), { recursive: true })
+  await Bun.write(sidecarPath, json)
 }
 
 test("archiveNote moves a selected note into notes/archive and stamps archivedAt", async () => {
@@ -53,7 +60,7 @@ test("archiveNote moves a selected note into notes/archive and stamps archivedAt
   }
 })
 
-test("archiveNote fails preflight when rebuild validation would already fail and does not move the note", async () => {
+test("archiveNote refuses to select a target when another note already has invalid sidecar metadata", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-archive-note-"))
 
   try {
@@ -62,15 +69,16 @@ test("archiveNote fails preflight when rebuild validation would already fail and
       path.join("notes", "inbox", "archive-me.md"),
       `---\nid: archive-me\nschemaVersion: 1\ntitle: Archive Me\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:15:00.000Z\nupdatedAt: 2026-05-21T10:15:00.000Z\n---\nReady to archive.\n`,
     )
-    await writeNote(
+    await writeNote(rootPath, path.join("notes", "journal", "invalid-sidecar.md"), "Plain body with mismatched metadata.\n")
+    await writeSidecar(
       rootPath,
-      path.join("notes", "inbox", "duplicate-a.md"),
-      `---\nid: duplicate-note\nschemaVersion: 1\ntitle: Duplicate A\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:16:00.000Z\nupdatedAt: 2026-05-21T10:16:00.000Z\n---\nFirst duplicate.\n`,
-    )
-    await writeNote(
-      rootPath,
-      path.join("notes", "inbox", "duplicate-b.md"),
-      `---\nid: duplicate-note\nschemaVersion: 1\ntitle: Duplicate B\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:17:00.000Z\nupdatedAt: 2026-05-21T10:17:00.000Z\n---\nSecond duplicate.\n`,
+      "invalid-sidecar",
+      sidecarJson({
+        key: "other-key",
+        title: "Invalid Sidecar",
+        description: "Broken metadata",
+        relativePath: path.join("notes", "inbox", "invalid-sidecar.md"),
+      }),
     )
 
     assert.throws(
@@ -79,7 +87,7 @@ test("archiveNote fails preflight when rebuild validation would already fail and
           override: rootPath,
           selector: "archive-me",
         }),
-      /Validation failed before archiving notes[\\/]inbox[\\/]archive-me\.md\.[\s\S]*Duplicate note id 'duplicate-note'/,
+      /Note metadata for 'other-key' points to 'notes[\\/]inbox[\\/]invalid-sidecar\.md' instead of 'notes[\\/]journal[\\/]invalid-sidecar\.md'\./,
     )
 
     const repository = createNoteRepository(rootPath)
@@ -168,7 +176,7 @@ test("archiveNote fails when notes/archive already contains the same basename", 
           override: rootPath,
           selector: "duplicate-source",
         }),
-      /Could not archive note 'notes[\\/]inbox[\\/]duplicate\.md'\./,
+      /Found duplicate note key 'duplicate' for 'notes[\\/]archive[\\/]duplicate\.md' and 'notes[\\/]inbox[\\/]duplicate\.md'\./,
     )
 
     const repository = createNoteRepository(rootPath)
