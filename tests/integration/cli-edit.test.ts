@@ -181,7 +181,7 @@ test("bn edit fails when $EDITOR is unset even if the parent environment defines
     )
 
     process.env.EDITOR = "/bin/true"
-    const result = harness.run(["edit", "present-note"], { EDITOR: undefined })
+    const result = harness.run(["edit", "present"], { EDITOR: undefined })
 
     assert.equal(result.exitCode, 1)
     assert.equal(result.stdout, "")
@@ -192,6 +192,21 @@ test("bn edit fails when $EDITOR is unset even if the parent environment defines
     } else {
       process.env.EDITOR = originalEditor
     }
+    await harness.cleanup()
+  }
+})
+
+test("bn edit requires a selector argument in <key|path> form", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-edit-usage-")
+
+  try {
+    const result = harness.run(["edit"])
+
+    assert.equal(result.exitCode, 1)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Missing required selector for edit\./)
+    assert.match(result.stderr, /Hint: Run bn edit <key\|path>\./)
+  } finally {
     await harness.cleanup()
   }
 })

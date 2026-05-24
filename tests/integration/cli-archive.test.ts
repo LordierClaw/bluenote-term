@@ -156,3 +156,18 @@ test("bn archive rejects notes that are already archived", async () => {
     await harness.cleanup()
   }
 })
+
+test("bn archive requires a selector argument in <key|path> form", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-archive-usage-")
+
+  try {
+    const result = harness.run(["archive"])
+
+    assert.equal(result.exitCode, 1)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Missing required selector for archive\./)
+    assert.match(result.stderr, /Hint: Run bn archive <key\|path>\./)
+  } finally {
+    await harness.cleanup()
+  }
+})

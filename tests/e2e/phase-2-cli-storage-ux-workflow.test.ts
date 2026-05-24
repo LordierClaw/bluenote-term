@@ -103,7 +103,7 @@ test("Phase 2 CLI workflow stays consistent through the real bin/bn.ts entrypoin
     const archiveResult = runOk("bn archive renamed", ["archive", renamedKey])
     assert.match(archiveResult.stdout, new RegExp(`Archived note: notes/archive/${harness.escapeForRegExp(renamedKey)}\\.md`))
 
-    const archiveShowResult = runOk("bn show archived renamed", ["show", renamedKey])
+    const archiveShowResult = runOk("bn show archived renamed", ["show", `notes/archive/${renamedKey}.md`])
     assert.match(archiveShowResult.stdout, new RegExp(`^Path: notes/archive/${harness.escapeForRegExp(renamedKey)}\\.md$`, "m"))
     const archivedSidecar = await readSidecar(renamedKey)
     assert.equal(archivedSidecar.relativePath, `notes/archive/${renamedKey}.md`)

@@ -33,7 +33,7 @@ bun run smoke:cli
 - Notes are plain `.md` files under `notes/`; canonical BlueNote metadata lives in `.state/notes/<key>.json` sidecars.
 - Derived artifacts such as `.state/metadata.sqlite` and `.state/search-index.json` are rebuildable.
 - `bn new`, `bn edit`, `bn archive`, and `bn delete --force` rebuild derived indexes automatically after mutating note storage.
-- Selectors are key-first for everyday use; `show`, `edit`, and `archive` accept key/path/slug selectors and still fall back to legacy frontmatter IDs during migration windows, while `delete` requires `--force` and accepts key/path selectors plus the same legacy-ID fallback.
+- Selectors are key-first for everyday use; `show`, `edit`, `archive`, and `delete --force` accept canonical `key|path` selectors.
 - `bn search` prints grouped note blocks with the title first, then key, path, and the highest-value match label or excerpt.
 
 ## Completion and migration

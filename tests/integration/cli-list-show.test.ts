@@ -175,8 +175,8 @@ test("bn show falls back to legacy frontmatter notes without sidecars", async ()
   }
 })
 
-test("bn show resolves a title-derived slug selector", async () => {
-  const harness = await createManagedRootHarness("bluenote-cli-show-slug-")
+test("bn show rejects a title-derived slug selector", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-show-slug-reject-")
 
   try {
     await writePlainNoteWithSidecar(harness.rootPath, {
@@ -189,9 +189,10 @@ test("bn show resolves a title-derived slug selector", async () => {
 
     const result = harness.run(["show", "  ExAmPlE-sHoW-nOtE  "])
 
-    assert.equal(result.exitCode, 0)
-    assert.equal(result.stderr, "")
-    assert.match(result.stdout, /^Title: Example Show Note\nKey: slug-note\nPath: notes[\\/]inbox[\\/]slug-note\.md\nDescription: Visible body\.\n\nVisible body\.\n$/)
+    assert.equal(result.exitCode, 1)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Could not find a note matching selector '  ExAmPlE-sHoW-nOtE  '\./)
+    assert.match(result.stderr, /Hint: Use bn list to inspect available notes\./)
   } finally {
     await harness.cleanup()
   }
@@ -220,35 +221,66 @@ test("bn show resolves a managed-root-relative path selector", async () => {
   }
 })
 
-test("bn show surfaces ambiguous selector failures", async () => {
-  const harness = await createManagedRootHarness("bluenote-cli-show-ambiguous-")
+test("bn show rejects non-canonical normalized path aliases", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-show-path-alias-")
+  const relativePath = path.join("notes", "journal", "show-path.md")
 
   try {
     await writePlainNoteWithSidecar(harness.rootPath, {
-      key: "shared-a",
-      title: "Shared Title",
-      description: "Shared A body.",
-      relativePath: path.join("notes", "inbox", "shared-a.md"),
-      body: "Shared A body.\n",
-      createdAt: "2026-05-21T10:19:00.000Z",
+      key: "show-path",
+      title: "Path Show Note",
+      description: "Path body.",
+      relativePath,
+      body: "Path body.\n",
     })
+
+    const result = harness.run(["show", `notes${path.sep}archive${path.sep}..${path.sep}journal${path.sep}show-path.md`])
+
+    assert.equal(result.exitCode, 1)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Could not find a note matching selector 'notes[\\/]archive[\\/]\.\.[\\/]journal[\\/]show-path\.md'\./)
+    assert.match(result.stderr, /Hint: Use bn list to inspect available notes\./)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test("bn show still resolves an exact key match when a legacy frontmatter id collides with it", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-show-key-collision-")
+
+  try {
     await writePlainNoteWithSidecar(harness.rootPath, {
-      key: "shared-b",
-      title: "Shared Title",
-      description: "Shared B body.",
-      relativePath: path.join("notes", "archive", "shared-b.md"),
-      body: "Shared B body.\n",
-      createdAt: "2026-05-21T10:20:00.000Z",
+      key: "shared-title",
+      title: "Canonical Key Note",
+      description: "Canonical key body.",
+      relativePath: path.join("notes", "inbox", "shared-title.md"),
+      body: "Canonical key body.\n",
     })
+    await harness.writeNote(
+      path.join("notes", "journal", "legacy-human-key.md"),
+      noteMarkdown({
+        id: "shared-title",
+        title: "Legacy Collision Note",
+        body: "Legacy collision body.\n",
+      }),
+    )
 
     const result = harness.run(["show", "shared-title"])
 
-    assert.equal(result.exitCode, 2)
-    assert.equal(result.stdout, "")
-    assert.match(result.stderr, /Ambiguous note selector: shared-title\./)
-    assert.match(result.stderr, /notes[\\/]inbox[\\/]shared-a\.md/)
-    assert.match(result.stderr, /notes[\\/]archive[\\/]shared-b\.md/)
-    assert.match(result.stderr, /Hint: Use a note key or managed-root-relative path to disambiguate\./)
+    assert.equal(result.exitCode, 0)
+    assert.equal(result.stderr, "")
+    assert.equal(
+      result.stdout,
+      [
+        "Title: Canonical Key Note",
+        "Key: shared-title",
+        "Path: notes/inbox/shared-title.md",
+        "Description: Canonical key body.",
+        "",
+        "Canonical key body.",
+        "",
+      ].join("\n"),
+    )
   } finally {
     await harness.cleanup()
   }
@@ -316,7 +348,31 @@ test("bn show requires a selector argument", async () => {
     assert.equal(result.exitCode, 1)
     assert.equal(result.stdout, "")
     assert.match(result.stderr, /Missing required selector for show\./)
-    assert.match(result.stderr, /Hint: Run bn show <key\|path\|slug>\./)
+    assert.match(result.stderr, /Hint: Run bn show <key\|path>\./)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test("bn show rejects legacy frontmatter ids when they do not match the canonical key", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-show-legacy-id-")
+
+  try {
+    await harness.writeNote(
+      path.join("notes", "inbox", "human-key.md"),
+      noteMarkdown({
+        id: "legacy-id-123",
+        title: "Legacy Selector Note",
+        body: "Legacy visible body.\n",
+      }),
+    )
+
+    const result = harness.run(["show", "legacy-id-123"])
+
+    assert.equal(result.exitCode, 1)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Could not find a note matching selector 'legacy-id-123'\./)
+    assert.match(result.stderr, /Hint: Use bn list to inspect available notes\./)
   } finally {
     await harness.cleanup()
   }

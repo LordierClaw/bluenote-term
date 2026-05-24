@@ -4,7 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
 
-import { AmbiguousSelectorError, SelectorNotFoundError } from "../../../src/core/errors"
+import { SelectorNotFoundError } from "../../../src/core/errors"
 import { selectNote } from "../../../src/core/select-note"
 import { createNoteRepository } from "../../../src/storage/note-repository"
 
@@ -145,6 +145,33 @@ test("selectNote resolves an exact managed-root-relative path as a fallback", as
   )
 })
 
+test("selectNote rejects non-canonical normalized path aliases", async () => {
+  await withRepository(
+    async (rootPath) => {
+      await writePlainNoteWithSidecar(rootPath, {
+        key: "archive-key",
+        title: "Archive Note",
+        relativePath: path.join("notes", "archive", "archive-key.md"),
+        body: "Archive body.\n",
+      })
+    },
+    (repository) => {
+      assert.throws(
+        () =>
+          selectNote({
+            repository,
+            selector: `notes${path.sep}journal${path.sep}..${path.sep}archive${path.sep}archive-key.md`,
+          }),
+        (error) => {
+          assert.ok(error instanceof SelectorNotFoundError)
+          assert.match(error.message, /Could not find a note matching selector 'notes[\\/]journal[\\/]\.\.[\\/]archive[\\/]archive-key\.md'\./)
+          return true
+        },
+      )
+    },
+  )
+})
+
 test("selectNote resolves a legacy frontmatter note by basename instead of UUID frontmatter id", async () => {
   await withRepository(
     async (rootPath) => {
@@ -164,7 +191,7 @@ test("selectNote resolves a legacy frontmatter note by basename instead of UUID 
   )
 })
 
-test("selectNote still resolves a legacy frontmatter note by its stored id", async () => {
+test("selectNote rejects legacy frontmatter ids as user-facing selectors", async () => {
   await withRepository(
     async (rootPath) => {
       await writeLegacyFrontmatterNote(rootPath, {
@@ -175,15 +202,19 @@ test("selectNote still resolves a legacy frontmatter note by its stored id", asy
       })
     },
     (repository) => {
-      const selected = selectNote({ repository, selector: "legacy-id-123" })
-
-      assert.equal(selected.frontmatter.id, "legacy-id-123")
-      assert.equal(selected.sourcePath, path.join("notes", "inbox", "human-key.md"))
+      assert.throws(
+        () => selectNote({ repository, selector: "legacy-id-123" }),
+        (error) => {
+          assert.ok(error instanceof SelectorNotFoundError)
+          assert.match(error.message, /Could not find a note matching selector 'legacy-id-123'\./)
+          return true
+        },
+      )
     },
   )
 })
 
-test("selectNote treats basename and legacy id collisions as ambiguous", async () => {
+test("selectNote resolves an exact key match even when a legacy frontmatter id collides with it", async () => {
   await withRepository(
     async (rootPath) => {
       await writePlainNoteWithSidecar(rootPath, {
@@ -200,20 +231,15 @@ test("selectNote treats basename and legacy id collisions as ambiguous", async (
       })
     },
     (repository) => {
-      assert.throws(
-        () => selectNote({ repository, selector: "foo" }),
-        (error) => {
-          assert.ok(error instanceof AmbiguousSelectorError)
-          assert.match(error.message, /notes[\\/]inbox[\\/]foo\.md/)
-          assert.match(error.message, /notes[\\/]journal[\\/]legacy-human-key\.md/)
-          return true
-        },
-      )
+      const selected = selectNote({ repository, selector: "foo" })
+
+      assert.equal(selected.frontmatter.id, "foo")
+      assert.equal(selected.sourcePath, path.join("notes", "inbox", "foo.md"))
     },
   )
 })
 
-test("selectNote resolves a unique title-derived slug match after key and path checks", async () => {
+test("selectNote rejects title-derived slug selectors", async () => {
   await withRepository(
     async (rootPath) => {
       await writePlainNoteWithSidecar(rootPath, {
@@ -224,57 +250,11 @@ test("selectNote resolves a unique title-derived slug match after key and path c
       })
     },
     (repository) => {
-      const selected = selectNote({ repository, selector: "project-retrospective" })
-
-      assert.equal(selected.frontmatter.id, "project-retro")
-      assert.equal(selected.sourcePath, path.join("notes", "journal", "project-retro.md"))
-    },
-  )
-})
-
-test("selectNote normalizes slug selectors before matching", async () => {
-  await withRepository(
-    async (rootPath) => {
-      await writePlainNoteWithSidecar(rootPath, {
-        key: "project-retro",
-        title: "Project Retrospective",
-        relativePath: path.join("notes", "journal", "project-retro.md"),
-        body: "Project body.\n",
-      })
-    },
-    (repository) => {
-      const selected = selectNote({ repository, selector: "  PrOjEcT-rEtRoSpEcTiVe  " })
-
-      assert.equal(selected.frontmatter.id, "project-retro")
-      assert.equal(selected.sourcePath, path.join("notes", "journal", "project-retro.md"))
-    },
-  )
-})
-
-test("selectNote raises AmbiguousSelectorError when a slug matches multiple notes", async () => {
-  await withRepository(
-    async (rootPath) => {
-      await writePlainNoteWithSidecar(rootPath, {
-        key: "shared-a",
-        title: "Shared Title",
-        relativePath: path.join("notes", "inbox", "shared-a.md"),
-        body: "Shared A body.\n",
-      })
-      await writePlainNoteWithSidecar(rootPath, {
-        key: "shared-b",
-        title: "Shared Title",
-        relativePath: path.join("notes", "archive", "shared-b.md"),
-        body: "Shared B body.\n",
-      })
-    },
-    (repository) => {
       assert.throws(
-        () => selectNote({ repository, selector: "shared-title" }),
+        () => selectNote({ repository, selector: "project-retrospective" }),
         (error) => {
-          assert.ok(error instanceof AmbiguousSelectorError)
-          assert.match(error.message, /Ambiguous note selector: shared-title/)
-          assert.match(error.message, /notes[\\/]inbox[\\/]shared-a\.md/)
-          assert.match(error.message, /notes[\\/]archive[\\/]shared-b\.md/)
+          assert.ok(error instanceof SelectorNotFoundError)
+          assert.match(error.message, /Could not find a note matching selector 'project-retrospective'\./)
           return true
         },
       )

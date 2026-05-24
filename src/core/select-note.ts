@@ -9,22 +9,6 @@ export interface SelectNoteOptions {
   selector: string
 }
 
-function slugifyTitle(title: string): string {
-  return title
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-}
-
-function normalizeSelectorPath(selector: string): string {
-  return path.normalize(selector)
-}
-
-function normalizeSlugSelector(selector: string): string {
-  return selector.trim().toLowerCase()
-}
-
 function selectorKeyFor(note: ParsedNote): string {
   return path.basename(note.sourcePath, ".md")
 }
@@ -89,34 +73,16 @@ function assertSingleMatch(selector: string, matches: ParsedNote[]): ParsedNote 
 export function selectNote(options: SelectNoteOptions): ParsedNote {
   const notes = options.repository.list()
   const trimmedSelector = options.selector.trim()
-  const normalizedSlugSelector = normalizeSlugSelector(trimmedSelector)
 
   const exactKeyMatches = notes.filter((note) => selectorKeyFor(note) === trimmedSelector)
-  const exactLegacyIdMatches = notes.filter(
-    (note) => note.frontmatter.id === trimmedSelector && selectorKeyFor(note) !== trimmedSelector,
-  )
-
-  if (exactKeyMatches.length > 0 && exactLegacyIdMatches.length > 0) {
-    return assertSingleMatch(trimmedSelector, [...exactKeyMatches, ...exactLegacyIdMatches])
-  }
 
   if (exactKeyMatches.length > 0) {
     return assertSingleMatch(trimmedSelector, exactKeyMatches)
   }
 
-  if (exactLegacyIdMatches.length > 0) {
-    return assertSingleMatch(trimmedSelector, exactLegacyIdMatches)
-  }
-
-  const normalizedSelectorPath = normalizeSelectorPath(trimmedSelector)
-  const exactPathMatches = notes.filter((note) => path.normalize(note.sourcePath) === normalizedSelectorPath)
+  const exactPathMatches = notes.filter((note) => note.sourcePath === trimmedSelector)
   if (exactPathMatches.length > 0) {
     return assertSingleMatch(trimmedSelector, exactPathMatches)
-  }
-
-  const slugMatches = notes.filter((note) => slugifyTitle(note.frontmatter.title) === normalizedSlugSelector)
-  if (slugMatches.length > 0) {
-    return assertSingleMatch(trimmedSelector, slugMatches)
   }
 
   const suggestions = findSuggestedKeys(trimmedSelector, notes)
