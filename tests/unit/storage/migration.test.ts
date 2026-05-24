@@ -2,7 +2,7 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
-import { mkdtemp, readFile, readdir, rm, writeFile, chmod, access } from "node:fs/promises"
+import { mkdtemp, readFile, readdir, rm, writeFile, access } from "node:fs/promises"
 
 import { loadIndexStore } from "../../../src/index/index-store"
 import { createNoteKey } from "../../../src/domain/note-key"
@@ -296,7 +296,6 @@ test("migrateLegacyStorage removes partial derived indexes and restores legacy n
     await writeFile(legacyPath, legacyMarkdown, "utf8")
     await writeFile(metadataPath, "stale-metadata", "utf8")
     await writeFile(searchIndexPath, '{"stale":true}\n', "utf8")
-    await chmod(metadataPath, 0o400)
 
     assert.throws(
       () =>
@@ -304,8 +303,13 @@ test("migrateLegacyStorage removes partial derived indexes and restores legacy n
           rootPath,
           migratedAt: MIGRATED_AT,
           randomSource,
+          testHooks: {
+            rebuildIndexes() {
+              throw new Error("simulated rebuild write failure")
+            },
+          },
         }),
-      /Legacy storage migration failed after rollback|EACCES|EPERM|permission|rebuild/i,
+      /Legacy storage migration failed after rollback|simulated rebuild write failure|rebuild/i,
     )
 
     assert.equal(await readFile(legacyPath, "utf8"), legacyMarkdown)

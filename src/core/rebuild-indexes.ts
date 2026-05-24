@@ -3,7 +3,7 @@ import { existsSync, readdirSync } from "node:fs"
 
 import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions, STATE_NOTES_DIRECTORY } from "../config/root"
 import { UsageError } from "./errors"
-import { rebuildIndexStore, type IndexedNoteRecord } from "../index/index-store"
+import { rebuildIndexStore, type IndexedNoteRecord, type RebuildIndexStoreResult } from "../index/index-store"
 import { parseNoteFile } from "../storage/frontmatter"
 import { parsePlainNote } from "../storage/plain-note"
 import { createSidecarRepository } from "../storage/sidecar-repository"

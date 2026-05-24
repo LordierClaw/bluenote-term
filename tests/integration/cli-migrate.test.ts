@@ -1,7 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import path from "node:path"
-import { chmod, readFile } from "node:fs/promises"
+import { access, readFile } from "node:fs/promises"
 
 import { createNoteDescription } from "../../src/domain/note-description"
 import { loadIndexStore } from "../../src/index/index-store"
@@ -99,11 +99,11 @@ test("bn migrate reports a clean rollback error when rebuild cannot write derive
     )
     await harness.writeNote(path.join(".state", "metadata.sqlite"), "stale-metadata")
     await harness.writeNote(path.join(".state", "search-index.json"), '{"stale":true}\n')
-    await chmod(path.join(harness.rootPath, ".state", "metadata.sqlite"), 0o400)
 
     const result = harness.run(["migrate"], {
       BLUENOTE_TEST_NOW: "2026-05-24T12:00:00.000Z",
       BLUENOTE_TEST_RANDOM_SEQUENCE: "0.1234",
+      BLUENOTE_TEST_MIGRATE_FAIL_REBUILD_WRITE: "1",
     })
 
     assert.equal(result.exitCode, 1)
@@ -121,6 +121,10 @@ test("bn migrate reports a clean rollback error when rebuild cannot write derive
         updatedAt: "2026-05-22T11:30:00.000Z",
       }),
     )
+    await assert.rejects(() => access(path.join(harness.rootPath, "notes", "inbox", "rollback-recovery-note-51u7i0.md")))
+    await assert.rejects(() => access(path.join(harness.rootPath, ".state", "notes", "rollback-recovery-note-51u7i0.json")))
+    await assert.rejects(() => access(path.join(harness.rootPath, ".state", "metadata.sqlite")))
+    await assert.rejects(() => access(path.join(harness.rootPath, ".state", "search-index.json")))
   } finally {
     await harness.cleanup()
   }

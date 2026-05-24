@@ -10,7 +10,7 @@ import { deleteNote } from "../core/delete-note"
 import { editNote } from "../core/edit-note"
 import { initRoot } from "../core/init-root"
 import { listNotes } from "../core/list-notes"
-import { migrateStorage } from "../core/migrate-storage"
+import { migrateStorage, type MigrateStorageOptions } from "../core/migrate-storage"
 import { rebuildIndexes, type RebuildIndexesOptions } from "../core/rebuild-indexes"
 import { searchNotes, type SearchNoteMatch } from "../core/search-notes"
 import { showNote } from "../core/show-note"
@@ -19,10 +19,7 @@ import { runCompletionBackendCli, runCompletionCli } from "./completion"
 
 export interface CliRuntimeOptions {
   createNoteOptions?: Pick<Parameters<typeof createNote>[0], "clock" | "randomSource">
-  migrateStorageOptions?: {
-    clock?: Clock
-    randomSource?: () => number
-  }
+  migrateStorageOptions?: Pick<MigrateStorageOptions, "clock" | "randomSource">
   rebuildIndexesOptions?: Pick<RebuildIndexesOptions, "testHooks">
 }
 
@@ -103,6 +100,30 @@ export function formatSearchMatches(query: string, matches: SearchNoteMatch[]): 
 
     return lines.join("\n")
   }).join("\n\n") + "\n"
+}
+
+export function formatMigrateCliResult(summary: ReturnType<typeof migrateStorage>): CliResult {
+  if (summary.status === "noop") {
+    return {
+      exitCode: 0,
+      stdout:
+        summary.reason === "new-format"
+          ? "BlueNote storage is already migrated; nothing to do.\n"
+          : "BlueNote root is empty; nothing to migrate.\n",
+      stderr: "",
+    }
+  }
+
+  const keyMapLines = Object.entries(summary.keyMap)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([previousId, nextKey]) => `Key map: ${previousId} -> ${nextKey}`)
+  const stdoutLines = [`Migrated ${summary.migratedNoteCount} legacy note(s) to plain-note + sidecar storage.`, ...keyMapLines]
+
+  return {
+    exitCode: 0,
+    stdout: `${stdoutLines.join("\n")}\n`,
+    stderr: "",
+  }
 }
 
 export function runCli(args: string[], version: string, runtime: CliRuntimeOptions = {}): CliResult {
@@ -285,29 +306,7 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
     }
 
     if (command === "migrate") {
-      const summary = migrateStorage(runtime.migrateStorageOptions)
-
-      if (summary.status === "noop") {
-        return {
-          exitCode: 0,
-          stdout:
-            summary.reason === "new-format"
-              ? "BlueNote storage is already migrated; nothing to do.\n"
-              : "BlueNote root is empty; nothing to migrate.\n",
-          stderr: "",
-        }
-      }
-
-      const keyMapLines = Object.entries(summary.keyMap)
-        .sort(([left], [right]) => left.localeCompare(right))
-        .map(([previousId, nextKey]) => `Key map: ${previousId} -> ${nextKey}`)
-      const stdoutLines = [`Migrated ${summary.migratedNoteCount} legacy note(s) to plain-note + sidecar storage.`, ...keyMapLines]
-
-      return {
-        exitCode: 0,
-        stdout: `${stdoutLines.join("\n")}\n`,
-        stderr: "",
-      }
+      return formatMigrateCliResult(migrateStorage(runtime.migrateStorageOptions))
     }
 
     return formatCliError(

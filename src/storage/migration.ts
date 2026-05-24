@@ -13,10 +13,12 @@ import {
 import { AppError, IndexValidationFailedError, UsageError } from "../core/errors"
 import { createNoteDescription } from "../domain/note-description"
 import { createNoteKey } from "../domain/note-key"
-import { rebuildIndexes } from "../core/rebuild-indexes"
+import { rebuildIndexes, type RebuildIndexesSummary } from "../core/rebuild-indexes"
+import type { IndexedNoteRecord } from "../index/index-store"
 import { assertPathInsideRoot } from "../platform/path-safety"
 import { parseNoteFile } from "./frontmatter"
 import { createNoteRepository } from "./note-repository"
+import type { ParsedNote } from "./note-schema"
 import { normalizePlainNoteBody } from "./plain-note"
 import { createSidecarRepository } from "./sidecar-repository"
 import { ensureManagedRoot, getStateNotesPath } from "./root-layout"
@@ -28,10 +30,15 @@ export interface StorageFormatSummary {
   sidecarCount: number
 }
 
+export interface MigrateLegacyStorageTestHooks {
+  rebuildIndexes?: (rootPath: string) => RebuildIndexesSummary
+}
+
 export interface MigrateLegacyStorageOptions {
   rootPath: string
   migratedAt: string
   randomSource?: () => number
+  testHooks?: MigrateLegacyStorageTestHooks
 }
 
 export interface MigrateLegacyStorageResult {
@@ -345,7 +352,9 @@ export function migrateLegacyStorage(options: MigrateLegacyStorageOptions): Migr
 
     writeRecoveryKeyMap(recoveryPath, options.migratedAt, recoveryNotes)
 
-    const rebuildSummary = rebuildIndexes({ override: rootPath })
+    const rebuildSummary = options.testHooks?.rebuildIndexes
+      ? options.testHooks.rebuildIndexes(rootPath)
+      : rebuildIndexes({ override: rootPath })
 
     if (rebuildSummary.validationErrors.length > 0) {
       throw new IndexValidationFailedError(
