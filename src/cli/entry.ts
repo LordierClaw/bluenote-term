@@ -309,14 +309,6 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
       }
     }
 
-    if (command === "tui") {
-      return {
-        exitCode: 0,
-        stdout: "BlueNote TUI scaffold is present; full implementation starts in Phase 2.\n",
-        stderr: "",
-      }
-    }
-
     return formatCliError(
       new UsageError(`Unknown command: ${command}`, {
         hint: "Use --help to see available commands.",

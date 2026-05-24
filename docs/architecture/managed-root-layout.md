@@ -16,6 +16,9 @@ Current managed user root:
 │   ├── search-index.json
 │   ├── notes/
 │   │   └── <key>.json
+│   ├── completions/
+│   ├── tmp/
+│   ├── logs/
 │   ├── recovery/
 │   └── ...rebuildable state artifacts
 ```
@@ -25,6 +28,7 @@ Current managed user root:
 - note files remain canonical user data
 - `.state/notes/*.json` sidecars are canonical BlueNote metadata paired with note files
 - `.state/metadata.sqlite` and `.state/search-index.json` are rebuildable
+- `.state/completions/`, `.state/tmp/`, and `.state/logs/` are BlueNote-managed support directories under the approved Phase 2 layout
 - `.state/recovery/` stores recovery artifacts where needed
 - BlueNote does not create a nested `.bluenote/.bluenote` layout
 - symlinks escaping the managed root must not be followed silently

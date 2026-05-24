@@ -2,14 +2,10 @@
 
 ## Goal
 
-Implement the local managed root, note file format, indexing, and the essential CLI flows.
+Establish the local managed-root foundation that the later Phase 2 storage/UX pivot builds on.
 
 ## Primary outcomes
 
-- initialize managed note root
-- create/read/list/search/show/edit/archive/delete core notes
-- store canonical data as plain Markdown plus `.state/notes/` sidecars
-- rebuild metadata/search indexes from files
-- provide shell completion output and selector completion helpers
-- support `bn migrate` for legacy frontmatter roots with rollback-oriented safety checks
-- validate archive/remove behavior
+- initialize the managed note root and repository/tooling conventions
+- define the core CLI/storage direction that later phases can revise explicitly
+- leave TUI shell implementation to later phases

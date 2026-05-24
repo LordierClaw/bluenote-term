@@ -25,6 +25,7 @@ test("formatHelp lists all Phase 2 commands with actionable usage", () => {
   assert.match(help, /rebuild\s+Rebuild derived metadata and search indexes/)
   assert.match(help, /migrate\s+Convert legacy frontmatter notes into plain files \+ sidecars/)
   assert.match(help, /completion\s+<bash\|zsh\|fish>\s+Print shell completion setup/)
+  assert.doesNotMatch(help, /(^|\n)  tui(\s|$)/m)
 })
 
 test("runCli returns version output for --version", () => {
@@ -50,6 +51,15 @@ test("runCli rejects unknown commands with guidance", () => {
   assert.match(result.stderr, /Unknown command: unknown/)
   assert.match(result.stderr, /Use --help/)
   assert.match(result.stderr, /available commands/)
+})
+
+test("runCli rejects hidden tui command with the standard unknown-command guidance", () => {
+  const result = runCli(["tui"], "0.1.0")
+
+  assert.equal(result.exitCode, 1)
+  assert.equal(result.stdout, "")
+  assert.match(result.stderr, /Unknown command: tui/)
+  assert.match(result.stderr, /Use --help/)
 })
 
 test("runCli accepts injected create-note dependencies for deterministic new-note tests", async () => {

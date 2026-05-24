@@ -12,16 +12,19 @@ function extractCreatedKey(stdout: string): string {
   return match[1]
 }
 
+const visibleCommands = ["init", "new", "list", "show", "search", "edit", "archive", "delete", "rebuild", "migrate", "completion"]
+
 for (const shell of ["bash", "zsh", "fish"] as const) {
-  test(`bn completion ${shell} prints a ${shell} completion script with commands and flags`, () => {
+  test(`bn completion ${shell} prints a ${shell} completion script for the visible Phase 2 commands and flags`, () => {
     const result = runCli(["completion", shell])
 
     assert.equal(result.exitCode, 0)
     assert.equal(result.stderr, "")
-    assert.match(result.stdout, /\bcompletion\b/)
-    assert.match(result.stdout, /\bnew\b/)
-    assert.match(result.stdout, /\blist\b/)
-    assert.match(result.stdout, /\bshow\b/)
+    for (const command of visibleCommands) {
+      assert.match(result.stdout, new RegExp(`\\b${command}\\b`))
+    }
+
+    assert.doesNotMatch(result.stdout, /\btui\b/)
     if (shell === "fish") {
       assert.match(result.stdout, /-l title/)
       assert.match(result.stdout, /-l force/)

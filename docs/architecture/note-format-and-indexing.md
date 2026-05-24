@@ -30,8 +30,8 @@ Minimum sidecar shape:
 Selector and CLI expectations:
 
 - generated keys are the primary human-facing selectors
-- `show`, `edit`, and `archive` resolve by `key|path|slug`, with legacy frontmatter IDs still accepted during migration windows
-- `delete` resolves by `key|path`, requires `--force`, and still accepts legacy frontmatter IDs during migration windows
+- `show`, `edit`, `archive`, and `delete` resolve by canonical `key|path` selectors in the Phase 2 user-facing contract
+- `delete` requires `--force`
 - legacy frontmatter remains relevant for migration compatibility, not canonical storage
 
 ## Indexing design

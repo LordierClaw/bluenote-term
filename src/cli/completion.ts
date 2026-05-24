@@ -17,7 +17,6 @@ export const COMMAND_NAMES = [
   "rebuild",
   "migrate",
   "completion",
-  "tui",
 ] as const
 
 export const FLAG_NAMES = ["--help", "--version", "--title", "--force"] as const
