@@ -1,9 +1,9 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import path from "node:path"
-import { readFile, stat } from "node:fs/promises"
+import { readFile } from "node:fs/promises"
 
-import { createManagedRootHarness, runCli } from "../helpers/cli"
+import { assertManagedRootLayout, createManagedRootHarness, runCli } from "../helpers/cli"
 
 const workspaceRoot = path.resolve(import.meta.dir, "../..")
 const packageJsonPath = path.join(workspaceRoot, "package.json")
@@ -38,10 +38,7 @@ test("smoke-cli script exercises --help and init against a temporary root", asyn
     assert.equal(result.stderr, "")
     assert.match(result.stdout, /CLI smoke check passed\./)
 
-    const notesDir = await stat(path.join(harness.rootPath, "notes"))
-    const stateDir = await stat(path.join(harness.rootPath, ".state"))
-    assert.equal(notesDir.isDirectory(), true)
-    assert.equal(stateDir.isDirectory(), true)
+    await assertManagedRootLayout(harness.rootPath)
   } finally {
     await harness.cleanup()
   }

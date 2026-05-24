@@ -3,7 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { mkdtemp, readFile, rm, stat, access } from "node:fs/promises"
 
-import { runBinCli } from "../tests/helpers/cli"
+import { assertManagedRootLayout, runBinCli } from "../tests/helpers/cli"
 
 const managedRoot = process.env.BLUENOTE_ROOT ?? (await mkdtemp(path.join(os.tmpdir(), "bluenote-smoke-cli-")))
 const shouldCleanup = process.env.BLUENOTE_ROOT === undefined
@@ -20,10 +20,7 @@ try {
   assert.equal(initResult.stderr, "")
   assert.match(initResult.stdout, new RegExp(`Initialized BlueNote root: ${managedRoot.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}`))
 
-  for (const relativePath of ["notes", ".state", path.join(".state", "notes")]) {
-    const stats = await stat(path.join(managedRoot, relativePath))
-    assert.equal(stats.isDirectory(), true, `${relativePath} should exist after smoke init`)
-  }
+  await assertManagedRootLayout(managedRoot)
 
   const manifestPath = path.join(managedRoot, ".state", "manifest.json")
   const manifestStats = await stat(manifestPath)

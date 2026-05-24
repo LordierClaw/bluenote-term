@@ -2,7 +2,7 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
-import { mkdtemp, rm, stat, writeFile } from "node:fs/promises"
+import { access, mkdtemp, rm, stat, writeFile } from "node:fs/promises"
 
 import { UsageError } from "../../../src/core/errors"
 import {
@@ -27,6 +27,8 @@ test("ensureManagedRoot creates the full managed root layout", async () => {
       const stats = await stat(fullPath)
       assert.equal(stats.isDirectory(), true, `${relativePath} should be a directory`)
     }
+
+    await assert.rejects(access(path.join(tempRoot, ".bluenote")))
   } finally {
     await rm(tempRoot, { recursive: true, force: true })
   }

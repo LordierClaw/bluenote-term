@@ -1,7 +1,14 @@
 import path from "node:path"
 import { mkdirSync } from "node:fs"
 
-import { STATE_DIRECTORY, STATE_NOTES_DIRECTORY, STATE_RECOVERY_DIRECTORY } from "../config/root"
+import {
+  STATE_COMPLETIONS_DIRECTORY,
+  STATE_DIRECTORY,
+  STATE_LOGS_DIRECTORY,
+  STATE_NOTES_DIRECTORY,
+  STATE_RECOVERY_DIRECTORY,
+  STATE_TMP_DIRECTORY,
+} from "../config/root"
 import { UsageError } from "../core/errors"
 import { assertPathInsideRoot } from "../platform/path-safety"
 
@@ -14,6 +21,9 @@ export const MANAGED_ROOT_LAYOUT = [
   STATE_DIRECTORY,
   STATE_NOTES_DIRECTORY,
   STATE_RECOVERY_DIRECTORY,
+  STATE_COMPLETIONS_DIRECTORY,
+  STATE_TMP_DIRECTORY,
+  STATE_LOGS_DIRECTORY,
 ] as const
 
 const NOTES_DIRECTORY = "notes"

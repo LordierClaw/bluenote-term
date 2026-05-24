@@ -7,6 +7,9 @@ export const DEFAULT_BLUENOTE_ROOT_DIRECTORY = ".bluenote"
 export const STATE_DIRECTORY = ".state"
 export const STATE_NOTES_DIRECTORY = path.join(STATE_DIRECTORY, "notes")
 export const STATE_RECOVERY_DIRECTORY = path.join(STATE_DIRECTORY, "recovery")
+export const STATE_COMPLETIONS_DIRECTORY = path.join(STATE_DIRECTORY, "completions")
+export const STATE_TMP_DIRECTORY = path.join(STATE_DIRECTORY, "tmp")
+export const STATE_LOGS_DIRECTORY = path.join(STATE_DIRECTORY, "logs")
 export const STATE_MANIFEST_FILENAME = "manifest.json"
 export const STORAGE_SCHEMA_VERSION = 2
 

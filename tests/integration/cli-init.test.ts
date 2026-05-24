@@ -16,7 +16,7 @@ test("bn init exits 0 and reports the initialized root", async () => {
     assert.equal(result.stderr, "")
     assert.match(result.stdout, new RegExp(`Initialized BlueNote root: ${harness.escapeForRegExp(harness.rootPath)}`))
     await assertManagedRootLayout(harness.rootPath)
-    await access(path.join(harness.rootPath, ".state", "notes"))
+
     await access(path.join(harness.rootPath, ".state", "manifest.json"))
 
     const manifestJson = await readFile(path.join(harness.rootPath, ".state", "manifest.json"), "utf8")
