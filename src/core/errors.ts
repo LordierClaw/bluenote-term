@@ -36,6 +36,12 @@ export class AmbiguousSelectorError extends AppError {
   }
 }
 
+export class SelectorNotFoundError extends AppError {
+  constructor(message: string, options: AppErrorOptions = {}) {
+    super("SELECTOR_NOT_FOUND", message, options)
+  }
+}
+
 export class EditorLaunchError extends AppError {
   constructor(message: string, options: AppErrorOptions = {}) {
     super("EDITOR_LAUNCH_FAILED", message, options)

@@ -277,6 +277,36 @@ test("bn show reports selector-not-found errors", async () => {
   }
 })
 
+test("bn show suggests close note keys when a selector is missing", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-show-suggest-")
+
+  try {
+    await writePlainNoteWithSidecar(harness.rootPath, {
+      key: "show-note",
+      title: "Show Note",
+      description: "Visible body.",
+      relativePath: path.join("notes", "inbox", "show-note.md"),
+      body: "Visible body.\n",
+    })
+    await writePlainNoteWithSidecar(harness.rootPath, {
+      key: "slow-note",
+      title: "Slow Note",
+      description: "Slow body.",
+      relativePath: path.join("notes", "journal", "slow-note.md"),
+      body: "Slow body.\n",
+    })
+
+    const result = harness.run(["show", "shoe-note"])
+
+    assert.equal(result.exitCode, 1)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Could not find a note matching selector 'shoe-note'\./)
+    assert.match(result.stderr, /Hint: Did you mean: show-note, slow-note\?/)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
 test("bn show requires a selector argument", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-show-usage-")
 
