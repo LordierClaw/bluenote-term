@@ -1,6 +1,6 @@
 # Managed Root Layout
 
-Planned managed user root:
+Current managed user root:
 
 ```text
 ~/.bluenote/
@@ -10,20 +10,21 @@ Planned managed user root:
 │   └── archive/
 ├── scratches/
 ├── templates/
-├── .bluenote/
-│   ├── config.json
-│   ├── state.json
-│   ├── cache.db
+├── .state/
+│   ├── manifest.json
+│   ├── metadata.sqlite
 │   ├── search-index.json
+│   ├── notes/
+│   │   └── <key>.json
 │   ├── recovery/
-│   ├── tmp/
-│   └── logs/
-└── .history/
+│   └── ...rebuildable state artifacts
 ```
 
 ## Rules
 
 - note files remain canonical user data
-- `.bluenote/cache.db` and `.bluenote/search-index.json` are rebuildable
-- `.history/` stores backups and recovery artifacts where needed
+- `.state/notes/*.json` sidecars are canonical BlueNote metadata paired with note files
+- `.state/metadata.sqlite` and `.state/search-index.json` are rebuildable
+- `.state/recovery/` stores recovery artifacts where needed
+- BlueNote does not create a nested `.bluenote/.bluenote` layout
 - symlinks escaping the managed root must not be followed silently

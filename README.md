@@ -28,6 +28,23 @@ bun run smoke:opentui
 bun run smoke:cli
 ```
 
+## Current CLI workflow
+
+- Notes are plain `.md` files under `notes/`; canonical BlueNote metadata lives in `.state/notes/<key>.json` sidecars.
+- Derived artifacts such as `.state/metadata.sqlite` and `.state/search-index.json` are rebuildable.
+- `bn new`, `bn edit`, `bn archive`, and `bn delete --force` rebuild derived indexes automatically after mutating note storage.
+- Selectors are key-first for everyday use; `show`, `edit`, and `archive` accept key/path/slug selectors and still fall back to legacy frontmatter IDs during migration windows, while `delete` requires `--force` and accepts key/path selectors plus the same legacy-ID fallback.
+- `bn search` prints grouped note blocks with the title first, then key, path, and the highest-value match label or excerpt.
+
+## Completion and migration
+
+- Install shell completion by printing a script, then sourcing or saving it for your shell:
+  - `bun run ./bin/bn.ts completion bash`
+  - `bun run ./bin/bn.ts completion zsh`
+  - `bun run ./bin/bn.ts completion fish`
+- The completion backend is selector-aware: `bn complete selectors <command> <prefix>` prints matching keys one per line and stays quiet when the root or indexes are unavailable.
+- `bn migrate` converts legacy frontmatter notes into plain note files plus `.state/notes/` sidecars, rebuilds derived indexes, and fails hard on mixed or unsafe roots instead of guessing.
+
 ## Repository map
 
 - `AGENTS.md` — project-local agent guidance
