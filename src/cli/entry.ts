@@ -11,7 +11,7 @@ import { editNote } from "../core/edit-note"
 import { initRoot } from "../core/init-root"
 import { listNotes } from "../core/list-notes"
 import { migrateStorage } from "../core/migrate-storage"
-import { rebuildIndexes } from "../core/rebuild-indexes"
+import { rebuildIndexes, type RebuildIndexesOptions } from "../core/rebuild-indexes"
 import { searchNotes, type SearchNoteMatch } from "../core/search-notes"
 import { showNote } from "../core/show-note"
 import type { Clock } from "../platform/clock"
@@ -23,6 +23,7 @@ export interface CliRuntimeOptions {
     clock?: Clock
     randomSource?: () => number
   }
+  rebuildIndexesOptions?: Pick<RebuildIndexesOptions, "testHooks">
 }
 
 export function formatCliError(error: AppError): CliResult {
@@ -266,7 +267,7 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
     }
 
     if (command === "rebuild") {
-      const summary = rebuildIndexes()
+      const summary = rebuildIndexes(runtime.rebuildIndexesOptions)
 
       if (summary.validationErrors.length > 0) {
         return {

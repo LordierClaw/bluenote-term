@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 import pkg from "../../package.json"
-import { runCli } from "../../src/cli/entry"
+import { runCli, type CliRuntimeOptions } from "../../src/cli/entry"
 
 function readTestClock() {
   const value = process.env.BLUENOTE_TEST_NOW
@@ -46,8 +46,23 @@ function readTestRandomSource(): (() => number) | undefined {
   return () => draws.shift() ?? 0
 }
 
+function readRebuildIndexesTestHooks(): CliRuntimeOptions["rebuildIndexesOptions"] | undefined {
+  if (process.env.BLUENOTE_TEST_REBUILD_FAIL_SIDECAR_SCAN !== "1") {
+    return undefined
+  }
+
+  return {
+    testHooks: {
+      listSidecarKeys() {
+        throw new Error("")
+      },
+    },
+  }
+}
+
 const clock = readTestClock()
 const randomSource = readTestRandomSource()
+const rebuildIndexesOptions = readRebuildIndexesTestHooks()
 const result = runCli(process.argv.slice(2), pkg.version, {
   createNoteOptions: {
     ...(clock ? { clock } : {}),
@@ -57,6 +72,7 @@ const result = runCli(process.argv.slice(2), pkg.version, {
     ...(clock ? { clock } : {}),
     ...(randomSource ? { randomSource } : {}),
   },
+  ...(rebuildIndexesOptions ? { rebuildIndexesOptions } : {}),
 })
 
 if (result.stdout) {

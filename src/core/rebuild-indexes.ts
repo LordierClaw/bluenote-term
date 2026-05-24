@@ -11,6 +11,12 @@ import { createNoteRepository } from "../storage/note-repository"
 import type { ParsedNote } from "../storage/note-schema"
 import { ensureManagedRoot } from "../storage/root-layout"
 
+export interface RebuildIndexesOptions extends ResolveBlueNoteRootOptions {
+  testHooks?: {
+    listSidecarKeys?: (rootPath: string) => string[]
+  }
+}
+
 export interface RebuildIndexesSummary {
   rootPath: string
   noteCount: number
@@ -54,7 +60,7 @@ function collectErrorMessages(error: unknown): string[] {
   return messages.length > 0 ? messages : [String(error)]
 }
 
-function listSidecarKeys(rootPath: string): string[] {
+function listSidecarKeys(rootPath: string, testHooks?: RebuildIndexesOptions["testHooks"]): string[] {
   const sidecarDirectoryPath = path.join(rootPath, STATE_NOTES_DIRECTORY)
 
   if (!existsSync(sidecarDirectoryPath)) {
@@ -62,6 +68,10 @@ function listSidecarKeys(rootPath: string): string[] {
   }
 
   try {
+    if (testHooks?.listSidecarKeys) {
+      return testHooks.listSidecarKeys(rootPath)
+    }
+
     return readdirSync(sidecarDirectoryPath, { withFileTypes: true })
       .filter((entry) => entry.isFile() && entry.name.endsWith(".json"))
       .map((entry) => path.basename(entry.name, ".json"))
@@ -82,7 +92,7 @@ function readLegacyFrontmatterNote(rawNote: string, relativePath: string) {
   }
 }
 
-export function rebuildIndexes(options: ResolveBlueNoteRootOptions = {}): RebuildIndexesSummary {
+export function rebuildIndexes(options: RebuildIndexesOptions = {}): RebuildIndexesSummary {
   const rootPath = ensureManagedRoot(resolveBlueNoteRoot(options))
   const repository = createNoteRepository(rootPath)
   const sidecars = createSidecarRepository(rootPath)
@@ -167,7 +177,7 @@ export function rebuildIndexes(options: ResolveBlueNoteRootOptions = {}): Rebuil
   }
 
   try {
-    for (const sidecarKey of listSidecarKeys(rootPath)) {
+    for (const sidecarKey of listSidecarKeys(rootPath, options.testHooks)) {
       if (noteRelativePathByKey.has(sidecarKey)) {
         continue
       }

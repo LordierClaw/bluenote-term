@@ -1,7 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import path from "node:path"
-import { chmod, mkdir, readFile } from "node:fs/promises"
+import { mkdir, readFile } from "node:fs/promises"
 
 import { loadIndexStore } from "../../src/index/index-store"
 import { createManagedRootHarness } from "../helpers/cli"
@@ -272,21 +272,30 @@ test("bn rebuild exits 2 and surfaces invalid sidecar validation errors", async 
 
 test("bn rebuild exits 2 with a controlled error when .state/notes cannot be scanned", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-rebuild-sidecar-scan-")
-  const sidecarDirectoryPath = path.join(harness.rootPath, ".state", "notes")
 
   try {
-    await harness.writeNote(path.join("notes", "inbox", "alpha-note.md"), "Alpha body.\n")
-    assert.equal(harness.run(["rebuild"]).exitCode, 2)
-    await chmod(sidecarDirectoryPath, 0o000)
+    const relativePath = path.join("notes", "inbox", "alpha-note.md")
+    await harness.writeNote(relativePath, "Alpha body.\n")
+    await harness.writeNote(
+      path.join(".state", "notes", "alpha-note.json"),
+      sidecarJson({
+        key: "alpha-note",
+        title: "Alpha Note",
+        description: "Alpha summary",
+        relativePath,
+      }),
+    )
 
-    const result = harness.run(["rebuild"])
+    const result = harness.run(["rebuild"], {
+      BLUENOTE_TEST_REBUILD_FAIL_SIDECAR_SCAN: "1",
+    })
 
     assert.equal(result.exitCode, 2)
     assert.equal(result.stdout, "")
     assert.match(result.stderr, /Validation failed while rebuilding indexes\./)
     assert.match(result.stderr, /Could not scan sidecar directory '\.state[\\/]notes'\./)
+    assert.doesNotMatch(result.stderr, /Forced sidecar scan failure for tests\./)
   } finally {
-    await chmod(sidecarDirectoryPath, 0o755).catch(() => undefined)
     await harness.cleanup()
   }
 })
