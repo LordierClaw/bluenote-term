@@ -15,6 +15,7 @@ export const COMMAND_NAMES = [
   "archive",
   "delete",
   "rebuild",
+  "migrate",
   "completion",
   "tui",
 ] as const

@@ -60,7 +60,7 @@ function readFlagValue(args: string[], flagName: string): string | undefined {
 export function formatHelp(version: string): string {
   return [
     `BlueNote v${version}`,
-    "Local-first terminal notes for Phase 2 storage + UX workflows",
+    "Local-first terminal notes for plain-note storage and selector-friendly workflows",
     "",
     "Usage:",
     "  bn <command> [options]",
@@ -73,8 +73,8 @@ export function formatHelp(version: string): string {
     "  list         List active notes as title, key, description, and path",
     "  show         <key|path|slug>  Print a matching note summary and body",
     "  search       <query>          Search indexed notes",
-    "  edit         <id|path|slug>   Open a matching note in $EDITOR",
-    "  archive      <id|path|slug>   Archive a matching note",
+    "  edit         <key|path|slug>  Open a matching note in $EDITOR",
+    "  archive      <key|path|slug>  Archive a matching note",
     "  delete       <key|path> --force  Permanently remove a matching note and sidecar",
     "  rebuild      Rebuild derived metadata and search indexes",
     "  migrate      Convert legacy frontmatter notes into plain files + sidecars",
@@ -160,7 +160,7 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
 
       if (!selector) {
         throw new UsageError("Missing required selector for edit.", {
-          hint: "Run bn edit <id|path|slug>.",
+          hint: "Run bn edit <key|path|slug>.",
         })
       }
 
@@ -182,7 +182,7 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
 
       if (!selector) {
         throw new UsageError("Missing required selector for archive.", {
-          hint: "Run bn archive <id|path|slug>.",
+          hint: "Run bn archive <key|path|slug>.",
         })
       }
 

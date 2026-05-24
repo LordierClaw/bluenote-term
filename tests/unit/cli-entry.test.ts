@@ -10,6 +10,7 @@ test("formatHelp lists all Phase 2 commands with actionable usage", () => {
   const help = formatHelp("0.1.0")
 
   assert.match(help, /BlueNote/)
+  assert.match(help, /Local-first terminal notes for plain-note storage and selector-friendly workflows/)
   assert.match(help, /Usage:\n  bn <command> \[options\]/)
   assert.match(help, /--help/)
   assert.match(help, /--version/)
@@ -18,8 +19,8 @@ test("formatHelp lists all Phase 2 commands with actionable usage", () => {
   assert.match(help, /list\s+List active notes as title, key, description, and path/)
   assert.match(help, /show\s+<key\|path\|slug>\s+Print a matching note summary and body/)
   assert.match(help, /search\s+<query>/)
-  assert.match(help, /edit\s+<id\|path\|slug>/)
-  assert.match(help, /archive\s+<id\|path\|slug>/)
+  assert.match(help, /edit\s+<key\|path\|slug>\s+Open a matching note in \$EDITOR/)
+  assert.match(help, /archive\s+<key\|path\|slug>\s+Archive a matching note/)
   assert.match(help, /delete\s+<key\|path>\s+--force\s+Permanently remove a matching note and sidecar/)
   assert.match(help, /rebuild\s+Rebuild derived metadata and search indexes/)
   assert.match(help, /migrate\s+Convert legacy frontmatter notes into plain files \+ sidecars/)
