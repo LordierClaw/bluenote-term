@@ -10,7 +10,7 @@ export type NoteFixtureInput = {
   tags?: string[]
 }
 
-export function noteMarkdown({
+export function legacyNoteMarkdown({
   id,
   title,
   body = "",
@@ -33,6 +33,34 @@ export function noteMarkdown({
     body,
     sourcePath: "tests/fixtures/generated.md",
   })
+}
+
+export const noteMarkdown = legacyNoteMarkdown
+
+export function sidecarJson(input: {
+  key: string
+  title: string
+  description: string
+  relativePath: string
+  createdAt?: string
+  updatedAt?: string
+  archivedAt?: string | null
+  namingVersion?: number
+}): string {
+  return `${JSON.stringify(
+    {
+      key: input.key,
+      title: input.title,
+      description: input.description,
+      relativePath: input.relativePath,
+      createdAt: input.createdAt ?? "2026-05-21T10:15:00.000Z",
+      updatedAt: input.updatedAt ?? input.createdAt ?? "2026-05-21T10:15:00.000Z",
+      archivedAt: input.archivedAt ?? null,
+      namingVersion: input.namingVersion ?? 1,
+    },
+    null,
+    2,
+  )}\n`
 }
 
 export function timestampFieldPattern(fieldName: string): RegExp {

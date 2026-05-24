@@ -107,7 +107,7 @@ test("bn edit <selector> updates sidecar metadata and rebuilds derived state aft
 
     const searchResult = harness.run(["search", "zebra tokens"])
     assert.equal(searchResult.exitCode, 0)
-    assert.match(searchResult.stdout, /edit-with-key\s+Editable Sidecar Note\s+notes[\\/]journal[\\/]edit-with-key\.md/)
+    assert.match(searchResult.stdout, /Editable Sidecar Note\n\s+key: edit-with-key\n\s+path: notes[\\/]journal[\\/]edit-with-key\.md\n\s+match: description/)
   } finally {
     await harness.cleanup()
   }

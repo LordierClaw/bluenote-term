@@ -39,9 +39,9 @@ test("smoke-cli script exercises --help and init against a temporary root", asyn
     assert.match(result.stdout, /CLI smoke check passed\./)
 
     const notesDir = await stat(path.join(harness.rootPath, "notes"))
-    const blueNoteDir = await stat(path.join(harness.rootPath, ".bluenote"))
+    const stateDir = await stat(path.join(harness.rootPath, ".state"))
     assert.equal(notesDir.isDirectory(), true)
-    assert.equal(blueNoteDir.isDirectory(), true)
+    assert.equal(stateDir.isDirectory(), true)
   } finally {
     await harness.cleanup()
   }

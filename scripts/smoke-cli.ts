@@ -20,7 +20,7 @@ try {
   assert.equal(initResult.stderr, "")
   assert.match(initResult.stdout, new RegExp(`Initialized BlueNote root: ${managedRoot.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}`))
 
-  for (const relativePath of ["notes", ".bluenote"]) {
+  for (const relativePath of ["notes", ".state"]) {
     const stats = await stat(path.join(managedRoot, relativePath))
     assert.equal(stats.isDirectory(), true, `${relativePath} should exist after smoke init`)
   }

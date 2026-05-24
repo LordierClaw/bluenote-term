@@ -10,13 +10,19 @@ import { deleteNote } from "../core/delete-note"
 import { editNote } from "../core/edit-note"
 import { initRoot } from "../core/init-root"
 import { listNotes } from "../core/list-notes"
+import { migrateStorage } from "../core/migrate-storage"
 import { rebuildIndexes } from "../core/rebuild-indexes"
 import { searchNotes, type SearchNoteMatch } from "../core/search-notes"
 import { showNote } from "../core/show-note"
+import type { Clock } from "../platform/clock"
 import { runCompletionBackendCli, runCompletionCli } from "./completion"
 
 export interface CliRuntimeOptions {
   createNoteOptions?: Pick<Parameters<typeof createNote>[0], "clock" | "randomSource">
+  migrateStorageOptions?: {
+    clock?: Clock
+    randomSource?: () => number
+  }
 }
 
 export function formatCliError(error: AppError): CliResult {
@@ -71,6 +77,7 @@ export function formatHelp(version: string): string {
     "  archive      <id|path|slug>   Archive a matching note",
     "  delete       <key|path> --force  Permanently remove a matching note and sidecar",
     "  rebuild      Rebuild derived metadata and search indexes",
+    "  migrate      Convert legacy frontmatter notes into plain files + sidecars",
     "  completion   <bash|zsh|fish>  Print shell completion setup",
   ].join("\n") + "\n"
 }
@@ -272,6 +279,32 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
       return {
         exitCode: 0,
         stdout: `Rebuilt indexes for ${summary.noteCount} note(s).\n`,
+        stderr: "",
+      }
+    }
+
+    if (command === "migrate") {
+      const summary = migrateStorage(runtime.migrateStorageOptions)
+
+      if (summary.status === "noop") {
+        return {
+          exitCode: 0,
+          stdout:
+            summary.reason === "new-format"
+              ? "BlueNote storage is already migrated; nothing to do.\n"
+              : "BlueNote root is empty; nothing to migrate.\n",
+          stderr: "",
+        }
+      }
+
+      const keyMapLines = Object.entries(summary.keyMap)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([previousId, nextKey]) => `Key map: ${previousId} -> ${nextKey}`)
+      const stdoutLines = [`Migrated ${summary.migratedNoteCount} legacy note(s) to plain-note + sidecar storage.`, ...keyMapLines]
+
+      return {
+        exitCode: 0,
+        stdout: `${stdoutLines.join("\n")}\n`,
         stderr: "",
       }
     }

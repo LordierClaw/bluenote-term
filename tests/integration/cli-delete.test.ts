@@ -94,7 +94,7 @@ test("bn delete <key|path> --force removes the note file and sidecar and rebuild
 
     const searchResult = harness.run(["search", "Disposable note"])
     assert.equal(searchResult.exitCode, 0)
-    assert.equal(searchResult.stdout, "")
+    assert.equal(searchResult.stdout, 'No notes matched "Disposable note".\n')
   } finally {
     await harness.cleanup()
   }

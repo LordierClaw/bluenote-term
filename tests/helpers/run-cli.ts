@@ -53,6 +53,10 @@ const result = runCli(process.argv.slice(2), pkg.version, {
     ...(clock ? { clock } : {}),
     ...(randomSource ? { randomSource } : {}),
   },
+  migrateStorageOptions: {
+    ...(clock ? { clock } : {}),
+    ...(randomSource ? { randomSource } : {}),
+  },
 })
 
 if (result.stdout) {

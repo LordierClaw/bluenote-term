@@ -114,7 +114,7 @@ test("bn archive <selector> moves the plain note to notes/archive, preserves the
 
     const searchResult = harness.run(["search", "Searchable before archive"])
     assert.equal(searchResult.exitCode, 0)
-    assert.equal(searchResult.stdout, "")
+    assert.equal(searchResult.stdout, 'No notes matched "Searchable before archive".\n')
   } finally {
     await harness.cleanup()
   }

@@ -22,6 +22,8 @@ test("formatHelp lists all Phase 2 commands with actionable usage", () => {
   assert.match(help, /archive\s+<id\|path\|slug>/)
   assert.match(help, /delete\s+<key\|path>\s+--force\s+Permanently remove a matching note and sidecar/)
   assert.match(help, /rebuild\s+Rebuild derived metadata and search indexes/)
+  assert.match(help, /migrate\s+Convert legacy frontmatter notes into plain files \+ sidecars/)
+  assert.match(help, /completion\s+<bash\|zsh\|fish>\s+Print shell completion setup/)
 })
 
 test("runCli returns version output for --version", () => {
