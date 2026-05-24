@@ -709,6 +709,199 @@ Only if a final small polish change was required.
 
 ---
 
+## Post-review amendment — approved-design alignment follow-up (2026-05-26)
+
+Final verification passed, but the required spec review against `docs/plans/2026-05-24-phase-2-cli-storage-ux-pivot-design.md` found three remaining mismatches that must be resolved before Phase 2 can be considered aligned with the approved design:
+
+1. selectors still accept slug and legacy-ID fallback for user-facing commands, while the approved command contract says `show`, `edit`, `archive`, and `delete` should resolve by `key|path`
+2. the managed-root layout does not yet create the approved `.state/completions/`, `.state/tmp/`, and `.state/logs/` directories
+3. README/help/phase docs still describe the shipped CLI/storage work as Phase 1 in places, even though the approved design says this work must land as a distinct Phase 2 deliverable
+
+Use the following amendment instead of quietly polishing forward.
+
+---
+
+## Task 15A: Finish the approved `.state/` root layout contract
+
+**Files:**
+- Modify: `src/config/root.ts`
+- Modify: `src/storage/root-layout.ts`
+- Test: `tests/unit/storage/root-layout.test.ts`
+- Test: `tests/integration/cli-init.test.ts`
+- Modify/Test as needed: `scripts/smoke-cli.ts`
+- Modify/Test as needed: `tests/integration/cli-help.test.ts`
+
+**Step 1: Write the failing layout checks first**
+Add or tighten tests that prove:
+- `bn init` creates `.state/completions/`, `.state/tmp/`, and `.state/logs/` in addition to `.state/notes/`, `.state/recovery/`, and `.state/manifest.json`
+- the smoke script asserts the same layout so the contract stays protected outside unit/integration coverage
+- no nested `.bluenote/.bluenote` layout is created
+
+**Step 2: Run the targeted checks — confirm they fail**
+Commands:
+```bash
+bun test tests/unit/storage/root-layout.test.ts tests/integration/cli-init.test.ts tests/integration/cli-help.test.ts
+bun run smoke:cli
+```
+Expected: FAIL because the extra approved `.state` directories are not created yet.
+
+**Step 3: Implement the minimum layout change**
+- add explicit constants/helpers for the missing `.state` directories if needed
+- extend managed-root creation to include the approved layout and nothing more
+- update smoke expectations in the same task so the contract is consistent everywhere
+
+**Step 4: Run the targeted checks — confirm they pass**
+Commands:
+```bash
+bun test tests/unit/storage/root-layout.test.ts tests/integration/cli-init.test.ts tests/integration/cli-help.test.ts
+bun run smoke:cli
+```
+Expected: PASS.
+
+**Step 5: Commit**
+```bash
+git add src/config/root.ts src/storage/root-layout.ts tests/unit/storage/root-layout.test.ts tests/integration/cli-init.test.ts tests/integration/cli-help.test.ts scripts/smoke-cli.ts && git commit -m "feat: finish approved state root layout"
+```
+
+---
+
+## Task 15B: Remove slug/legacy-ID selector fallbacks from the user-facing Phase 2 contract
+
+**Files:**
+- Modify: `src/core/select-note.ts`
+- Modify: `src/cli/entry.ts`
+- Test: `tests/unit/core/select-note.test.ts`
+- Test: `tests/integration/cli-list-show.test.ts`
+- Test: `tests/integration/cli-edit.test.ts`
+- Test: `tests/integration/cli-archive.test.ts`
+- Test: `tests/integration/cli-delete.test.ts`
+- Test: `tests/unit/cli-entry.test.ts`
+- Test/Modify as needed: `tests/e2e/phase-2-cli-storage-ux-workflow.test.ts`
+- Test/Modify as needed: `tests/e2e/phase-1-cli-workflow.test.ts`
+
+**Step 1: Write the failing selector-contract tests first**
+Add or update tests that prove:
+- `show`, `edit`, and `archive` help/hints say `<key|path>` rather than `<key|path|slug>`
+- `selectNote()` resolves exact key first, then exact managed-root-relative path, and stops there for user-facing selectors
+- title-derived slug selection is rejected with a helpful selector-not-found or ambiguity error instead of succeeding silently
+- legacy frontmatter IDs are not accepted as user-facing selectors during this Phase 2 alignment pass
+- end-to-end workflows still pass when using the canonical key/path contract only
+
+**Step 2: Run the targeted checks — confirm they fail**
+Commands:
+```bash
+bun test tests/unit/core/select-note.test.ts tests/unit/cli-entry.test.ts tests/integration/cli-list-show.test.ts tests/integration/cli-edit.test.ts tests/integration/cli-archive.test.ts tests/integration/cli-delete.test.ts
+bun test tests/e2e/phase-2-cli-storage-ux-workflow.test.ts tests/e2e/phase-1-cli-workflow.test.ts
+```
+Expected: FAIL because the current implementation and tests still allow slug and legacy-ID fallback.
+
+**Step 3: Implement the minimum selector-contract change**
+- simplify selector resolution to exact key and exact path only for the Phase 2 command surface
+- keep ambiguity handling and suggestion quality intact
+- update CLI help/hints and adjacent e2e expectations in the same task so user-facing wording stays aligned
+
+**Step 4: Run the targeted checks — confirm they pass**
+Commands:
+```bash
+bun test tests/unit/core/select-note.test.ts tests/unit/cli-entry.test.ts tests/integration/cli-list-show.test.ts tests/integration/cli-edit.test.ts tests/integration/cli-archive.test.ts tests/integration/cli-delete.test.ts
+bun test tests/e2e/phase-2-cli-storage-ux-workflow.test.ts tests/e2e/phase-1-cli-workflow.test.ts
+```
+Expected: PASS.
+
+**Step 5: Commit**
+```bash
+git add src/core/select-note.ts src/cli/entry.ts tests/unit/core/select-note.test.ts tests/unit/cli-entry.test.ts tests/integration/cli-list-show.test.ts tests/integration/cli-edit.test.ts tests/integration/cli-archive.test.ts tests/integration/cli-delete.test.ts tests/e2e/phase-2-cli-storage-ux-workflow.test.ts tests/e2e/phase-1-cli-workflow.test.ts && git commit -m "feat: align selectors with approved phase 2 contract"
+```
+
+---
+
+## Task 15C: Align README/help/phase docs and completion-visible command surface with the approved design
+
+**Files:**
+- Modify: `README.md`
+- Modify: `docs/product/overview.md`
+- Modify: `docs/architecture/managed-root-layout.md`
+- Modify: `docs/architecture/note-format-and-indexing.md`
+- Modify: `docs/phases/phase-1-core-cli-storage.md`
+- Modify or create as needed: `docs/phases/phase-2-cli-storage-ux-pivot.md`
+- Modify: `src/cli/entry.ts`
+- Modify: `src/cli/completion.ts`
+- Test: `tests/integration/cli-help.test.ts`
+- Test: `tests/integration/cli-completion.test.ts`
+- Test: `tests/unit/cli-entry.test.ts`
+- Test: `tests/unit/cli/completion.test.ts`
+- Verify as needed: `scripts/smoke-cli.ts`
+
+**Step 1: Write the failing contract-alignment checklist first**
+Before editing, capture the exact drift to eliminate:
+- README and product/phase docs calling the implemented CLI/storage work “Phase 1” instead of the approved Phase 2 pivot
+- docs/help still mentioning slug or legacy-ID selector behavior
+- help/completion/tests disagreeing about the visible command surface
+- stale TUI scaffold wording that still says the full implementation starts in Phase 2
+
+**Step 2: Update docs/help minimally but explicitly**
+Align user-facing docs and command text so they all say the same thing about:
+- plain note files + `.state/` sidecars as canonical storage
+- `key|path` selector behavior for Phase 2 user-facing commands
+- the approved `.state/` layout including completions/tmp/logs
+- the current command surface exposed by `--help` and completion generation
+- the fact that this storage/UX pivot is a distinct Phase 2 deliverable, not a silent extension of Phase 1
+
+**Step 3: Verify docs/help/completion alignment against the running code**
+Commands:
+```bash
+bun test tests/integration/cli-help.test.ts tests/integration/cli-completion.test.ts tests/unit/cli-entry.test.ts tests/unit/cli/completion.test.ts
+bun run smoke:cli
+```
+Expected: PASS, and docs/help should not advertise behavior that the CLI no longer supports.
+
+**Step 4: Commit**
+```bash
+git add README.md docs/product/overview.md docs/architecture/managed-root-layout.md docs/architecture/note-format-and-indexing.md docs/phases/phase-1-core-cli-storage.md docs/phases/phase-2-cli-storage-ux-pivot.md src/cli/entry.ts src/cli/completion.ts tests/integration/cli-help.test.ts tests/integration/cli-completion.test.ts tests/unit/cli-entry.test.ts tests/unit/cli/completion.test.ts scripts/smoke-cli.ts && git commit -m "docs: align phase 2 design contract across help and docs"
+```
+Adjust the `git add` set if the final doc solution updates rather than creates `docs/phases/phase-2-cli-storage-ux-pivot.md`.
+
+---
+
+## Task 15D: Re-run the full Phase 2 gate and final review loop
+
+**Files:**
+- Review/modify as needed: all files touched in Tasks 15A–15C
+
+**Step 1: Run the full verification gate**
+Commands:
+```bash
+bun run typecheck
+bun test
+bun run smoke:opentui
+bun run smoke:cli
+git status --short
+```
+Expected: PASS and only intentional changes remain.
+
+**Step 2: Run focused Phase 2 verification commands**
+Commands:
+```bash
+bun test tests/e2e
+bun test tests/integration
+```
+Expected: PASS.
+
+**Step 3: Run final review passes again**
+Run:
+- spec-compliance review against `docs/plans/2026-05-24-phase-2-cli-storage-ux-pivot-design.md`
+- code-quality review for storage safety, migration safety, test clarity, completion robustness, and user-facing contract alignment
+
+If the spec review still reports drift, stop again and amend the plan before more implementation.
+
+**Step 4: Commit final polish only if necessary**
+```bash
+git add . && git commit -m "chore: finish phase 2 approved-design alignment"
+```
+Only if a final small polish change was required.
+
+---
+
 ## Suggested execution order rationale
 
 1. establish the new root/manifest contract before touching note semantics
@@ -719,9 +912,10 @@ Only if a final small polish change was required.
 6. add explicit migration only after the new storage path already works
 7. update smoke/e2e and docs once behavior is fully real
 8. finish with full verification and review passes
+9. after final review drift, close the remaining design mismatches in the order: layout → selectors → docs/help → verification
 
 ---
 
 ## Stop condition
 
-Do not execute Phase 2 implementation work until this plan is explicitly approved by the user.
+Do not execute further Phase 2 implementation work from this amendment until the user explicitly approves the updated plan.
