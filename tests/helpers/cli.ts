@@ -18,6 +18,7 @@ export type CliEnvOverrides = Record<string, string | undefined>
 export type ManagedRootHarness = {
   rootPath: string
   run(args: string[], extraEnv?: CliEnvOverrides): CliRunResult
+  runBin(args: string[], extraEnv?: CliEnvOverrides): CliRunResult
   runScript(relativeScriptPath: string, extraEnv?: CliEnvOverrides): CliRunResult
   writeNote(relativePath: string, markdown: string): Promise<void>
   writeFakeEditorScript(markdown: string, fileName?: string): Promise<string>
@@ -74,6 +75,10 @@ export function runCli(args: string[], options: RunWorkspaceCommandOptions = {})
   return runWorkspaceCommand(["bun", "run", cliPath, ...args], options)
 }
 
+export function runBinCli(args: string[], options: RunWorkspaceCommandOptions = {}): CliRunResult {
+  return runWorkspaceCommand(["bun", "run", path.join(workspaceRoot, "bin", "bn.ts"), ...args], options)
+}
+
 export function runWorkspaceScript(
   relativeScriptPath: string,
   { rootPath, extraEnv = {} }: RunWorkspaceCommandOptions = {},
@@ -113,6 +118,9 @@ export async function createManagedRootHarness(prefix = "bluenote-test-"): Promi
     rootPath,
     run(args, extraEnv = {}) {
       return runCli(args, { rootPath, extraEnv })
+    },
+    runBin(args, extraEnv = {}) {
+      return runBinCli(args, { rootPath, extraEnv })
     },
     runScript(relativeScriptPath, extraEnv = {}) {
       return runWorkspaceScript(relativeScriptPath, { rootPath, extraEnv })
