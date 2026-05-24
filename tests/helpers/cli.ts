@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises"
 import { MANAGED_ROOT_LAYOUT } from "../../src/storage/root-layout"
 
 const workspaceRoot = path.resolve(import.meta.dir, "../..")
-const cliPath = path.join(workspaceRoot, "bin", "bn.ts")
+const cliPath = path.join(workspaceRoot, "tests", "helpers", "run-cli.ts")
 
 export type CliRunResult = {
   exitCode: number

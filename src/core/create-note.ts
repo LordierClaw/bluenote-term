@@ -1,4 +1,5 @@
 import path from "node:path"
+import { existsSync, readdirSync } from "node:fs"
 
 import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions } from "../config/root"
 import { IndexValidationFailedError } from "./errors"
@@ -6,15 +7,14 @@ import { createNoteDescription } from "../domain/note-description"
 import { createNoteKey } from "../domain/note-key"
 import { rebuildIndexes } from "./rebuild-indexes"
 import { systemClock, type Clock } from "../platform/clock"
-import type { IdGenerator } from "../platform/ids"
 import { createNoteRepository } from "../storage/note-repository"
-import { ensureManagedRoot } from "../storage/root-layout"
+import { ensureManagedRoot, getStateNotesPath } from "../storage/root-layout"
 
 export interface CreateNoteOptions extends ResolveBlueNoteRootOptions {
   title: string
   body?: string
   clock?: Clock
-  ids?: IdGenerator
+  randomSource?: () => number
 }
 
 export interface CreateNoteSummary {
@@ -26,54 +26,34 @@ export interface CreateNoteSummary {
   relativePath: string
 }
 
-function readTestTimestamp(): Date | null {
-  const value = process.env.BLUENOTE_TEST_NOW
+function listExistingCreateKeys(rootPath: string, repository: ReturnType<typeof createNoteRepository>): Set<string> {
+  const existingKeys = new Set(repository.listNotePaths().map((record) => path.basename(record.relativePath, ".md")))
+  const stateNotesPath = getStateNotesPath(rootPath)
 
-  if (!value) {
-    return null
+  if (!existsSync(stateNotesPath)) {
+    return existingKeys
   }
 
-  return new Date(value)
-}
+  for (const entry of readdirSync(stateNotesPath, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith(".json")) {
+      continue
+    }
 
-function createRandomSourceFromEnvironment(): (() => number) | undefined {
-  const sequence = process.env.BLUENOTE_TEST_RANDOM_SEQUENCE
-
-  if (!sequence) {
-    return undefined
+    existingKeys.add(path.basename(entry.name, ".json"))
   }
 
-  const draws = sequence
-    .split(",")
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0)
-    .map((value) => Number(value))
-
-  return () => draws.shift() ?? 0
+  return existingKeys
 }
 
 export function createNote(options: CreateNoteOptions): CreateNoteSummary {
   const rootPath = ensureManagedRoot(resolveBlueNoteRoot(options))
-  const clock =
-    options.clock ??
-    (() => {
-      const testTimestamp = readTestTimestamp()
-
-      return testTimestamp === null
-        ? systemClock
-        : {
-            now() {
-              return new Date(testTimestamp)
-            },
-          }
-    })()
+  const clock = options.clock ?? systemClock
   const timestamp = clock.now().toISOString()
   const repository = createNoteRepository(rootPath)
-  const randomSource = createRandomSourceFromEnvironment()
-  const existingKeys = new Set(repository.listNotePaths().map((record) => path.basename(record.relativePath, ".md")))
+  const existingKeys = listExistingCreateKeys(rootPath, repository)
   const key = createNoteKey(options.title, {
     isUnique: (candidate) => !existingKeys.has(candidate),
-    randomSource,
+    randomSource: options.randomSource,
   })
   const description = createNoteDescription(options.body ?? "")
   const created = repository.create({

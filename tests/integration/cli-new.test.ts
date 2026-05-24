@@ -137,6 +137,54 @@ test("repeated note creation produces distinct keys", async () => {
   }
 })
 
+test("bn new retries when an orphaned sidecar collides with the first generated key", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-new-sidecar-collision-")
+
+  try {
+    await Bun.write(
+      path.join(harness.rootPath, ".state", "notes", "example-51u7i0.json"),
+      JSON.stringify(
+        {
+          key: "example-51u7i0",
+          title: "Orphaned Example",
+          description: "",
+          relativePath: "notes/inbox/example-51u7i0.md",
+          createdAt: FIXED_TIMESTAMP,
+          updatedAt: FIXED_TIMESTAMP,
+          archivedAt: null,
+          namingVersion: 1,
+        },
+        null,
+        2,
+      ) + "\n",
+    )
+
+    const result = harness.run(["new", "--title", "Example"], {
+      BLUENOTE_TEST_NOW: FIXED_TIMESTAMP,
+      BLUENOTE_TEST_RANDOM_SEQUENCE: "0x12345678,0x76543210",
+    })
+
+    assert.equal(result.exitCode, 2)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Created note 'example-wtycr4', but derived indexes could not be rebuilt\./)
+    assert.match(result.stderr, /Sidecar '\.state[\\/]notes[\\/]example-51u7i0\.json' points to missing note 'notes[\\/]inbox[\\/]example-51u7i0\.md'\./)
+    assert.doesNotMatch(result.stderr, /Could not create note 'notes[\\/]inbox[\\/]example-51u7i0\.md'\./)
+
+    const noteFiles = await readdir(path.join(harness.rootPath, "notes", "inbox"))
+    assert.deepEqual(noteFiles, ["example-wtycr4.md"])
+    assert.equal(
+      JSON.parse(await readFile(path.join(harness.rootPath, ".state", "notes", "example-51u7i0.json"), "utf8")).key,
+      "example-51u7i0",
+    )
+    assert.equal(
+      JSON.parse(await readFile(path.join(harness.rootPath, ".state", "notes", "example-wtycr4.json"), "utf8")).key,
+      "example-wtycr4",
+    )
+  } finally {
+    await harness.cleanup()
+  }
+})
+
 test("bn new surfaces repository filesystem failures as CLI errors", async () => {
   const fixture = await createBlockedRootFixture("bluenote-cli-new-error-")
 

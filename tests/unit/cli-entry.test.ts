@@ -1,5 +1,8 @@
 import test from "node:test"
 import assert from "node:assert/strict"
+import os from "node:os"
+import path from "node:path"
+import { mkdtemp, readFile, rm } from "node:fs/promises"
 
 import { formatHelp, runCli } from "../../src/cli/entry"
 
@@ -43,4 +46,41 @@ test("runCli rejects unknown commands with guidance", () => {
   assert.match(result.stderr, /Unknown command: unknown/)
   assert.match(result.stderr, /Use --help/)
   assert.match(result.stderr, /available commands/)
+})
+
+test("runCli accepts injected create-note dependencies for deterministic new-note tests", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-entry-new-"))
+  const previousRoot = process.env.BLUENOTE_ROOT
+
+  process.env.BLUENOTE_ROOT = rootPath
+
+  try {
+    const result = runCli(
+      ["new", "--title", "Example"],
+      "0.1.0",
+      {
+        createNoteOptions: {
+          clock: {
+            now() {
+              return new Date("2026-05-24T12:00:00.000Z")
+            },
+          },
+          randomSource: () => 0x12345678,
+        },
+      },
+    )
+
+    assert.equal(result.exitCode, 0)
+    assert.equal(result.stderr, "")
+    assert.equal(result.stdout, "Created note\nKey: example-51u7i0\nPath: notes/inbox/example-51u7i0.md\n")
+    assert.equal(await readFile(path.join(rootPath, "notes", "inbox", "example-51u7i0.md"), "utf8"), "")
+  } finally {
+    if (previousRoot === undefined) {
+      delete process.env.BLUENOTE_ROOT
+    } else {
+      process.env.BLUENOTE_ROOT = previousRoot
+    }
+
+    await rm(rootPath, { recursive: true, force: true })
+  }
 })

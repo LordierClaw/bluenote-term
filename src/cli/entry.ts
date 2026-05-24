@@ -13,6 +13,10 @@ import { rebuildIndexes } from "../core/rebuild-indexes"
 import { searchNotes } from "../core/search-notes"
 import { showNote } from "../core/show-note"
 
+export interface CliRuntimeOptions {
+  createNoteOptions?: Pick<Parameters<typeof createNote>[0], "clock" | "randomSource">
+}
+
 export function formatCliError(error: AppError): CliResult {
   const messageLines = [error.message]
 
@@ -67,7 +71,7 @@ export function formatHelp(version: string): string {
   ].join("\n") + "\n"
 }
 
-export function runCli(args: string[], version: string): CliResult {
+export function runCli(args: string[], version: string, runtime: CliRuntimeOptions = {}): CliResult {
   try {
     const [command, ...commandArgs] = args
 
@@ -98,7 +102,10 @@ export function runCli(args: string[], version: string): CliResult {
         })
       }
 
-      const summary = createNote({ title })
+      const summary = createNote({
+        title,
+        ...runtime.createNoteOptions,
+      })
 
       return {
         exitCode: 0,
