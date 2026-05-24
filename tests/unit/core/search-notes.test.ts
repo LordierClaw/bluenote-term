@@ -7,34 +7,73 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { IndexUnavailableError } from "../../../src/core/errors"
 import { listNotes } from "../../../src/core/list-notes"
 import { searchNotes } from "../../../src/core/search-notes"
-import { rebuildIndexStore } from "../../../src/index/index-store"
-import { parseNoteFile } from "../../../src/storage/frontmatter"
+import { rebuildIndexStore, type IndexedNoteRecord } from "../../../src/index/index-store"
 
-const NOTE_ALPHA = parseNoteFile(
-  `---\nid: note-alpha\nschemaVersion: 1\ntitle: Alpha Note\nmode: plain\ntags: [alpha]\ncreatedAt: 2026-05-21T10:15:00.000Z\nupdatedAt: 2026-05-21T10:15:00.000Z\n---\nAlpha body mentions project comet.\n`,
-  path.join("notes", "inbox", "alpha.md"),
-)
+const MATCH_NOTES: IndexedNoteRecord[] = [
+  {
+    key: "moonbeam-title",
+    title: "Moonbeam Launch",
+    description: "Status review",
+    body: "Quiet body text.\n",
+    relativePath: path.join("notes", "inbox", "moonbeam-title.md"),
+    createdAt: "2026-05-21T10:15:00.000Z",
+    updatedAt: "2026-05-21T10:15:00.000Z",
+    archivedAt: null,
+  },
+  {
+    key: "description-match",
+    title: "Status Review",
+    description: "Moonbeam rollout checklist",
+    body: "General body text.\n",
+    relativePath: path.join("notes", "inbox", "description-match.md"),
+    createdAt: "2026-05-21T10:16:00.000Z",
+    updatedAt: "2026-05-21T10:16:00.000Z",
+    archivedAt: null,
+  },
+  {
+    key: "content-match",
+    title: "Incident Notes",
+    description: "Body-only reference",
+    body: "First line stays quiet.\nSecond line mentions moonbeam during deployment.\nThird line closes out.\n",
+    relativePath: path.join("notes", "journal", "content-match.md"),
+    createdAt: "2026-05-21T10:17:00.000Z",
+    updatedAt: "2026-05-21T10:17:00.000Z",
+    archivedAt: null,
+  },
+  {
+    key: "moonbeam-utility",
+    title: "Utility Note",
+    description: "Helper index",
+    body: "Plain helper text only.\n",
+    relativePath: path.join("notes", "archive", "moonbeam-utility.md"),
+    createdAt: "2026-05-21T10:18:00.000Z",
+    updatedAt: "2026-05-21T10:18:00.000Z",
+    archivedAt: null,
+  },
+]
 
-const NOTE_BETA = parseNoteFile(
-  `---\nid: note-beta\nschemaVersion: 1\ntitle: Beta Nebula Note\nmode: plain\ntags: [beta]\ncreatedAt: 2026-05-21T11:15:00.000Z\nupdatedAt: 2026-05-21T11:15:00.000Z\n---\nBeta body mentions nebula launch plans.\n`,
-  path.join("notes", "journal", "beta.md"),
-)
-
-test("searchNotes returns ranked matches with title and path snippets from derived indexes", async () => {
+test("searchNotes returns one grouped match per note with ranked source labels", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-search-notes-"))
 
   try {
-    rebuildIndexStore({
-      rootPath,
-      notes: [NOTE_ALPHA, NOTE_BETA],
-    })
+    rebuildIndexStore({ rootPath, notes: MATCH_NOTES })
 
-    const results = searchNotes("nebula", { override: rootPath })
+    const results = searchNotes("moonbeam", { override: rootPath })
 
-    assert.deepEqual(results.map((result) => result.id), ["note-beta"])
-    assert.equal(results[0]?.title, "Beta Nebula Note")
-    assert.match(results[0]?.titleSnippet ?? "", /Beta Nebula Note/)
-    assert.match(results[0]?.pathSnippet ?? "", /notes[\\/]journal[\\/]beta\.md/)
+    assert.deepEqual(results.map((result) => result.key), [
+      "moonbeam-title",
+      "description-match",
+      "content-match",
+      "moonbeam-utility",
+    ])
+    assert.deepEqual(results.map((result) => result.match.label), [
+      "title",
+      "description",
+      "content line 2",
+      "key/path",
+    ])
+    assert.equal(results[2]?.match.excerpt, "...Second line mentions moonbeam during deployment....")
+    assert.equal(results[0]?.relativePath, path.join("notes", "inbox", "moonbeam-title.md"))
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }
@@ -44,18 +83,16 @@ test("listNotes prefers derived index summaries when available", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-list-notes-index-"))
 
   try {
-    rebuildIndexStore({
-      rootPath,
-      notes: [NOTE_ALPHA],
-    })
+    rebuildIndexStore({ rootPath, notes: [MATCH_NOTES[0]] })
 
     const summaries = listNotes({ override: rootPath })
 
     assert.deepEqual(summaries, [
       {
-        id: "note-alpha",
-        title: "Alpha Note",
-        relativePath: path.join("notes", "inbox", "alpha.md"),
+        key: "moonbeam-title",
+        title: "Moonbeam Launch",
+        description: "Status review",
+        relativePath: path.join("notes", "inbox", "moonbeam-title.md"),
       },
     ])
   } finally {
@@ -72,7 +109,7 @@ test("searchNotes returns actionable rebuild guidance when derived indexes are m
       (error) => {
         assert.ok(error instanceof IndexUnavailableError)
         assert.equal(error.message, "Derived indexes are unavailable.")
-        assert.equal(error.hint, "Run bn rebuild to recreate .bluenote artifacts from note files.")
+        assert.equal(error.hint, "Run bn rebuild to recreate .state artifacts from note files and sidecars.")
         return true
       },
     )

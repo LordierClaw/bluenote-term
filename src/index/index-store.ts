@@ -17,7 +17,7 @@ const DERIVED_DIRECTORY = STATE_DIRECTORY
 const METADATA_FILENAME = "metadata.sqlite"
 const SEARCH_FILENAME = "search-index.json"
 const SEARCH_FIELDS = ["key", "title", "description", "body", "relativePath"] as const
-const SEARCH_STORE_FIELDS = ["id", "key", "title", "description", "relativePath"] as const
+const SEARCH_STORE_FIELDS = ["id", "key", "title", "description", "body", "relativePath"] as const
 const REBUILD_INDEX_HINT = "Run bn rebuild to recreate .state artifacts from note files and sidecars."
 
 export interface IndexedNoteSummary {
@@ -55,7 +55,10 @@ export interface SearchIndexMatch {
   id: string
   title: string
   description: string
+  body: string
   relativePath: string
+  score?: number
+  termMatches?: Record<string, string[]>
 }
 
 export interface LoadedIndexStore {
@@ -241,7 +244,20 @@ export function loadIndexStore(rootPath: string): LoadedIndexStore {
               id: String(match.id),
               title: String(match.title),
               description: String(match.description),
+              body: typeof match.body === "string" ? match.body : "",
               relativePath: String(match.relativePath),
+              score: typeof match.score === "number" ? match.score : undefined,
+              termMatches:
+                match.match !== undefined && typeof match.match === "object" && match.match !== null
+                  ? Object.fromEntries(
+                      Object.entries(match.match)
+                        .filter(([term, fields]) => typeof term === "string" && Array.isArray(fields))
+                        .map(([term, fields]) => [
+                          term,
+                          fields.filter((field): field is string => typeof field === "string"),
+                        ]),
+                    )
+                  : undefined,
             }))
         },
       }

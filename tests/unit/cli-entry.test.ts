@@ -4,7 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import { mkdtemp, readFile, rm } from "node:fs/promises"
 
-import { formatHelp, runCli } from "../../src/cli/entry"
+import { formatHelp, formatSearchMatches, runCli } from "../../src/cli/entry"
 
 test("formatHelp lists all Phase 2 commands with actionable usage", () => {
   const help = formatHelp("0.1.0")
@@ -93,4 +93,28 @@ test("runCli rejects delete without --force", () => {
   assert.equal(result.stdout, "")
   assert.match(result.stderr, /Deleting notes requires --force\./)
   assert.match(result.stderr, /Run bn delete <key\|path> --force to confirm permanent removal\./)
+})
+
+test("formatSearchMatches renders grouped note blocks with optional excerpts", () => {
+  const output = formatSearchMatches("moonbeam", [
+    {
+      key: "moonbeam-title",
+      title: "Moonbeam Launch",
+      relativePath: path.join("notes", "inbox", "moonbeam-title.md"),
+      match: { label: "title" },
+    },
+    {
+      key: "content-match",
+      title: "Incident Notes",
+      relativePath: path.join("notes", "journal", "content-match.md"),
+      match: { label: "content line 2", excerpt: "...Second line mentions moonbeam during deployment..." },
+    },
+  ])
+
+  assert.match(output, /^Moonbeam Launch\n  key: moonbeam-title\n  path: notes[\\/]inbox[\\/]moonbeam-title\.md\n  match: title/m)
+  assert.match(output, /Incident Notes\n  key: content-match\n  path: notes[\\/]journal[\\/]content-match\.md\n  match: content line 2\n  excerpt:\n    \.\.\.Second line mentions moonbeam during deployment\.\.\./)
+})
+
+test("formatSearchMatches returns a calm no-result message", () => {
+  assert.equal(formatSearchMatches("saturn", []), 'No notes matched "saturn".\n')
 })

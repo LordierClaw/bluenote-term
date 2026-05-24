@@ -11,7 +11,7 @@ import { editNote } from "../core/edit-note"
 import { initRoot } from "../core/init-root"
 import { listNotes } from "../core/list-notes"
 import { rebuildIndexes } from "../core/rebuild-indexes"
-import { searchNotes } from "../core/search-notes"
+import { searchNotes, type SearchNoteMatch } from "../core/search-notes"
 import { showNote } from "../core/show-note"
 
 export interface CliRuntimeOptions {
@@ -71,6 +71,28 @@ export function formatHelp(version: string): string {
     "  delete       <key|path> --force  Permanently remove a matching note and sidecar",
     "  rebuild      Rebuild derived metadata and search indexes",
   ].join("\n") + "\n"
+}
+
+export function formatSearchMatches(query: string, matches: SearchNoteMatch[]): string {
+  if (matches.length === 0) {
+    return `No notes matched \"${query}\".\n`
+  }
+
+  return matches.map((match) => {
+    const lines = [
+      match.title,
+      `  key: ${match.key}`,
+      `  path: ${match.relativePath}`,
+      `  match: ${match.match.label}`,
+    ]
+
+    if (match.match.excerpt) {
+      lines.push("  excerpt:")
+      lines.push(`    ${match.match.excerpt}`)
+    }
+
+    return lines.join("\n")
+  }).join("\n\n") + "\n"
 }
 
 export function runCli(args: string[], version: string, runtime: CliRuntimeOptions = {}): CliResult {
@@ -200,11 +222,10 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
       }
 
       const matches = searchNotes(query)
-      const stdout = matches.map((match) => `${match.id}\t${match.titleSnippet}\t${match.pathSnippet}`).join("\n")
 
       return {
         exitCode: 0,
-        stdout: stdout === "" ? "" : `${stdout}\n`,
+        stdout: formatSearchMatches(query, matches),
         stderr: "",
       }
     }
