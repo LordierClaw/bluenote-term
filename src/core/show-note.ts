@@ -43,6 +43,6 @@ export function showNote(options: ShowNoteOptions): ShowNoteSummary {
     title: sidecar.title,
     description: sidecar.description,
     relativePath: sidecar.relativePath,
-    body: repository.readRaw(path.join(rootPath, selected.sourcePath)),
+    body: selected.body,
   }
 }
