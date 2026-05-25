@@ -55,7 +55,7 @@ export function loadNoteDetail(options: ShowNoteOptions): NoteDetailAdapterResul
       ok: true,
       note: {
         key: note.key,
-        selector: note.key,
+        selector: note.relativePath,
         title: note.title,
         description: note.description,
         relativePath: note.relativePath,

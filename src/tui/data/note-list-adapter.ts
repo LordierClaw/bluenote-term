@@ -41,7 +41,7 @@ export function loadNoteList(options: ResolveBlueNoteRootOptions = {}): NoteList
       ok: true,
       notes: listNotesModule.listNotes(options).map((note) => ({
         key: note.key,
-        selector: note.key,
+        selector: note.relativePath,
         title: note.title,
         description: note.description,
         relativePath: note.relativePath,
