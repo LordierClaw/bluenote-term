@@ -6,7 +6,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises"
 
 import { formatHelp, formatSearchMatches, runCli } from "../../src/cli/entry"
 
-test("formatHelp lists all Phase 2 commands with actionable usage", () => {
+test("formatHelp lists Phase 2 commands plus the Phase 3 tui entrypoint with actionable usage", () => {
   const help = formatHelp("0.1.0")
 
   assert.match(help, /BlueNote/)
@@ -25,7 +25,7 @@ test("formatHelp lists all Phase 2 commands with actionable usage", () => {
   assert.match(help, /rebuild\s+Rebuild derived metadata and search indexes/)
   assert.match(help, /migrate\s+Convert legacy frontmatter notes into plain files \+ sidecars/)
   assert.match(help, /completion\s+<bash\|zsh\|fish>\s+Print shell completion setup/)
-  assert.doesNotMatch(help, /(^|\n)  tui(\s|$)/m)
+  assert.match(help, /tui\s+Launch the Phase 3 terminal shell \(shows a friendly startup state when no root exists\)/)
 })
 
 test("runCli returns version output for --version", () => {
@@ -53,13 +53,29 @@ test("runCli rejects unknown commands with guidance", () => {
   assert.match(result.stderr, /available commands/)
 })
 
-test("runCli rejects hidden tui command with the standard unknown-command guidance", () => {
-  const result = runCli(["tui"], "0.1.0")
+test("runCli routes tui to the Phase 3 shell without hiding existing commands", async () => {
+  const missingRootParent = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-entry-tui-"))
+  const missingRootPath = path.join(missingRootParent, "missing-root")
+  const previousRoot = process.env.BLUENOTE_ROOT
 
-  assert.equal(result.exitCode, 1)
-  assert.equal(result.stdout, "")
-  assert.match(result.stderr, /Unknown command: tui/)
-  assert.match(result.stderr, /Use --help/)
+  process.env.BLUENOTE_ROOT = missingRootPath
+
+  try {
+    const result = runCli(["tui"], "0.1.0")
+
+    assert.equal(result.exitCode, 0)
+    assert.equal(result.stderr, "")
+    assert.match(result.stdout, /BlueNote root missing/)
+    assert.match(result.stdout, /Run 'bn init' first\./)
+  } finally {
+    if (previousRoot === undefined) {
+      delete process.env.BLUENOTE_ROOT
+    } else {
+      process.env.BLUENOTE_ROOT = previousRoot
+    }
+
+    await rm(missingRootParent, { recursive: true, force: true })
+  }
 })
 
 test("runCli accepts injected create-note dependencies for deterministic new-note tests", async () => {

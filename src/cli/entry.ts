@@ -15,6 +15,7 @@ import { rebuildIndexes, type RebuildIndexesOptions } from "../core/rebuild-inde
 import { searchNotes, type SearchNoteMatch } from "../core/search-notes"
 import { showNote } from "../core/show-note"
 import type { Clock } from "../platform/clock"
+import { renderTuiApp } from "../tui/app"
 import { runCompletionBackendCli, runCompletionCli } from "./completion"
 
 export interface CliRuntimeOptions {
@@ -77,6 +78,7 @@ export function formatHelp(version: string): string {
     "  rebuild      Rebuild derived metadata and search indexes",
     "  migrate      Convert legacy frontmatter notes into plain files + sidecars",
     "  completion   <bash|zsh|fish>  Print shell completion setup",
+    "  tui          Launch the Phase 3 terminal shell (shows a friendly startup state when no root exists)",
   ].join("\n") + "\n"
 }
 
@@ -154,6 +156,16 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
 
     if (command === "complete") {
       return runCompletionBackendCli(commandArgs)
+    }
+
+    if (command === "tui") {
+      const rendered = renderTuiApp()
+
+      return {
+        exitCode: 0,
+        stdout: `${rendered.frame}\n`,
+        stderr: "",
+      }
     }
 
     if (command === "new") {

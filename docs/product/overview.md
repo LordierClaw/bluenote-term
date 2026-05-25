@@ -17,12 +17,12 @@ Delivered by the distinct Phase 2 CLI storage/UX pivot:
 - plain Markdown note storage plus `.state/notes/` sidecars
 - approved `.state/` support directories for completions, temp work, logs, and recovery
 - rebuildable metadata/search indexing with `sql.js` and MiniSearch
-- terminal CLI flows for init, new, list, search, show, edit, archive, delete, rebuild, completion, and migrate
+- terminal CLI flows for init, new, list, search, show, edit, archive, delete, rebuild, completion, migrate, and the `tui` shell entrypoint
 - `key|path` selector UX for everyday note targeting
 - grouped search output that shows one ranked block per matching note
 - automatic index rebuilds after CLI mutations so list/search/completion reflect changes immediately
 - automated validation and smoke checks
-- the dedicated TUI shell remains a later phase and is not part of the visible command contract above
+- the dedicated TUI shell is now exposed as `bn tui`, while the Phase 2 storage-oriented commands remain unchanged
 
 Still out of scope:
 

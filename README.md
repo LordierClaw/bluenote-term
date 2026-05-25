@@ -7,10 +7,11 @@ BlueNote is a terminal-native, local-first note tool with the Phase 2 CLI storag
 This repository now includes the approved **Phase 2 CLI storage + UX pivot** implementation and verification work, building on the earlier Phase 0/Phase 1 groundwork.
 
 Current goals:
-- keep repository and Git hygiene aligned with active CLI work
+- reindex the roadmap so the next active build target is Phase 3 TUI shell work
+- keep repository and Git hygiene aligned with the implemented CLI/storage contract
 - maintain runtime/tooling conventions
 - keep Hermes and project docs aligned with the implemented workflow
-- verify the command-first Phase 2 CLI workflow with tests and smoke checks
+- design and implement the Phase 3 TUI shell with tests and smoke checks
 
 ## Runtime
 
@@ -36,7 +37,9 @@ bun run smoke:cli
 - `bn new`, `bn edit`, `bn archive`, and `bn delete --force` rebuild derived indexes automatically after mutating note storage.
 - Selectors are key-first for everyday use; `show`, `edit`, `archive`, and `delete --force` accept canonical `key|path` selectors.
 - `bn search` prints grouped note blocks with the title first, then key, path, and the highest-value match label or excerpt.
-- The visible CLI command surface is `init`, `new`, `list`, `show`, `search`, `edit`, `archive`, `delete`, `rebuild`, `migrate`, and `completion`.
+- The visible CLI command surface is `init`, `new`, `list`, `show`, `search`, `edit`, `archive`, `delete`, `rebuild`, `migrate`, `completion`, and `tui`.
+- `bn tui` now exposes the Phase 3 terminal shell entrypoint while preserving the existing Phase 2 command names and behaviors.
+- When no managed root exists yet, `bn tui` shows a friendly startup state with the same `bn init` guidance used by the TUI empty-state screens.
 
 ## Completion and migration
 
@@ -58,4 +61,4 @@ bun run smoke:cli
 
 ## Current implementation note
 
-The repository now includes a working Phase 2 storage/UX CLI flow plus automated verification. Older planning artifacts may still describe pre-pivot assumptions, so the docs in this repo are being normalized to the approved Phase 2 contract.
+The repository now includes a working Phase 2 storage/UX CLI flow plus automated verification. The next planned build target is the reindexed Phase 3 TUI shell, and docs should treat later roadmap items with that numbering.
