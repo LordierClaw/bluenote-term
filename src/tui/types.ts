@@ -13,7 +13,7 @@ export interface TuiBootstrapInfo {
 export type TuiNoteBrowserState =
   | {
       status: "empty"
-      notes: []
+      notes: TuiNoteListItem[]
       selectedNote: null
       emptyState: TuiAdapterError
     }

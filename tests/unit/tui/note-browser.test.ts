@@ -56,6 +56,56 @@ test("note browser loads sidebar notes and eagerly selects the first note detail
   }
 })
 
+test("note browser surfaces first-note detail failures instead of silently clearing selection", () => {
+  const listSpy = spyOn(noteListAdapterModule, "loadNoteList").mockReturnValue({
+    ok: true,
+    notes: [
+      {
+        key: "alpha-key",
+        selector: "alpha-key",
+        title: "Alpha Note",
+        description: "Alpha summary",
+        relativePath: "notes/inbox/alpha-note.md",
+      },
+    ],
+  })
+  const detailSpy = spyOn(noteDetailAdapterModule, "loadNoteDetail").mockReturnValue({
+    ok: false,
+    error: {
+      code: "SELECTOR_NOT_FOUND",
+      message: "Could not find a note matching selector 'alpha-key'.",
+      hint: "Use bn list to inspect available notes.",
+    },
+  })
+
+  try {
+    const result = loadInitialNoteBrowserState({ override: "/tmp/bluenote-root", env: {}, cwd: "/" })
+
+    assert.deepEqual(result, {
+      status: "empty",
+      notes: [
+        {
+          key: "alpha-key",
+          selector: "alpha-key",
+          title: "Alpha Note",
+          description: "Alpha summary",
+          relativePath: "notes/inbox/alpha-note.md",
+        },
+      ],
+      selectedNote: null,
+      emptyState: {
+        code: "SELECTOR_NOT_FOUND",
+        message: "Could not find a note matching selector 'alpha-key'.",
+        hint: "Use bn list to inspect available notes.",
+      },
+    })
+    assert.equal(detailSpy.mock.calls.length, 1)
+  } finally {
+    listSpy.mockRestore()
+    detailSpy.mockRestore()
+  }
+})
+
 test("note browser returns a structured empty state when the root is missing", () => {
   const listSpy = spyOn(noteListAdapterModule, "loadNoteList").mockReturnValue({
     ok: false,

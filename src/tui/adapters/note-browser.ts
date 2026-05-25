@@ -30,9 +30,18 @@ export function loadInitialNoteBrowserState(options: ResolveBlueNoteRootOptions 
     selector: firstNote.selector,
   })
 
+  if (noteDetail.ok) {
+    return {
+      status: "ready",
+      notes: noteList.notes,
+      selectedNote: noteDetail.note,
+    }
+  }
+
   return {
-    status: "ready",
+    status: "empty",
     notes: noteList.notes,
-    selectedNote: noteDetail.ok ? noteDetail.note : null,
+    selectedNote: null,
+    emptyState: noteDetail.error,
   }
 }
