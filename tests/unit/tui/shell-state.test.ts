@@ -55,6 +55,17 @@ test("entering editor mode without a selected note keeps the shell in navigation
   assert.equal(nextState.editorDirty, false)
 })
 
+test("entering editor mode without an opened note keeps the shell in navigation mode", () => {
+  const state = selectNote(createInitialShellState(), "note-123")
+
+  const nextState = enterEditorMode(state)
+
+  assert.equal(nextState.mode, "navigation")
+  assert.equal(nextState.focusRegion, "sidebar")
+  assert.equal(nextState.selectedNoteKey, "note-123")
+  assert.equal(nextState.editorDirty, false)
+})
+
 test("entering editor mode marks the editor as active for the selected note", () => {
   const state = openSelectedNote(selectNote(createInitialShellState(), "note-123"))
 

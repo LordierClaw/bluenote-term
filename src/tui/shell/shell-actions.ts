@@ -32,7 +32,7 @@ export function openSelectedNote(state: ShellState): ShellState {
 }
 
 export function enterEditorMode(state: ShellState): ShellState {
-  if (state.selectedNoteKey === null) {
+  if (state.selectedNoteKey === null || state.mode !== "note") {
     return state
   }
 
