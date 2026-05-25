@@ -88,16 +88,24 @@ export function moveCursorDown(buffer: EditorBuffer): EditorBuffer {
   }
 }
 
-export function insertCharacter(buffer: EditorBuffer, character: string): EditorBuffer {
+function assertInlineText(text: string): void {
+  if (/\r|\n/.test(text)) {
+    throw new Error("Inline text insertion does not accept newline characters")
+  }
+}
+
+export function insertText(buffer: EditorBuffer, text: string): EditorBuffer {
+  assertInlineText(text)
+
   const row = clampRow(buffer.lines, buffer.cursor.row)
   const line = lineAt(buffer.lines, row)
   const column = clampColumn(line, buffer.cursor.column)
   const lines = [...buffer.lines]
-  lines[row] = `${line.slice(0, column)}${character}${line.slice(column)}`
+  lines[row] = `${line.slice(0, column)}${text}${line.slice(column)}`
 
   return {
     lines,
-    cursor: { row, column: column + character.length },
+    cursor: { row, column: column + text.length },
     dirty: true,
   }
 }

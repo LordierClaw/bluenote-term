@@ -6,9 +6,13 @@ import { createEditorBuffer } from "../../../src/tui/editor/editor-buffer"
 import { createInitialShellState } from "../../../src/tui/shell/shell-state"
 import { enterEditorMode, openSelectedNote, selectNote } from "../../../src/tui/shell/shell-actions"
 
+function createEditorState() {
+  return enterEditorMode(openSelectedNote(selectNote(createInitialShellState(), "note-123")))
+}
+
 test("editor input mapping only mutates the buffer while the shell is in editor mode", () => {
   const navigationState = createInitialShellState()
-  const editorState = enterEditorMode(openSelectedNote(selectNote(createInitialShellState(), "note-123")))
+  const editorState = createEditorState()
   const buffer = createEditorBuffer("Alpha")
 
   const unchanged = applyEditorIntent(navigationState, buffer, { kind: "insertText", text: "!" })
@@ -21,7 +25,7 @@ test("editor input mapping only mutates the buffer while the shell is in editor 
 })
 
 test("editor input maps cursor and deletion intents to editor buffer operations", () => {
-  const editorState = enterEditorMode(openSelectedNote(selectNote(createInitialShellState(), "note-123")))
+  const editorState = createEditorState()
   const buffer = {
     lines: ["Alpha", "Beta"],
     cursor: { row: 0, column: 5 },

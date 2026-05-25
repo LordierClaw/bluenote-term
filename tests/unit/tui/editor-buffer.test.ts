@@ -6,13 +6,21 @@ import {
   createEditorBuffer,
   deleteForward,
   getEditorText,
-  insertCharacter,
+  insertText,
   insertNewline,
   moveCursorDown,
   moveCursorLeft,
   moveCursorRight,
   moveCursorUp,
 } from "../../../src/tui/editor/editor-buffer"
+
+function createLineBoundaryBuffer() {
+  return {
+    lines: ["Alpha"],
+    cursor: { row: 0, column: 5 },
+    dirty: false,
+  }
+}
 
 test("editor buffer initializes from note body text and preserves line structure", () => {
   const buffer = createEditorBuffer("Alpha line\nBeta line\n")
@@ -26,11 +34,18 @@ test("editor buffer initializes from note body text and preserves line structure
 })
 
 test("inserting characters updates the current line and cursor position", () => {
-  const buffer = insertCharacter(createEditorBuffer("Alpha"), "!")
+  const buffer = insertText(createEditorBuffer("Alpha"), "!")
 
   assert.deepEqual(buffer.lines, ["!Alpha"])
   assert.deepEqual(buffer.cursor, { row: 0, column: 1 })
   assert.equal(buffer.dirty, true)
+})
+
+test("plain text insertion rejects newline-containing input", () => {
+  const buffer = createEditorBuffer("Alpha")
+
+  assert.throws(() => insertText(buffer, "line 1\nline 2"), /does not accept newline characters/i)
+  assert.throws(() => insertText(buffer, "line 1\rline 2"), /does not accept newline characters/i)
 })
 
 test("backspace and delete update text safely at line boundaries", () => {
@@ -74,7 +89,7 @@ test("arrow movement stays within valid row and column bounds", () => {
 
 test("dirty state stays false for pure cursor movement and flips true for newline insertion", () => {
   const moved = moveCursorRight(createEditorBuffer("Alpha"))
-  const inserted = insertNewline({ ...moved, cursor: { row: 0, column: 5 } })
+  const inserted = insertNewline(createLineBoundaryBuffer())
 
   assert.equal(moved.dirty, false)
   assert.deepEqual(inserted.lines, ["Alpha", ""])

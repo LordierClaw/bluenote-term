@@ -2,7 +2,7 @@ import type { ShellState } from "../shell/shell-state"
 import {
   backspace,
   deleteForward,
-  insertCharacter,
+  insertText,
   insertNewline,
   moveCursorDown,
   moveCursorLeft,
@@ -28,7 +28,7 @@ export function applyEditorIntent(state: ShellState, buffer: EditorBuffer, inten
 
   switch (intent.kind) {
     case "insertText":
-      return insertCharacter(buffer, intent.text)
+      return insertText(buffer, intent.text)
     case "newline":
       return insertNewline(buffer)
     case "backspace":
