@@ -1,8 +1,8 @@
 import type { ResolveBlueNoteRootOptions } from "../config/root"
 import { bootstrapTuiApp } from "./bootstrap"
-import type { TuiBootstrapInfo } from "./types"
+import type { TuiAppState, TuiBootstrapInfo } from "./types"
 
-export type { TuiBootstrapInfo } from "./types"
+export type { TuiAppState, TuiBootstrapInfo } from "./types"
 
 export function getTuiBootstrapInfo(options: ResolveBlueNoteRootOptions = {}): TuiBootstrapInfo {
   return bootstrapTuiApp(options)

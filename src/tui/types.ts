@@ -6,3 +6,7 @@ export interface TuiBootstrapInfo {
   rootPath: string
   nextPhase: "phase-3-tui-shell"
 }
+
+export interface TuiAppState {
+  bootstrap: TuiBootstrapInfo
+}
