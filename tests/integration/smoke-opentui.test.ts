@@ -6,7 +6,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 
 import { createManagedRootHarness, runWorkspaceScript } from "../helpers/cli"
 
-test("smoke-opentui script reports validated missing-root shell startup", async () => {
+test("smoke-opentui script reports validated live missing-root shell startup", async () => {
   const tempRoot = await mkdtemp(path.join(os.tmpdir(), "bluenote-smoke-opentui-missing-root-"))
   const missingRootPath = path.join(tempRoot, "missing-root")
 
@@ -15,13 +15,13 @@ test("smoke-opentui script reports validated missing-root shell startup", async 
 
     assert.equal(result.exitCode, 0)
     assert.equal(result.stderr, "")
-    assert.match(result.stdout, /OpenTUI smoke check passed for BlueNote \(missing-root shell startup validated\)\./u)
+    assert.match(result.stdout, /OpenTUI smoke check passed for BlueNote \(live missing-root shell startup validated\)\./u)
   } finally {
     await rm(tempRoot, { recursive: true, force: true })
   }
 })
 
-test("smoke-opentui script reports validated ready shell startup", async () => {
+test("smoke-opentui script reports validated live ready shell startup", async () => {
   const harness = await createManagedRootHarness("bluenote-smoke-opentui-ready-")
 
   try {
@@ -31,7 +31,7 @@ test("smoke-opentui script reports validated ready shell startup", async () => {
 
     assert.equal(result.exitCode, 0)
     assert.equal(result.stderr, "")
-    assert.match(result.stdout, /OpenTUI smoke check passed for BlueNote \(ready shell startup validated\)\./u)
+    assert.match(result.stdout, /OpenTUI smoke check passed for BlueNote \(live ready shell startup validated\)\./u)
   } finally {
     await harness.cleanup()
   }

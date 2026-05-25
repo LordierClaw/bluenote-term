@@ -1,3 +1,4 @@
+import { createCliRenderer, TextRenderable } from "@opentui/core"
 import type { ResolveBlueNoteRootOptions } from "../config/root"
 import {
   createEditorSession,
@@ -36,6 +37,210 @@ export interface TuiRuntime {
   shellState: ShellState
   editorSession: EditorSession | null
   quitRequested: boolean
+}
+
+const CTRL_C = "\u0003"
+
+function mapInputSequenceToShellKey(sequence: string): ShellKeyInput | null {
+  switch (sequence) {
+    case "\r":
+    case "\n":
+      return "Enter"
+    case "\t":
+      return "Tab"
+    case "\u0013":
+      return "Ctrl+S"
+    case "\u0004":
+      return "Ctrl+D"
+    case "\u001b[A":
+      return "ArrowUp"
+    case "\u001b[B":
+      return "ArrowDown"
+    case "\u001b[C":
+      return "ArrowRight"
+    case "\u001b[D":
+      return "ArrowLeft"
+    default:
+      if (sequence.length === 1 && sequence >= " " && sequence !== "\u007f") {
+        return sequence
+      }
+
+      return null
+  }
+}
+
+function mapInputChunkToShellKeys(chunk: string): ShellKeyInput[] {
+  const directMatch = mapInputSequenceToShellKey(chunk)
+
+  if (directMatch !== null) {
+    return [directMatch]
+  }
+
+  if (chunk.startsWith("\u001b")) {
+    return []
+  }
+
+  return [...chunk]
+    .map((sequence) => mapInputSequenceToShellKey(sequence))
+    .filter((key): key is ShellKeyInput => key !== null)
+}
+
+function renderRuntimeFrame(runtime: TuiRuntime): string {
+  return `${renderTuiRuntime(runtime).frame}\n`
+}
+
+function advanceRuntimeWithKey(runtime: TuiRuntime, key: ShellKeyInput): TuiRuntime {
+  return dispatchTuiKey(runtime, key)
+}
+
+async function launchStreamTuiApp(options: ResolveBlueNoteRootOptions = {}): Promise<number> {
+  let runtime = createTuiRuntime(options)
+  const stdin = process.stdin
+  const restoreRawMode = stdin.isTTY && typeof stdin.setRawMode === "function"
+  let finished = false
+
+  process.stdout.write(renderRuntimeFrame(runtime))
+
+  return await new Promise<number>((resolve) => {
+    const cleanup = () => {
+      stdin.off("data", onData)
+      stdin.off("end", onEnd)
+      stdin.off("close", onEnd)
+
+      if (restoreRawMode) {
+        stdin.setRawMode(false)
+      }
+
+      stdin.pause()
+    }
+
+    const finish = (exitCode: number) => {
+      if (finished) {
+        return
+      }
+
+      finished = true
+      cleanup()
+      resolve(exitCode)
+    }
+
+    const onEnd = () => {
+      finish(0)
+    }
+
+    const onData = (chunk: Buffer | string) => {
+      const text = chunk.toString()
+
+      if (text.includes(CTRL_C)) {
+        finish(0)
+        return
+      }
+
+      for (const key of mapInputChunkToShellKeys(text)) {
+        runtime = advanceRuntimeWithKey(runtime, key)
+
+        if (runtime.quitRequested) {
+          finish(0)
+          return
+        }
+
+        process.stdout.write(renderRuntimeFrame(runtime))
+      }
+    }
+
+    if (restoreRawMode) {
+      stdin.setRawMode(true)
+    }
+
+    stdin.resume()
+    stdin.on("data", onData)
+    stdin.on("end", onEnd)
+    stdin.on("close", onEnd)
+  })
+}
+
+async function launchOpenTuiApp(options: ResolveBlueNoteRootOptions = {}): Promise<number> {
+  const screenMode = process.env.BLUENOTE_TUI_TEST_SCREEN_MODE === "main-screen"
+    ? "main-screen"
+    : "alternate-screen"
+  const emitStartupFrame = process.env.BLUENOTE_TUI_TEST_EMIT_FRAME === "1"
+  const renderer = await createCliRenderer({
+    clearOnShutdown: true,
+    exitOnCtrlC: false,
+    screenMode,
+    useMouse: false,
+  })
+  const frame = new TextRenderable(renderer, {
+    content: "",
+    height: "100%",
+    width: "100%",
+  })
+
+  renderer.root.add(frame)
+
+  let runtime = createTuiRuntime(options)
+
+  return await new Promise<number>((resolve) => {
+    let emittedStartupFrame = false
+
+    const draw = () => {
+      frame.content = renderTuiRuntime(runtime).frame
+
+      if (emitStartupFrame && !emittedStartupFrame) {
+        process.stdout.write(renderRuntimeFrame(runtime))
+        emittedStartupFrame = true
+      }
+
+      renderer.requestRender()
+    }
+
+    const cleanup = () => {
+      renderer.removeInputHandler(onInput)
+      renderer.destroy()
+    }
+
+    const finish = (exitCode: number) => {
+      cleanup()
+      resolve(exitCode)
+    }
+
+    const onInput = (sequence: string) => {
+      if (sequence === CTRL_C) {
+        finish(0)
+        return true
+      }
+
+      const keys = mapInputChunkToShellKeys(sequence)
+
+      if (keys.length === 0) {
+        return false
+      }
+
+      for (const key of keys) {
+        runtime = advanceRuntimeWithKey(runtime, key)
+      }
+
+      if (runtime.quitRequested) {
+        finish(0)
+        return true
+      }
+
+      draw()
+      return true
+    }
+
+    renderer.addInputHandler(onInput)
+    renderer.start()
+    draw()
+  })
+}
+
+export async function launchTuiApp(options: ResolveBlueNoteRootOptions = {}): Promise<number> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return launchStreamTuiApp(options)
+  }
+
+  return launchOpenTuiApp(options)
 }
 
 function createRenderState(
@@ -382,5 +587,5 @@ const isMainModule = invokedPath
   : false
 
 if (isMainModule) {
-  console.log(renderTuiApp().frame)
+  process.exit(await launchTuiApp())
 }

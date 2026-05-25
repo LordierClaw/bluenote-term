@@ -15,7 +15,6 @@ import { rebuildIndexes, type RebuildIndexesOptions } from "../core/rebuild-inde
 import { searchNotes, type SearchNoteMatch } from "../core/search-notes"
 import { showNote } from "../core/show-note"
 import type { Clock } from "../platform/clock"
-import { renderTuiApp } from "../tui/app"
 import { runCompletionBackendCli, runCompletionCli } from "./completion"
 
 export interface CliRuntimeOptions {
@@ -23,6 +22,12 @@ export interface CliRuntimeOptions {
   migrateStorageOptions?: Pick<MigrateStorageOptions, "clock" | "randomSource">
   rebuildIndexesOptions?: Pick<RebuildIndexesOptions, "testHooks">
 }
+
+export interface TuiLaunchResult extends CliResult {
+  mode: "launch-tui"
+}
+
+export type CliInvocationResult = CliResult | TuiLaunchResult
 
 export function formatCliError(error: AppError): CliResult {
   const messageLines = [error.message]
@@ -128,7 +133,7 @@ export function formatMigrateCliResult(summary: ReturnType<typeof migrateStorage
   }
 }
 
-export function runCli(args: string[], version: string, runtime: CliRuntimeOptions = {}): CliResult {
+export function runCli(args: string[], version: string, runtime: CliRuntimeOptions = {}): CliInvocationResult {
   try {
     const [command, ...commandArgs] = args
 
@@ -159,11 +164,10 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
     }
 
     if (command === "tui") {
-      const rendered = renderTuiApp()
-
       return {
+        mode: "launch-tui",
         exitCode: 0,
-        stdout: `${rendered.frame}\n`,
+        stdout: "",
         stderr: "",
       }
     }

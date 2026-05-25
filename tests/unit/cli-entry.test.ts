@@ -53,29 +53,14 @@ test("runCli rejects unknown commands with guidance", () => {
   assert.match(result.stderr, /available commands/)
 })
 
-test("runCli routes tui to the Phase 3 shell without hiding existing commands", async () => {
-  const missingRootParent = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-entry-tui-"))
-  const missingRootPath = path.join(missingRootParent, "missing-root")
-  const previousRoot = process.env.BLUENOTE_ROOT
+test("runCli returns a dedicated launch result for the Phase 3 tui shell", async () => {
+  const result = runCli(["tui"], "0.1.0")
 
-  process.env.BLUENOTE_ROOT = missingRootPath
-
-  try {
-    const result = runCli(["tui"], "0.1.0")
-
-    assert.equal(result.exitCode, 0)
-    assert.equal(result.stderr, "")
-    assert.match(result.stdout, /BlueNote root missing/)
-    assert.match(result.stdout, /Run 'bn init' first\./)
-  } finally {
-    if (previousRoot === undefined) {
-      delete process.env.BLUENOTE_ROOT
-    } else {
-      process.env.BLUENOTE_ROOT = previousRoot
-    }
-
-    await rm(missingRootParent, { recursive: true, force: true })
-  }
+  assert.equal(result.exitCode, 0)
+  assert.ok("mode" in result)
+  assert.equal(result.mode, "launch-tui")
+  assert.equal(result.stdout, "")
+  assert.equal(result.stderr, "")
 })
 
 test("runCli accepts injected create-note dependencies for deterministic new-note tests", async () => {
