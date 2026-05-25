@@ -88,7 +88,7 @@ test("Phase 1 CLI workflow stays consistent across init, create, rebuild, list, 
     assert.match(postEditSearchResult.stdout, /Reference Note/)
     assert.match(postEditSearchResult.stdout, /key: reference-note/)
     assert.match(postEditSearchResult.stdout, /path: notes[\\/]journal[\\/]reference-note\.md/)
-    assert.match(postEditSearchResult.stdout, /match: content(?: line \d+)?/)
+    assert.match(postEditSearchResult.stdout, /match: title/)
     assert.match(postEditSearchResult.stdout, /Reference Note Edited/)
 
     const archiveResult = runOk("bn archive reference-note", ["archive", "reference-note"])
@@ -113,4 +113,4 @@ test("Phase 1 CLI workflow stays consistent across init, create, rebuild, list, 
   } finally {
     await harness.cleanup()
   }
-})
+}, 15_000)

@@ -821,4 +821,4 @@ The plan is complete when:
 - malformed notes are reported rather than silently rewritten
 - `$EDITOR` handoff works for `bn edit`
 - typecheck, tests, and smoke checks all pass
-- the CLI is ready to serve as the reusable foundation for Phase 2 TUI work
+- the CLI is ready to serve as the reusable foundation for Phase 3 TUI shell work

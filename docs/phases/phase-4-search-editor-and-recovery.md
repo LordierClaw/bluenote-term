@@ -1,4 +1,4 @@
-# Phase 3 — Search, Editing, and Recovery
+# Phase 4 — Search, Editing, and Recovery
 
 ## Goal
 

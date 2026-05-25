@@ -2,11 +2,11 @@
 
 ## Project intent
 
-BlueNote is a terminal-native, local-first note tool. This repository is currently in **preparation / scaffold mode**.
+BlueNote is a terminal-native, local-first note tool. This repository now has a delivered Phase 2 CLI/storage foundation and is preparing for Phase 3 TUI shell work.
 
-- Phase 1 scope is local/offline only.
-- Markdown files with frontmatter are the future source of truth.
-- Do not introduce AI features, network sync, hosted backends, or cloud-only assumptions during initial implementation.
+- Current delivered scope remains local/offline only.
+- Notes are plain Markdown files; BlueNote-managed metadata lives in `.state/notes/` sidecars.
+- Do not introduce AI features, network sync, hosted backends, or cloud-only assumptions during current implementation.
 
 ## Runtime and architecture rules
 
