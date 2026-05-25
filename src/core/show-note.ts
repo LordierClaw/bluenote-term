@@ -1,4 +1,3 @@
-import path from "node:path"
 import { existsSync } from "node:fs"
 
 import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions } from "../config/root"
