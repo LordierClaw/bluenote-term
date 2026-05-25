@@ -15,6 +15,7 @@ export interface ShellState {
   selectedNoteSelector: string | null
   transientMessage: ShellTransientMessage | null
   editorDirty: boolean
+  helpVisible: boolean
 }
 
 export function createInitialShellState(): ShellState {
@@ -24,5 +25,6 @@ export function createInitialShellState(): ShellState {
     selectedNoteSelector: null,
     transientMessage: null,
     editorDirty: false,
+    helpVisible: false,
   }
 }

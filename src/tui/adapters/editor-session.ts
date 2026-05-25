@@ -69,6 +69,7 @@ export function saveEditorSession(session: EditorSession, options: SaveEditorSes
       summary,
       session: {
         ...session,
+        selector: summary.key ?? session.selector,
         persistedBody: body,
         buffer: createEditorBuffer(body),
         saveError: null,

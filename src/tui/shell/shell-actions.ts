@@ -28,6 +28,7 @@ export function openSelectedNote(state: ShellState): ShellState {
     ...state,
     mode: "note",
     focusRegion: "main",
+    transientMessage: null,
   }
 }
 
@@ -41,6 +42,7 @@ export function enterEditorMode(state: ShellState): ShellState {
     mode: "editor",
     focusRegion: "main",
     editorDirty: false,
+    transientMessage: null,
   }
 }
 

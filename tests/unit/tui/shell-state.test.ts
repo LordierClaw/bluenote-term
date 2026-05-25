@@ -20,6 +20,7 @@ test("initial shell state starts in navigation mode with sidebar focus", () => {
     selectedNoteSelector: null,
     transientMessage: null,
     editorDirty: false,
+    helpVisible: false,
   })
 })
 
