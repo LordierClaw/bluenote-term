@@ -11,14 +11,14 @@ test("note browser loads sidebar notes and eagerly selects the first note detail
     notes: [
       {
         key: "alpha-key",
-        selector: "notes/inbox/alpha-note.md",
+        selector: "alpha-key",
         title: "Alpha Note",
         description: "Alpha summary",
         relativePath: "notes/inbox/alpha-note.md",
       },
       {
         key: "beta-key",
-        selector: "notes/inbox/beta-note.md",
+        selector: "beta-key",
         title: "Beta Note",
         description: "Beta summary",
         relativePath: "notes/inbox/beta-note.md",
@@ -29,7 +29,7 @@ test("note browser loads sidebar notes and eagerly selects the first note detail
     ok: true,
     note: {
       key: "alpha-key",
-      selector: "notes/inbox/alpha-note.md",
+      selector: "alpha-key",
       title: "Alpha Note",
       description: "Alpha summary",
       relativePath: "notes/inbox/alpha-note.md",
@@ -41,14 +41,11 @@ test("note browser loads sidebar notes and eagerly selects the first note detail
     const result = loadInitialNoteBrowserState({ override: "/tmp/bluenote-root", env: {}, cwd: "/" })
 
     assert.equal(result.status, "ready")
-    assert.deepEqual(result.notes.map((note) => note.selector), [
-      "notes/inbox/alpha-note.md",
-      "notes/inbox/beta-note.md",
-    ])
-    assert.equal(result.selectedNote?.selector, "notes/inbox/alpha-note.md")
+    assert.deepEqual(result.notes.map((note) => note.selector), ["alpha-key", "beta-key"])
+    assert.equal(result.selectedNote?.selector, "alpha-key")
     assert.equal(detailSpy.mock.calls.length, 1)
     assert.deepEqual(detailSpy.mock.calls[0]?.[0], {
-      selector: "notes/inbox/alpha-note.md",
+      selector: "alpha-key",
       override: "/tmp/bluenote-root",
       env: {},
       cwd: "/",

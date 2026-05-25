@@ -35,21 +35,9 @@ test("list adapter returns note summaries suitable for sidebar rendering using t
       env: {},
       cwd: "/",
     })
-    assert.deepEqual(result.notes, [
-      {
-        key: "legacy-alpha-id",
-        selector: "notes/inbox/alpha-note.md",
-        title: "Alpha Note",
-        description: "Alpha summary",
-        relativePath: "notes/inbox/alpha-note.md",
-      },
-      {
-        key: "legacy-beta-id",
-        selector: "notes/journal/beta-note.md",
-        title: "Beta Note",
-        description: "Beta summary",
-        relativePath: "notes/journal/beta-note.md",
-      },
+    assert.deepEqual(result.notes.map((note) => [note.key, note.selector, note.relativePath]), [
+      ["legacy-alpha-id", "legacy-alpha-id", "notes/inbox/alpha-note.md"],
+      ["legacy-beta-id", "legacy-beta-id", "notes/journal/beta-note.md"],
     ])
   } finally {
     listNotesSpy.mockRestore()

@@ -16,7 +16,7 @@ test("detail adapter loads a selected note suitable for main-pane rendering usin
 
   try {
     const result = loadNoteDetail({
-      selector: "notes/inbox/detail-note.md",
+      selector: "legacy-detail-id",
       override: "/tmp/bluenote-root",
       env: {},
       cwd: "/",
@@ -29,14 +29,14 @@ test("detail adapter loads a selected note suitable for main-pane rendering usin
 
     assert.equal(showNoteSpy.mock.calls.length, 1)
     assert.deepEqual(showNoteSpy.mock.calls[0]?.[0], {
-      selector: "notes/inbox/detail-note.md",
+      selector: "legacy-detail-id",
       override: "/tmp/bluenote-root",
       env: {},
       cwd: "/",
     })
     assert.deepEqual(result.note, {
       key: "legacy-detail-id",
-      selector: "notes/inbox/detail-note.md",
+      selector: "legacy-detail-id",
       title: "Detail Note",
       description: "Detail summary",
       relativePath: "notes/inbox/detail-note.md",
