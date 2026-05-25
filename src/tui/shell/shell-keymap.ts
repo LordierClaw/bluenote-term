@@ -9,6 +9,8 @@ export type ShellKeyInput =
   | "ArrowUp"
   | "ArrowLeft"
   | "ArrowRight"
+  | "Backspace"
+  | "Delete"
   | "Escape"
   | "Tab"
   | "Enter"
@@ -72,6 +74,10 @@ function mapEditorIntent(key: ShellKeyInput): EditorIntent | null {
       return { kind: "moveUp" }
     case "ArrowDown":
       return { kind: "moveDown" }
+    case "Backspace":
+      return { kind: "backspace" }
+    case "Delete":
+      return { kind: "deleteForward" }
     case "Enter":
       return { kind: "newline" }
     default:

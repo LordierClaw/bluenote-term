@@ -108,6 +108,25 @@ test("save and discard shortcuts only emit actions when the editor buffer is dir
   assert.equal(dirtyDiscard.effect.type, "discard")
 })
 
+test("backspace and delete route to editor intents only while editing", () => {
+  const noteState = openSelectedNote(selectNote(createInitialShellState(), "beta"))
+  const editorState = enterEditorMode(noteState)
+
+  const editorBackspace = applyKey("Backspace", editorState)
+  const editorDelete = applyKey("Delete", editorState)
+  const noteBackspace = applyKey("Backspace", noteState)
+  const noteDelete = applyKey("Delete", noteState)
+  const navigationBackspace = applyKey("Backspace")
+  const navigationDelete = applyKey("Delete")
+
+  assert.deepEqual(editorBackspace.effect, { type: "editor-intent", intent: { kind: "backspace" } })
+  assert.deepEqual(editorDelete.effect, { type: "editor-intent", intent: { kind: "deleteForward" } })
+  assert.equal(noteBackspace.effect.type, "none")
+  assert.equal(noteDelete.effect.type, "none")
+  assert.equal(navigationBackspace.effect.type, "none")
+  assert.equal(navigationDelete.effect.type, "none")
+})
+
 test("question mark toggles help state and q quits cleanly from non-dirty states", () => {
   const helpOn = applyKey("?", createInitialShellState())
   const helpOff = applyKey("?", helpOn.shellState)

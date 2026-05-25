@@ -43,3 +43,27 @@ test("editor input maps cursor and deletion intents to editor buffer operations"
   assert.deepEqual(deleted.lines, ["Alpha", "Beta"])
   assert.deepEqual(deleted.cursor, { row: 1, column: 0 })
 })
+
+test("editor deletion intents stay inert outside editor mode and distinguish backward vs forward deletion", () => {
+  const navigationState = createInitialShellState()
+  const editorState = createEditorState()
+  const buffer = {
+    lines: ["Alpha"],
+    cursor: { row: 0, column: 2 },
+    dirty: false,
+  }
+
+  const inertBackspace = applyEditorIntent(navigationState, buffer, { kind: "backspace" })
+  const inertDelete = applyEditorIntent(navigationState, buffer, { kind: "deleteForward" })
+  const backspaced = applyEditorIntent(editorState, buffer, { kind: "backspace" })
+  const deletedForward = applyEditorIntent(editorState, buffer, { kind: "deleteForward" })
+
+  assert.deepEqual(inertBackspace, buffer)
+  assert.deepEqual(inertDelete, buffer)
+  assert.deepEqual(backspaced.lines, ["Apha"])
+  assert.deepEqual(backspaced.cursor, { row: 0, column: 1 })
+  assert.equal(backspaced.dirty, true)
+  assert.deepEqual(deletedForward.lines, ["Alha"])
+  assert.deepEqual(deletedForward.cursor, { row: 0, column: 2 })
+  assert.equal(deletedForward.dirty, true)
+})

@@ -80,8 +80,15 @@ test("tui keyflow covers note-navigation-note transitions, stale selection fallb
 
     runtime = dispatchTuiKey(runtime, "Enter")
     runtime = dispatchTuiKey(runtime, "i")
-    runtime = dispatchTuiKey(runtime, "!")
+    runtime = dispatchTuiKey(runtime, "a")
+    runtime = dispatchTuiKey(runtime, "b")
+    runtime = dispatchTuiKey(runtime, "ArrowLeft")
+    runtime = dispatchTuiKey(runtime, "Backspace")
+    runtime = dispatchTuiKey(runtime, "a")
+    runtime = dispatchTuiKey(runtime, "Delete")
+    runtime = dispatchTuiKey(runtime, "?")
     assert.equal(runtime.shellState.mode, "editor")
+    assert.equal(runtime.editorSession?.buffer.lines.join("\n"), "a")
     assert.equal(runtime.shellState.editorDirty, true)
 
     const blockedQuit = dispatchTuiKey(runtime, "q")

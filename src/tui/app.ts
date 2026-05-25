@@ -45,6 +45,8 @@ function mapInputSequenceToShellKey(sequence: string): ShellKeyInput | null {
   switch (sequence) {
     case "\u001b":
       return "Escape"
+    case "\u007f":
+      return "Backspace"
     case "\r":
     case "\n":
       return "Enter"
@@ -62,8 +64,10 @@ function mapInputSequenceToShellKey(sequence: string): ShellKeyInput | null {
       return "ArrowRight"
     case "\u001b[D":
       return "ArrowLeft"
+    case "\u001b[3~":
+      return "Delete"
     default:
-      if (sequence.length === 1 && sequence >= " " && sequence !== "\u007f") {
+      if (sequence.length === 1 && sequence >= " ") {
         return sequence
       }
 
