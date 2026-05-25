@@ -118,10 +118,10 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   return root
 }
 
-export function routeEditorKey(sequence: string, controller: WorkspaceController, onExit?: () => void): boolean {
+export function routeEditorKey(sequence: string, controller: WorkspaceController, onExit?: () => void, onInvalidate?: () => void): boolean {
   switch (sequence) {
     case "\u0013":
-      controller.runCommand("/save")
+      void controller.saveEditor().then(() => onInvalidate?.())
       return true
     case "\u0006":
       controller.runCommand("/find")

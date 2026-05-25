@@ -259,6 +259,34 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(calls, ["list", "show:daily-plan"])
   })
 
+  test("async save completion does not replace a different active editor", async () => {
+    let finishPersist!: (note: TuiNote) => void
+    const { deps } = createDeps({
+      persistEditorBody: (note, body) =>
+        new Promise<TuiNote>((resolve) => {
+          finishPersist = resolve
+          return { ...note, body }
+        }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    controller.focusManagerItem(3)
+    controller.openFocusedManagerItem()
+    controller.updateEditorBody("Async daily body")
+    const savePromise = controller.saveEditor()
+
+    controller.showManager()
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem({ confirmed: true })
+    assert.equal(controller.getState().editor?.note.key, "archive-review")
+
+    finishPersist({ ...notesByKey["daily-plan"], body: "Async daily body" })
+    await savePromise
+
+    assert.equal(controller.getState().editor?.note.key, "archive-review")
+    assert.equal(controller.getState().editor?.body, "Archive body")
+  })
+
   test("selecting a command search result closes search and dispatches by command name", () => {
     const commandContexts: string[] = []
     const { deps } = createDeps({

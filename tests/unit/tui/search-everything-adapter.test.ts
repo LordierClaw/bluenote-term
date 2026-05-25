@@ -118,7 +118,7 @@ describe("TUI Search Everything adapter", () => {
   test("returns slash-prefixed command results", () => {
     assert.deepEqual(
       TUI_COMMANDS.map((command) => command.name),
-      ["/new", "/archive", "/delete", "/rebuild", "/migrate", "/find", "/replace"],
+      ["/new", "/archive", "/delete", "/rebuild", "/migrate", "/find", "/replace", "/save"],
     )
 
     const results = buildSearchEverythingResults("/re", createDeps())

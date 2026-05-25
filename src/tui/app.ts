@@ -1,13 +1,19 @@
+import path from "node:path"
 import { createCliRenderer, type BoxRenderable, type CliRenderer } from "@opentui/core"
 
+import { resolveBlueNoteRoot } from "../config/root"
 import { listNotes } from "../core/list-notes"
+import { rebuildIndexes } from "../core/rebuild-indexes"
 import { searchNotes } from "../core/search-notes"
 import { showNote } from "../core/show-note"
 import type { CliResult } from "../core/types"
+import { systemClock, type Clock } from "../platform/clock"
+import { createNoteRepository } from "../storage/note-repository"
 import { renderEditorScreen, routeEditorKey } from "./render-editor"
 import { renderManagerScreen, routeManagerKey } from "./render-manager"
 import { renderSearchEverythingScreen, routeSearchEverythingKey } from "./render-search-everything"
-import { createWorkspaceController, type WorkspaceController } from "./workspace-controller"
+import type { TuiNote } from "./state"
+import { createWorkspaceController, type WorkspaceCommandHandler, type WorkspaceController } from "./workspace-controller"
 
 export interface TuiBootstrapInfo {
   appName: string
@@ -26,6 +32,12 @@ export interface RunningTuiWorkspace {
   destroy: () => void
 }
 
+export interface DefaultWorkspaceControllerOptions {
+  rootPath?: string
+  clock?: Clock
+  commandHandlers?: Partial<Record<string, WorkspaceCommandHandler>>
+}
+
 export function getTuiBootstrapInfo(): TuiBootstrapInfo {
   return {
     appName: "BlueNote",
@@ -38,11 +50,27 @@ export function formatTuiBootstrapMessage(info: TuiBootstrapInfo = getTuiBootstr
   return `${info.appName} TUI workspace bootstrap ready (${info.status}). Next: ${info.nextPhase}.\n`
 }
 
-function createDefaultWorkspaceController(): WorkspaceController {
+function persistTuiEditorBody(rootPath: string, note: TuiNote, body: string, clock: Clock): TuiNote {
+  const repository = createNoteRepository(rootPath)
+  repository.syncEditedNote(path.join(rootPath, note.relativePath), {
+    title: note.title,
+    body,
+    updatedAt: clock.now().toISOString(),
+  })
+  rebuildIndexes({ override: rootPath })
+
+  return showNote({ override: rootPath, selector: note.key })
+}
+
+export function createDefaultWorkspaceController(options: DefaultWorkspaceControllerOptions = {}): WorkspaceController {
+  const rootPath = resolveBlueNoteRoot({ override: options.rootPath })
+  const clock = options.clock ?? systemClock
+
   return createWorkspaceController({
-    listNotes: () => listNotes(),
-    showNote: (selector) => showNote({ selector }),
-    searchNotes: (query) => searchNotes(query),
+    listNotes: () => listNotes({ override: rootPath }),
+    showNote: (selector) => showNote({ override: rootPath, selector }),
+    searchNotes: (query) => searchNotes(query, { override: rootPath }),
+    persistEditorBody: (note, body) => persistTuiEditorBody(rootPath, note, body, clock),
     commandHandlers: {
       "/rebuild": () => {},
       "/migrate": () => {},
@@ -52,6 +80,7 @@ function createDefaultWorkspaceController(): WorkspaceController {
       "/find": () => {},
       "/replace": () => {},
       "/save": () => {},
+      ...options.commandHandlers,
     },
   })
 }
@@ -61,7 +90,12 @@ export interface RoutedWorkspaceKey {
   exit?: boolean
 }
 
-export function routeWorkspaceKey(sequence: string, controller: WorkspaceController, onExit: () => void): RoutedWorkspaceKey {
+export function routeWorkspaceKey(
+  sequence: string,
+  controller: WorkspaceController,
+  onExit: () => void,
+  onInvalidate: () => void = () => {},
+): RoutedWorkspaceKey {
   const state = controller.getState()
 
   if (sequence === "\u0003") {
@@ -79,7 +113,7 @@ export function routeWorkspaceKey(sequence: string, controller: WorkspaceControl
   }
 
   if (state.screen === "editor") {
-    return { handled: routeEditorKey(sequence, controller, onExit) }
+    return { handled: routeEditorKey(sequence, controller, onExit, onInvalidate) }
   }
 
   return { handled: routeManagerKey(sequence, controller, onExit), exit: sequence === "q" || undefined }
@@ -131,7 +165,7 @@ export async function startTuiWorkspace(options: StartTuiWorkspaceOptions = {}):
       return false
     }
 
-    const routed = routeWorkspaceKey(sequence, controller, destroy)
+    const routed = routeWorkspaceKey(sequence, controller, destroy, rerender)
     if (routed.handled && !routed.exit) {
       rerender()
     }

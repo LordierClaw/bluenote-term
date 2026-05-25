@@ -37,6 +37,10 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
       return { blocked: false }
     },
     updateEditorBody: (body) => calls.push(`updateEditorBody:${body}`),
+    saveEditor: async () => {
+      calls.push("saveEditor")
+      return { blocked: false }
+    },
     openSearch: (query) => {
       calls.push(`openSearch:${query ?? ""}`)
       state.screen = "search"
@@ -69,6 +73,13 @@ describe("TUI render keyboard routing", () => {
 
     assert.equal(exited, false)
     assert.deepEqual(calls, [])
+  })
+
+  test("editor Ctrl+S dispatches the workspace save action", () => {
+    const { controller, calls } = createController("editor")
+
+    assert.equal(routeEditorKey("\u0013", controller), true)
+    assert.deepEqual(calls, ["saveEditor"])
   })
 
   test("workspace route opens Search Everything with Ctrl+P but leaves slash to editor textarea", () => {

@@ -109,6 +109,12 @@ export const TUI_COMMANDS: readonly TuiCommandDefinition[] = [
     usage: "/replace <query> <replacement>",
     shortcut: "Ctrl+H",
   },
+  {
+    name: "/save",
+    description: "Save the active editor buffer",
+    usage: "/save",
+    shortcut: "Ctrl+S",
+  },
 ]
 
 function normalizePath(path: string): string {
@@ -308,6 +314,7 @@ function strictCommandScore(query: string, commandName: string): number {
 
 function buildCommandResults(query: string): SearchEverythingCommandResult[] {
   const trimmedQuery = query.trim()
+  const commandQuery = trimmedQuery.split(/\s+/u)[0] ?? ""
 
   if (!trimmedQuery.startsWith("/")) {
     return []
@@ -318,7 +325,7 @@ function buildCommandResults(query: string): SearchEverythingCommandResult[] {
     id: `command:${command.name}`,
     label: command.name,
     detail: command.description,
-    score: strictCommandScore(trimmedQuery, command.name),
+    score: strictCommandScore(commandQuery, command.name),
     ...command,
   })).filter((command) => command.score > 0)
 }

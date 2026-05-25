@@ -1,3 +1,4 @@
+import type { SaveEditorBufferDependencies } from "./adapters/editor-buffer-adapter"
 import {
   buildManagerItems,
   moveManagerSelection,
@@ -43,6 +44,7 @@ export interface WorkspaceControllerDependencies {
   listNotes: () => readonly NoteManagerSummary[]
   showNote: (selector: string) => TuiNote
   searchNotes: (query: string) => readonly SearchNoteMatch[]
+  persistEditorBody?: SaveEditorBufferDependencies["persist"]
   commandHandlers?: Partial<Record<string, WorkspaceCommandHandler>>
 }
 
@@ -56,6 +58,7 @@ export interface WorkspaceController {
   showManager: () => WorkspaceActionResult
   showEditor: () => WorkspaceActionResult
   updateEditorBody: (body: string) => void
+  saveEditor: () => Promise<WorkspaceActionResult>
   openSearch: (query?: string) => void
   updateSearchQuery: (query: string) => void
   focusSearchResult: (index: number) => void
@@ -132,6 +135,41 @@ function mustConfirmDirtyReplacement(state: TuiState, nextNoteKey: string, optio
 
 function mustConfirmDirtyDestructiveAction(state: TuiState, command: string, options: WorkspaceActionOptions): boolean {
   return Boolean(state.editor?.dirty && destructiveCommands.has(commandNameFor(command)) && options.confirmed !== true)
+}
+
+function applySavedEditor(state: TuiState, persistedNote: TuiNote, submittedBody = persistedNote.body): TuiState {
+  if (state.editor?.note.key !== persistedNote.key) {
+    return state
+  }
+
+  if (state.editor.body !== submittedBody) {
+    return {
+      ...state,
+      editor: {
+        ...state.editor,
+        note: {
+          ...state.editor.note,
+          body: state.editor.body,
+        },
+        savedBody: persistedNote.body,
+        dirty: state.editor.body !== persistedNote.body,
+      },
+    }
+  }
+
+  return {
+    ...state,
+    editor: {
+      note: toTuiNote(persistedNote),
+      body: persistedNote.body,
+      savedBody: persistedNote.body,
+      dirty: false,
+    },
+  }
+}
+
+function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
+  return typeof (value as Promise<T>).then === "function"
 }
 
 export function createWorkspaceController(deps: WorkspaceControllerDependencies): WorkspaceController {
@@ -278,6 +316,26 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       state = markEditorBodyChanged(state, body)
     },
 
+    saveEditor: async () => {
+      if (!state.editor) {
+        return ok()
+      }
+
+      const persist = deps.persistEditorBody ?? ((note, body) => ({ ...note, body }))
+      const noteToPersist = toTuiNote(state.editor.note)
+      const submittedBody = state.editor.body
+      const persistedNote = persist(noteToPersist, submittedBody)
+
+      if (isPromiseLike(persistedNote)) {
+        const savedNote = await persistedNote
+        state = applySavedEditor(state, savedNote, submittedBody)
+        return ok()
+      }
+
+      state = applySavedEditor(state, persistedNote, submittedBody)
+      return ok()
+    },
+
     openSearch: (query = "") => {
       state = openSearchEverything(state, { query })
       rebuildSearchResults(query)
@@ -358,6 +416,11 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       }
 
       const commandName = commandNameFor(command)
+      if (commandName === "/save") {
+        void controller.saveEditor()
+        return ok()
+      }
+
       deps.commandHandlers?.[commandName]?.({ state: cloneStateSnapshot(state), command })
       return ok()
     },
