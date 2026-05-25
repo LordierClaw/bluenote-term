@@ -15,12 +15,14 @@ import { rebuildIndexes, type RebuildIndexesOptions } from "../core/rebuild-inde
 import { searchNotes, type SearchNoteMatch } from "../core/search-notes"
 import { showNote } from "../core/show-note"
 import type { Clock } from "../platform/clock"
+import { runTuiCli } from "../tui/app"
 import { runCompletionBackendCli, runCompletionCli } from "./completion"
 
 export interface CliRuntimeOptions {
   createNoteOptions?: Pick<Parameters<typeof createNote>[0], "clock" | "randomSource">
   migrateStorageOptions?: Pick<MigrateStorageOptions, "clock" | "randomSource">
   rebuildIndexesOptions?: Pick<RebuildIndexesOptions, "testHooks">
+  tuiRunner?: () => CliResult
 }
 
 export function formatCliError(error: AppError): CliResult {
@@ -77,6 +79,7 @@ export function formatHelp(version: string): string {
     "  rebuild      Rebuild derived metadata and search indexes",
     "  migrate      Convert legacy frontmatter notes into plain files + sidecars",
     "  completion   <bash|zsh|fish>  Print shell completion setup",
+    "  tui          Launch the Phase 3 TUI workspace",
   ].join("\n") + "\n"
 }
 
@@ -150,6 +153,10 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
 
     if (command === "completion") {
       return runCompletionCli(commandArgs)
+    }
+
+    if (command === "tui") {
+      return (runtime.tuiRunner ?? runTuiCli)()
     }
 
     if (command === "complete") {

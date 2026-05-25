@@ -20,7 +20,7 @@ test("generateCompletionScript returns shell-specific hooks", () => {
 
 test("generated completion scripts mention all commands and selector-related flags", () => {
   assert.ok(COMMAND_NAMES.includes("migrate"))
-  assert.equal((COMMAND_NAMES as readonly string[]).includes("tui"), false)
+  assert.ok(COMMAND_NAMES.includes("tui"))
 
   for (const shell of ["bash", "zsh", "fish"] as const) {
     const script = generateCompletionScript(shell)

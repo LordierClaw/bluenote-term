@@ -8,18 +8,18 @@ import { assertManagedRootLayout, createManagedRootHarness, runCli } from "../he
 const workspaceRoot = path.resolve(import.meta.dir, "../..")
 const packageJsonPath = path.join(workspaceRoot, "package.json")
 
-test("bn --help prints the visible Phase 2 command surface", () => {
+test("bn --help prints the visible Phase 2 command surface and Phase 3 TUI launch command", () => {
   const result = runCli(["--help"])
 
   assert.equal(result.exitCode, 0)
   assert.equal(result.stderr.toString(), "")
 
   const output = result.stdout.toString()
-  for (const command of ["init", "new", "list", "show", "search", "edit", "archive", "delete", "rebuild", "migrate", "completion"]) {
+  for (const command of ["init", "new", "list", "show", "search", "edit", "archive", "delete", "rebuild", "migrate", "completion", "tui"]) {
     assert.match(output, new RegExp(`(^|\\n)  ${command}(\\s|$)`, "m"))
   }
 
-  assert.doesNotMatch(output, /(^|\n)  tui(\s|$)/m)
+  assert.match(output, /tui\s+Launch the Phase 3 TUI workspace/)
 })
 
 test("package.json smoke:cli runs the dedicated smoke script", async () => {

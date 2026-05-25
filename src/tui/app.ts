@@ -1,3 +1,5 @@
+import type { CliResult } from "../core/types"
+
 export interface TuiBootstrapInfo {
   appName: string
   status: string
@@ -7,8 +9,28 @@ export interface TuiBootstrapInfo {
 export function getTuiBootstrapInfo(): TuiBootstrapInfo {
   return {
     appName: "BlueNote",
-    status: "scaffold-ready",
-    nextPhase: "phase-3-tui-workspace",
+    status: "phase-3-workspace-bootstrap",
+    nextPhase: "phase-3-render-screens",
+  }
+}
+
+export function formatTuiBootstrapMessage(info: TuiBootstrapInfo = getTuiBootstrapInfo()): string {
+  return `${info.appName} TUI workspace bootstrap ready (${info.status}). Next: ${info.nextPhase}.\n`
+}
+
+export function runTuiCli(): CliResult {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return {
+      exitCode: 1,
+      stdout: "",
+      stderr: "BlueNote TUI requires an interactive terminal. Run `bn tui` from a TTY.\n",
+    }
+  }
+
+  return {
+    exitCode: 0,
+    stdout: formatTuiBootstrapMessage(),
+    stderr: "",
   }
 }
 
@@ -18,6 +40,5 @@ const isMainModule = invokedPath
   : false
 
 if (isMainModule) {
-  const info = getTuiBootstrapInfo()
-  console.log(`${info.appName} TUI scaffold ready (${info.status}). Next: ${info.nextPhase}.`)
+  process.stdout.write(formatTuiBootstrapMessage())
 }

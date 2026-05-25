@@ -6,7 +6,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises"
 
 import { formatHelp, formatSearchMatches, runCli } from "../../src/cli/entry"
 
-test("formatHelp lists all Phase 2 commands with actionable usage", () => {
+test("formatHelp lists all Phase 2 commands and the Phase 3 TUI launch command with actionable usage", () => {
   const help = formatHelp("0.1.0")
 
   assert.match(help, /BlueNote/)
@@ -25,7 +25,7 @@ test("formatHelp lists all Phase 2 commands with actionable usage", () => {
   assert.match(help, /rebuild\s+Rebuild derived metadata and search indexes/)
   assert.match(help, /migrate\s+Convert legacy frontmatter notes into plain files \+ sidecars/)
   assert.match(help, /completion\s+<bash\|zsh\|fish>\s+Print shell completion setup/)
-  assert.doesNotMatch(help, /(^|\n)  tui(\s|$)/m)
+  assert.match(help, /tui\s+Launch the Phase 3 TUI workspace/)
 })
 
 test("runCli returns version output for --version", () => {
@@ -53,13 +53,25 @@ test("runCli rejects unknown commands with guidance", () => {
   assert.match(result.stderr, /available commands/)
 })
 
-test("runCli rejects hidden tui command with the standard unknown-command guidance", () => {
-  const result = runCli(["tui"], "0.1.0")
+test("runCli delegates tui to an injectable TUI runner and returns its result", () => {
+  let callCount = 0
 
-  assert.equal(result.exitCode, 1)
-  assert.equal(result.stdout, "")
-  assert.match(result.stderr, /Unknown command: tui/)
-  assert.match(result.stderr, /Use --help/)
+  const result = runCli(["tui"], "0.1.0", {
+    tuiRunner() {
+      callCount += 1
+
+      return {
+        exitCode: 0,
+        stdout: "TUI runner launched.\n",
+        stderr: "",
+      }
+    },
+  })
+
+  assert.equal(callCount, 1)
+  assert.equal(result.exitCode, 0)
+  assert.equal(result.stdout, "TUI runner launched.\n")
+  assert.equal(result.stderr, "")
 })
 
 test("runCli accepts injected create-note dependencies for deterministic new-note tests", async () => {
