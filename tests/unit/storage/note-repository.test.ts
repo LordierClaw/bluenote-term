@@ -1,8 +1,9 @@
-import { test } from "bun:test"
+import { spyOn, test } from "bun:test"
 import assert from "node:assert/strict"
+import * as fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 
 import { UsageError } from "../../../src/core/errors"
 import { parsePlainNote } from "../../../src/storage/plain-note"
@@ -119,25 +120,38 @@ test("repository archive rolls back the destination file when removing the sourc
       `---\nid: note-123\nschemaVersion: 1\ntitle: Example title\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:15:00.000Z\nupdatedAt: 2026-05-21T10:15:00.000Z\n---\nHello from BlueNote.\n`,
       "utf8",
     )
-    await chmod(inboxPath, 0o555)
 
     const repository = createNoteRepository(rootPath)
+    const originalRmSync = fs.rmSync
+    const sourceRemovalFailure = new Error("simulated source removal failure")
+    const rmMock = spyOn(fs, "rmSync").mockImplementation((...args: Parameters<typeof fs.rmSync>) => {
+      const [targetPath] = args
 
-    assert.throws(
-      () => repository.archive(sourcePath, "2026-05-21T12:30:00.000Z"),
-      (error) => {
-        assert.ok(error instanceof UsageError)
-        assert.match(error.message, /Could not archive note 'notes[\\/]inbox[\\/]note-123\.md'\./)
-        assert.equal(error.hint, "Ensure the note exists inside BLUENOTE_ROOT and the archive path is writable.")
+      if (path.resolve(String(targetPath)) === path.resolve(sourcePath)) {
+        throw sourceRemovalFailure
+      }
 
-        return true
-      },
-    )
+      return originalRmSync(...args)
+    })
+
+    try {
+      assert.throws(
+        () => repository.archive(sourcePath, "2026-05-21T12:30:00.000Z"),
+        (error) => {
+          assert.ok(error instanceof UsageError)
+          assert.match(error.message, /Could not archive note 'notes[\\/]inbox[\\/]note-123\.md'\./)
+          assert.equal(error.hint, "Ensure the note exists inside BLUENOTE_ROOT and the archive path is writable.")
+          assert.equal(error.cause, sourceRemovalFailure)
+          return true
+        },
+      )
+    } finally {
+      rmMock.mockRestore()
+    }
 
     await access(sourcePath)
     await assert.rejects(() => access(archivedPath))
   } finally {
-    await chmod(inboxPath, 0o755).catch(() => undefined)
     await rm(rootPath, { recursive: true, force: true })
   }
 })
