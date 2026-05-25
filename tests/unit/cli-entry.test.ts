@@ -25,7 +25,7 @@ test("formatHelp lists Phase 2 commands plus the Phase 3 tui entrypoint with act
   assert.match(help, /rebuild\s+Rebuild derived metadata and search indexes/)
   assert.match(help, /migrate\s+Convert legacy frontmatter notes into plain files \+ sidecars/)
   assert.match(help, /completion\s+<bash\|zsh\|fish>\s+Print shell completion setup/)
-  assert.match(help, /tui\s+Launch the Phase 3 terminal shell \(shows a friendly startup state when no root exists\)/)
+  assert.match(help, /tui\s+Launch the Phase 3 live terminal shell \(browse notes, edit inline, friendly startup when no root exists\)/)
 })
 
 test("runCli returns version output for --version", () => {

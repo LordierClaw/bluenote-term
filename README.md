@@ -38,7 +38,9 @@ bun run smoke:cli
 - Selectors are key-first for everyday use; `show`, `edit`, `archive`, and `delete --force` accept canonical `key|path` selectors.
 - `bn search` prints grouped note blocks with the title first, then key, path, and the highest-value match label or excerpt.
 - The visible CLI command surface is `init`, `new`, `list`, `show`, `search`, `edit`, `archive`, `delete`, `rebuild`, `migrate`, `completion`, and `tui`.
-- `bn tui` now exposes the Phase 3 terminal shell entrypoint while preserving the existing Phase 2 command names and behaviors.
+- `bn tui` now launches a live Phase 3 terminal shell while preserving the existing Phase 2 command names and behaviors.
+- The current shell supports note browsing, opening a note, returning to navigation with `Escape`, entering inline editor mode, and editing through the shared shell keymap.
+- In editor mode, text entry, cursor movement, `Backspace`, `Delete`, save (`Ctrl+S`), and discard (`Ctrl+D`) all flow through the live shell runtime.
 - When no managed root exists yet, `bn tui` shows a friendly startup state with the same `bn init` guidance used by the TUI empty-state screens.
 
 ## Completion and migration

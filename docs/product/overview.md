@@ -23,6 +23,8 @@ Delivered by the distinct Phase 2 CLI storage/UX pivot:
 - automatic index rebuilds after CLI mutations so list/search/completion reflect changes immediately
 - automated validation and smoke checks
 - the dedicated TUI shell is now exposed as `bn tui`, while the Phase 2 storage-oriented commands remain unchanged
+- the current Phase 3 shell supports live startup, note browsing, note-open/navigation return, and inline editing through the shared keymap
+- the current inline editing slice covers text insertion, cursor movement, `Backspace`, `Delete`, save, and discard flows in the live shell
 
 Still out of scope:
 

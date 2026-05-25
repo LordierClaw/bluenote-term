@@ -83,7 +83,7 @@ export function formatHelp(version: string): string {
     "  rebuild      Rebuild derived metadata and search indexes",
     "  migrate      Convert legacy frontmatter notes into plain files + sidecars",
     "  completion   <bash|zsh|fish>  Print shell completion setup",
-    "  tui          Launch the Phase 3 terminal shell (shows a friendly startup state when no root exists)",
+    "  tui          Launch the Phase 3 live terminal shell (browse notes, edit inline, friendly startup when no root exists)",
   ].join("\n") + "\n"
 }
 

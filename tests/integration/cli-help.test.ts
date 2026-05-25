@@ -20,7 +20,10 @@ test("bn --help prints the Phase 2 command surface plus the Phase 3 tui entrypoi
   }
 
   assert.match(output, /(^|\n)  tui(\s|$)/m)
-  assert.match(output, /tui\s+Launch the Phase 3 terminal shell \(shows a friendly startup state when no root exists\)/)
+  assert.match(
+    output,
+    /tui\s+Launch the Phase 3 live terminal shell \(browse notes, edit inline, friendly startup when no root exists\)/,
+  )
 })
 
 test("package.json smoke:cli runs the dedicated smoke script", async () => {
