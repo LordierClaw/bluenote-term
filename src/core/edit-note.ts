@@ -23,6 +23,13 @@ export interface EditNoteSummary {
   key?: string
 }
 
+export interface PersistEditedNoteOptions extends ResolveBlueNoteRootOptions {
+  selector: string
+  body: string
+  clock?: Clock
+  randomSource?: () => number
+}
+
 function extractEditedTitle(body: string, fallbackTitle: string): string {
   const firstMeaningfulLine = body
     .split(/\r?\n/u)
@@ -41,13 +48,28 @@ export function editNote(options: EditNoteOptions): EditNoteSummary {
   const repository = createNoteRepository(rootPath)
   const selected = selectNote({ repository, selector: options.selector })
   const notePath = path.join(rootPath, selected.sourcePath)
-  const clock = options.clock ?? systemClock
 
   launchEditor(notePath, options)
 
   const editedRaw = repository.readRaw(notePath)
   const edited = parsePlainNote(editedRaw, selected.sourcePath)
-  const title = extractEditedTitle(edited.body, selected.frontmatter.title)
+
+  return persistEditedNote({
+    override: rootPath,
+    selector: options.selector,
+    body: edited.body,
+    clock: options.clock,
+    randomSource: options.randomSource,
+  })
+}
+
+export function persistEditedNote(options: PersistEditedNoteOptions): EditNoteSummary {
+  const rootPath = resolveBlueNoteRoot(options)
+  const repository = createNoteRepository(rootPath)
+  const selected = selectNote({ repository, selector: options.selector })
+  const clock = options.clock ?? systemClock
+  const notePath = path.join(rootPath, selected.sourcePath)
+  const title = extractEditedTitle(options.body, selected.frontmatter.title)
   const updatedAt = clock.now().toISOString()
 
   if (title !== selected.frontmatter.title) {
@@ -55,7 +77,7 @@ export function editNote(options: EditNoteOptions): EditNoteSummary {
       override: rootPath,
       selector: options.selector,
       title,
-      body: edited.body,
+      body: options.body,
       updatedAt,
       randomSource: options.randomSource,
     })
@@ -73,7 +95,7 @@ export function editNote(options: EditNoteOptions): EditNoteSummary {
 
   const synced = repository.syncEditedNote(notePath, {
     title,
-    body: edited.body,
+    body: options.body,
     updatedAt,
   })
 
