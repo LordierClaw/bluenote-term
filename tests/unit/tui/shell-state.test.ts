@@ -6,6 +6,7 @@ import {
   clearTransientMessage,
   cycleFocus,
   enterEditorMode,
+  leaveNoteMode,
   openSelectedNote,
   selectNote,
   setTransientMessage,
@@ -74,6 +75,17 @@ test("entering editor mode marks the editor as active for the selected note", ()
 
   assert.equal(nextState.mode, "editor")
   assert.equal(nextState.focusRegion, "main")
+  assert.equal(nextState.selectedNoteSelector, "note-123")
+  assert.equal(nextState.editorDirty, false)
+})
+
+test("leaving note mode returns to navigation with sidebar focus while keeping the selected note aligned", () => {
+  const state = openSelectedNote(selectNote(createInitialShellState(), "note-123"))
+
+  const nextState = leaveNoteMode(state)
+
+  assert.equal(nextState.mode, "navigation")
+  assert.equal(nextState.focusRegion, "sidebar")
   assert.equal(nextState.selectedNoteSelector, "note-123")
   assert.equal(nextState.editorDirty, false)
 })

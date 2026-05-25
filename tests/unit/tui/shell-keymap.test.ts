@@ -5,7 +5,7 @@ import {
   dispatchShellKey,
   type ShellKeyInput,
 } from "../../../src/tui/shell/shell-keymap"
-import { openSelectedNote, selectNote } from "../../../src/tui/shell/shell-actions"
+import { enterEditorMode, openSelectedNote, selectNote } from "../../../src/tui/shell/shell-actions"
 import { createInitialShellState } from "../../../src/tui/shell/shell-state"
 
 function applyKey(key: ShellKeyInput, state = createInitialShellState(), noteSelectors = ["alpha", "beta", "gamma"]) {
@@ -46,6 +46,31 @@ test("enter opens and focuses the selected note", () => {
   assert.equal(result.shellState.mode, "note")
   assert.equal(result.shellState.focusRegion, "main")
   assert.equal(result.shellState.selectedNoteSelector, "beta")
+})
+
+test("escape returns from note mode to navigation so movement keys work again", () => {
+  const noteState = openSelectedNote(selectNote(createInitialShellState(), "beta"))
+
+  const escaped = applyKey("Escape", noteState)
+  const down = applyKey("j", escaped.shellState)
+  const up = applyKey("ArrowUp", down.shellState)
+
+  assert.equal(escaped.shellState.mode, "navigation")
+  assert.equal(escaped.shellState.focusRegion, "sidebar")
+  assert.equal(escaped.shellState.selectedNoteSelector, "beta")
+  assert.equal(down.shellState.selectedNoteSelector, "gamma")
+  assert.equal(up.shellState.selectedNoteSelector, "beta")
+})
+
+test("escape is inert in editor mode so note-navigation-note focus stays consistent", () => {
+  const editorState = enterEditorMode(openSelectedNote(selectNote(createInitialShellState(), "beta")))
+
+  const result = applyKey("Escape", editorState)
+
+  assert.equal(result.shellState.mode, "editor")
+  assert.equal(result.shellState.focusRegion, "main")
+  assert.equal(result.shellState.selectedNoteSelector, "beta")
+  assert.equal(result.effect.type, "none")
 })
 
 test("i or e enters editor mode for inline editing", () => {

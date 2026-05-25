@@ -10,7 +10,7 @@ import {
 import { loadNoteDetail } from "../../src/tui/data/note-detail-adapter"
 
 
-test("tui keyflow covers navigation, help, refresh, editor save/discard, and guarded quit", async () => {
+test("tui keyflow covers note-navigation-note transitions, stale selection fallback, help, refresh, editor save/discard, and guarded quit", async () => {
   const harness = await createManagedRootHarness("bluenote-tui-keyflow-")
 
   try {
@@ -20,8 +20,11 @@ test("tui keyflow covers navigation, help, refresh, editor save/discard, and gua
     assert.equal(alphaCreate.exitCode, 0)
     assert.equal(betaCreate.exitCode, 0)
 
+    const alphaKeyMatch = alphaCreate.stdout.match(/Key: (alpha-note-[a-z0-9]{6})/u)
     const betaKeyMatch = betaCreate.stdout.match(/Key: (beta-note-[a-z0-9]{6})/u)
+    assert.ok(alphaKeyMatch)
     assert.ok(betaKeyMatch)
+    const alphaKey = alphaKeyMatch[1]
     const betaKey = betaKeyMatch[1]
 
     let runtime = createTuiRuntime({ override: harness.rootPath, env: {}, cwd: "/" })
@@ -35,7 +38,47 @@ test("tui keyflow covers navigation, help, refresh, editor save/discard, and gua
     runtime = dispatchTuiKey(runtime, "Enter")
     assert.equal(runtime.shellState.selectedNoteSelector, betaKey)
     assert.equal(runtime.shellState.mode, "note")
+    assert.equal(runtime.shellState.focusRegion, "main")
 
+    runtime = dispatchTuiKey(runtime, "Escape")
+    assert.equal(runtime.shellState.mode, "navigation")
+    assert.equal(runtime.shellState.focusRegion, "sidebar")
+    assert.equal(runtime.shellState.selectedNoteSelector, betaKey)
+
+    runtime = dispatchTuiKey(runtime, "k")
+    assert.equal(runtime.shellState.selectedNoteSelector, alphaKey)
+
+    runtime = dispatchTuiKey(runtime, "Enter")
+    assert.equal(runtime.shellState.mode, "note")
+    assert.equal(runtime.shellState.focusRegion, "main")
+    assert.equal(runtime.shellState.selectedNoteSelector, alphaKey)
+
+    runtime = dispatchTuiKey(runtime, "Escape")
+    runtime = dispatchTuiKey(runtime, "ArrowDown")
+    assert.equal(runtime.shellState.mode, "navigation")
+    assert.equal(runtime.shellState.selectedNoteSelector, betaKey)
+
+    assert.equal(harness.run(["delete", betaKey, "--force"]).exitCode, 0)
+    runtime = dispatchTuiKey(runtime, "Enter")
+    assert.equal(runtime.shellState.mode, "note")
+    runtime = dispatchTuiKey(runtime, "Escape")
+    runtime = dispatchTuiKey(runtime, "r")
+    assert.equal(runtime.shellState.selectedNoteSelector, betaKey)
+    assert.equal(runtime.appState.noteBrowser.selectedNote?.selector, alphaKey)
+    assert.equal(runtime.appState.noteBrowser.notes.some((note) => note.selector === betaKey), false)
+
+    runtime = dispatchTuiKey(runtime, "Enter")
+    assert.equal(runtime.shellState.mode, "note")
+    assert.equal(runtime.shellState.selectedNoteSelector, betaKey)
+    assert.equal(runtime.appState.noteBrowser.selectedNote?.selector, alphaKey)
+    assert.match(renderTuiRuntime(runtime).regions.main, /Alpha Note/u)
+
+    runtime = dispatchTuiKey(runtime, "Escape")
+    assert.equal(runtime.shellState.mode, "navigation")
+    assert.equal(runtime.shellState.focusRegion, "sidebar")
+    assert.equal(runtime.shellState.selectedNoteSelector, betaKey)
+
+    runtime = dispatchTuiKey(runtime, "Enter")
     runtime = dispatchTuiKey(runtime, "i")
     runtime = dispatchTuiKey(runtime, "!")
     assert.equal(runtime.shellState.mode, "editor")

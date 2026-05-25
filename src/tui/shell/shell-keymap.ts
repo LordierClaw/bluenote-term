@@ -1,5 +1,5 @@
 import type { EditorIntent } from "../editor/editor-input"
-import { cycleFocus, enterEditorMode, openSelectedNote, selectNote, setTransientMessage } from "./shell-actions"
+import { cycleFocus, enterEditorMode, leaveNoteMode, openSelectedNote, selectNote, setTransientMessage } from "./shell-actions"
 import type { ShellState } from "./shell-state"
 
 export type ShellKeyInput =
@@ -9,6 +9,7 @@ export type ShellKeyInput =
   | "ArrowUp"
   | "ArrowLeft"
   | "ArrowRight"
+  | "Escape"
   | "Tab"
   | "Enter"
   | "i"
@@ -96,6 +97,13 @@ export function dispatchShellKey(options: DispatchShellKeyOptions): DispatchShel
   if (key === "Tab") {
     return {
       shellState: cycleFocus(shellState),
+      effect: { type: "none" },
+    }
+  }
+
+  if (key === "Escape" && shellState.mode === "note") {
+    return {
+      shellState: leaveNoteMode(shellState),
       effect: { type: "none" },
     }
   }

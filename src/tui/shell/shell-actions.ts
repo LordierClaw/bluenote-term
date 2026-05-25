@@ -32,6 +32,19 @@ export function openSelectedNote(state: ShellState): ShellState {
   }
 }
 
+export function leaveNoteMode(state: ShellState): ShellState {
+  if (state.mode !== "note") {
+    return state
+  }
+
+  return {
+    ...state,
+    mode: "navigation",
+    focusRegion: "sidebar",
+    transientMessage: null,
+  }
+}
+
 export function enterEditorMode(state: ShellState): ShellState {
   if (state.selectedNoteSelector === null || state.mode !== "note") {
     return state

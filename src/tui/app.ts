@@ -43,6 +43,8 @@ const CTRL_C = "\u0003"
 
 function mapInputSequenceToShellKey(sequence: string): ShellKeyInput | null {
   switch (sequence) {
+    case "\u001b":
+      return "Escape"
     case "\r":
     case "\n":
       return "Enter"
@@ -352,6 +354,7 @@ function renderHelpOverlay(): string {
     "- j/k or ArrowUp/ArrowDown: move selection",
     "- Tab: cycle focus",
     "- Enter: open selected note",
+    "- Escape: return from note view to browsing",
     "- i/e: enter editor mode",
     "- Ctrl+S: save dirty editor buffer",
     "- Ctrl+D: discard dirty editor buffer",
