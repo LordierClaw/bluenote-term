@@ -1,15 +1,11 @@
-export interface TuiBootstrapInfo {
-  appName: string
-  status: string
-  nextPhase: string
-}
+import type { ResolveBlueNoteRootOptions } from "../config/root"
+import { bootstrapTuiApp } from "./bootstrap"
+import type { TuiBootstrapInfo } from "./types"
 
-export function getTuiBootstrapInfo(): TuiBootstrapInfo {
-  return {
-    appName: "BlueNote",
-    status: "scaffold-ready",
-    nextPhase: "phase-2-tui-shell",
-  }
+export type { TuiBootstrapInfo } from "./types"
+
+export function getTuiBootstrapInfo(options: ResolveBlueNoteRootOptions = {}): TuiBootstrapInfo {
+  return bootstrapTuiApp(options)
 }
 
 const invokedPath = process.argv[1]
@@ -19,5 +15,5 @@ const isMainModule = invokedPath
 
 if (isMainModule) {
   const info = getTuiBootstrapInfo()
-  console.log(`${info.appName} TUI scaffold ready (${info.status}). Next: ${info.nextPhase}.`)
+  console.log(`${info.appName} TUI bootstrap ${info.status} at ${info.rootPath}. Next: ${info.nextPhase}.`)
 }
