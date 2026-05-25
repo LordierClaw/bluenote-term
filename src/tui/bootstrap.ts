@@ -3,8 +3,9 @@ import { existsSync } from "node:fs"
 import path from "node:path"
 
 import { resolveBlueNoteRoot } from "../config/root"
+import { RootNotInitializedError } from "../core/errors"
 import { MANAGED_ROOT_LAYOUT } from "../storage/root-layout"
-import { readStateManifest } from "../storage/state-manifest"
+import * as stateManifest from "../storage/state-manifest"
 import type { TuiAppState, TuiBootstrapInfo, TuiBootstrapStatus } from "./types"
 
 function hasManagedRootLayout(rootPath: string): boolean {
@@ -26,14 +27,18 @@ export function bootstrapTuiApp(options: ResolveBlueNoteRootOptions = {}): TuiBo
   const rootPath = resolveBlueNoteRoot(options)
 
   try {
-    readStateManifest(rootPath)
+    stateManifest.readStateManifest(rootPath)
 
     if (!hasManagedRootLayout(rootPath)) {
       return createTuiAppState(rootPath, "missing-root").bootstrap
     }
 
     return createTuiAppState(rootPath, "ready").bootstrap
-  } catch {
-    return createTuiAppState(rootPath, "missing-root").bootstrap
+  } catch (error) {
+    if (error instanceof RootNotInitializedError) {
+      return createTuiAppState(rootPath, "missing-root").bootstrap
+    }
+
+    throw error
   }
 }
