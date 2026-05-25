@@ -1,4 +1,4 @@
-# Phase 4 — Hardening and Release
+# Phase 5 — Hardening and Release
 
 ## Goal
 

@@ -11,7 +11,7 @@ BlueNote is a terminal-native note tool optimized for fast local capture, search
 
 ## Current delivered scope
 
-Delivered by the distinct Phase 2 CLI storage/UX pivot:
+Delivered by the distinct Phase 2 CLI storage/UX pivot (complete before the Phase 3 TUI workspace):
 
 - managed root initialization
 - plain Markdown note storage plus `.state/notes/` sidecars
@@ -22,7 +22,7 @@ Delivered by the distinct Phase 2 CLI storage/UX pivot:
 - grouped search output that shows one ranked block per matching note
 - automatic index rebuilds after CLI mutations so list/search/completion reflect changes immediately
 - automated validation and smoke checks
-- the dedicated TUI shell remains a later phase and is not part of the visible command contract above
+- the dedicated TUI workspace is Phase 3 and must consume this visible command/storage contract rather than redefining it
 
 Still out of scope:
 

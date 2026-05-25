@@ -8,7 +8,7 @@ export function getTuiBootstrapInfo(): TuiBootstrapInfo {
   return {
     appName: "BlueNote",
     status: "scaffold-ready",
-    nextPhase: "phase-2-tui-shell",
+    nextPhase: "phase-3-tui-workspace",
   }
 }
 

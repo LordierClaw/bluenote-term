@@ -1,16 +1,17 @@
 # BlueNote
 
-BlueNote is a terminal-native, local-first note tool with the Phase 2 CLI storage/UX pivot implemented in Bun, TypeScript, and OpenTUI-adjacent scaffolding.
+BlueNote is a terminal-native, local-first note tool with the Phase 2 CLI storage/UX pivot implemented in Bun and TypeScript; Phase 3 is now the OpenTUI workspace phase.
 
 ## Status
 
-This repository now includes the approved **Phase 2 CLI storage + UX pivot** implementation and verification work, building on the earlier Phase 0/Phase 1 groundwork.
+This repository now includes the approved **Phase 2 CLI storage + UX pivot** implementation and verification work, building on the earlier Phase 0/Phase 1 groundwork. The active next phase is **Phase 3 — TUI Workspace**.
 
 Current goals:
 - keep repository and Git hygiene aligned with active CLI work
 - maintain runtime/tooling conventions
 - keep Hermes and project docs aligned with the implemented workflow
 - verify the command-first Phase 2 CLI workflow with tests and smoke checks
+- plan and implement the Phase 3 OpenTUI workspace without changing the Phase 2 storage contract
 
 ## Runtime
 
@@ -58,4 +59,4 @@ bun run smoke:cli
 
 ## Current implementation note
 
-The repository now includes a working Phase 2 storage/UX CLI flow plus automated verification. Older planning artifacts may still describe pre-pivot assumptions, so the docs in this repo are being normalized to the approved Phase 2 contract.
+The repository now includes a working Phase 2 storage/UX CLI flow plus automated verification. The roadmap has been reindexed so the former TUI shell work is now Phase 3, followed by workflow hardening in Phase 4 and release hardening in Phase 5.

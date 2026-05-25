@@ -77,9 +77,10 @@ This is the proposed structure after the preparation pass:
 │   └── phases/
 │       ├── phase-0-repo-preparation.md
 │       ├── phase-1-core-cli-storage.md
-│       ├── phase-2-tui-shell.md
-│       ├── phase-3-search-editor-and-recovery.md
-│       └── phase-4-hardening-and-release.md
+│       ├── phase-2-cli-storage-ux-pivot.md
+│       ├── phase-3-tui-workspace.md
+│       ├── phase-4-search-editing-and-recovery.md
+│       └── phase-5-hardening-and-release.md
 ├── .hermes/
 │   └── plans/
 │       └── *.md
@@ -354,16 +355,18 @@ git branch -m master main  # only if you want to rename
 **Files:**
 - Create: `docs/phases/phase-0-repo-preparation.md`
 - Create: `docs/phases/phase-1-core-cli-storage.md`
-- Create: `docs/phases/phase-2-tui-shell.md`
-- Create: `docs/phases/phase-3-search-editor-and-recovery.md`
-- Create: `docs/phases/phase-4-hardening-and-release.md`
+- Create: `docs/phases/phase-2-cli-storage-ux-pivot.md`
+- Create: `docs/phases/phase-3-tui-workspace.md`
+- Create: `docs/phases/phase-4-search-editing-and-recovery.md`
+- Create: `docs/phases/phase-5-hardening-and-release.md`
 
 **Planned phase breakdown:**
 1. **Phase 0** — repo prep, docs, tooling, Hermes setup, CI baseline
 2. **Phase 1** — managed root init, frontmatter, file storage, config, `sql.js` + MiniSearch indexing, essential CLI flows
-3. **Phase 2** — TUI renderer shell, layout, mode switching, keymap foundation, editor-first interaction model
-4. **Phase 3** — search UX, editor integration, autosave/recovery, archive flows, templates, today/scratch behavior
-5. **Phase 4** — cross-platform hardening, failure-path tests, release readiness, packaging polish
+3. **Phase 2** — CLI storage/UX pivot: plain note files, `.state/` sidecars, key/path selectors, search output, shell completion, migration
+4. **Phase 3** — OpenTUI workspace: renderer shell, elegant layout, inline editor, file navigation, search, and command/action coverage for the implemented CLI workflows
+5. **Phase 4** — search/editing/recovery hardening, archive/history polish, templates, today/scratch behavior
+6. **Phase 5** — cross-platform hardening, failure-path tests, release readiness, packaging polish
 
 **Validation:**
 - Each phase doc should have entry criteria, deliverables, validation targets, and non-goals.
@@ -485,9 +488,9 @@ git commit -m "chore: initialize BlueNote project scaffold"
 - `docs/workflow/hermes-workflow.md`
 - `docs/phases/phase-0-repo-preparation.md`
 - `docs/phases/phase-1-core-cli-storage.md`
-- `docs/phases/phase-2-tui-shell.md`
-- `docs/phases/phase-3-search-editor-and-recovery.md`
-- `docs/phases/phase-4-hardening-and-release.md`
+- `docs/phases/phase-3-tui-workspace.md`
+- `docs/phases/phase-4-search-editing-and-recovery.md`
+- `docs/phases/phase-5-hardening-and-release.md`
 
 ### Remove or stop tracking
 - `node_modules/`
