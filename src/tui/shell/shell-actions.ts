@@ -15,7 +15,7 @@ export function cycleFocus(state: ShellState): ShellState {
 
   return {
     ...state,
-    focusRegion: FOCUS_ORDER[nextIndex] ?? "sidebar",
+    focusRegion: FOCUS_ORDER[nextIndex],
   }
 }
 
@@ -32,6 +32,10 @@ export function openSelectedNote(state: ShellState): ShellState {
 }
 
 export function enterEditorMode(state: ShellState): ShellState {
+  if (state.selectedNoteKey === null) {
+    return state
+  }
+
   return {
     ...state,
     mode: "editor",

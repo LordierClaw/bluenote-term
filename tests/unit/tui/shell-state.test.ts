@@ -44,25 +44,26 @@ test("opening a selected note moves the shell into note mode", () => {
   assert.equal(nextState.focusRegion, "main")
 })
 
-test("entering editor mode marks the editor as active without mutating note storage", () => {
-  const noteStorage = {
-    byKey: {
-      "note-123": {
-        key: "note-123",
-        body: "Original body",
-      },
-    },
-  }
+test("entering editor mode without a selected note keeps the shell in navigation mode", () => {
+  const state = createInitialShellState()
 
-  const beforeStorage = structuredClone(noteStorage)
+  const nextState = enterEditorMode(state)
+
+  assert.equal(nextState.mode, "navigation")
+  assert.equal(nextState.focusRegion, "sidebar")
+  assert.equal(nextState.selectedNoteKey, null)
+  assert.equal(nextState.editorDirty, false)
+})
+
+test("entering editor mode marks the editor as active for the selected note", () => {
   const state = openSelectedNote(selectNote(createInitialShellState(), "note-123"))
 
   const nextState = enterEditorMode(state)
 
   assert.equal(nextState.mode, "editor")
   assert.equal(nextState.focusRegion, "main")
+  assert.equal(nextState.selectedNoteKey, "note-123")
   assert.equal(nextState.editorDirty, false)
-  assert.deepEqual(noteStorage, beforeStorage)
 })
 
 test("status and error message slots can be set and cleared without affecting selection state", () => {
