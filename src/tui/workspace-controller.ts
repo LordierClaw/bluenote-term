@@ -58,6 +58,7 @@ export interface WorkspaceController {
   updateEditorBody: (body: string) => void
   openSearch: (query?: string) => void
   updateSearchQuery: (query: string) => void
+  focusSearchResult: (index: number) => void
   cancelSearch: () => void
   selectSearchResult: (result?: SearchEverythingResult, options?: WorkspaceActionOptions) => WorkspaceActionResult
   runCommand: (command: string, options?: WorkspaceActionOptions) => WorkspaceActionResult
@@ -296,6 +297,20 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         },
       }
       rebuildSearchResults(query)
+    },
+
+    focusSearchResult: (index) => {
+      if (!state.search) {
+        return
+      }
+
+      state = {
+        ...state,
+        search: {
+          ...state.search,
+          selectedIndex: clampIndex(index, searchResults.length),
+        },
+      }
     },
 
     cancelSearch: () => {
