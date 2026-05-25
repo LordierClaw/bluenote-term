@@ -2,10 +2,10 @@ import type { ShellFocusRegion, ShellState, ShellTransientMessage } from "./shel
 
 const FOCUS_ORDER: ShellFocusRegion[] = ["sidebar", "main"]
 
-export function selectNote(state: ShellState, noteKey: string | null): ShellState {
+export function selectNote(state: ShellState, noteSelector: string | null): ShellState {
   return {
     ...state,
-    selectedNoteKey: noteKey,
+    selectedNoteSelector: noteSelector,
   }
 }
 
@@ -20,7 +20,7 @@ export function cycleFocus(state: ShellState): ShellState {
 }
 
 export function openSelectedNote(state: ShellState): ShellState {
-  if (state.selectedNoteKey === null) {
+  if (state.selectedNoteSelector === null) {
     return state
   }
 
@@ -32,7 +32,7 @@ export function openSelectedNote(state: ShellState): ShellState {
 }
 
 export function enterEditorMode(state: ShellState): ShellState {
-  if (state.selectedNoteKey === null || state.mode !== "note") {
+  if (state.selectedNoteSelector === null || state.mode !== "note") {
     return state
   }
 

@@ -17,7 +17,7 @@ test("initial shell state starts in navigation mode with sidebar focus", () => {
   assert.deepEqual(state, {
     mode: "navigation",
     focusRegion: "sidebar",
-    selectedNoteKey: null,
+    selectedNoteSelector: null,
     transientMessage: null,
     editorDirty: false,
   })
@@ -39,7 +39,7 @@ test("opening a selected note moves the shell into note mode", () => {
 
   const nextState = openSelectedNote(state)
 
-  assert.equal(nextState.selectedNoteKey, "note-123")
+  assert.equal(nextState.selectedNoteSelector, "note-123")
   assert.equal(nextState.mode, "note")
   assert.equal(nextState.focusRegion, "main")
 })
@@ -51,7 +51,7 @@ test("entering editor mode without a selected note keeps the shell in navigation
 
   assert.equal(nextState.mode, "navigation")
   assert.equal(nextState.focusRegion, "sidebar")
-  assert.equal(nextState.selectedNoteKey, null)
+  assert.equal(nextState.selectedNoteSelector, null)
   assert.equal(nextState.editorDirty, false)
 })
 
@@ -62,7 +62,7 @@ test("entering editor mode without an opened note keeps the shell in navigation 
 
   assert.equal(nextState.mode, "navigation")
   assert.equal(nextState.focusRegion, "sidebar")
-  assert.equal(nextState.selectedNoteKey, "note-123")
+  assert.equal(nextState.selectedNoteSelector, "note-123")
   assert.equal(nextState.editorDirty, false)
 })
 
@@ -73,7 +73,7 @@ test("entering editor mode marks the editor as active for the selected note", ()
 
   assert.equal(nextState.mode, "editor")
   assert.equal(nextState.focusRegion, "main")
-  assert.equal(nextState.selectedNoteKey, "note-123")
+  assert.equal(nextState.selectedNoteSelector, "note-123")
   assert.equal(nextState.editorDirty, false)
 })
 
@@ -92,16 +92,16 @@ test("status and error message slots can be set and cleared without affecting se
 
   const clearedState = clearTransientMessage(errorState)
 
-  assert.equal(statusState.selectedNoteKey, "note-123")
+  assert.equal(statusState.selectedNoteSelector, "note-123")
   assert.deepEqual(statusState.transientMessage, {
     level: "status",
     text: "Saved note",
   })
-  assert.equal(errorState.selectedNoteKey, "note-123")
+  assert.equal(errorState.selectedNoteSelector, "note-123")
   assert.deepEqual(errorState.transientMessage, {
     level: "error",
     text: "Save failed",
   })
-  assert.equal(clearedState.selectedNoteKey, "note-123")
+  assert.equal(clearedState.selectedNoteSelector, "note-123")
   assert.equal(clearedState.transientMessage, null)
 })

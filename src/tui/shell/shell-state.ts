@@ -12,7 +12,7 @@ export interface ShellTransientMessage {
 export interface ShellState {
   mode: ShellMode
   focusRegion: ShellFocusRegion
-  selectedNoteKey: string | null
+  selectedNoteSelector: string | null
   transientMessage: ShellTransientMessage | null
   editorDirty: boolean
 }
@@ -21,7 +21,7 @@ export function createInitialShellState(): ShellState {
   return {
     mode: "navigation",
     focusRegion: "sidebar",
-    selectedNoteKey: null,
+    selectedNoteSelector: null,
     transientMessage: null,
     editorDirty: false,
   }
