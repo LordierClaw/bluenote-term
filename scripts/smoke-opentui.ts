@@ -7,12 +7,12 @@ if (typeof moduleRef.createCliRenderer !== "function") {
 }
 
 const info = getTuiBootstrapInfo()
-if (info.status !== "phase-3-workspace-bootstrap") {
-  throw new Error(`Expected Phase 3 workspace bootstrap status, received ${info.status}`)
+if (info.status !== "phase-3-tui-workspace") {
+  throw new Error(`Expected Phase 3 TUI workspace status, received ${info.status}`)
 }
 
-if (info.nextPhase !== "phase-3-render-screens") {
-  throw new Error(`Expected Phase 3 render-screens metadata, received ${info.nextPhase}`)
+if (info.nextPhase !== "phase-4-search-editing-and-recovery") {
+  throw new Error(`Expected Phase 4 search/editing/recovery metadata, received ${info.nextPhase}`)
 }
 
 console.log(`OpenTUI smoke check passed for ${info.appName} (${info.status}; next: ${info.nextPhase}).`)

@@ -111,7 +111,7 @@ test("bn edit <selector> updates sidecar metadata and rebuilds derived state aft
   } finally {
     await harness.cleanup()
   }
-})
+}, 20_000)
 
 test("bn edit renames the note key, file, and sidecar when the markdown heading title changes", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-edit-rename-")

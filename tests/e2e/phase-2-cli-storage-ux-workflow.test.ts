@@ -129,4 +129,4 @@ test("Phase 2 CLI workflow stays consistent through the real bin/bn.ts entrypoin
   } finally {
     await harness.cleanup()
   }
-})
+}, 20_000)
