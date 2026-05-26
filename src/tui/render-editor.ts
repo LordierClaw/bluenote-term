@@ -1,4 +1,4 @@
-import { BoxRenderable, TextareaRenderable, TextRenderable, type CliRenderer } from "@opentui/core"
+import { BoxRenderable, InputRenderable, InputRenderableEvents, TextareaRenderable, TextRenderable, type CliRenderer } from "@opentui/core"
 
 import type { TuiState } from "./state"
 import type { TuiColorIntent } from "./theme"
@@ -22,6 +22,18 @@ export interface EditorBodyViewModel {
   lineCount: number
   characterCount: number
   placeholder: string
+  focused: boolean
+}
+
+export interface EditorFindViewModel {
+  visible: true
+  query: string
+  matchCount: number
+  activeIndex: number | null
+  countLabel: string
+  placeholder: string
+  focused: boolean
+  styleIntent: TuiColorIntent
 }
 
 export interface EditorBottombarViewModel {
@@ -32,6 +44,7 @@ export interface EditorBottombarViewModel {
 
 export interface EditorViewModel {
   topbar: EditorTopbarViewModel
+  find: EditorFindViewModel | null
   body: EditorBodyViewModel
   bottombar: EditorBottombarViewModel
 }
@@ -70,6 +83,9 @@ export function buildEditorViewModel(state: TuiState): EditorViewModel {
   const status = dirty ? "dirty" : "saved"
   const statusIntent = statusIntentForEditor(editor)
   const relativePath = note?.relativePath ?? ""
+  const findMode = state.mode === "editor.find"
+  const findMatchCount = editor?.findMatchCount ?? 0
+  const activeFindIndex = editor?.activeFindIndex ?? null
 
   return {
     topbar: {
@@ -81,11 +97,24 @@ export function buildEditorViewModel(state: TuiState): EditorViewModel {
       status,
       statusIntent,
     },
+    find: findMode
+      ? {
+          visible: true,
+          query: editor?.findQuery ?? "",
+          matchCount: findMatchCount,
+          activeIndex: activeFindIndex,
+          countLabel: findMatchCount > 0 && activeFindIndex !== null ? `${activeFindIndex + 1}/${findMatchCount}` : `0/${findMatchCount}`,
+          placeholder: "Find in note…",
+          focused: true,
+          styleIntent: "secondaryAccent",
+        }
+      : null,
     body: {
       value: body,
       lineCount: countLines(body),
       characterCount: Array.from(body).length,
       placeholder: "Write your note…",
+      focused: !findMode,
     },
     bottombar: {
       status: `Line 1, Col 1 · ${status}`,
@@ -99,6 +128,7 @@ export interface RenderEditorScreenOptions {
   renderer: CliRenderer
   controller: WorkspaceController
   onExit?: () => void
+  onInvalidate?: () => void
 }
 
 export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRenderable {
@@ -117,6 +147,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     height: 1,
   })
   const bottombarStatus = new TextRenderable(options.renderer, { content: vm.bottombar.status, height: 1 })
+  let findInput: InputRenderable | null = null
   const textarea = new TextareaRenderable(options.renderer, {
     id: "bluenote-editor-body",
     initialValue: vm.body.value,
@@ -133,24 +164,71 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   })
 
   root.add(topbar)
+  if (vm.find) {
+    const findBar = new BoxRenderable(options.renderer, {
+      id: "bluenote-editor-find-bar",
+      flexDirection: "row",
+      width: "100%",
+      height: 1,
+    })
+    findInput = new InputRenderable(options.renderer, {
+      id: "bluenote-editor-find-query",
+      value: vm.find.query,
+      placeholder: vm.find.placeholder,
+      width: "70%",
+    })
+    const matchCount = new TextRenderable(options.renderer, { content: ` ${vm.find.countLabel}  Enter next  Esc close`, height: 1 })
+    findInput.on(InputRenderableEvents.INPUT, () => {
+      options.controller.updateEditorFindQuery(findInput?.value ?? "")
+      options.onInvalidate?.()
+    })
+    findInput.on(InputRenderableEvents.CHANGE, () => {
+      options.controller.updateEditorFindQuery(findInput?.value ?? "")
+      options.onInvalidate?.()
+    })
+    findInput.on(InputRenderableEvents.ENTER, () => {
+      options.controller.advanceEditorFind()
+      options.onInvalidate?.()
+    })
+    findBar.add(findInput)
+    findBar.add(matchCount)
+    root.add(findBar)
+  }
   root.add(textarea)
   root.add(bottombarStatus)
   root.add(new TextRenderable(options.renderer, { content: vm.bottombar.hints.join("  "), height: 1 }))
-  textarea.focus()
+  if (findInput) {
+    findInput.focus()
+  } else {
+    textarea.focus()
+  }
 
   return root
 }
 
 export function routeEditorKey(sequence: string, controller: WorkspaceController, onExit?: () => void, onInvalidate?: () => void): boolean {
+  const state = controller.getState()
+  if (state.mode === "editor.find") {
+    if (sequence === "\u001b" || sequence === "\u001b[") {
+      controller.goBack()
+      return true
+    }
+    if (sequence === "\r" || sequence === "\n") {
+      controller.advanceEditorFind()
+      return true
+    }
+  }
+
   switch (sequence) {
     case "\u0013":
       void controller.saveEditor().then(() => onInvalidate?.())
       return true
     case "\u0006":
-      controller.runCommand("/find")
+      controller.openEditorFind()
       return true
     case "\u001b":
-      controller.showManager()
+    case "\u001b[":
+      controller.goBack()
       return true
     default:
       return false

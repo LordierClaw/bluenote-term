@@ -228,6 +228,26 @@ export function findInEditorBody(
   }
 }
 
+export function advanceEditorFindState(editor: EditorBufferState, findState: EditorFindState): EditorFindState {
+  if (findState.query.length === 0) {
+    return emptyFindState(findState.query)
+  }
+
+  const refreshed = findInEditorBody(editor, findState.query)
+  if (refreshed.matches.length === 0) {
+    return refreshed
+  }
+
+  const currentIndex = findState.currentIndex >= 0 ? findState.currentIndex : refreshed.currentIndex
+  const nextIndex = (currentIndex + 1) % refreshed.matches.length
+
+  return {
+    ...refreshed,
+    currentIndex: nextIndex,
+    currentMatch: refreshed.matches[nextIndex] ?? null,
+  }
+}
+
 export function replaceCurrentMatch(
   editor: EditorBufferState,
   findState: EditorFindState,

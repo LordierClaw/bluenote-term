@@ -141,7 +141,7 @@ function renderWorkspace(renderer: CliRenderer, controller: WorkspaceController,
   }
 
   if (state.screen === "editor") {
-    return renderEditorScreen({ renderer, controller, onExit })
+    return renderEditorScreen({ renderer, controller, onExit, onInvalidate })
   }
 
   return renderManagerScreen({ renderer, controller, onExit })

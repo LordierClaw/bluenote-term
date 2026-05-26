@@ -1,4 +1,5 @@
 import type { SaveEditorBufferDependencies } from "./adapters/editor-buffer-adapter"
+import { advanceEditorFindState, findInEditorBody } from "./adapters/editor-buffer-adapter"
 import {
   buildManagerBrowserModel,
   goToManagerParent,
@@ -76,6 +77,8 @@ export interface WorkspaceController {
   clearManagerFilter: () => void
   toggleSearch: (query?: string) => void
   openEditorFind: (query?: string) => void
+  updateEditorFindQuery: (query: string) => void
+  advanceEditorFind: () => void
   selectSearchResult: (result?: SearchEverythingResult, options?: WorkspaceActionOptions) => WorkspaceActionResult
   runCommand: (command: string, options?: WorkspaceActionOptions) => WorkspaceActionResult
 }
@@ -408,7 +411,45 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     },
 
     openEditorFind: (query = "") => {
-      state = openEditorFindState(state, { query })
+      if (!state.editor) {
+        return
+      }
+      const findState = findInEditorBody(state.editor, query)
+      state = openEditorFindState(state, {
+        query: findState.query,
+        matchCount: findState.matches.length,
+        activeIndex: findState.currentIndex >= 0 ? findState.currentIndex : null,
+      })
+    },
+
+    updateEditorFindQuery: (query) => {
+      if (!state.editor) {
+        return
+      }
+      const findState = findInEditorBody(state.editor, query)
+      state = openEditorFindState(state, {
+        query: findState.query,
+        matchCount: findState.matches.length,
+        activeIndex: findState.currentIndex >= 0 ? findState.currentIndex : null,
+      })
+    },
+
+    advanceEditorFind: () => {
+      if (!state.editor) {
+        return
+      }
+      const findState = findInEditorBody(state.editor, state.editor.findQuery ?? "")
+      const activeIndex = state.editor.activeFindIndex ?? findState.currentIndex
+      const advanced = advanceEditorFindState(state.editor, {
+        ...findState,
+        currentIndex: activeIndex,
+        currentMatch: activeIndex >= 0 ? findState.matches[activeIndex] ?? null : null,
+      })
+      state = openEditorFindState(state, {
+        query: advanced.query,
+        matchCount: advanced.matches.length,
+        activeIndex: advanced.currentIndex >= 0 ? advanced.currentIndex : null,
+      })
     },
 
     showManager: () => {

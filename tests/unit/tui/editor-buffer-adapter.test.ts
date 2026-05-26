@@ -2,6 +2,7 @@ import { describe, test } from "bun:test"
 import assert from "node:assert/strict"
 
 import {
+  advanceEditorFindState,
   copySelection,
   cutSelection,
   findInEditorBody,
@@ -156,6 +157,25 @@ describe("TUI editor buffer adapter", () => {
 
     const wrapped = findInEditorBody(editor, "🌊", { fromIndex: Array.from(editor.body).length })
     assert.equal(wrapped.currentIndex, 0)
+  })
+
+  test("advances to the next editor find match and wraps", () => {
+    const editor = createEditor("alpha beta alpha gamma alpha")
+    const found = findInEditorBody(editor, "alpha")
+
+    const second = advanceEditorFindState(editor, found)
+    assert.equal(second.query, "alpha")
+    assert.equal(second.matches.length, 3)
+    assert.equal(second.currentIndex, 1)
+    assert.equal(second.currentMatch?.start, 11)
+
+    const third = advanceEditorFindState(editor, second)
+    assert.equal(third.currentIndex, 2)
+    assert.equal(third.currentMatch?.start, 23)
+
+    const wrapped = advanceEditorFindState(editor, third)
+    assert.equal(wrapped.currentIndex, 0)
+    assert.equal(wrapped.currentMatch?.start, 0)
   })
 
   test("replaces the current find match and all matches on current buffer text", () => {

@@ -5,7 +5,7 @@ import { routeWorkspaceKey } from "../../../src/tui/app"
 import { routeEditorKey } from "../../../src/tui/render-editor"
 import { routeSearchEverythingKey } from "../../../src/tui/render-search-everything"
 import type { TuiState } from "../../../src/tui/state"
-import type { WorkspaceController } from "../../../src/tui/workspace-controller"
+import { createWorkspaceController, type WorkspaceController } from "../../../src/tui/workspace-controller"
 
 function createController(screen: TuiState["screen"]): { controller: WorkspaceController; calls: string[] } {
   const calls: string[] = []
@@ -59,6 +59,8 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
     clearManagerFilter: () => calls.push("clearManagerFilter"),
     toggleSearch: (query) => calls.push(`toggleSearch:${query ?? ""}`),
     openEditorFind: (query) => calls.push(`openEditorFind:${query ?? ""}`),
+    updateEditorFindQuery: (query) => calls.push(`updateEditorFindQuery:${query}`),
+    advanceEditorFind: () => calls.push("advanceEditorFind"),
     selectSearchResult: () => {
       calls.push("selectSearchResult")
       return { blocked: false }
@@ -90,6 +92,85 @@ describe("TUI render keyboard routing", () => {
 
     assert.equal(routeEditorKey("\u0013", controller), true)
     assert.deepEqual(calls, ["saveEditor"])
+  })
+
+  test("editor Ctrl+F enters editor find mode from the body", () => {
+    const { controller, calls } = createController("editor")
+
+    assert.equal(routeEditorKey("\u0006", controller), true)
+    assert.deepEqual(calls, ["openEditorFind:"])
+  })
+
+  test("editor find mode leaves printable keys to focused find input and routes Enter/Escape to find actions", () => {
+    const { controller, calls } = createController("editor")
+    controller.getState().mode = "editor.find"
+    controller.getState().editor = {
+      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" },
+      body: "body",
+      savedBody: "body",
+      dirty: false,
+      findQuery: "",
+      findMatchCount: 0,
+      activeFindIndex: null,
+    }
+
+    assert.equal(routeEditorKey("a", controller), false)
+    assert.equal(routeEditorKey("b", controller), false)
+    assert.equal(routeEditorKey("\r", controller), true)
+    assert.equal(routeEditorKey("\u001b", controller), true)
+
+    assert.deepEqual(calls, ["advanceEditorFind", "goBack"])
+  })
+
+  test("editor find mode treats Ctrl+[ as Escape", () => {
+    const { controller, calls } = createController("editor")
+    controller.getState().mode = "editor.find"
+
+    assert.equal(routeEditorKey("\u001b[", controller), true)
+    assert.deepEqual(calls, ["goBack"])
+  })
+
+  test("editor find typing updates matches against current body, Enter advances, and Escape returns to body without editing textarea", () => {
+    const controller = createWorkspaceController({
+      listNotes: () => [
+        {
+          key: "daily",
+          title: "Daily",
+          description: "",
+          relativePath: "notes/daily.md",
+          body: "alpha beta alpha",
+        },
+      ],
+      showNote: () => ({
+        key: "daily",
+        title: "Daily",
+        description: "",
+        relativePath: "notes/daily.md",
+        body: "alpha beta alpha",
+      }),
+      searchNotes: () => [],
+    })
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    assert.equal(controller.getState().mode, "editor.body")
+
+    assert.equal(routeEditorKey("\u0006", controller), true)
+    controller.updateEditorFindQuery("al")
+
+    let state = controller.getState()
+    assert.equal(state.mode, "editor.find")
+    assert.equal(state.editor?.body, "alpha beta alpha")
+    assert.equal(state.editor?.findQuery, "al")
+    assert.equal(state.editor?.findMatchCount, 2)
+    assert.equal(state.editor?.activeFindIndex, 0)
+
+    assert.equal(routeEditorKey("\r", controller), true)
+    state = controller.getState()
+    assert.equal(state.editor?.activeFindIndex, 1)
+
+    assert.equal(routeEditorKey("\u001b", controller), true)
+    state = controller.getState()
+    assert.equal(state.mode, "editor.body")
+    assert.equal(state.editor?.body, "alpha beta alpha")
   })
 
   test("workspace route opens Search Everything with Ctrl+P but leaves slash to editor textarea", () => {

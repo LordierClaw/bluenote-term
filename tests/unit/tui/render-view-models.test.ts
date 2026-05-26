@@ -158,7 +158,7 @@ describe("TUI render view models", () => {
   test("editor view model includes only topbar, editor body metadata, and bottombar data", () => {
     const vm = buildEditorViewModel({ ...baseState, screen: "editor" })
 
-    assert.deepEqual(Object.keys(vm).sort(), ["body", "bottombar", "topbar"])
+    assert.deepEqual(Object.keys(vm).sort(), ["body", "bottombar", "find", "topbar"])
     assert.deepEqual(vm.topbar, {
       title: "Daily Plan",
       path: "notes/inbox/daily-plan.md",
@@ -173,7 +173,9 @@ describe("TUI render view models", () => {
       lineCount: 3,
       characterCount: 36,
       placeholder: "Write your note…",
+      focused: true,
     })
+    assert.equal(vm.find, null)
     assert.deepEqual(vm.bottombar.hints, ["Ctrl+S save", "Ctrl+F find", "Ctrl+P search", "Esc manager", "Ctrl+C quit"])
     assert.equal(vm.bottombar.status, "Line 1, Col 1 · saved")
     assert.equal(vm.bottombar.statusIntent, "success")
@@ -185,6 +187,37 @@ describe("TUI render view models", () => {
     const autosaveVm = buildEditorViewModel({ ...baseState, screen: "editor", editor: { ...baseState.editor!, autosaveStatus: "saving" } as TuiState["editor"] })
     assert.equal(autosaveVm.topbar.statusIntent, "warning")
     assert.equal(autosaveVm.bottombar.statusIntent, "warning")
+  })
+
+  test("editor find mode exposes one focused find input and match count while body is unfocused", () => {
+    const vm = buildEditorViewModel({
+      ...baseState,
+      screen: "editor",
+      mode: "editor.find",
+      editor: {
+        ...baseState.editor!,
+        findQuery: "Ship",
+        findMatchCount: 1,
+        activeFindIndex: 0,
+      },
+    })
+
+    assert.deepEqual(vm.find, {
+      visible: true,
+      query: "Ship",
+      matchCount: 1,
+      activeIndex: 0,
+      countLabel: "1/1",
+      placeholder: "Find in note…",
+      focused: true,
+      styleIntent: "secondaryAccent",
+    })
+    assert.equal(vm.body.focused, false)
+    assert.equal(Number(vm.find.focused) + Number(vm.body.focused), 1)
+
+    const bodyVm = buildEditorViewModel({ ...baseState, screen: "editor", mode: "editor.body" })
+    assert.equal(bodyVm.find, null)
+    assert.equal(bodyVm.body.focused, true)
   })
 
   test("Search Everything view model includes query, result list, selected preview/excerpt/command usage, and previous-screen context", () => {
