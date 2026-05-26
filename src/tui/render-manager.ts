@@ -1,6 +1,7 @@
 import { BoxRenderable, TextRenderable, type CliRenderer } from "@opentui/core"
 
 import type { TuiState } from "./state"
+import type { TuiColorIntent } from "./theme"
 import type { WorkspaceController } from "./workspace-controller"
 
 export interface ManagerRowViewModel {
@@ -12,6 +13,10 @@ export interface ManagerRowViewModel {
   type: "note" | "folder"
   focused: boolean
   focusMarker: "›" | " "
+  styleIntent: TuiColorIntent
+  itemStyleIntent: TuiColorIntent
+  openStyleIntent: TuiColorIntent | null
+  metadataStyleIntent: TuiColorIntent
 }
 
 export interface ManagerViewModel {
@@ -22,13 +27,13 @@ export interface ManagerViewModel {
 }
 
 export function buildManagerViewModel(state: TuiState): ManagerViewModel {
-  const focusedItem = state.manager.items[state.manager.focusedIndex]
-  const selected = focusedItem?.type === "note" ? focusedItem.key : state.manager.selectedNoteKey
+  const openNoteKey = state.editor?.note.key ?? null
 
   return {
     title: "BlueNote Manager",
     rows: state.manager.items.map((item, index) => {
       const focused = index === state.manager.focusedIndex
+      const open = item.type === "note" && item.key === openNoteKey
       return {
         key: item.key,
         filename: item.filename,
@@ -38,9 +43,13 @@ export function buildManagerViewModel(state: TuiState): ManagerViewModel {
         type: item.type,
         focused,
         focusMarker: focused ? "›" : " ",
+        styleIntent: focused ? "focusedRow" : "panel",
+        itemStyleIntent: item.type === "folder" ? "secondaryAccent" : "primaryAccent",
+        openStyleIntent: open ? "selectedOpenNote" : null,
+        metadataStyleIntent: "mutedText",
       }
     }),
-    status: `${state.manager.items.length} ${state.manager.items.length === 1 ? "item" : "items"}${selected ? ` · selected ${selected}` : ""}`,
+    status: `${state.manager.items.length} ${state.manager.items.length === 1 ? "item" : "items"}${openNoteKey ? ` · selected ${openNoteKey}` : ""}`,
     shortcuts: ["↑/↓ move", "Enter/o open", "s search", "e editor", "q quit"],
   }
 }

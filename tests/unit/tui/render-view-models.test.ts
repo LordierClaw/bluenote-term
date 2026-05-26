@@ -4,6 +4,7 @@ import assert from "node:assert/strict"
 import { buildEditorViewModel } from "../../../src/tui/render-editor"
 import { buildManagerViewModel } from "../../../src/tui/render-manager"
 import { buildSearchEverythingViewModel } from "../../../src/tui/render-search-everything"
+import { tuiTheme } from "../../../src/tui/theme"
 import type { SearchEverythingResult } from "../../../src/tui/adapters/search-everything-adapter"
 import type { TuiState } from "../../../src/tui/state"
 
@@ -47,6 +48,24 @@ const baseState: TuiState = {
 }
 
 describe("TUI render view models", () => {
+  test("semantic TUI theme exposes required color tokens", () => {
+    assert.deepEqual(Object.keys(tuiTheme).sort(), [
+      "background",
+      "danger",
+      "focusedRow",
+      "mutedText",
+      "panel",
+      "primaryAccent",
+      "secondaryAccent",
+      "selectedOpenNote",
+      "success",
+      "warning",
+    ])
+    for (const color of Object.values(tuiTheme)) {
+      assert.match(color, /^#[0-9a-f]{6}$/iu)
+    }
+  })
+
   test("manager view model includes rows with filename/key, title, description, focus marker, and shortcut/status hints", () => {
     const vm = buildManagerViewModel(baseState)
 
@@ -58,6 +77,80 @@ describe("TUI render view models", () => {
       [
         { marker: " ", key: "notes/inbox", filename: "inbox/", title: "inbox", description: "2 notes", focused: false },
         { marker: "›", key: "daily-plan", filename: "daily-plan.md", title: "Daily Plan", description: "Today priorities.", focused: true },
+      ],
+    )
+    assert.deepEqual(
+      vm.rows.map((row) => ({ key: row.key, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent, openStyleIntent: row.openStyleIntent, metadataStyleIntent: row.metadataStyleIntent })),
+      [
+        { key: "notes/inbox", styleIntent: "panel", itemStyleIntent: "secondaryAccent", openStyleIntent: null, metadataStyleIntent: "mutedText" },
+        { key: "daily-plan", styleIntent: "focusedRow", itemStyleIntent: "primaryAccent", openStyleIntent: "selectedOpenNote", metadataStyleIntent: "mutedText" },
+      ],
+    )
+  })
+
+  test("manager focused note and open editor note use separate style intents", () => {
+    const vm = buildManagerViewModel({
+      ...baseState,
+      manager: {
+        ...baseState.manager,
+        focusedIndex: 0,
+        selectedNoteKey: "note-b",
+        items: [
+          {
+            type: "note",
+            key: "note-a",
+            filename: "note-a.md",
+            title: "Note A",
+            description: "Focused note.",
+            relativePath: "notes/note-a.md",
+          },
+          {
+            type: "note",
+            key: "note-b",
+            filename: "note-b.md",
+            title: "Note B",
+            description: "Open note.",
+            relativePath: "notes/note-b.md",
+          },
+        ],
+      },
+      editor: {
+        ...baseState.editor!,
+        note: {
+          ...baseState.editor!.note,
+          key: "note-b",
+          title: "Note B",
+          description: "Open note.",
+          relativePath: "notes/note-b.md",
+        },
+      },
+    })
+
+    assert.deepEqual(
+      vm.rows.map((row) => ({ key: row.key, styleIntent: row.styleIntent, openStyleIntent: row.openStyleIntent })),
+      [
+        { key: "note-a", styleIntent: "focusedRow", openStyleIntent: null },
+        { key: "note-b", styleIntent: "panel", openStyleIntent: "selectedOpenNote" },
+      ],
+    )
+  })
+
+  test("manager selected note without an open editor does not receive open-note styling", () => {
+    const vm = buildManagerViewModel({
+      ...baseState,
+      manager: {
+        ...baseState.manager,
+        focusedIndex: 1,
+        selectedNoteKey: "daily-plan",
+      },
+      editor: null,
+    })
+
+    assert.deepEqual(
+      vm.rows.map((row) => ({ key: row.key, focused: row.focused, styleIntent: row.styleIntent, openStyleIntent: row.openStyleIntent })),
+      [
+        { key: "notes/inbox", focused: false, styleIntent: "panel", openStyleIntent: null },
+        { key: "daily-plan", focused: true, styleIntent: "focusedRow", openStyleIntent: null },
       ],
     )
   })
@@ -73,6 +166,7 @@ describe("TUI render view models", () => {
       key: "daily-plan",
       dirty: false,
       status: "saved",
+      statusIntent: "success",
     })
     assert.deepEqual(vm.body, {
       value: "# Daily Plan\n\nShip renderer screens.",
@@ -82,6 +176,15 @@ describe("TUI render view models", () => {
     })
     assert.deepEqual(vm.bottombar.hints, ["Ctrl+S save", "Ctrl+F find", "Ctrl+P search", "Esc manager", "Ctrl+C quit"])
     assert.equal(vm.bottombar.status, "Line 1, Col 1 · saved")
+    assert.equal(vm.bottombar.statusIntent, "success")
+
+    const dirtyVm = buildEditorViewModel({ ...baseState, screen: "editor", editor: { ...baseState.editor!, dirty: true, body: `${baseState.editor!.body}\nunsaved` } })
+    assert.equal(dirtyVm.topbar.statusIntent, "warning")
+    assert.equal(dirtyVm.bottombar.statusIntent, "warning")
+
+    const autosaveVm = buildEditorViewModel({ ...baseState, screen: "editor", editor: { ...baseState.editor!, autosaveStatus: "saving" } as TuiState["editor"] })
+    assert.equal(autosaveVm.topbar.statusIntent, "warning")
+    assert.equal(autosaveVm.bottombar.statusIntent, "warning")
   })
 
   test("Search Everything view model includes query, result list, selected preview/excerpt/command usage, and previous-screen context", () => {
@@ -121,6 +224,13 @@ describe("TUI render view models", () => {
 
     assert.equal(vm.query, "/rep")
     assert.equal(vm.previousScreen, "editor")
+    assert.deepEqual(vm.styleIntents, {
+      panel: "panel",
+      input: "primaryAccent",
+      result: "panel",
+      selectedResult: "focusedRow",
+      preview: "secondaryAccent",
+    })
     assert.deepEqual(vm.shortcuts, ["type search", "↑/↓ select", "Enter open/run", "Esc editor"])
     assert.deepEqual(
       vm.results.map((row) => ({ marker: row.focusMarker, kind: row.kind, label: row.label, detail: row.detail, selected: row.selected })),
@@ -129,10 +239,12 @@ describe("TUI render view models", () => {
         { marker: "›", kind: "command", label: "/replace", detail: "Find and replace text in the active editor buffer", selected: true },
       ],
     )
+    assert.deepEqual(vm.results.map((row) => row.styleIntent), ["panel", "focusedRow"])
     assert.deepEqual(vm.preview, {
       title: "/replace",
       subtitle: "Find and replace text in the active editor buffer",
       lines: ["Usage: /replace <query> <replacement>", "Shortcut: Ctrl+H"],
+      styleIntent: "secondaryAccent",
     })
 
     const contentVm = buildSearchEverythingViewModel(

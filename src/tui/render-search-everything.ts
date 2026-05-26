@@ -6,7 +6,20 @@ import {
   type SearchEverythingResult,
 } from "./adapters/search-everything-adapter"
 import type { TuiScreen, TuiState } from "./state"
+import type { TuiColorIntent } from "./theme"
 import type { WorkspaceController } from "./workspace-controller"
+
+export interface SearchEverythingStyleIntents {
+  panel: TuiColorIntent
+  input: TuiColorIntent
+  result: TuiColorIntent
+  selectedResult: TuiColorIntent
+  preview: TuiColorIntent
+}
+
+export interface SearchEverythingPreviewViewModel extends SearchEverythingPreview {
+  styleIntent: TuiColorIntent
+}
 
 export interface SearchEverythingResultRowViewModel {
   id: string
@@ -15,13 +28,15 @@ export interface SearchEverythingResultRowViewModel {
   detail: string
   selected: boolean
   focusMarker: "›" | " "
+  styleIntent: TuiColorIntent
 }
 
 export interface SearchEverythingViewModel {
   query: string
   previousScreen: Exclude<TuiScreen, "search">
+  styleIntents: SearchEverythingStyleIntents
   results: SearchEverythingResultRowViewModel[]
-  preview: SearchEverythingPreview | null
+  preview: SearchEverythingPreviewViewModel | null
   shortcuts: string[]
 }
 
@@ -40,10 +55,19 @@ export function buildSearchEverythingViewModel(
   const query = state.search?.query ?? ""
   const previousScreen = state.search?.previousScreen ?? "manager"
   const selectedIndex = clampIndex(state.search?.selectedIndex ?? 0, results.length)
+  const styleIntents: SearchEverythingStyleIntents = {
+    panel: "panel",
+    input: "primaryAccent",
+    result: "panel",
+    selectedResult: "focusedRow",
+    preview: "secondaryAccent",
+  }
+  const preview = buildHighlightedSearchEverythingPreview(results, selectedIndex)
 
   return {
     query,
     previousScreen,
+    styleIntents,
     results: results.map((result, index) => {
       const selected = index === selectedIndex
       return {
@@ -53,9 +77,10 @@ export function buildSearchEverythingViewModel(
         detail: result.detail,
         selected,
         focusMarker: selected ? "›" : " ",
+        styleIntent: selected ? styleIntents.selectedResult : styleIntents.result,
       }
     }),
-    preview: buildHighlightedSearchEverythingPreview(results, selectedIndex),
+    preview: preview ? { ...preview, styleIntent: styleIntents.preview } : null,
     shortcuts: ["type search", "↑/↓ select", "Enter open/run", `Esc ${previousScreen}`],
   }
 }

@@ -1,7 +1,11 @@
 import { BoxRenderable, TextareaRenderable, TextRenderable, type CliRenderer } from "@opentui/core"
 
 import type { TuiState } from "./state"
+import type { TuiColorIntent } from "./theme"
 import type { WorkspaceController } from "./workspace-controller"
+
+type EditorAutosaveStatus = "idle" | "pending" | "saving" | "saved" | "error"
+type EditorBufferWithAutosave = NonNullable<TuiState["editor"]> & { autosaveStatus?: EditorAutosaveStatus }
 
 export interface EditorTopbarViewModel {
   title: string
@@ -10,6 +14,7 @@ export interface EditorTopbarViewModel {
   key: string
   dirty: boolean
   status: "dirty" | "saved"
+  statusIntent: TuiColorIntent
 }
 
 export interface EditorBodyViewModel {
@@ -21,6 +26,7 @@ export interface EditorBodyViewModel {
 
 export interface EditorBottombarViewModel {
   status: string
+  statusIntent: TuiColorIntent
   hints: string[]
 }
 
@@ -42,12 +48,27 @@ function countLines(value: string): number {
   return value.split("\n").length
 }
 
+function statusIntentForEditor(editor: EditorBufferWithAutosave | null): TuiColorIntent {
+  switch (editor?.autosaveStatus) {
+    case "pending":
+    case "saving":
+      return "warning"
+    case "saved":
+      return "success"
+    case "error":
+      return "danger"
+    default:
+      return editor?.dirty ? "warning" : "success"
+  }
+}
+
 export function buildEditorViewModel(state: TuiState): EditorViewModel {
-  const editor = state.editor
+  const editor = state.editor as EditorBufferWithAutosave | null
   const note = editor?.note
   const body = editor?.body ?? ""
   const dirty = editor?.dirty ?? false
   const status = dirty ? "dirty" : "saved"
+  const statusIntent = statusIntentForEditor(editor)
   const relativePath = note?.relativePath ?? ""
 
   return {
@@ -58,6 +79,7 @@ export function buildEditorViewModel(state: TuiState): EditorViewModel {
       key: note?.key ?? "",
       dirty,
       status,
+      statusIntent,
     },
     body: {
       value: body,
@@ -67,6 +89,7 @@ export function buildEditorViewModel(state: TuiState): EditorViewModel {
     },
     bottombar: {
       status: `Line 1, Col 1 · ${status}`,
+      statusIntent,
       hints: ["Ctrl+S save", "Ctrl+F find", "Ctrl+P search", "Esc manager", "Ctrl+C quit"],
     },
   }
