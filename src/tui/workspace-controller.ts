@@ -1,8 +1,9 @@
 import type { SaveEditorBufferDependencies } from "./adapters/editor-buffer-adapter"
 import {
-  buildManagerItems,
+  buildManagerBrowserModel,
+  goToManagerParent,
   moveManagerSelection,
-  openManagerSelection,
+  openManagerBrowserItem,
   type MoveManagerSelectionDirection,
   type NoteManagerSummary,
 } from "./adapters/note-manager-adapter"
@@ -11,11 +12,16 @@ import {
   type SearchEverythingResult,
 } from "./adapters/search-everything-adapter"
 import {
+  clearManagerFilter as clearManagerFilterState,
   closeSearchEverything,
+  closeTransientMode,
   createInitialTuiState,
+  openEditorFind as openEditorFindState,
   markEditorBodyChanged,
   openEditorForNote,
   openSearchEverything,
+  setManagerFilter as setManagerFilterState,
+  type EditorBufferState,
   type ManagerItem,
   type TuiNote,
   type TuiState,
@@ -63,6 +69,13 @@ export interface WorkspaceController {
   updateSearchQuery: (query: string) => void
   focusSearchResult: (index: number) => void
   cancelSearch: () => void
+  goBack: () => WorkspaceActionResult
+  openManagerFilter: () => void
+  setManagerFilter: (query: string) => void
+  updateManagerFilter: (query: string) => void
+  clearManagerFilter: () => void
+  toggleSearch: (query?: string) => void
+  openEditorFind: (query?: string) => void
   selectSearchResult: (result?: SearchEverythingResult, options?: WorkspaceActionOptions) => WorkspaceActionResult
   runCommand: (command: string, options?: WorkspaceActionOptions) => WorkspaceActionResult
 }
@@ -70,7 +83,7 @@ export interface WorkspaceController {
 const ok = (): WorkspaceActionResult => ({ blocked: false })
 const dirtyBlocked = (): WorkspaceActionResult => ({ blocked: true, reason: "dirty-editor" })
 
-const destructiveCommands = new Set(["/archive", "/delete", "/migrate"])
+const destructiveCommands = new Set(["/archive", "/delete", "/migrate", "/quit"])
 
 function clampIndex(index: number, length: number): number {
   if (length <= 0) {
@@ -125,8 +138,12 @@ function commandNameFor(command: string): string {
   return command.trim().split(/\s+/u)[0] ?? ""
 }
 
+export function editorRequiresDestructiveConfirmation(editor: EditorBufferState | null | undefined): boolean {
+  return Boolean(editor?.dirty || editor?.autosaveStatus === "pending" || editor?.autosaveStatus === "saving" || editor?.autosaveStatus === "error")
+}
+
 function wouldReplaceDirtyEditor(state: TuiState, nextNoteKey: string): boolean {
-  return Boolean(state.editor?.dirty && state.editor.note.key !== nextNoteKey)
+  return Boolean(editorRequiresDestructiveConfirmation(state.editor) && state.editor?.note.key !== nextNoteKey)
 }
 
 function mustConfirmDirtyReplacement(state: TuiState, nextNoteKey: string, options: WorkspaceActionOptions): boolean {
@@ -134,7 +151,7 @@ function mustConfirmDirtyReplacement(state: TuiState, nextNoteKey: string, optio
 }
 
 function mustConfirmDirtyDestructiveAction(state: TuiState, command: string, options: WorkspaceActionOptions): boolean {
-  return Boolean(state.editor?.dirty && destructiveCommands.has(commandNameFor(command)) && options.confirmed !== true)
+  return Boolean(editorRequiresDestructiveConfirmation(state.editor) && destructiveCommands.has(commandNameFor(command)) && options.confirmed !== true)
 }
 
 function applySavedEditor(state: TuiState, persistedNote: TuiNote, submittedBody = persistedNote.body): TuiState {
@@ -177,20 +194,34 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   let state = createInitialTuiState()
   let searchResults: SearchEverythingResult[] = []
 
-  function refreshManager(): void {
-    noteSummaries = deps.listNotes()
-    const items = buildManagerItems(noteSummaries)
-    const focusedIndex = clampIndex(state.manager.focusedIndex, items.length)
+  function applyManagerBrowserModel(): void {
+    const model = buildManagerBrowserModel(noteSummaries, state.manager)
+    const items = model.layout1Rows.map(cloneManagerItem)
+    const focusedIndex = clampIndex(model.focusedIndex, items.length)
     const focusedItem = items[focusedIndex]
+    const previousSelectedNoteKey = state.manager.selectedNoteKey
+    const selectedNoteStillExists = previousSelectedNoteKey
+      ? noteSummaries.some((summary) => summary.key === previousSelectedNoteKey)
+      : false
+    const selectedNoteKey = selectedNoteKeyFor(focusedItem) ?? (selectedNoteStillExists ? previousSelectedNoteKey : null)
 
     state = {
       ...state,
       manager: {
+        ...model.state,
         items,
         focusedIndex,
-        selectedNoteKey: selectedNoteKeyFor(focusedItem),
+        selectedNoteKey,
+        currentFolderPath: model.currentFolderPath,
+        hoveredPath: model.hoveredPath,
+        filterQuery: model.state.filterQuery ?? "",
       },
     }
+  }
+
+  function refreshManager(): void {
+    noteSummaries = deps.listNotes()
+    applyManagerBrowserModel()
   }
 
   function setEditorNote(note: TuiNote): void {
@@ -198,10 +229,11 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   }
 
   function openNoteByKey(key: string, options: WorkspaceActionOptions = {}): WorkspaceActionResult {
-    if (state.editor?.dirty && state.editor.note.key === key) {
+    if (editorRequiresDestructiveConfirmation(state.editor) && state.editor?.note.key === key) {
       state = {
         ...state,
         screen: "editor",
+        mode: "editor.body",
         search: null,
       }
       return ok()
@@ -223,19 +255,19 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   }
 
   function focusFolder(path: string): void {
-    const focusedIndex = state.manager.items.findIndex((item) => item.type === "folder" && item.relativePath === path)
-    const nextFocusedIndex = focusedIndex === -1 ? state.manager.focusedIndex : focusedIndex
-
     state = {
       ...state,
       screen: "manager",
+      mode: "manager.browse",
       search: null,
       manager: {
         ...state.manager,
-        focusedIndex: nextFocusedIndex,
-        selectedNoteKey: focusedIndex === -1 ? state.manager.selectedNoteKey : selectedNoteKeyFor(state.manager.items[nextFocusedIndex]),
+        currentFolderPath: path,
+        hoveredPath: null,
+        focusedIndex: 0,
       },
     }
+    applyManagerBrowserModel()
   }
 
   const controller: WorkspaceController = {
@@ -247,33 +279,62 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
     focusManagerItem: (index) => {
       const focusedIndex = clampIndex(index, state.manager.items.length)
+      const focusedItem = state.manager.items[focusedIndex]
       state = {
         ...state,
         manager: {
           ...state.manager,
           focusedIndex,
-          selectedNoteKey: selectedNoteKeyFor(state.manager.items[focusedIndex]),
+          hoveredPath: focusedItem?.relativePath ?? null,
+          selectedNoteKey: selectedNoteKeyFor(focusedItem),
         },
       }
+      applyManagerBrowserModel()
     },
 
     moveManagerSelection: (direction, options = {}) => {
+      const previousManager = state.manager
+      const movedManager = moveManagerSelection(previousManager, direction, options)
+      const focusedItem = movedManager.items[movedManager.focusedIndex]
       state = {
         ...state,
-        manager: moveManagerSelection(state.manager, direction, options),
+        manager: {
+          ...previousManager,
+          ...movedManager,
+          currentFolderPath: previousManager.currentFolderPath,
+          hoveredPath: focusedItem?.relativePath ?? null,
+          filterQuery: previousManager.filterQuery ?? "",
+        },
       }
+      applyManagerBrowserModel()
     },
 
     openFocusedManagerItem: (options = {}) => {
       const focused = state.manager.items[state.manager.focusedIndex]
-      if (!focused || focused.type !== "note") {
+      if (!focused) {
         return ok()
       }
 
-      if (state.editor?.dirty && state.editor.note.key === focused.key) {
+      if (focused.type === "folder") {
+        const opened = openManagerBrowserItem(state.manager, { showNote: deps.showNote })
+        if (opened.type === "folder") {
+          state = {
+            ...state,
+            screen: "manager",
+            mode: "manager.browse",
+            search: null,
+            manager: opened.state,
+          }
+          applyManagerBrowserModel()
+        }
+        return ok()
+      }
+
+      if (editorRequiresDestructiveConfirmation(state.editor) && state.editor?.note.key === focused.key) {
         state = {
           ...state,
           screen: "editor",
+          mode: "editor.body",
           search: null,
         }
         return ok()
@@ -283,21 +344,81 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         return dirtyBlocked()
       }
 
-      const note = openManagerSelection(state.manager, { showNote: deps.showNote })
-      if (!note) {
+      const opened = openManagerBrowserItem(state.manager, { showNote: deps.showNote })
+      if (opened.type !== "note") {
         return ok()
       }
 
-      setEditorNote(note)
+      setEditorNote(opened.note)
       return ok()
+    },
+
+    goBack: () => {
+      if (state.screen === "search" || state.mode === "editor.find" || state.mode === "editor.replace" || state.mode === "manager.filter") {
+        state = closeTransientMode(state)
+        if (state.screen === "manager") {
+          applyManagerBrowserModel()
+        }
+        if (state.screen !== "search") {
+          searchResults = []
+        }
+        return ok()
+      }
+
+      if (state.screen === "manager") {
+        const nextManager = goToManagerParent(state.manager)
+        state = {
+          ...state,
+          mode: "manager.browse",
+          manager: nextManager,
+        }
+        applyManagerBrowserModel()
+      }
+      return ok()
+    },
+
+    openManagerFilter: () => {
+      state = setManagerFilterState(state, state.manager.filterQuery ?? "")
+      applyManagerBrowserModel()
+    },
+
+    setManagerFilter: (query) => {
+      state = setManagerFilterState(state, query)
+      applyManagerBrowserModel()
+    },
+
+    updateManagerFilter: (query) => {
+      state = setManagerFilterState(state, query)
+      applyManagerBrowserModel()
+    },
+
+    clearManagerFilter: () => {
+      state = clearManagerFilterState(state)
+      applyManagerBrowserModel()
+    },
+
+    toggleSearch: (query = "") => {
+      if (state.screen === "search") {
+        state = closeSearchEverything(state)
+        searchResults = []
+        return
+      }
+
+      controller.openSearch(query)
+    },
+
+    openEditorFind: (query = "") => {
+      state = openEditorFindState(state, { query })
     },
 
     showManager: () => {
       state = {
         ...state,
         screen: "manager",
+        mode: "manager.browse",
         search: null,
       }
+      applyManagerBrowserModel()
       return ok()
     },
 
@@ -306,6 +427,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         state = {
           ...state,
           screen: "editor",
+          mode: "editor.body",
           search: null,
         }
       }

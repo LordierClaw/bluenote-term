@@ -49,6 +49,16 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
     updateSearchQuery: (query) => calls.push(`updateSearchQuery:${query}`),
     focusSearchResult: (index) => calls.push(`focusSearchResult:${index}`),
     cancelSearch: () => calls.push("cancelSearch"),
+    goBack: () => {
+      calls.push("goBack")
+      return { blocked: false }
+    },
+    openManagerFilter: () => calls.push("openManagerFilter"),
+    setManagerFilter: (query) => calls.push(`setManagerFilter:${query}`),
+    updateManagerFilter: (query) => calls.push(`updateManagerFilter:${query}`),
+    clearManagerFilter: () => calls.push("clearManagerFilter"),
+    toggleSearch: (query) => calls.push(`toggleSearch:${query ?? ""}`),
+    openEditorFind: (query) => calls.push(`openEditorFind:${query ?? ""}`),
     selectSearchResult: () => {
       calls.push("selectSearchResult")
       return { blocked: false }
