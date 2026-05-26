@@ -2,9 +2,12 @@ import { describe, test } from "bun:test"
 import assert from "node:assert/strict"
 
 import {
+  buildManagerBrowserModel,
   buildManagerItems,
   buildManagerViewModel,
+  goToManagerParent,
   moveManagerSelection,
+  openManagerBrowserItem,
   openManagerSelection,
   type NoteManagerSummary,
 } from "../../../src/tui/adapters/note-manager-adapter"
@@ -28,6 +31,52 @@ const summaries: NoteManagerSummary[] = [
     title: "Root Note",
     description: "A top-level note.",
     relativePath: "notes/root-note.md",
+  },
+]
+
+const browserSummaries: NoteManagerSummary[] = [
+  {
+    key: "root-note",
+    title: "Root Note",
+    description: "A top-level note.",
+    relativePath: "notes/root-note.md",
+    body: "# Root Note\n\nThis is the real note body.\n- Preview this content.\n",
+  },
+  {
+    key: "daily-plan",
+    title: "Daily Plan",
+    description: "Today priorities.",
+    relativePath: "notes/inbox/daily-plan.md",
+  },
+  {
+    key: "api-roadmap",
+    title: "API Roadmap",
+    description: "Ship API work.",
+    relativePath: "notes/projects/api-roadmap.md",
+  },
+  {
+    key: "client-brief",
+    title: "Client Brief",
+    description: "Client notes.",
+    relativePath: "notes/projects/client/client-brief.md",
+  },
+  {
+    key: "scratch-text",
+    title: "Scratch Text",
+    description: "Not a note file.",
+    relativePath: "notes/scratch.txt",
+  },
+  {
+    key: "sidecar",
+    title: "Sidecar",
+    description: "Hidden state sidecar.",
+    relativePath: ".state/notes/root-note.json",
+  },
+  {
+    key: "hidden-note",
+    title: "Hidden Note",
+    description: "Hidden app state.",
+    relativePath: "notes/.state/hidden-note.md",
   },
 ]
 
@@ -246,5 +295,182 @@ describe("TUI note manager adapter", () => {
       null,
     )
     assert.equal(calls, 0)
+  })
+
+  test("builds a current-folder browser model with only immediate folders and BlueNote note files", () => {
+    const model = buildManagerBrowserModel(browserSummaries, {
+      items: [],
+      focusedIndex: 0,
+      selectedNoteKey: null,
+      currentFolderPath: "",
+      hoveredPath: null,
+      filterQuery: "",
+    })
+
+    assert.deepEqual(
+      model.layout1Rows.map((row) => `${row.type}:${row.relativePath}`),
+      ["folder:notes/inbox", "folder:notes/projects", "note:notes/root-note.md"],
+    )
+    assert.deepEqual(model.layout1Rows[0], {
+      type: "folder",
+      key: "notes/inbox",
+      relativePath: "notes/inbox",
+      filename: "inbox",
+      title: "",
+      description: "",
+      columns: { filename: "inbox", title: "", description: "" },
+      rowStyleIntent: "folder",
+      focused: true,
+      selected: false,
+      index: 0,
+    })
+    assert.deepEqual(model.layout1Rows[2], {
+      type: "note",
+      key: "root-note",
+      relativePath: "notes/root-note.md",
+      filename: "root-note.md",
+      title: "Root Note",
+      description: "A top-level note.",
+      columns: { filename: "root-note.md", title: "Root Note", description: "A top-level note." },
+      rowStyleIntent: "note",
+      focused: false,
+      selected: false,
+      index: 2,
+    })
+  })
+
+  test("previews hovered folders with the same browser row style and hovered notes with note content", () => {
+    const folderPreview = buildManagerBrowserModel(browserSummaries, {
+      items: [],
+      focusedIndex: 0,
+      selectedNoteKey: null,
+      currentFolderPath: "",
+      hoveredPath: "notes/projects",
+      filterQuery: "",
+    }).preview
+
+    assert.equal(folderPreview.type, "folder")
+    assert.equal(folderPreview.path, "notes/projects")
+    assert.deepEqual(
+      folderPreview.rows?.map((row) => ({
+        type: row.type,
+        key: row.key,
+        filename: row.filename,
+        title: row.title,
+        description: row.description,
+        rowStyleIntent: row.rowStyleIntent,
+      })),
+      [
+        { type: "folder", key: "notes/projects/client", filename: "client", title: "", description: "", rowStyleIntent: "folder" },
+        { type: "note", key: "api-roadmap", filename: "api-roadmap.md", title: "API Roadmap", description: "Ship API work.", rowStyleIntent: "note" },
+      ],
+    )
+
+    const notePreview = buildManagerBrowserModel(browserSummaries, {
+      items: [],
+      focusedIndex: 2,
+      selectedNoteKey: null,
+      currentFolderPath: "",
+      hoveredPath: "notes/root-note.md",
+      filterQuery: "",
+    }).preview
+
+    assert.deepEqual(notePreview, {
+      type: "note-content",
+      path: "notes/root-note.md",
+      noteKey: "root-note",
+      title: "Root Note",
+      description: "A top-level note.",
+      contentLines: ["# Root Note", "", "This is the real note body.", "- Preview this content."],
+    })
+  })
+
+  test("opens folders by updating current folder and opens notes as editor-ready data", () => {
+    const rootModel = buildManagerBrowserModel(browserSummaries, {
+      items: [],
+      focusedIndex: 0,
+      selectedNoteKey: null,
+      currentFolderPath: "",
+      hoveredPath: "notes/projects",
+      filterQuery: "",
+    })
+    const openedFolder = openManagerBrowserItem(rootModel.state, {
+      showNote: () => {
+        throw new Error("showNote should not be called for folders")
+      },
+    })
+
+    assert.equal(openedFolder.type, "folder")
+    assert.equal(openedFolder.state.currentFolderPath, "notes/projects")
+    assert.equal(openedFolder.state.hoveredPath, null)
+    assert.equal(openedFolder.state.focusedIndex, 0)
+    assert.equal(openedFolder.state.filterQuery, "")
+
+    const projectModel = buildManagerBrowserModel(browserSummaries, {
+      ...openedFolder.state,
+      hoveredPath: "notes/projects/api-roadmap.md",
+    })
+    const openedNote = openManagerBrowserItem(projectModel.state, {
+      showNote: (selector) => {
+        assert.equal(selector, "api-roadmap")
+        return {
+          key: "api-roadmap",
+          title: "API Roadmap",
+          description: "Ship API work.",
+          relativePath: "notes/projects/api-roadmap.md",
+          body: "# API Roadmap\n\nShip it.\n",
+        }
+      },
+    })
+
+    assert.deepEqual(openedNote, {
+      type: "note",
+      note: {
+        key: "api-roadmap",
+        title: "API Roadmap",
+        description: "Ship API work.",
+        relativePath: "notes/projects/api-roadmap.md",
+        body: "# API Roadmap\n\nShip it.\n",
+      },
+    })
+  })
+
+  test("moves to the parent folder and calmly no-ops at the manager root", () => {
+    const nested: ManagerState = {
+      items: [],
+      focusedIndex: 3,
+      selectedNoteKey: null,
+      currentFolderPath: "notes/projects/client",
+      hoveredPath: "notes/projects/client/client-brief.md",
+      filterQuery: "client",
+    }
+
+    assert.deepEqual(goToManagerParent(nested), {
+      items: [],
+      focusedIndex: 0,
+      selectedNoteKey: null,
+      currentFolderPath: "notes/projects",
+      hoveredPath: null,
+      filterQuery: "client",
+    })
+
+    const root: ManagerState = { ...nested, currentFolderPath: "", focusedIndex: 1, hoveredPath: "notes/projects" }
+    assert.equal(goToManagerParent(root), root)
+  })
+
+  test("filters Layout 1 and updates Layout 2 from the hovered filtered item", () => {
+    const model = buildManagerBrowserModel(browserSummaries, {
+      items: [],
+      focusedIndex: 0,
+      selectedNoteKey: null,
+      currentFolderPath: "",
+      hoveredPath: "notes/root-note.md",
+      filterQuery: "project",
+    })
+
+    assert.deepEqual(model.layout1Rows.map((row) => row.relativePath), ["notes/projects"])
+    assert.equal(model.hoveredPath, "notes/projects")
+    assert.equal(model.preview.type, "folder")
+    assert.deepEqual(model.preview.rows?.map((row) => row.relativePath), ["notes/projects/client", "notes/projects/api-roadmap.md"])
   })
 })

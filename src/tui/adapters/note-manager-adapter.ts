@@ -2,7 +2,9 @@ import type { NoteSummary } from "../../core/list-notes"
 import type { ShowNoteSummary } from "../../core/show-note"
 import type { ManagerItem, ManagerState, TuiNote } from "../state"
 
-export type NoteManagerSummary = NoteSummary
+export interface NoteManagerSummary extends NoteSummary {
+  body?: string
+}
 
 export type MoveManagerSelectionDirection = "up" | "down" | "first" | "last"
 
@@ -13,6 +15,66 @@ export interface MoveManagerSelectionOptions {
 export interface OpenManagerSelectionDependencies {
   showNote: (selector: string) => ShowNoteSummary | TuiNote
 }
+
+export interface OpenManagerBrowserItemDependencies {
+  showNote: (selector: string) => ShowNoteSummary | TuiNote
+}
+
+export interface ManagerBrowserRow extends ManagerItem {
+  index: number
+  focused: boolean
+  selected: boolean
+  columns: {
+    filename: string
+    title: string
+    description: string
+  }
+  rowStyleIntent: "folder" | "note"
+}
+
+export type ManagerPreviewModel =
+  | {
+      type: "empty"
+      path: null
+      rows?: undefined
+      noteKey?: undefined
+      title?: undefined
+      description?: undefined
+      contentLines?: undefined
+    }
+  | {
+      type: "folder"
+      path: string
+      rows: ManagerBrowserRow[]
+      noteKey?: undefined
+      title?: undefined
+      description?: undefined
+      contentLines?: undefined
+    }
+  | {
+      type: "note-content"
+      path: string
+      noteKey: string
+      title: string
+      description: string
+      contentLines: string[]
+      rows?: undefined
+    }
+
+export interface ManagerBrowserModel {
+  layout1Rows: ManagerBrowserRow[]
+  preview: ManagerPreviewModel
+  currentFolderPath: string
+  hoveredPath: string | null
+  focusedIndex: number
+  empty: boolean
+  state: ManagerState
+}
+
+export type OpenManagerBrowserItemResult =
+  | { type: "folder"; state: ManagerState }
+  | { type: "note"; note: TuiNote }
+  | { type: "none"; state: ManagerState }
 
 export interface ManagerRowViewModel extends ManagerItem {
   index: number
@@ -31,6 +93,12 @@ export interface ManagerViewModel {
 
 function normalizeRelativePath(relativePath: string): string {
   return relativePath.replaceAll("\\", "/").replace(/\/+/gu, "/")
+}
+
+function normalizeManagerFolderPath(path: string | null | undefined): string {
+  const normalizedPath = normalizeRelativePath(path ?? "").replace(/^\/+|\/+$/gu, "")
+
+  return normalizedPath === "notes" ? "" : normalizedPath
 }
 
 function filenameFor(relativePath: string): string {
@@ -67,6 +135,148 @@ function cloneItem(item: ManagerItem): ManagerItem {
   return { ...item }
 }
 
+function isBlueNoteNotePath(relativePath: string): boolean {
+  const normalizedPath = normalizeRelativePath(relativePath)
+  const parts = normalizedPath.split("/").filter(Boolean)
+
+  return parts.length >= 2 && parts[0] === "notes" && parts.every((part) => !part.startsWith(".")) && normalizedPath.endsWith(".md")
+}
+
+function noteItemForSummary(summary: NoteManagerSummary): ManagerItem | null {
+  const relativePath = normalizeRelativePath(summary.relativePath)
+
+  if (!isBlueNoteNotePath(relativePath)) {
+    return null
+  }
+
+  return {
+    type: "note",
+    key: summary.key,
+    filename: filenameFor(relativePath) || summary.key,
+    title: summary.title,
+    description: summary.description,
+    relativePath,
+  }
+}
+
+function allBrowserItems(noteSummaries: readonly NoteManagerSummary[]): ManagerItem[] {
+  const folderPaths = new Set<string>()
+  const noteItems: ManagerItem[] = []
+
+  for (const summary of noteSummaries) {
+    const noteItem = noteItemForSummary(summary)
+
+    if (!noteItem) {
+      continue
+    }
+
+    noteItems.push(noteItem)
+
+    const parts = noteItem.relativePath.split("/").filter(Boolean)
+    for (let index = 1; index < parts.length - 1; index += 1) {
+      folderPaths.add(parts.slice(0, index + 1).join("/"))
+    }
+  }
+
+  const folderItems = Array.from(folderPaths).map<ManagerItem>((folderPath) => ({
+    type: "folder",
+    key: folderPath,
+    filename: filenameFor(folderPath),
+    title: "",
+    description: "",
+    relativePath: folderPath,
+  }))
+
+  return [...folderItems, ...noteItems].sort(compareBrowserItems)
+}
+
+function compareBrowserItems(left: ManagerItem, right: ManagerItem): number {
+  if (left.type !== right.type) {
+    return left.type === "folder" ? -1 : 1
+  }
+
+  const nameComparison = left.filename.localeCompare(right.filename)
+  return nameComparison !== 0 ? nameComparison : left.relativePath.localeCompare(right.relativePath)
+}
+
+function immediateRowsForFolder(items: readonly ManagerItem[], currentFolderPath: string): ManagerItem[] {
+  const folderPath = normalizeManagerFolderPath(currentFolderPath)
+  const parentParts = folderPath ? folderPath.split("/").filter(Boolean) : ["notes"]
+
+  return items
+    .filter((item) => {
+      const itemParts = item.relativePath.split("/").filter(Boolean)
+
+      if (item.type === "folder") {
+        return itemParts.length === parentParts.length + 1 && parentParts.every((part, index) => itemParts[index] === part)
+      }
+
+      return itemParts.length === parentParts.length + 1 && parentParts.every((part, index) => itemParts[index] === part)
+    })
+    .sort(compareBrowserItems)
+}
+
+function filterRows(rows: readonly ManagerItem[], query: string): ManagerItem[] {
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+
+  if (!normalizedQuery) {
+    return [...rows]
+  }
+
+  return rows.filter((row) =>
+    [row.filename, row.title, row.description, row.relativePath]
+      .join("\n")
+      .toLocaleLowerCase()
+      .includes(normalizedQuery),
+  )
+}
+
+function browserRowFor(item: ManagerItem, index: number, focused: boolean, selectedNoteKey: string | null): ManagerBrowserRow {
+  return {
+    ...item,
+    index,
+    focused,
+    selected: item.type === "note" && item.key === selectedNoteKey,
+    columns: {
+      filename: item.filename,
+      title: item.type === "folder" ? "" : item.title,
+      description: item.type === "folder" ? "" : item.description,
+    },
+    rowStyleIntent: item.type,
+  }
+}
+
+function browserRowsFor(items: readonly ManagerItem[], focusedPath: string | null, selectedNoteKey: string | null): ManagerBrowserRow[] {
+  return items.map((item, index) => browserRowFor(item, index, item.relativePath === focusedPath, selectedNoteKey))
+}
+
+function noteContentPreview(item: ManagerItem, noteSummaries: readonly NoteManagerSummary[]): ManagerPreviewModel {
+  const summary = noteSummaries.find((candidate) => normalizeRelativePath(candidate.relativePath) === item.relativePath)
+  const bodyLines = summary?.body?.split(/\r?\n/u) ?? []
+  if (bodyLines.at(-1) === "") {
+    bodyLines.pop()
+  }
+
+  return {
+    type: "note-content",
+    path: item.relativePath,
+    noteKey: item.key,
+    title: item.title,
+    description: item.description,
+    contentLines: bodyLines,
+  }
+}
+
+function folderPreview(items: readonly ManagerItem[], folderPath: string, selectedNoteKey: string | null): ManagerPreviewModel {
+  const previewItems = immediateRowsForFolder(items, folderPath)
+
+  return {
+    type: "folder",
+    path: folderPath,
+    rows: browserRowsFor(previewItems, null, selectedNoteKey),
+  }
+}
+
 function selectedNoteKeyFor(items: ManagerItem[], focusedIndex: number): string | null {
   const focused = items[focusedIndex]
   return focused?.type === "note" ? focused.key : null
@@ -74,6 +284,108 @@ function selectedNoteKeyFor(items: ManagerItem[], focusedIndex: number): string 
 
 function clampIndex(index: number, max: number): number {
   return Math.min(Math.max(index, 0), max)
+}
+
+export function buildManagerBrowserModel(
+  noteSummaries: readonly NoteManagerSummary[],
+  state: ManagerState,
+): ManagerBrowserModel {
+  const items = allBrowserItems(noteSummaries)
+  const currentFolderPath = normalizeManagerFolderPath(state.currentFolderPath)
+  const filterQuery = state.filterQuery ?? ""
+  const visibleItems = filterRows(immediateRowsForFolder(items, currentFolderPath), filterQuery)
+  const focusedIndex = visibleItems.length === 0 ? 0 : clampIndex(state.focusedIndex, visibleItems.length - 1)
+  const requestedHoveredPath = state.hoveredPath ?? null
+  const hoveredItem = visibleItems.find((item) => item.relativePath === requestedHoveredPath) ?? visibleItems[focusedIndex] ?? null
+  const hoveredPath = hoveredItem?.relativePath ?? null
+  const layout1Rows = browserRowsFor(visibleItems, hoveredPath, state.selectedNoteKey)
+
+  const preview: ManagerPreviewModel = !hoveredItem
+    ? { type: "empty", path: null }
+    : hoveredItem.type === "folder"
+      ? folderPreview(items, hoveredItem.relativePath, state.selectedNoteKey)
+      : noteContentPreview(hoveredItem, noteSummaries)
+
+  return {
+    layout1Rows,
+    preview,
+    currentFolderPath,
+    hoveredPath,
+    focusedIndex,
+    empty: layout1Rows.length === 0,
+    state: {
+      ...state,
+      items: items.map(cloneItem),
+      focusedIndex,
+      currentFolderPath,
+      hoveredPath,
+      filterQuery,
+    },
+  }
+}
+
+export function openManagerBrowserItem(
+  state: ManagerState,
+  deps: OpenManagerBrowserItemDependencies,
+): OpenManagerBrowserItemResult {
+  const hoveredPath = state.hoveredPath ?? state.items[state.focusedIndex]?.relativePath ?? null
+  const focused = hoveredPath ? state.items.find((item) => item.relativePath === hoveredPath) : state.items[state.focusedIndex]
+
+  if (!focused) {
+    return {
+      type: "none",
+      state: {
+        ...state,
+        items: state.items.map(cloneItem),
+      },
+    }
+  }
+
+  if (focused.type === "folder") {
+    return {
+      type: "folder",
+      state: {
+        ...state,
+        items: state.items.map(cloneItem),
+        focusedIndex: 0,
+        currentFolderPath: normalizeManagerFolderPath(focused.relativePath),
+        hoveredPath: null,
+        filterQuery: state.filterQuery ?? "",
+      },
+    }
+  }
+
+  const note = deps.showNote(focused.key)
+
+  return {
+    type: "note",
+    note: {
+      key: note.key,
+      title: note.title,
+      description: note.description,
+      relativePath: note.relativePath,
+      body: note.body,
+    },
+  }
+}
+
+export function goToManagerParent(state: ManagerState): ManagerState {
+  const currentFolderPath = normalizeManagerFolderPath(state.currentFolderPath)
+
+  if (!currentFolderPath) {
+    return state
+  }
+
+  const parentPath = currentFolderPath.includes("/") ? currentFolderPath.split("/").slice(0, -1).join("/") : ""
+
+  return {
+    ...state,
+    items: state.items.map(cloneItem),
+    focusedIndex: 0,
+    currentFolderPath: parentPath,
+    hoveredPath: null,
+    filterQuery: state.filterQuery ?? "",
+  }
 }
 
 export function buildManagerItems(noteSummaries: readonly NoteManagerSummary[]): ManagerItem[] {
