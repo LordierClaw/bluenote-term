@@ -75,6 +75,21 @@ function statusIntentForEditor(editor: EditorBufferWithAutosave | null): TuiColo
   }
 }
 
+function bottomBarAutosaveLabel(editor: EditorBufferWithAutosave | null, fallbackStatus: "dirty" | "saved"): string {
+  switch (editor?.autosaveStatus) {
+    case "pending":
+      return "Unsaved"
+    case "saving":
+      return "Autosaving…"
+    case "saved":
+      return "Saved"
+    case "error":
+      return "Autosave failed"
+    default:
+      return fallbackStatus
+  }
+}
+
 export function buildEditorViewModel(state: TuiState): EditorViewModel {
   const editor = state.editor as EditorBufferWithAutosave | null
   const note = editor?.note
@@ -82,6 +97,7 @@ export function buildEditorViewModel(state: TuiState): EditorViewModel {
   const dirty = editor?.dirty ?? false
   const status = dirty ? "dirty" : "saved"
   const statusIntent = statusIntentForEditor(editor)
+  const bottomBarStatus = bottomBarAutosaveLabel(editor, status)
   const relativePath = note?.relativePath ?? ""
   const findMode = state.mode === "editor.find"
   const findMatchCount = editor?.findMatchCount ?? 0
@@ -117,7 +133,7 @@ export function buildEditorViewModel(state: TuiState): EditorViewModel {
       focused: !findMode,
     },
     bottombar: {
-      status: `Line 1, Col 1 · ${status}`,
+      status: `Line 1, Col 1 · ${bottomBarStatus}`,
       statusIntent,
       hints: ["Ctrl+S save", "Ctrl+F find", "Ctrl+P search", "Esc manager", "Ctrl+C quit"],
     },

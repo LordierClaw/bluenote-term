@@ -160,6 +160,7 @@ export async function startTuiWorkspace(options: StartTuiWorkspaceOptions = {}):
     destroyed = true
     currentScreen?.destroyRecursively()
     currentScreen = null
+    controller.dispose()
     renderer.destroy()
   }
 
@@ -174,6 +175,8 @@ export async function startTuiWorkspace(options: StartTuiWorkspaceOptions = {}):
     currentScreen = renderWorkspace(renderer, controller, destroy, rerender)
     renderer.root.add(currentScreen)
   }
+
+  controller.setAutosaveStateChangeHandler(rerender)
 
   renderer.addInputHandler((sequence) => {
     if (destroyed || renderer.isDestroyed) {

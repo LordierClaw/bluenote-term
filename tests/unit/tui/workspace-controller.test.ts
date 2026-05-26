@@ -10,6 +10,38 @@ import type { NoteManagerSummary } from "../../../src/tui/adapters/note-manager-
 import type { SearchEverythingResult } from "../../../src/tui/adapters/search-everything-adapter"
 import type { TuiNote } from "../../../src/tui/state"
 
+function createFakeScheduler() {
+  type ScheduledTask = { id: number; callback: () => void; delay: number; cleared: boolean }
+  const tasks: ScheduledTask[] = []
+  let nextId = 1
+
+  return {
+    tasks,
+    setTimeout(callback: () => void, delay: number) {
+      const task = { id: nextId++, callback, delay, cleared: false }
+      tasks.push(task)
+      return task.id
+    },
+    clearTimeout(handle: unknown) {
+      const task = tasks.find((candidate) => candidate.id === handle)
+      if (task) {
+        task.cleared = true
+      }
+    },
+    runNext() {
+      const task = tasks.find((candidate) => !candidate.cleared)
+      if (!task) {
+        throw new Error("No scheduled task to run")
+      }
+      task.cleared = true
+      task.callback()
+    },
+    activeTasks() {
+      return tasks.filter((task) => !task.cleared)
+    },
+  }
+}
+
 const noteSummaries: NoteManagerSummary[] = [
   {
     key: "daily-plan",
@@ -550,5 +582,239 @@ describe("TUI workspace controller", () => {
     assert.equal(editorRequiresDestructiveConfirmation({ ...cleanEditor, autosaveStatus: "pending" }), true)
     assert.equal(editorRequiresDestructiveConfirmation({ ...cleanEditor, autosaveStatus: "saving" }), true)
     assert.equal(editorRequiresDestructiveConfirmation({ ...cleanEditor, autosaveStatus: "error" }), true)
+  })
+
+  test("changing editor body marks dirty, sets autosave pending, and debounces persistence for 750ms", async () => {
+    const scheduler = createFakeScheduler()
+    const persistedBodies: string[] = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) => {
+        persistedBodies.push(`${note.key}:${body}`)
+        return { ...note, body }
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Draft one")
+
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+    assert.deepEqual(scheduler.activeTasks().map((task) => task.delay), [750])
+    assert.deepEqual(persistedBodies, [])
+
+    controller.updateEditorBody("Draft two")
+    assert.equal(scheduler.tasks[0]?.cleared, true)
+    assert.deepEqual(scheduler.activeTasks().map((task) => task.delay), [750])
+
+    scheduler.runNext()
+    await Promise.resolve()
+
+    assert.deepEqual(persistedBodies, ["daily-plan:Draft two"])
+    assert.equal(controller.getState().editor?.body, "Draft two")
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+  })
+
+  test("autosave uses the same persistence dependency as manual save", async () => {
+    const scheduler = createFakeScheduler()
+    const persistedBodies: string[] = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) => {
+        persistedBodies.push(`${note.key}:${body}`)
+        return { ...note, body }
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Manual body")
+    await controller.saveEditor()
+    controller.updateEditorBody("Autosaved body")
+    scheduler.runNext()
+    await Promise.resolve()
+
+    assert.deepEqual(persistedBodies, ["daily-plan:Manual body", "daily-plan:Autosaved body"])
+  })
+
+  test("updating editor body to saved content does not schedule autosave or mark pending", () => {
+    const scheduler = createFakeScheduler()
+    const { deps } = createDeps({ autosaveScheduler: scheduler })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Original daily body")
+
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+    assert.deepEqual(scheduler.activeTasks(), [])
+  })
+
+  test("stale autosave completion after a newer manual save does not corrupt clean saved state", async () => {
+    const scheduler = createFakeScheduler()
+    const pendingSaves: Array<{ body: string; resolve: (note: TuiNote) => void }> = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) =>
+        new Promise<TuiNote>((resolve) => {
+          pendingSaves.push({ body, resolve: (savedNote) => resolve({ ...note, ...savedNote }) })
+        }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Older autosave body")
+    scheduler.runNext()
+    await Promise.resolve()
+    controller.updateEditorBody("Newer manual body")
+    const manualSave = controller.saveEditor()
+    pendingSaves[1]?.resolve({ ...notesByKey["daily-plan"], body: "Newer manual body" })
+    await manualSave
+
+    pendingSaves[0]?.resolve({ ...notesByKey["daily-plan"], body: "Older autosave body" })
+    await Promise.resolve()
+
+    assert.equal(controller.getState().editor?.body, "Newer manual body")
+    assert.equal(controller.getState().editor?.savedBody, "Newer manual body")
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+  })
+
+  test("dispose clears pending autosave timers", () => {
+    const scheduler = createFakeScheduler()
+    const { deps } = createDeps({ autosaveScheduler: scheduler })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Pending before destroy")
+    assert.equal(scheduler.activeTasks().length, 1)
+
+    controller.dispose()
+
+    assert.deepEqual(scheduler.activeTasks(), [])
+  })
+
+  test("autosave status changes notify the renderer to rerender", async () => {
+    const scheduler = createFakeScheduler()
+    const invalidations: string[] = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      onAutosaveStateChange: () => invalidations.push(controller.getState().editor?.autosaveStatus ?? "none"),
+      persistEditorBody: (note, body) => Promise.resolve({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Autosave status body")
+    scheduler.runNext()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    assert.deepEqual(invalidations, ["pending", "saving", "saved"])
+  })
+
+  test("stale autosave completion for an older body does not overwrite a newer dirty body", async () => {
+    const scheduler = createFakeScheduler()
+    const pendingSaves: Array<{ body: string; resolve: (note: TuiNote) => void }> = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) =>
+        new Promise<TuiNote>((resolve) => {
+          pendingSaves.push({ body, resolve: (savedNote) => resolve({ ...note, ...savedNote }) })
+        }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Older autosave body")
+    scheduler.runNext()
+    await Promise.resolve()
+    assert.equal(controller.getState().editor?.autosaveStatus, "saving")
+
+    controller.updateEditorBody("Newer unsaved body")
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+    pendingSaves[0]?.resolve({ ...notesByKey["daily-plan"], body: "Older autosave body" })
+    await Promise.resolve()
+
+    assert.equal(controller.getState().editor?.body, "Newer unsaved body")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+  })
+
+  test("stale autosave completion for a different active note is ignored", async () => {
+    const scheduler = createFakeScheduler()
+    let finishPersist!: (note: TuiNote) => void
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) =>
+        new Promise<TuiNote>((resolve) => {
+          finishPersist = (savedNote) => resolve({ ...note, ...savedNote, body })
+        }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Autosaving daily")
+    scheduler.runNext()
+    await Promise.resolve()
+    openArchiveReview(controller, { confirmed: true })
+
+    finishPersist({ ...notesByKey["daily-plan"], body: "Autosaving daily" })
+    await Promise.resolve()
+
+    assert.equal(controller.getState().editor?.note.key, "archive-review")
+    assert.equal(controller.getState().editor?.body, "Archive body")
+    assert.equal(controller.getState().editor?.autosaveStatus, "idle")
+  })
+
+  test("stale autosave failure after a newer manual save does not mark clean editor as failed", async () => {
+    const scheduler = createFakeScheduler()
+    const pendingSaves: Array<{ body: string; resolve: (note: TuiNote) => void; reject: (error: Error) => void }> = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) =>
+        new Promise<TuiNote>((resolve, reject) => {
+          pendingSaves.push({ body, resolve: (savedNote) => resolve({ ...note, ...savedNote }), reject })
+        }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Shared body")
+    scheduler.runNext()
+    await Promise.resolve()
+    const manualSave = controller.saveEditor()
+    pendingSaves[1]?.resolve({ ...notesByKey["daily-plan"], body: "Shared body" })
+    await manualSave
+
+    pendingSaves[0]?.reject(new Error("late autosave failure"))
+    await Promise.resolve()
+    await Promise.resolve()
+
+    assert.equal(controller.getState().editor?.body, "Shared body")
+    assert.equal(controller.getState().editor?.savedBody, "Shared body")
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+  })
+
+  test("autosave failure changes status to error and preserves dirty body", async () => {
+    const scheduler = createFakeScheduler()
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: () => Promise.reject(new Error("disk full")),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Dirty body after failure")
+    scheduler.runNext()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    assert.equal(controller.getState().editor?.body, "Dirty body after failure")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "error")
   })
 })

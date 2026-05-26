@@ -18,6 +18,9 @@ import {
   closeTransientMode,
   createInitialTuiState,
   openEditorFind as openEditorFindState,
+  markAutosaveError,
+  markAutosavePending,
+  markAutosaveSaving,
   markEditorBodyChanged,
   openEditorForNote,
   openSearchEverything,
@@ -47,11 +50,18 @@ export interface WorkspaceCommandContext {
 
 export type WorkspaceCommandHandler = (context: WorkspaceCommandContext) => void
 
+export interface WorkspaceDebounceScheduler {
+  setTimeout: (callback: () => void, delay: number) => unknown
+  clearTimeout: (handle: unknown) => void
+}
+
 export interface WorkspaceControllerDependencies {
   listNotes: () => readonly NoteManagerSummary[]
   showNote: (selector: string) => TuiNote
   searchNotes: (query: string) => readonly SearchNoteMatch[]
   persistEditorBody?: SaveEditorBufferDependencies["persist"]
+  autosaveScheduler?: WorkspaceDebounceScheduler
+  onAutosaveStateChange?: () => void
   commandHandlers?: Partial<Record<string, WorkspaceCommandHandler>>
 }
 
@@ -79,6 +89,8 @@ export interface WorkspaceController {
   openEditorFind: (query?: string) => void
   updateEditorFindQuery: (query: string) => void
   advanceEditorFind: () => void
+  dispose: () => void
+  setAutosaveStateChangeHandler: (handler: (() => void) | null) => void
   selectSearchResult: (result?: SearchEverythingResult, options?: WorkspaceActionOptions) => WorkspaceActionResult
   runCommand: (command: string, options?: WorkspaceActionOptions) => WorkspaceActionResult
 }
@@ -163,18 +175,7 @@ function applySavedEditor(state: TuiState, persistedNote: TuiNote, submittedBody
   }
 
   if (state.editor.body !== submittedBody) {
-    return {
-      ...state,
-      editor: {
-        ...state.editor,
-        note: {
-          ...state.editor.note,
-          body: state.editor.body,
-        },
-        savedBody: persistedNote.body,
-        dirty: state.editor.body !== persistedNote.body,
-      },
-    }
+    return state
   }
 
   return {
@@ -184,8 +185,17 @@ function applySavedEditor(state: TuiState, persistedNote: TuiNote, submittedBody
       body: persistedNote.body,
       savedBody: persistedNote.body,
       dirty: false,
+      autosaveStatus: "saved",
     },
   }
+}
+
+function applyAutosaveFailure(state: TuiState, noteKey: string, submittedBody: string): TuiState {
+  if (state.editor?.note.key !== noteKey || state.editor.body !== submittedBody || !state.editor.dirty) {
+    return state
+  }
+
+  return markAutosaveError(state)
 }
 
 function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
@@ -196,6 +206,66 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   let noteSummaries: readonly NoteManagerSummary[] = []
   let state = createInitialTuiState()
   let searchResults: SearchEverythingResult[] = []
+  let autosaveTimer: unknown = null
+  let autosaveStateChangeHandler: (() => void) | null = deps.onAutosaveStateChange ?? null
+  const autosaveScheduler: WorkspaceDebounceScheduler = deps.autosaveScheduler ?? {
+    setTimeout: (callback, delay) => globalThis.setTimeout(callback, delay),
+    clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
+  }
+
+  function clearAutosaveTimer(): void {
+    if (autosaveTimer !== null) {
+      autosaveScheduler.clearTimeout(autosaveTimer)
+      autosaveTimer = null
+    }
+  }
+
+  function notifyAutosaveStateChange(): void {
+    autosaveStateChangeHandler?.()
+  }
+
+  function persistEditorSnapshot(noteToPersist: TuiNote, submittedBody: string): TuiNote | Promise<TuiNote> {
+    const persist = deps.persistEditorBody ?? ((note, body) => ({ ...note, body }))
+    return persist(noteToPersist, submittedBody)
+  }
+
+  async function autosaveEditor(noteToPersist: TuiNote, submittedBody: string): Promise<void> {
+    if (state.editor?.note.key !== noteToPersist.key || state.editor.body !== submittedBody) {
+      return
+    }
+
+    state = markAutosaveSaving(state)
+    notifyAutosaveStateChange()
+    try {
+      const persistedNote = persistEditorSnapshot(noteToPersist, submittedBody)
+      const savedNote = isPromiseLike(persistedNote) ? await persistedNote : persistedNote
+      const previousState = state
+      state = applySavedEditor(state, savedNote, submittedBody)
+      if (state !== previousState) {
+        notifyAutosaveStateChange()
+      }
+    } catch {
+      const previousState = state
+      state = applyAutosaveFailure(state, noteToPersist.key, submittedBody)
+      if (state !== previousState) {
+        notifyAutosaveStateChange()
+      }
+    }
+  }
+
+  function scheduleAutosave(): void {
+    if (!state.editor) {
+      return
+    }
+
+    clearAutosaveTimer()
+    const noteToPersist = toTuiNote(state.editor.note)
+    const submittedBody = state.editor.body
+    autosaveTimer = autosaveScheduler.setTimeout(() => {
+      autosaveTimer = null
+      void autosaveEditor(noteToPersist, submittedBody)
+    }, 750)
+  }
 
   function applyManagerBrowserModel(): void {
     const model = buildManagerBrowserModel(noteSummaries, state.manager)
@@ -477,6 +547,25 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
     updateEditorBody: (body) => {
       state = markEditorBodyChanged(state, body)
+      if (!state.editor) {
+        clearAutosaveTimer()
+        return
+      }
+      if (!state.editor.dirty) {
+        clearAutosaveTimer()
+        state = {
+          ...state,
+          editor: {
+            ...state.editor,
+            autosaveStatus: "saved",
+          },
+        }
+        notifyAutosaveStateChange()
+        return
+      }
+      state = markAutosavePending(state)
+      notifyAutosaveStateChange()
+      scheduleAutosave()
     },
 
     saveEditor: async () => {
@@ -484,10 +573,10 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         return ok()
       }
 
-      const persist = deps.persistEditorBody ?? ((note, body) => ({ ...note, body }))
+      clearAutosaveTimer()
       const noteToPersist = toTuiNote(state.editor.note)
       const submittedBody = state.editor.body
-      const persistedNote = persist(noteToPersist, submittedBody)
+      const persistedNote = persistEditorSnapshot(noteToPersist, submittedBody)
 
       if (isPromiseLike(persistedNote)) {
         const savedNote = await persistedNote
@@ -537,6 +626,15 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     cancelSearch: () => {
       state = closeSearchEverything(state)
       searchResults = []
+    },
+
+    dispose: () => {
+      clearAutosaveTimer()
+      autosaveStateChangeHandler = null
+    },
+
+    setAutosaveStateChangeHandler: (handler) => {
+      autosaveStateChangeHandler = handler
     },
 
     selectSearchResult: (result, options = {}) => {

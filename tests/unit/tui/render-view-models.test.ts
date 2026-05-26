@@ -189,6 +189,29 @@ describe("TUI render view models", () => {
     assert.equal(autosaveVm.bottombar.statusIntent, "warning")
   })
 
+  test("editor bottom bar displays autosave status labels", () => {
+    const statusFor = (autosaveStatus: NonNullable<TuiState["editor"]>["autosaveStatus"], dirty = true) =>
+      buildEditorViewModel({
+        ...baseState,
+        screen: "editor",
+        editor: {
+          ...baseState.editor!,
+          dirty,
+          autosaveStatus,
+        },
+      }).bottombar
+
+    assert.deepEqual(
+      [statusFor("pending"), statusFor("saving"), statusFor("saved", false), statusFor("error")].map((bar) => ({ status: bar.status, intent: bar.statusIntent })),
+      [
+        { status: "Line 1, Col 1 · Unsaved", intent: "warning" },
+        { status: "Line 1, Col 1 · Autosaving…", intent: "warning" },
+        { status: "Line 1, Col 1 · Saved", intent: "success" },
+        { status: "Line 1, Col 1 · Autosave failed", intent: "danger" },
+      ],
+    )
+  })
+
   test("editor find mode exposes one focused find input and match count while body is unfocused", () => {
     const vm = buildEditorViewModel({
       ...baseState,

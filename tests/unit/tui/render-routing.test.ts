@@ -61,6 +61,8 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
     openEditorFind: (query) => calls.push(`openEditorFind:${query ?? ""}`),
     updateEditorFindQuery: (query) => calls.push(`updateEditorFindQuery:${query}`),
     advanceEditorFind: () => calls.push("advanceEditorFind"),
+    dispose: () => calls.push("dispose"),
+    setAutosaveStateChangeHandler: () => calls.push("setAutosaveStateChangeHandler"),
     selectSearchResult: () => {
       calls.push("selectSearchResult")
       return { blocked: false }
