@@ -5,6 +5,8 @@ import { buildEditorViewModel } from "../../../src/tui/render-editor"
 import { buildManagerViewModel } from "../../../src/tui/render-manager"
 import { buildSearchEverythingViewModel } from "../../../src/tui/render-search-everything"
 import { tuiTheme } from "../../../src/tui/theme"
+import { buildManagerBrowserModel, type NoteManagerSummary } from "../../../src/tui/adapters/note-manager-adapter"
+import { createWorkspaceController } from "../../../src/tui/workspace-controller"
 import type { SearchEverythingResult } from "../../../src/tui/adapters/search-everything-adapter"
 import type { TuiState } from "../../../src/tui/state"
 
@@ -71,7 +73,7 @@ describe("TUI render view models", () => {
 
     assert.equal(vm.title, "BlueNote Manager")
     assert.equal(vm.status, "2 items · selected daily-plan")
-    assert.deepEqual(vm.shortcuts, ["↑/↓ move", "Enter/o open", "s search", "e editor", "q quit"])
+    assert.deepEqual(vm.shortcuts, ["↑/↓ move", "→/Enter open", "←/Esc back", "/ filter", "Ctrl+P search", "q quit"])
     assert.deepEqual(
       vm.rows.map((row) => ({ marker: row.focusMarker, key: row.key, filename: row.filename, title: row.title, description: row.description, focused: row.focused })),
       [
@@ -153,6 +155,124 @@ describe("TUI render view models", () => {
         { key: "daily-plan", focused: true, styleIntent: "focusedRow", openStyleIntent: null },
       ],
     )
+  })
+
+  test("manager browser view model exposes colored two-column topbar, rows, and folder preview", () => {
+    const summaries: NoteManagerSummary[] = [
+      { key: "root-note", title: "Root Note", description: "A top-level note.", relativePath: "notes/root-note.md", body: "# Root Note" },
+      { key: "api-roadmap", title: "API Roadmap", description: "Ship API work.", relativePath: "notes/projects/api-roadmap.md" },
+      { key: "client-brief", title: "Client Brief", description: "Client notes.", relativePath: "notes/projects/client/client-brief.md" },
+    ]
+    const browser = buildManagerBrowserModel(summaries, {
+      items: [],
+      focusedIndex: 0,
+      selectedNoteKey: "api-roadmap",
+      currentFolderPath: "",
+      hoveredPath: "notes/projects",
+      filterQuery: "",
+    })
+    const vm = buildManagerViewModel({
+      ...baseState,
+      manager: {
+        ...browser.state,
+        items: browser.layout1Rows,
+      },
+    } as TuiState, browser)
+
+    assert.deepEqual(vm.topbar, {
+      title: "BlueNote Manager",
+      currentPath: "notes/",
+      hoveredPath: "notes/projects",
+      styleIntent: "primaryAccent",
+    })
+    assert.deepEqual(vm.panels, {
+      layout1: { title: "Layout 1: current folder", styleIntent: "panel" },
+      layout2: { title: "Layout 2: preview", styleIntent: "panel" },
+    })
+    assert.deepEqual(
+      vm.layout1.rows.map((row) => ({ filename: row.filename, columns: row.columns, focused: row.focused, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent })),
+      [
+        { filename: "projects", columns: { filename: "projects", title: "", description: "" }, focused: true, styleIntent: "focusedRow", itemStyleIntent: "secondaryAccent" },
+        { filename: "root-note.md", columns: { filename: "root-note.md", title: "Root Note", description: "A top-level note." }, focused: false, styleIntent: "panel", itemStyleIntent: "primaryAccent" },
+      ],
+    )
+    assert.equal(vm.layout2.preview.type, "folder")
+    assert.deepEqual(
+      vm.layout2.preview.rows.map((row) => ({ filename: row.filename, columns: row.columns, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent })),
+      [
+        { filename: "client", columns: { filename: "client", title: "", description: "" }, styleIntent: "panel", itemStyleIntent: "secondaryAccent" },
+        { filename: "api-roadmap.md", columns: { filename: "api-roadmap.md", title: "API Roadmap", description: "Ship API work." }, styleIntent: "panel", itemStyleIntent: "primaryAccent" },
+      ],
+    )
+  })
+
+  test("manager note preview exposes title, path, content lines, focus background, and separate open marker", () => {
+    const browser = buildManagerBrowserModel([
+      {
+        key: "root-note",
+        title: "Root Note",
+        description: "A top-level note.",
+        relativePath: "notes/root-note.md",
+        body: "# Root Note\n\nPreview body.",
+      },
+    ], {
+      items: [],
+      focusedIndex: 0,
+      selectedNoteKey: "root-note",
+      currentFolderPath: "",
+      hoveredPath: "notes/root-note.md",
+      filterQuery: "",
+    })
+
+    const vm = buildManagerViewModel({
+      ...baseState,
+      manager: {
+        ...browser.state,
+        items: browser.layout1Rows,
+      },
+      editor: {
+        ...baseState.editor!,
+        note: { ...baseState.editor!.note, key: "root-note", relativePath: "notes/root-note.md", title: "Root Note" },
+      },
+    } as TuiState, browser)
+
+    assert.deepEqual(vm.layout2.preview, {
+      type: "note-content",
+      title: "Root Note",
+      path: "notes/root-note.md",
+      noteKey: "root-note",
+      description: "A top-level note.",
+      contentLines: ["# Root Note", "", "Preview body."],
+      styleIntent: "panel",
+    })
+    assert.equal(vm.layout1.rows[0]?.styleIntent, "focusedRow")
+    assert.equal(vm.layout1.rows[0]?.openMarker, "●")
+    assert.notEqual(vm.layout1.rows[0]?.openMarker, vm.layout1.rows[0]?.focusMarker)
+    assert.equal(vm.layout1.rows[0]?.openStyleIntent, "selectedOpenNote")
+  })
+
+  test("runtime manager controller exposes the browser preview model used by renderer", () => {
+    const summaries: NoteManagerSummary[] = [
+      { key: "root-note", title: "Root Note", description: "A top-level note.", relativePath: "notes/root-note.md" },
+      { key: "api-roadmap", title: "API Roadmap", description: "Ship API work.", relativePath: "notes/projects/api-roadmap.md" },
+    ]
+    const controller = createWorkspaceController({
+      listNotes: () => summaries,
+      showNote: (selector) => {
+        const summary = summaries.find((candidate) => candidate.key === selector || candidate.relativePath === selector) ?? summaries[0]!
+        return { ...summary, body: `# ${summary.title}\n\nHydrated preview body.` }
+      },
+      searchNotes: () => [],
+    })
+
+    controller.refreshManager()
+    controller.moveManagerSelection("down")
+
+    const vm = buildManagerViewModel(controller.getState(), controller.getManagerBrowserModel())
+
+    assert.equal(vm.layout2.preview.type, "note-content")
+    assert.equal(vm.layout2.preview.path, "notes/root-note.md")
+    assert.deepEqual(vm.layout2.preview.contentLines, ["# Root Note", "", "Hydrated preview body."])
   })
 
   test("editor view model includes only topbar, editor body metadata, and bottombar data", () => {

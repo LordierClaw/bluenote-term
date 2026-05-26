@@ -5,6 +5,7 @@ import {
   goToManagerParent,
   moveManagerSelection,
   openManagerBrowserItem,
+  type ManagerBrowserModel,
   type MoveManagerSelectionDirection,
   type NoteManagerSummary,
 } from "./adapters/note-manager-adapter"
@@ -67,6 +68,7 @@ export interface WorkspaceControllerDependencies {
 
 export interface WorkspaceController {
   getState: () => TuiState
+  getManagerBrowserModel: () => ManagerBrowserModel
   getSearchResults: () => readonly SearchEverythingResult[]
   refreshManager: () => void
   focusManagerItem: (index: number) => void
@@ -267,6 +269,21 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     }, 750)
   }
 
+  function noteSummariesForManagerPreview(): readonly NoteManagerSummary[] {
+    const focusedItem = state.manager.items[state.manager.focusedIndex]
+    if (focusedItem?.type !== "note") {
+      return noteSummaries
+    }
+
+    const focusedSummary = noteSummaries.find((summary) => summary.key === focusedItem.key || summary.relativePath === focusedItem.relativePath)
+    if (!focusedSummary || focusedSummary.body !== undefined) {
+      return noteSummaries
+    }
+
+    const hydratedNote = deps.showNote(focusedItem.key)
+    return noteSummaries.map((summary) => (summary.key === focusedSummary.key ? { ...summary, body: hydratedNote.body } : summary))
+  }
+
   function applyManagerBrowserModel(): void {
     const model = buildManagerBrowserModel(noteSummaries, state.manager)
     const items = model.layout1Rows.map(cloneManagerItem)
@@ -345,6 +362,8 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
   const controller: WorkspaceController = {
     getState: () => cloneStateSnapshot(state),
+
+    getManagerBrowserModel: () => buildManagerBrowserModel(noteSummariesForManagerPreview(), state.manager),
 
     getSearchResults: () => searchResults.map(cloneSearchResult),
 

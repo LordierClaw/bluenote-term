@@ -3,9 +3,11 @@ import assert from "node:assert/strict"
 
 import { routeWorkspaceKey } from "../../../src/tui/app"
 import { routeEditorKey } from "../../../src/tui/render-editor"
+import { routeManagerKey } from "../../../src/tui/render-manager"
 import { routeSearchEverythingKey } from "../../../src/tui/render-search-everything"
 import type { TuiState } from "../../../src/tui/state"
 import { createWorkspaceController, type WorkspaceController } from "../../../src/tui/workspace-controller"
+import type { ManagerBrowserModel } from "../../../src/tui/adapters/note-manager-adapter"
 
 function createController(screen: TuiState["screen"]): { controller: WorkspaceController; calls: string[] } {
   const calls: string[] = []
@@ -18,6 +20,15 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
 
   const controller: WorkspaceController = {
     getState: () => state,
+    getManagerBrowserModel: (): ManagerBrowserModel => ({
+      layout1Rows: [],
+      preview: { type: "empty", path: null },
+      currentFolderPath: "",
+      hoveredPath: null,
+      focusedIndex: 0,
+      empty: true,
+      state: state.manager,
+    }),
     getSearchResults: () => [],
     refreshManager: () => calls.push("refreshManager"),
     focusManagerItem: (index) => calls.push(`focusManagerItem:${index}`),
@@ -197,6 +208,25 @@ describe("TUI render keyboard routing", () => {
 
     assert.deepEqual(routeWorkspaceKey("q", controller, () => { exitCount += 1 }), { handled: true, exit: true })
     assert.equal(exitCount, 1)
+  })
+
+  test("manager route maps browser navigation and filter keys", () => {
+    const { controller, calls } = createController("manager")
+
+    for (const [sequence, expected] of [
+      ["\u001b[A", "moveManagerSelection:up"],
+      ["\u001b[B", "moveManagerSelection:down"],
+      ["\u001b[C", "openFocusedManagerItem"],
+      ["\r", "openFocusedManagerItem"],
+      ["\u001b[D", "goBack"],
+      ["\u001b", "goBack"],
+      ["\u001b[", "goBack"],
+      ["/", "openManagerFilter"],
+      ["\u0006", "openManagerFilter"],
+    ] as const) {
+      assert.equal(routeManagerKey(sequence, controller), true, sequence)
+      assert.equal(calls.at(-1), expected, sequence)
+    }
   })
 
   test("search route does not consume printable query input", () => {
