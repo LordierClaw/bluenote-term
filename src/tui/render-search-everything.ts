@@ -6,7 +6,7 @@ import {
   type SearchEverythingResult,
 } from "./adapters/search-everything-adapter"
 import type { TuiScreen, TuiState } from "./state"
-import type { TuiColorIntent } from "./theme"
+import { tuiTheme, type TuiColorIntent } from "./theme"
 import type { WorkspaceController } from "./workspace-controller"
 
 export interface SearchEverythingStyleIntents {
@@ -31,10 +31,27 @@ export interface SearchEverythingResultRowViewModel {
   styleIntent: TuiColorIntent
 }
 
+export interface SearchEverythingInputViewModel {
+  id: "bluenote-search-query"
+  value: string
+  placeholder: string
+  focused: true
+  styleIntent: TuiColorIntent
+}
+
+export interface SearchEverythingRegionViewModel {
+  id: "input" | "result-list" | "preview"
+  renderableId: "bluenote-search-input-region" | "bluenote-search-results-region" | "bluenote-search-preview-region"
+  kind: "input" | "results" | "preview"
+  styleIntent: TuiColorIntent
+}
+
 export interface SearchEverythingViewModel {
   query: string
   previousScreen: Exclude<TuiScreen, "search">
   styleIntents: SearchEverythingStyleIntents
+  input: SearchEverythingInputViewModel
+  regions: SearchEverythingRegionViewModel[]
   results: SearchEverythingResultRowViewModel[]
   preview: SearchEverythingPreviewViewModel | null
   shortcuts: string[]
@@ -68,6 +85,18 @@ export function buildSearchEverythingViewModel(
     query,
     previousScreen,
     styleIntents,
+    input: {
+      id: "bluenote-search-query",
+      value: query,
+      placeholder: "Search notes, content, folders, or /commands",
+      focused: true,
+      styleIntent: styleIntents.input,
+    },
+    regions: [
+      { id: "input", renderableId: "bluenote-search-input-region", kind: "input", styleIntent: styleIntents.input },
+      { id: "result-list", renderableId: "bluenote-search-results-region", kind: "results", styleIntent: styleIntents.result },
+      { id: "preview", renderableId: "bluenote-search-preview-region", kind: "preview", styleIntent: styleIntents.preview },
+    ],
     results: results.map((result, index) => {
       const selected = index === selectedIndex
       return {
@@ -99,13 +128,51 @@ export function renderSearchEverythingScreen(options: RenderSearchEverythingScre
     width: "100%",
     height: "100%",
     border: true,
+    borderColor: tuiTheme.primaryAccent,
+    backgroundColor: tuiTheme.background,
     title: "Search Everything",
   })
 
+  const inputRegion = new BoxRenderable(options.renderer, {
+    id: "bluenote-search-input-region",
+    flexDirection: "column",
+    width: "100%",
+    height: 3,
+    border: true,
+    borderColor: tuiTheme[vm.styleIntents.input],
+    backgroundColor: tuiTheme.panel,
+    title: "Input",
+  })
+  const resultsRegion = new BoxRenderable(options.renderer, {
+    id: "bluenote-search-results-region",
+    flexDirection: "column",
+    width: "100%",
+    flexGrow: 1,
+    border: true,
+    borderColor: tuiTheme[vm.styleIntents.result],
+    backgroundColor: tuiTheme.panel,
+    title: "Results",
+  })
+  const previewRegion = new BoxRenderable(options.renderer, {
+    id: "bluenote-search-preview-region",
+    flexDirection: "column",
+    width: "100%",
+    height: "30%",
+    border: true,
+    borderColor: tuiTheme[vm.styleIntents.preview],
+    backgroundColor: tuiTheme.panel,
+    title: "Preview",
+  })
+
   const input = new InputRenderable(options.renderer, {
-    id: "bluenote-search-query",
-    value: vm.query,
-    placeholder: "Search notes, content, folders, or /commands",
+    id: vm.input.id,
+    value: vm.input.value,
+    placeholder: vm.input.placeholder,
+    backgroundColor: tuiTheme.panel,
+    focusedBackgroundColor: tuiTheme.focusedRow,
+    textColor: tuiTheme.primaryAccent,
+    focusedTextColor: tuiTheme.primaryAccent,
+    placeholderColor: tuiTheme.mutedText,
   })
   input.on(InputRenderableEvents.INPUT, () => {
     options.controller.updateSearchQuery(input.value)
@@ -120,23 +187,30 @@ export function renderSearchEverythingScreen(options: RenderSearchEverythingScre
     options.onInvalidate?.()
   })
 
-  root.add(input)
+  inputRegion.add(input)
   for (const row of vm.results) {
-    root.add(
+    resultsRegion.add(
       new TextRenderable(options.renderer, {
         content: `${row.focusMarker} [${row.kind}] ${row.label} — ${row.detail}`,
         height: 1,
+        fg: tuiTheme[row.selected ? vm.styleIntents.selectedResult : row.styleIntent],
+        bg: tuiTheme.panel,
       }),
     )
   }
   if (vm.preview) {
-    root.add(new TextRenderable(options.renderer, { content: vm.preview.title, height: 1 }))
-    root.add(new TextRenderable(options.renderer, { content: vm.preview.subtitle, height: 1 }))
+    previewRegion.add(new TextRenderable(options.renderer, { content: vm.preview.title, height: 1, fg: tuiTheme.primaryAccent, bg: tuiTheme.panel }))
+    previewRegion.add(new TextRenderable(options.renderer, { content: vm.preview.subtitle, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
     for (const line of vm.preview.lines) {
-      root.add(new TextRenderable(options.renderer, { content: line, height: 1 }))
+      previewRegion.add(new TextRenderable(options.renderer, { content: line, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
     }
+  } else {
+    previewRegion.add(new TextRenderable(options.renderer, { content: "No preview", height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
   }
-  root.add(new TextRenderable(options.renderer, { content: vm.shortcuts.join("  "), height: 1 }))
+  root.add(inputRegion)
+  root.add(resultsRegion)
+  root.add(previewRegion)
+  root.add(new TextRenderable(options.renderer, { content: vm.shortcuts.join("  "), height: 1, fg: tuiTheme.secondaryAccent, bg: tuiTheme.panel }))
   input.focus()
 
   return root
@@ -148,6 +222,7 @@ export function routeSearchEverythingKey(sequence: string, controller: Workspace
 
   switch (sequence) {
     case "\u001b":
+    case "\u001b[":
       controller.cancelSearch()
       return true
     case "\u001b[A":

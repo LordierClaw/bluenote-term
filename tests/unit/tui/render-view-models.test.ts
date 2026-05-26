@@ -1,9 +1,10 @@
 import { describe, test } from "bun:test"
 import assert from "node:assert/strict"
+import { createCliRenderer, InputRenderable, type Renderable } from "@opentui/core"
 
 import { buildEditorViewModel } from "../../../src/tui/render-editor"
 import { buildManagerViewModel } from "../../../src/tui/render-manager"
-import { buildSearchEverythingViewModel } from "../../../src/tui/render-search-everything"
+import { buildSearchEverythingViewModel, renderSearchEverythingScreen } from "../../../src/tui/render-search-everything"
 import { tuiTheme } from "../../../src/tui/theme"
 import { buildManagerBrowserModel, type NoteManagerSummary } from "../../../src/tui/adapters/note-manager-adapter"
 import { createWorkspaceController } from "../../../src/tui/workspace-controller"
@@ -432,5 +433,79 @@ describe("TUI render view models", () => {
       results,
     )
     assert.deepEqual(contentVm.preview?.lines, ["Ship renderer screens with OpenTUI."])
+  })
+
+  test("Search Everything view model describes one input, result list, and preview regions in order", () => {
+    const vm = buildSearchEverythingViewModel(
+      {
+        ...baseState,
+        screen: "search",
+        mode: "search.input",
+        search: { query: "ship", selectedIndex: 0, previousScreen: "manager", previousMode: "manager.browse" },
+      },
+      [
+        {
+          kind: "note",
+          id: "note:daily-plan",
+          key: "daily-plan",
+          title: "Daily Plan",
+          relativePath: "notes/inbox/daily-plan.md",
+          filename: "daily-plan.md",
+          description: "Today priorities.",
+          matchedFields: ["title"],
+          label: "Daily Plan",
+          detail: "notes/inbox/daily-plan.md",
+          score: 10,
+        },
+      ],
+    )
+
+    assert.deepEqual(vm.input, {
+      id: "bluenote-search-query",
+      value: "ship",
+      placeholder: "Search notes, content, folders, or /commands",
+      focused: true,
+      styleIntent: "primaryAccent",
+    })
+    assert.deepEqual(vm.regions.map((region) => region.id), ["input", "result-list", "preview"])
+    assert.equal(vm.regions.findIndex((region) => region.id === "preview") > vm.regions.findIndex((region) => region.id === "result-list"), true)
+    assert.equal(vm.regions.filter((region) => region.kind === "input").length, 1)
+  })
+
+  test("Search Everything renderer builds one stable focused input and no duplicate input regions", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const controller = createWorkspaceController({
+        listNotes: () => [
+          {
+            key: "daily-plan",
+            title: "Daily Plan",
+            description: "Today priorities.",
+            relativePath: "notes/inbox/daily-plan.md",
+            body: "Ship renderer screens.",
+          },
+        ],
+        showNote: () => ({ ...baseState.editor!.note }),
+        searchNotes: () => [],
+      })
+      controller.openSearch("ship")
+
+      const root = renderSearchEverythingScreen({ renderer, controller })
+      const descendants = (node: Renderable): Renderable[] => [
+        node,
+        ...node.getChildren().flatMap((child) => descendants(child)),
+      ]
+      const descendantIds = descendants(root).map((node) => node.id)
+      const searchInput = descendants(root).find((node) => node.id === "bluenote-search-query")
+
+      assert.equal(descendantIds.filter((id) => id === "bluenote-search-query").length, 1)
+      assert.equal(descendantIds.filter((id) => id === "bluenote-search-input-region").length, 1)
+      assert.equal(descendantIds.filter((id) => id === "bluenote-search-results-region").length, 1)
+      assert.equal(descendantIds.filter((id) => id === "bluenote-search-preview-region").length, 1)
+      assert.equal(searchInput instanceof InputRenderable, true)
+      assert.equal(searchInput?.focused, true)
+    } finally {
+      renderer.destroy()
+    }
   })
 })

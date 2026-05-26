@@ -118,13 +118,17 @@ export function routeWorkspaceKey(
     return { handled: true, exit: true }
   }
 
-  if (state.screen === "search") {
-    return { handled: routeSearchEverythingKey(sequence, controller) }
+  if (sequence === "\u0010") {
+    if (state.screen === "search") {
+      controller.toggleSearch()
+    } else {
+      controller.openSearch()
+    }
+    return { handled: true }
   }
 
-  if (sequence === "\u0010") {
-    controller.openSearch()
-    return { handled: true }
+  if (state.screen === "search") {
+    return { handled: routeSearchEverythingKey(sequence, controller) }
   }
 
   if (state.screen === "editor") {

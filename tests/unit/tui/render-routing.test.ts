@@ -194,6 +194,13 @@ describe("TUI render keyboard routing", () => {
     assert.deepEqual(calls, ["openSearch:"])
   })
 
+  test("workspace route toggles out of Search Everything with Ctrl+P", () => {
+    const { controller, calls } = createController("search")
+
+    assert.deepEqual(routeWorkspaceKey("\u0010", controller, () => {}), { handled: true })
+    assert.deepEqual(calls, ["toggleSearch:"])
+  })
+
   test("workspace route reports exit without asking caller to rerender", () => {
     const { controller } = createController("manager")
     let exitCount = 0
@@ -235,5 +242,13 @@ describe("TUI render keyboard routing", () => {
     assert.equal(routeSearchEverythingKey("a", controller), false)
     assert.equal(routeSearchEverythingKey("/", controller), false)
     assert.deepEqual(calls, [])
+  })
+
+  test("search route maps Escape and Ctrl+[ to previous screen navigation", () => {
+    const { controller, calls } = createController("search")
+
+    assert.equal(routeSearchEverythingKey("\u001b", controller), true)
+    assert.equal(routeSearchEverythingKey("\u001b[", controller), true)
+    assert.deepEqual(calls, ["cancelSearch", "cancelSearch"])
   })
 })
