@@ -28,6 +28,21 @@ describe("TUI workspace workflows", () => {
     await rm(rootPath, { recursive: true, force: true })
   })
 
+  test("loads manager rows after creating derived indexes for a freshly initialized root", async () => {
+    const freshRootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-tui-fresh-root-"))
+
+    try {
+      initRoot({ override: freshRootPath })
+
+      const controller = createDefaultWorkspaceController({ rootPath: freshRootPath })
+
+      assert.equal(controller.getState().screen, "manager")
+      assert.equal(controller.getState().manager.items.length, 0)
+    } finally {
+      await rm(freshRootPath, { recursive: true, force: true })
+    }
+  })
+
   test("loads manager rows, opens a note, edits body, saves, and persists the plain note file", async () => {
     const first = createNote({
       override: rootPath,

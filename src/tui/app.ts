@@ -2,6 +2,7 @@ import path from "node:path"
 import { createCliRenderer, type BoxRenderable, type CliRenderer } from "@opentui/core"
 
 import { resolveBlueNoteRoot } from "../config/root"
+import { IndexUnavailableError } from "../core/errors"
 import { listNotes } from "../core/list-notes"
 import { rebuildIndexes } from "../core/rebuild-indexes"
 import { searchNotes } from "../core/search-notes"
@@ -62,9 +63,23 @@ function persistTuiEditorBody(rootPath: string, note: TuiNote, body: string, clo
   return showNote({ override: rootPath, selector: note.key })
 }
 
+function ensureTuiIndexes(rootPath: string): void {
+  try {
+    listNotes({ override: rootPath })
+  } catch (error) {
+    if (!(error instanceof IndexUnavailableError)) {
+      throw error
+    }
+
+    rebuildIndexes({ override: rootPath })
+  }
+}
+
 export function createDefaultWorkspaceController(options: DefaultWorkspaceControllerOptions = {}): WorkspaceController {
   const rootPath = resolveBlueNoteRoot({ override: options.rootPath })
   const clock = options.clock ?? systemClock
+
+  ensureTuiIndexes(rootPath)
 
   return createWorkspaceController({
     listNotes: () => listNotes({ override: rootPath }),
@@ -191,7 +206,28 @@ export function runTuiCli(): CliResult {
 
   return {
     exitCode: 0,
-    stdout: formatTuiBootstrapMessage(),
+    stdout: "",
+    stderr: "",
+  }
+}
+
+export async function runTuiCliInteractive(): Promise<CliResult> {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    return {
+      exitCode: 1,
+      stdout: "",
+      stderr: "BlueNote TUI requires an interactive terminal. Run `bn tui` from a TTY.\n",
+    }
+  }
+
+  const running = await startTuiWorkspace()
+  await new Promise<void>((resolve) => {
+    running.renderer.on("destroy", resolve)
+  })
+
+  return {
+    exitCode: 0,
+    stdout: "",
     stderr: "",
   }
 }

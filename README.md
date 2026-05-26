@@ -26,6 +26,7 @@ bun run check:env
 bun run typecheck
 bun test
 bun run smoke:opentui
+bun run smoke:opentui:interactive
 bun run smoke:cli
 ```
 
@@ -48,13 +49,13 @@ bun run ./bin/bn.ts tui
 
 ## Phase 3 TUI workspace
 
-Launch the workspace with `bn tui` (or `bun run ./bin/bn.ts tui` from the repo). It is organized as separate screens rather than a single mixed view:
+Launch the workspace with `bn tui` (or `bun run ./bin/bn.ts tui` from the repo) from an interactive terminal. It is organized as separate screens rather than a single mixed view:
 
 - **Manager** — file-style note navigation backed by the same note list/selectors as the CLI, with active-note focus and shortcuts for opening notes and Search Everything.
 - **Editor** — a focused inline note editing screen with top/bottom bars around the editor body. Current wired Phase 3 behavior covers Unicode-safe buffer changes, save, and dirty-state handling; select-all, cut/copy/paste, and find/replace live in the tested editor adapter/controller groundwork for follow-on runtime wiring.
 - **Search Everything** — a global search/command screen for notes, content matches, folders/paths, and discoverable slash-prefixed command entries such as `/new`, `/archive`, `/delete`, `/rebuild`, `/migrate`, `/find`, `/replace`, and `/save`. In the current runtime, `/save` is the built-in wired action; other command entries require handler wiring before they mutate notes.
 
-The TUI reads and writes the same plain Markdown note files and `.state/notes/` sidecars as the CLI; note files remain plain and do not gain frontmatter.
+The TUI reads and writes the same plain Markdown note files and `.state/notes/` sidecars as the CLI; note files remain plain and do not gain frontmatter. Agents can verify the real interactive path with `bun run smoke:opentui:interactive`, which launches `bn tui` inside a tmux-backed TTY and captures the Manager screen.
 
 ## Completion and migration
 

@@ -23,5 +23,6 @@ This repo starts with scaffold-first work before feature delivery:
 bun run typecheck
 bun test
 bun run smoke:opentui
+bun run smoke:opentui:interactive
 bun run smoke:cli
 ```

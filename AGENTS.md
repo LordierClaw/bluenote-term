@@ -38,8 +38,9 @@ Before committing code or scaffolding changes:
 1. Run `bun run typecheck`
 2. Run `bun test`
 3. Run `bun run smoke:opentui`
-4. Run `bun run smoke:cli`
-5. Review `git status`
+4. Run `bun run smoke:opentui:interactive`
+5. Run `bun run smoke:cli`
+6. Review `git status`
 
 ## Primary docs
 

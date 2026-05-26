@@ -22,12 +22,15 @@ test("bn --help prints the visible Phase 2 command surface and Phase 3 TUI launc
   assert.match(output, /tui\s+Launch the Phase 3 TUI workspace/)
 })
 
-test("package.json smoke:cli runs the dedicated smoke script", async () => {
+test("package.json smoke scripts cover CLI plus import-only and interactive OpenTUI checks", async () => {
   const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as {
     scripts?: Record<string, string>
   }
 
   assert.equal(packageJson.scripts?.["smoke:cli"], "bun run ./scripts/smoke-cli.ts")
+  assert.equal(packageJson.scripts?.["smoke:opentui"], "bun run ./scripts/smoke-opentui.ts")
+  assert.equal(packageJson.scripts?.["smoke:opentui:interactive"], "bun run ./scripts/smoke-opentui-interactive.ts")
+  assert.match(packageJson.scripts?.check ?? "", /smoke:opentui:interactive/)
 })
 
 test("smoke-cli script exercises --help and init against a temporary root", async () => {
