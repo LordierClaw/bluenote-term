@@ -14,6 +14,7 @@ try {
   assert.equal(helpResult.stderr, "")
   assert.match(helpResult.stdout, /BlueNote v/)
   assert.match(helpResult.stdout, /archive/)
+  assert.match(helpResult.stdout, /tui\s+Launch the Phase 3 TUI workspace/)
 
   const initResult = runBinCli(["init"], { rootPath: managedRoot })
   assert.equal(initResult.exitCode, 0)

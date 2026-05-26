@@ -1,17 +1,17 @@
 # BlueNote
 
-BlueNote is a terminal-native, local-first note tool with the Phase 2 CLI storage/UX pivot implemented in Bun and TypeScript; Phase 3 is now the OpenTUI workspace phase.
+BlueNote is a terminal-native, local-first note tool implemented in Bun and TypeScript. Phase 2 delivered the plain-note CLI storage/UX pivot, and Phase 3 now adds the OpenTUI workspace on top of the same storage contract.
 
 ## Status
 
-This repository now includes the approved **Phase 2 CLI storage + UX pivot** implementation and verification work, building on the earlier Phase 0/Phase 1 groundwork. The active next phase is **Phase 3 — TUI Workspace**.
+This repository includes the approved **Phase 2 CLI storage + UX pivot** and the active **Phase 3 — TUI Workspace** implementation. The TUI is a presentation/input layer over the existing core services; it does not introduce a separate storage model.
 
 Current goals:
-- keep repository and Git hygiene aligned with active CLI work
+- keep repository and Git hygiene aligned with active CLI/TUI work
 - maintain runtime/tooling conventions
 - keep Hermes and project docs aligned with the implemented workflow
-- verify the command-first Phase 2 CLI workflow with tests and smoke checks
-- plan and implement the Phase 3 OpenTUI workspace without changing the Phase 2 storage contract
+- verify the command-first CLI workflow with tests and smoke checks
+- preserve the Phase 2 storage contract while using the Phase 3 OpenTUI workspace
 
 ## Runtime
 
@@ -29,6 +29,13 @@ bun run smoke:opentui
 bun run smoke:cli
 ```
 
+Run the CLI through the package entrypoint during development:
+
+```bash
+bun run ./bin/bn.ts --help
+bun run ./bin/bn.ts tui
+```
+
 ## Current CLI workflow
 
 - Notes are plain `.md` files under `notes/`; canonical BlueNote metadata lives in `.state/notes/<key>.json` sidecars.
@@ -37,7 +44,17 @@ bun run smoke:cli
 - `bn new`, `bn edit`, `bn archive`, and `bn delete --force` rebuild derived indexes automatically after mutating note storage.
 - Selectors are key-first for everyday use; `show`, `edit`, `archive`, and `delete --force` accept canonical `key|path` selectors.
 - `bn search` prints grouped note blocks with the title first, then key, path, and the highest-value match label or excerpt.
-- The visible CLI command surface is `init`, `new`, `list`, `show`, `search`, `edit`, `archive`, `delete`, `rebuild`, `migrate`, and `completion`.
+- The visible CLI command surface is `init`, `new`, `list`, `show`, `search`, `edit`, `archive`, `delete`, `rebuild`, `migrate`, `completion`, and `tui`.
+
+## Phase 3 TUI workspace
+
+Launch the workspace with `bn tui` (or `bun run ./bin/bn.ts tui` from the repo). It is organized as separate screens rather than a single mixed view:
+
+- **Manager** — file-style note navigation backed by the same note list/selectors as the CLI, with active-note focus and shortcuts for opening notes and Search Everything.
+- **Editor** — a focused inline note editing screen with top/bottom bars around the editor body. Current wired Phase 3 behavior covers Unicode-safe buffer changes, save, and dirty-state handling; select-all, cut/copy/paste, and find/replace live in the tested editor adapter/controller groundwork for follow-on runtime wiring.
+- **Search Everything** — a global search/command screen for notes, content matches, folders/paths, and discoverable slash-prefixed command entries such as `/new`, `/archive`, `/delete`, `/rebuild`, `/migrate`, `/find`, `/replace`, and `/save`. In the current runtime, `/save` is the built-in wired action; other command entries require handler wiring before they mutate notes.
+
+The TUI reads and writes the same plain Markdown note files and `.state/notes/` sidecars as the CLI; note files remain plain and do not gain frontmatter.
 
 ## Completion and migration
 
@@ -45,7 +62,7 @@ bun run smoke:cli
   - `bun run ./bin/bn.ts completion bash`
   - `bun run ./bin/bn.ts completion zsh`
   - `bun run ./bin/bn.ts completion fish`
-- Shell completion uses an internal backend helper: the generated completion scripts call `bn complete selectors <command> <prefix>` directly, and it stays quiet when the root or indexes are unavailable.
+- Shell completion is shell setup, not a TUI action. The generated completion scripts call `bn complete selectors <command> <prefix>` directly, and they stay quiet when the root or indexes are unavailable.
 - `bn migrate` converts legacy frontmatter notes into plain note files plus `.state/notes/` sidecars, rebuilds derived indexes, and fails hard on mixed or unsafe roots instead of guessing.
 
 ## Repository map
@@ -59,4 +76,4 @@ bun run smoke:cli
 
 ## Current implementation note
 
-The repository now includes a working Phase 2 storage/UX CLI flow plus automated verification. The roadmap has been reindexed so the former TUI shell work is now Phase 3, followed by workflow hardening in Phase 4 and release hardening in Phase 5.
+The repository now includes a working Phase 2 storage/UX CLI flow plus the Phase 3 TUI workspace. The roadmap continues with workflow hardening in Phase 4 and release hardening in Phase 5.

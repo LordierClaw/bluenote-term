@@ -6,23 +6,33 @@ BlueNote is a terminal-native note tool optimized for fast local capture, search
 
 - **File-first:** notes are ordinary Markdown files without required frontmatter; BlueNote-managed metadata lives in sidecar JSON under `.state/notes/`.
 - **Local-first:** user files remain the source of truth inside a managed notes root.
-- **Offline-first:** the local CLI and storage workflow must work fully offline.
-- **AI-optional:** AI, sync, backend, cloud, and mobile are future concerns, not current CLI/storage requirements.
+- **Offline-first:** the local CLI and storage/TUI workflow must work fully offline.
+- **AI-optional:** AI, sync, backend, cloud, and mobile are future concerns, not current CLI/storage/TUI requirements.
 
 ## Current delivered scope
 
-Delivered by the distinct Phase 2 CLI storage/UX pivot (complete before the Phase 3 TUI workspace):
+Delivered by the distinct Phase 2 CLI storage/UX pivot and Phase 3 TUI workspace:
 
 - managed root initialization
 - plain Markdown note storage plus `.state/notes/` sidecars
 - approved `.state/` support directories for completions, temp work, logs, and recovery
 - rebuildable metadata/search indexing with `sql.js` and MiniSearch
-- terminal CLI flows for init, new, list, search, show, edit, archive, delete, rebuild, completion, and migrate
+- terminal CLI flows for init, new, list, search, show, edit, archive, delete, rebuild, completion, migrate, and tui
 - `key|path` selector UX for everyday note targeting
 - grouped search output that shows one ranked block per matching note
 - automatic index rebuilds after CLI mutations so list/search/completion reflect changes immediately
 - automated validation and smoke checks
-- the dedicated TUI workspace is Phase 3 and must consume this visible command/storage contract rather than redefining it
+- `bn tui`, the Phase 3 OpenTUI workspace over the same visible command/storage contract
+
+## Phase 3 TUI model
+
+The TUI workspace launches with `bn tui` and is intentionally split into separate screens:
+
+- **Manager:** note navigation over CLI-compatible note summaries, paths, keys, titles, and descriptions.
+- **Editor:** focused inline editing of the selected plain Markdown note body. Current wired Phase 3 behavior includes Unicode-safe buffer updates, save, and dirty-state handling; select-all, cut/copy/paste, and find/replace are covered in the adapter/controller layer but are not all wired as default runtime actions yet. The Editor does not add metadata frontmatter to note files.
+- **Search Everything:** global note/content/folder search plus slash-prefixed command entries for workspace/action discovery. `/save` is wired as a built-in runtime action; the other command entries are discoverable adapter outputs until command handlers are connected.
+
+Shell completion remains shell setup through `bn completion <bash|zsh|fish>`, not a TUI action. The TUI may surface command discovery, but completion script generation belongs to the CLI.
 
 Still out of scope:
 
