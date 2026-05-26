@@ -1,4 +1,12 @@
-import { BoxRenderable, InputRenderable, InputRenderableEvents, TextareaRenderable, TextRenderable, type CliRenderer } from "@opentui/core"
+import {
+  BoxRenderable,
+  InputRenderable,
+  InputRenderableEvents,
+  TextareaRenderable,
+  TextRenderable,
+  defaultTextareaKeyBindings,
+  type CliRenderer,
+} from "@opentui/core"
 
 import type { TuiState } from "./state"
 import type { TuiColorIntent } from "./theme"
@@ -6,6 +14,15 @@ import type { WorkspaceController } from "./workspace-controller"
 
 type EditorAutosaveStatus = "idle" | "pending" | "saving" | "saved" | "error"
 type EditorBufferWithAutosave = NonNullable<TuiState["editor"]> & { autosaveStatus?: EditorAutosaveStatus }
+
+const editorBodyKeyBindings = defaultTextareaKeyBindings.filter(
+  (binding) => !(
+    binding.ctrl === true &&
+    binding.shift !== true &&
+    binding.meta !== true &&
+    (binding.name === "f" || binding.name === "s" || binding.name === "c")
+  ),
+)
 
 export interface EditorTopbarViewModel {
   title: string
@@ -168,16 +185,48 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     id: "bluenote-editor-body",
     initialValue: vm.body.value,
     placeholder: vm.body.placeholder,
-    flexGrow: 1,
+    height: 20,
     width: "100%",
     wrapMode: "word",
+    keyBindings: editorBodyKeyBindings,
     onContentChange() {
-      options.controller.updateEditorBody(textarea.plainText)
+      const rawBody = textarea.plainText
+      const nextBody = rawBody.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
+      if (nextBody !== rawBody) {
+        textarea.initialValue = nextBody
+      }
+      options.controller.updateEditorBody(nextBody)
+      if (rawBody.includes("\u0006")) {
+        options.controller.openEditorFind()
+        options.onInvalidate?.()
+        return
+      }
+      if (rawBody.includes("\u0013")) {
+        void options.controller.saveEditor().then(() => options.onInvalidate?.())
+        return
+      }
       const nextVm = buildEditorViewModel(options.controller.getState())
       topbar.content = `${nextVm.topbar.title}  ${nextVm.topbar.path}  ${nextVm.topbar.key}  ${nextVm.topbar.status}`
       bottombarStatus.content = nextVm.bottombar.status
     },
   })
+  const defaultTextareaHandleKeyPress = textarea.handleKeyPress.bind(textarea)
+  textarea.handleKeyPress = (key: Parameters<TextareaRenderable["handleKeyPress"]>[0]): boolean => {
+    if ((key.ctrl === true && key.name === "f") || key.sequence === "\u0006") {
+      options.controller.openEditorFind()
+      options.onInvalidate?.()
+      return true
+    }
+    if ((key.ctrl === true && key.name === "s") || key.sequence === "\u0013") {
+      void options.controller.saveEditor().then(() => options.onInvalidate?.())
+      return true
+    }
+    if ((key.ctrl === true && key.name === "c") || key.sequence === "\u0003") {
+      options.onExit?.()
+      return true
+    }
+    return defaultTextareaHandleKeyPress(key)
+  }
 
   root.add(topbar)
   if (vm.find) {

@@ -1,5 +1,5 @@
 import path from "node:path"
-import { createCliRenderer, type BoxRenderable, type CliRenderer } from "@opentui/core"
+import { createCliRenderer, BoxRenderable, type CliRenderer, type Renderable } from "@opentui/core"
 
 import { resolveBlueNoteRoot } from "../config/root"
 import { IndexUnavailableError } from "../core/errors"
@@ -151,18 +151,41 @@ function renderWorkspace(renderer: CliRenderer, controller: WorkspaceController,
   return renderManagerScreen({ renderer, controller, onExit })
 }
 
+function renderableDescendants(node: Renderable): Renderable[] {
+  return [node, ...node.getChildren().flatMap((child) => renderableDescendants(child))]
+}
+
+export function focusActiveWorkspaceInput(screen: Renderable): void {
+  const activeInput = renderableDescendants(screen).find((node) =>
+    node.id === "bluenote-search-query" || node.id === "bluenote-editor-find-query",
+  )
+  activeInput?.focus()
+}
+
+export function blurWorkspaceInputs(screen: Renderable): void {
+  for (const node of renderableDescendants(screen)) {
+    if (node.id === "bluenote-search-query" || node.id === "bluenote-editor-find-query") {
+      node.blur()
+    }
+  }
+}
+
 export async function startTuiWorkspace(options: StartTuiWorkspaceOptions = {}): Promise<RunningTuiWorkspace> {
   const renderer = options.renderer ?? (await createCliRenderer({ screenMode: "alternate-screen", exitOnCtrlC: true }))
   const controller = options.controller ?? createDefaultWorkspaceController()
   let currentScreen: BoxRenderable | null = null
   let destroyed = false
+  let rerenderScheduled = false
 
   const destroy = (): void => {
     if (destroyed) {
       return
     }
     destroyed = true
-    currentScreen?.destroyRecursively()
+    if (currentScreen) {
+      blurWorkspaceInputs(currentScreen)
+      currentScreen.destroyRecursively()
+    }
     currentScreen = null
     controller.dispose()
     renderer.destroy()
@@ -172,12 +195,30 @@ export async function startTuiWorkspace(options: StartTuiWorkspaceOptions = {}):
     if (destroyed || renderer.isDestroyed) {
       return
     }
-    if (currentScreen) {
-      renderer.root.remove(currentScreen.id)
-      currentScreen.destroyRecursively()
+    for (const child of renderer.root.getChildren()) {
+      blurWorkspaceInputs(child)
+      renderer.root.remove(child.id)
+      child.destroyRecursively()
     }
     currentScreen = renderWorkspace(renderer, controller, destroy, rerender)
     renderer.root.add(currentScreen)
+    focusActiveWorkspaceInput(currentScreen)
+    currentScreen.requestRender()
+    renderer.root.requestRender()
+    const immediateRenderer = renderer as unknown as { intermediateRender?: () => void; requestRender?: () => void }
+    immediateRenderer.requestRender?.()
+    immediateRenderer.intermediateRender?.()
+  }
+
+  const scheduleRerender = (): void => {
+    if (rerenderScheduled) {
+      return
+    }
+    rerenderScheduled = true
+    setTimeout(() => {
+      rerenderScheduled = false
+      rerender()
+    }, 0)
   }
 
   controller.setAutosaveStateChangeHandler(rerender)
@@ -189,7 +230,7 @@ export async function startTuiWorkspace(options: StartTuiWorkspaceOptions = {}):
 
     const routed = routeWorkspaceKey(sequence, controller, destroy, rerender)
     if (routed.handled && !routed.exit) {
-      rerender()
+      scheduleRerender()
     }
     return routed.handled
   })

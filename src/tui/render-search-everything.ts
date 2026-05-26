@@ -235,7 +235,22 @@ export function routeSearchEverythingKey(sequence: string, controller: Workspace
     case "\n":
       controller.selectSearchResult()
       return true
+    case "\u007f":
+    case "\b":
+      controller.updateSearchQuery((state.search?.query ?? "").slice(0, -1))
+      return true
     default:
+      if (isPrintableSearchInput(sequence)) {
+        controller.updateSearchQuery(`${state.search?.query ?? ""}${sequence}`)
+        return true
+      }
       return false
   }
+}
+
+function isPrintableSearchInput(sequence: string): boolean {
+  return sequence.length > 0 && !sequence.startsWith("\u001b") && Array.from(sequence).every((character) => {
+    const codepoint = character.codePointAt(0) ?? 0
+    return codepoint >= 32 && codepoint !== 127
+  })
 }

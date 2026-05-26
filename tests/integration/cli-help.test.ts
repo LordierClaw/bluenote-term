@@ -30,7 +30,7 @@ test("package.json smoke scripts cover CLI plus import-only and interactive Open
   assert.equal(packageJson.scripts?.["smoke:cli"], "bun run ./scripts/smoke-cli.ts")
   assert.equal(packageJson.scripts?.["smoke:opentui"], "bun run ./scripts/smoke-opentui.ts")
   assert.equal(packageJson.scripts?.["smoke:opentui:interactive"], "bun run ./scripts/smoke-opentui-interactive.ts")
-  assert.match(packageJson.scripts?.check ?? "", /smoke:opentui:interactive/)
+  assert.match(packageJson.scripts?.check ?? "", /bun run smoke:opentui:interactive/)
 })
 
 test("smoke-cli script exercises --help and init against a temporary root", async () => {

@@ -1,8 +1,9 @@
 import { describe, test } from "bun:test"
 import assert from "node:assert/strict"
+import { createCliRenderer } from "@opentui/core"
 
-import { routeWorkspaceKey } from "../../../src/tui/app"
-import { routeEditorKey } from "../../../src/tui/render-editor"
+import { blurWorkspaceInputs, focusActiveWorkspaceInput, routeWorkspaceKey } from "../../../src/tui/app"
+import { renderEditorScreen, routeEditorKey } from "../../../src/tui/render-editor"
 import { routeManagerKey } from "../../../src/tui/render-manager"
 import { routeSearchEverythingKey } from "../../../src/tui/render-search-everything"
 import type { TuiState } from "../../../src/tui/state"
@@ -112,6 +113,45 @@ describe("TUI render keyboard routing", () => {
 
     assert.equal(routeEditorKey("\u0006", controller), true)
     assert.deepEqual(calls, ["openEditorFind:"])
+  })
+
+  test("post-attach focus re-registers the active editor input with OpenTUI key routing", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const controller = createWorkspaceController({
+        listNotes: () => [
+          {
+            key: "daily",
+            title: "Daily",
+            description: "",
+            relativePath: "notes/daily.md",
+            body: "alpha beta alpha",
+          },
+        ],
+        showNote: () => ({
+          key: "daily",
+          title: "Daily",
+          description: "",
+          relativePath: "notes/daily.md",
+          body: "alpha beta alpha",
+        }),
+        searchNotes: () => [],
+      })
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+      controller.openEditorFind()
+      const screen = renderEditorScreen({ renderer, controller })
+      renderer.root.add(screen)
+      const findInput = screen.getChildren().flatMap((child) => child.getChildren()).find((node) => node.id === "bluenote-editor-find-query")
+      findInput?.blur()
+
+      assert.equal(findInput?.focused, false)
+      focusActiveWorkspaceInput(screen)
+      assert.equal(findInput?.focused, true)
+      blurWorkspaceInputs(screen)
+      assert.equal(findInput?.focused, false)
+    } finally {
+      renderer.destroy()
+    }
   })
 
   test("editor find mode leaves printable keys to focused find input and routes Enter/Escape to find actions", () => {
@@ -236,12 +276,15 @@ describe("TUI render keyboard routing", () => {
     }
   })
 
-  test("search route does not consume printable query input", () => {
+  test("search route appends printable query input and supports backspace fallback for real terminal keys", () => {
     const { controller, calls } = createController("search")
 
-    assert.equal(routeSearchEverythingKey("a", controller), false)
-    assert.equal(routeSearchEverythingKey("/", controller), false)
-    assert.deepEqual(calls, [])
+    assert.equal(routeSearchEverythingKey("a", controller), true)
+    controller.getState().search!.query = "a"
+    assert.equal(routeSearchEverythingKey("/", controller), true)
+    controller.getState().search!.query = "a/"
+    assert.equal(routeSearchEverythingKey("\u007f", controller), true)
+    assert.deepEqual(calls, ["updateSearchQuery:a", "updateSearchQuery:a/", "updateSearchQuery:a"])
   })
 
   test("search route maps Escape and Ctrl+[ to previous screen navigation", () => {
