@@ -323,18 +323,21 @@ describe("TUI render view models", () => {
     assert.deepEqual(vm.layout2.preview.contentLines, ["# Root Note", "", "Hydrated preview body."])
   })
 
-  test("editor view model includes only topbar, editor body metadata, and bottombar data", () => {
+  test("editor view model exposes structured topbar, editor body metadata, and bottombar data", () => {
     const vm = buildEditorViewModel({ ...baseState, screen: "editor" })
 
     assert.deepEqual(Object.keys(vm).sort(), ["body", "bottombar", "find", "topbar"])
     assert.deepEqual(vm.topbar, {
-      title: "Daily Plan",
-      path: "notes/inbox/daily-plan.md",
+      noteName: "Daily Plan",
+      directoryPath: "notes/inbox",
       filename: "daily-plan.md",
+      relativePath: "notes/inbox/daily-plan.md",
       key: "daily-plan",
       dirty: false,
-      status: "saved",
+      saveStatusLabel: "Saved",
       statusIntent: "mutedText",
+      updatedLabel: "Updated unknown",
+      updatedIntent: "mutedText",
     })
     assert.deepEqual(vm.body, {
       inputId: "bluenote-editor-body-input",
@@ -348,17 +351,58 @@ describe("TUI render view models", () => {
       overflow: false,
     })
     assert.equal(vm.find, null)
-    assert.deepEqual(vm.bottombar.hints, ["Ctrl+S save", "Ctrl+F find", "Ctrl+P search", "Esc manager", "Ctrl+C quit"])
-    assert.equal(vm.bottombar.status, "Line 3, Col 23 · saved")
+    assert.deepEqual(vm.bottombar.shortcuts, [
+      { label: "Ctrl+S save", priority: 1 },
+      { label: "Ctrl+F find", priority: 2 },
+      { label: "Alt+Z wrap", priority: 3 },
+      { label: "Ctrl+P search", priority: 4 },
+      { label: "Esc manager", priority: 5 },
+      { label: "Ctrl+C quit", priority: 6 },
+    ])
+    assert.deepEqual(vm.bottombar.hints, ["Ctrl+S save", "Ctrl+F find", "Alt+Z wrap", "Ctrl+P search", "Esc manager", "Ctrl+C quit"])
+    assert.equal(vm.bottombar.cursorLabel, "Line 3, Col 23")
+    assert.equal(vm.bottombar.saveStatusLabel, "Saved")
+    assert.equal(vm.bottombar.updatedLabel, "Updated unknown")
+    assert.equal(vm.bottombar.wrapLabel, "Wrap word")
+    assert.equal(vm.bottombar.status, "Line 3, Col 23 · Wrap word · Saved · Updated unknown")
     assert.equal(vm.bottombar.statusIntent, "mutedText")
 
+    const editorChrome = JSON.stringify({ topbar: vm.topbar, bottombar: vm.bottombar })
+    assert.doesNotMatch(editorChrome, /BlueNote(?: TUI| Editor)?/i)
+    assert.equal("title" in vm.topbar, false)
+
     const dirtyVm = buildEditorViewModel({ ...baseState, screen: "editor", editor: { ...baseState.editor!, dirty: true, body: `${baseState.editor!.body}\nunsaved` } })
+    assert.equal(dirtyVm.topbar.saveStatusLabel, "Unsaved")
+    assert.equal(dirtyVm.bottombar.saveStatusLabel, "Unsaved")
     assert.equal(dirtyVm.topbar.statusIntent, "primaryAccent")
     assert.equal(dirtyVm.bottombar.statusIntent, "primaryAccent")
 
     const autosaveVm = buildEditorViewModel({ ...baseState, screen: "editor", editor: { ...baseState.editor!, autosaveStatus: "saving" } as TuiState["editor"] })
+    assert.equal(autosaveVm.topbar.saveStatusLabel, "Autosaving…")
+    assert.equal(autosaveVm.bottombar.saveStatusLabel, "Autosaving…")
     assert.equal(autosaveVm.topbar.statusIntent, "secondaryAccent")
     assert.equal(autosaveVm.bottombar.statusIntent, "secondaryAccent")
+  })
+
+  test("editor chrome extracts note directory and latest updated or modified labels from metadata", () => {
+    const vm = buildEditorViewModel({
+      ...baseState,
+      screen: "editor",
+      editor: {
+        ...baseState.editor!,
+        note: {
+          ...baseState.editor!.note,
+          relativePath: "notes/projects/client/client-brief.md",
+          updatedAt: "2026-05-28T10:30:00.000Z",
+          modifiedAt: "2026-05-28T11:45:00.000Z",
+        },
+      } as TuiState["editor"],
+    })
+
+    assert.equal(vm.topbar.directoryPath, "notes/projects/client")
+    assert.equal(vm.topbar.filename, "client-brief.md")
+    assert.equal(vm.topbar.updatedLabel, "Modified 2026-05-28T11:45:00.000Z")
+    assert.equal(vm.bottombar.updatedLabel, "Modified 2026-05-28T11:45:00.000Z")
   })
 
   test("editor bottom bar displays autosave status labels", () => {
@@ -376,10 +420,10 @@ describe("TUI render view models", () => {
     assert.deepEqual(
       [statusFor("pending"), statusFor("saving"), statusFor("saved", false), statusFor("error")].map((bar) => ({ status: bar.status, intent: bar.statusIntent })),
       [
-        { status: "Line 3, Col 23 · Unsaved", intent: "primaryAccent" },
-        { status: "Line 3, Col 23 · Autosaving…", intent: "secondaryAccent" },
-        { status: "Line 3, Col 23 · Saved", intent: "mutedText" },
-        { status: "Line 3, Col 23 · Autosave failed", intent: "danger" },
+        { status: "Line 3, Col 23 · Wrap word · Unsaved · Updated unknown", intent: "primaryAccent" },
+        { status: "Line 3, Col 23 · Wrap word · Autosaving… · Updated unknown", intent: "secondaryAccent" },
+        { status: "Line 3, Col 23 · Wrap word · Saved · Updated unknown", intent: "mutedText" },
+        { status: "Line 3, Col 23 · Wrap word · Autosave failed · Updated unknown", intent: "danger" },
       ],
     )
   })

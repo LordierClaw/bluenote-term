@@ -14,15 +14,27 @@ import type { WorkspaceController } from "./workspace-controller"
 
 type EditorAutosaveStatus = "idle" | "pending" | "saving" | "saved" | "error"
 type EditorBufferWithAutosave = NonNullable<TuiState["editor"]> & { autosaveStatus?: EditorAutosaveStatus }
+type NoteWithEditorMetadata = NonNullable<TuiState["editor"]>["note"] & {
+  updatedAt?: string
+  modifiedAt?: string
+}
+
+export interface EditorShortcutViewModel {
+  label: string
+  priority: number
+}
 
 export interface EditorTopbarViewModel {
-  title: string
-  path: string
+  noteName: string
+  directoryPath: string
   filename: string
+  relativePath: string
   key: string
   dirty: boolean
-  status: "dirty" | "saved"
+  saveStatusLabel: string
   statusIntent: TuiColorIntent
+  updatedLabel: string
+  updatedIntent: TuiColorIntent
 }
 
 export interface EditorBodyViewModel {
@@ -52,6 +64,11 @@ export interface EditorBottombarViewModel {
   status: string
   statusIntent: TuiColorIntent
   hints: string[]
+  cursorLabel: string
+  saveStatusLabel: string
+  updatedLabel: string
+  wrapLabel: string
+  shortcuts: EditorShortcutViewModel[]
 }
 
 export interface EditorViewModel {
@@ -61,8 +78,22 @@ export interface EditorViewModel {
   bottombar: EditorBottombarViewModel
 }
 
+function normalizeRelativePath(relativePath: string): string {
+  return relativePath.replaceAll("\\", "/").replace(/\/+/gu, "/")
+}
+
 function filenameFor(relativePath: string): string {
-  return relativePath.split(/[\\/]/u).filter(Boolean).at(-1) ?? relativePath
+  const normalizedPath = normalizeRelativePath(relativePath)
+  return normalizedPath.split("/").filter(Boolean).at(-1) ?? normalizedPath
+}
+
+function directoryPathFor(relativePath: string): string {
+  const parts = normalizeRelativePath(relativePath).split("/").filter(Boolean)
+  if (parts.length <= 1) {
+    return ""
+  }
+
+  return parts.slice(0, -1).join("/")
 }
 
 function countLines(value: string): number {
@@ -96,7 +127,7 @@ function statusIntentForEditor(editor: EditorBufferWithAutosave | null): TuiColo
   }
 }
 
-function bottomBarAutosaveLabel(editor: EditorBufferWithAutosave | null, fallbackStatus: "dirty" | "saved"): string {
+function editorSaveStatusLabel(editor: EditorBufferWithAutosave | null, dirty: boolean): string {
   switch (editor?.autosaveStatus) {
     case "pending":
       return "Unsaved"
@@ -107,8 +138,41 @@ function bottomBarAutosaveLabel(editor: EditorBufferWithAutosave | null, fallbac
     case "error":
       return "Autosave failed"
     default:
-      return fallbackStatus
+      return dirty ? "Unsaved" : "Saved"
   }
+}
+
+function noteTimestampCandidates(note: NoteWithEditorMetadata | null | undefined): Array<{ label: "Updated" | "Modified"; value: string; time: number }> {
+  return [
+    note?.updatedAt ? { label: "Updated" as const, value: note.updatedAt, time: Date.parse(note.updatedAt) } : null,
+    note?.modifiedAt ? { label: "Modified" as const, value: note.modifiedAt, time: Date.parse(note.modifiedAt) } : null,
+  ].filter((candidate): candidate is { label: "Updated" | "Modified"; value: string; time: number } => candidate !== null)
+}
+
+function updatedLabelFor(note: NoteWithEditorMetadata | null | undefined): string {
+  const candidates = noteTimestampCandidates(note)
+  if (candidates.length === 0) {
+    return "Updated unknown"
+  }
+
+  const latest = candidates.reduce((currentLatest, candidate) => {
+    const currentTime = Number.isNaN(currentLatest.time) ? Number.NEGATIVE_INFINITY : currentLatest.time
+    const candidateTime = Number.isNaN(candidate.time) ? Number.NEGATIVE_INFINITY : candidate.time
+    return candidateTime > currentTime ? candidate : currentLatest
+  })
+
+  return `${latest.label} ${latest.value}`
+}
+
+function editorShortcuts(): EditorShortcutViewModel[] {
+  return [
+    { label: "Ctrl+S save", priority: 1 },
+    { label: "Ctrl+F find", priority: 2 },
+    { label: "Alt+Z wrap", priority: 3 },
+    { label: "Ctrl+P search", priority: 4 },
+    { label: "Esc manager", priority: 5 },
+    { label: "Ctrl+C quit", priority: 6 },
+  ]
 }
 
 export function buildEditorViewModel(state: TuiState): EditorViewModel {
@@ -116,25 +180,31 @@ export function buildEditorViewModel(state: TuiState): EditorViewModel {
   const note = editor?.note
   const body = editor?.body ?? ""
   const dirty = editor?.dirty ?? false
-  const status = dirty ? "dirty" : "saved"
   const statusIntent = statusIntentForEditor(editor)
-  const bottomBarStatus = bottomBarAutosaveLabel(editor, status)
-  const relativePath = note?.relativePath ?? ""
+  const saveStatusLabel = editorSaveStatusLabel(editor, dirty)
+  const relativePath = normalizeRelativePath(note?.relativePath ?? "")
+  const updatedLabel = updatedLabelFor(note as NoteWithEditorMetadata | null | undefined)
   const findMode = state.mode === "editor.find"
   const findMatchCount = editor?.findMatchCount ?? 0
   const activeFindIndex = editor?.activeFindIndex ?? null
 
   const cursor = editor ? editorCursorPosition(editor, editorCursorOffset(editor)) : { line: 1, column: 1 }
+  const cursorLabel = `Line ${cursor.line}, Col ${cursor.column}`
+  const wrapLabel = `Wrap ${editor?.wrapMode ?? "word"}`
+  const shortcuts = editorShortcuts()
 
   return {
     topbar: {
-      title: note?.title ?? "No note open",
-      path: relativePath,
+      noteName: note?.title ?? "No note open",
+      directoryPath: directoryPathFor(relativePath),
       filename: filenameFor(relativePath),
+      relativePath,
       key: note?.key ?? "",
       dirty,
-      status,
+      saveStatusLabel,
       statusIntent,
+      updatedLabel,
+      updatedIntent: "mutedText",
     },
     find: findMode
       ? {
@@ -160,9 +230,14 @@ export function buildEditorViewModel(state: TuiState): EditorViewModel {
       overflow: false,
     },
     bottombar: {
-      status: `Line ${cursor.line}, Col ${cursor.column} · Wrap ${editor?.wrapMode ?? "word"} · ${bottomBarStatus}`,
+      status: `${cursorLabel} · ${wrapLabel} · ${saveStatusLabel} · ${updatedLabel}`,
       statusIntent,
-      hints: ["Ctrl+S save", "Ctrl+F find", "Ctrl+P search", "Esc manager", "Ctrl+C quit"],
+      hints: shortcuts.map((shortcut) => shortcut.label),
+      cursorLabel,
+      saveStatusLabel,
+      updatedLabel,
+      wrapLabel,
+      shortcuts,
     },
   }
 }
@@ -184,11 +259,10 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     border: true,
     borderColor: tuiTheme.primaryAccent,
     backgroundColor: tuiTheme.background,
-    title: vm.topbar.title,
   })
 
   const topbar = new TextRenderable(options.renderer, {
-    content: `${vm.topbar.title}  ${vm.topbar.path}  ${vm.topbar.key}  ${vm.topbar.status}`,
+    content: `${vm.topbar.noteName}  ${vm.topbar.directoryPath}  ${vm.topbar.filename}  ${vm.topbar.key}  ${vm.topbar.updatedLabel}  ${vm.topbar.saveStatusLabel}`,
     height: 1,
     fg: tuiTheme[vm.topbar.statusIntent],
     bg: tuiTheme.panel,
