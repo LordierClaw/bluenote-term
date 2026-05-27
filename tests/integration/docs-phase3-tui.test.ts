@@ -46,6 +46,22 @@ function assertMinimalManagerChrome(content: string): void {
   assert.doesNotMatch(content, /BlueNote Manager|BlueNote TUI|branded title screen|decorative title/i)
 }
 
+function assertDeliveredPhase4BEditorBehavior(content: string): void {
+  assert.match(content, /real editor body input|inline body editing|live typing/i)
+  assert.match(content, /visible cursor|cursor marker|cursor/i)
+  assert.match(content, /Ctrl\+S save|explicit save|save status/i)
+  assert.match(content, /autosave status|autosave/i)
+  assert.match(content, /Alt\+Z wrap|wrap toggle|wrap mode/i)
+  assert.match(content, /responsive bottom bar|responsive .*status|bottom bar.*responsive/i)
+  assert.match(content, /Line .*Col|cursor position|line\/column/i)
+}
+
+function assertPhase4BNotAdvertisedIncomplete(content: string): void {
+  assert.doesNotMatch(content, /Phase 4B[^\n.]*continues|continues with Phase 4B|Phase 4B[^\n.]*follow-on/i)
+  assert.doesNotMatch(content, /Phase 4B[^\n.]*incomplete|incomplete[^\n.]*Phase 4B/i)
+  assert.doesNotMatch(content, /Phase 4B[^\n.]*upcoming|upcoming[^\n.]*Phase 4B/i)
+}
+
 function assertDataStorageAndContainsSearchContract(content: string): void {
   assert.match(content, /plain Markdown/i)
   assert.match(content, /\.data\/notes\//)
@@ -73,6 +89,8 @@ test("README documents the refined Phase 3 TUI workspace behavior", async () => 
   assert.match(readme, /not a TUI action/i)
   assertRefinedTuiBehavior(readme)
   assertMinimalManagerChrome(readme)
+  assertDeliveredPhase4BEditorBehavior(readme)
+  assertPhase4BNotAdvertisedIncomplete(readme)
 })
 
 test("product and phase docs describe refined Manager, Editor, and Search Everything Phase 3 scope", async () => {
@@ -93,6 +111,23 @@ test("product and phase docs describe refined Manager, Editor, and Search Everyt
   assert.match(phase, /command entries/i)
   assert.match(phase, /only .*\/save.* wired|\/save.* only .*wired/i)
   assert.doesNotMatch(phase, /command\/action layer covering the available CLI workflows/i)
+  assertDeliveredPhase4BEditorBehavior(phase)
+  assertPhase4BNotAdvertisedIncomplete(phase)
+})
+
+test("smoke contracts cover delivered Phase 4B editor regressions and status metadata", async () => {
+  const smoke = await readRepoFile("scripts/smoke-opentui.ts")
+  const interactiveSmoke = await readRepoFile("scripts/smoke-opentui-interactive.ts")
+
+  assert.match(smoke, /phase-4b-editor-input-cursor-responsive-chrome/i)
+  assert.match(smoke, /phase-4c-manager-performance-responsive-layout-style/i)
+  assertPhase4BNotAdvertisedIncomplete(smoke)
+
+  assert.match(interactiveSmoke, /editor-input-regression-token/)
+  assert.match(interactiveSmoke, /cursor-probe/)
+  assert.match(interactiveSmoke, /Alt\+Z wrap|wrap/i)
+  assert.match(interactiveSmoke, /responsive resize|responsive bottom/i)
+  assert.match(interactiveSmoke, /Saved/)
 })
 
 test("runtime docs identify OpenTUI as the refined Phase 3 workspace runtime", async () => {
@@ -120,5 +155,6 @@ test("active docs describe canonical data storage and contains search contracts"
   for (const content of docs) {
     assertDataStorageAndContainsSearchContract(content)
     assertNoCanonicalStateSidecars(content)
+    assertPhase4BNotAdvertisedIncomplete(content)
   }
 })

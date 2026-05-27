@@ -354,8 +354,16 @@ try {
   expectPaneContains(resizedEditorPane, "Line ", "editor responsive resize")
   expectPaneContains(resizedEditorPane, "Ctrl+S save", "editor responsive resize")
   expectPaneContains(resizedEditorPane, "Ctrl+F find", "editor responsive resize")
+  expectPaneContains(resizedEditorPane, "Alt+Z wrap", "editor responsive resize")
   resizeSession(sessionName, 100, 30, "editor restore after responsive resize")
   wait(500, "editor focus settle")
+
+  sendKeys(sessionName, "M-z")
+  const editorWrapNonePane = capturePaneUntil(sessionName, "editor Alt+Z wrap toggle off", "Wrap none", 20)
+  expectPaneContains(editorWrapNonePane, "Alt+Z wrap", "editor Alt+Z wrap toggle off")
+  sendKeys(sessionName, "M-z")
+  const editorWrapWordPane = capturePaneUntil(sessionName, "editor Alt+Z wrap toggle on", "Wrap word", 20)
+  expectPaneContains(editorWrapWordPane, "Alt+Z wrap", "editor Alt+Z wrap toggle on")
 
   const typedEditorText = "editor-input-regression-token"
   sendText(sessionName, typedEditorText)

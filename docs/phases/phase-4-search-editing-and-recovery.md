@@ -15,4 +15,4 @@ Harden the day-to-day workflows after the Phase 3 TUI workspace is usable while 
 - external editor support and safe write flows where still useful beside inline editing
 - archive/history behavior hardening
 
-Phase 4A covers the `.data` migration and contains-search foundation. Phase 4B, 4C, and 4D are upcoming subplans for editor input/cursor work, Manager performance/responsive layout/style, and Search Everything readability/responsiveness respectively.
+Phase 4A covers the `.data` migration and contains-search foundation. Phase 4B delivers the accepted editor input/cursor/responsive-chrome work. Phase 4C and 4D remain upcoming subplans for Manager performance/responsive layout/style and Search Everything readability/responsiveness respectively.

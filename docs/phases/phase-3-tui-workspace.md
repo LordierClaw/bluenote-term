@@ -13,7 +13,7 @@ The workspace is launched with `bn tui` and remains a presentation/input layer o
 - separate **Manager**, **Editor**, and **Search Everything** screens instead of one overloaded pane
 - Manager screen backed by the same note list/selectors as the CLI
 - Search Everything screen backed by the same indexed search service as `bn search`, including notes, content excerpts, folders/paths, and slash-prefixed command entries
-- focused inline Editor screen for everyday writing, saving, Unicode text, and dirty-state handling, with tested adapter/controller groundwork for selection, cut/copy/paste, and find/replace
+- focused inline Editor screen for everyday writing, saving, visible cursor movement, Unicode text, wrap mode, responsive status chrome, and dirty-state handling, with tested adapter/controller groundwork for selection, cut/copy/paste, and find/replace
 - command discovery for available CLI-shaped workflows, with only `/save` wired as a built-in TUI action until the remaining command handlers are connected
 - graceful startup, no-root, no-TTY, unsupported-terminal, and shutdown behavior
 
@@ -25,7 +25,7 @@ The Manager is the workspace home screen. It presents a minimal Manager screen w
 
 ### Editor
 
-The Editor is a focused note-body surface with only the TUI topbar, editor body, and bottombar/status chrome. Current wired Phase 3 behavior covers inline body editing, live typing/input regression coverage, Unicode-safe changes, explicit saving, `Ctrl+F` find mode, 750ms autosave with stale-completion guards, and dirty-state protection. Selection and cut/copy/paste are tested in the adapter/controller layer and reserved for follow-on runtime wiring. The Editor writes the selected note body back to the same plain Markdown file; it does not add frontmatter or create a TUI-only storage format.
+The Editor is a focused note-body surface with only the TUI topbar, editor body, and bottombar/status chrome. Current wired behavior covers real editor body input, inline body editing, live typing/input regression coverage, a visible cursor marker, cursor-aware arrow/edit operations, Unicode-safe changes, newline/backspace/delete, explicit `Ctrl+S save`, `Ctrl+F` find mode, 750ms autosave with stale-completion guards, and dirty-state protection. The responsive bottom bar shows save/autosave status, `Line`/`Col` cursor position, wrap mode, and priority shortcuts; `Alt+Z` is the wrap toggle for word/no-wrap mode. Selection and cut/copy/paste are tested in the adapter/controller layer and reserved for follow-on runtime wiring, while literal multi-character paste fallback is covered by the interactive smoke contract. The Editor writes the selected note body back to the same plain Markdown file and `.data/notes/` sidecar/index flow; it does not add frontmatter or create a TUI-only storage format.
 
 ### Search Everything
 

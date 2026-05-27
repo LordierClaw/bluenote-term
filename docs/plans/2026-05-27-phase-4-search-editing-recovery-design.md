@@ -55,6 +55,7 @@ Primary outcomes:
 - Try OpenTUI `TextareaRenderable` as the real input owner.
 - Prove it with a real TTY spike/test early.
 - If it still fails, switch to the prepared custom controlled editor fallback.
+- Phase 4B implementation note (2026-05-28): the real TTY spike showed `TextareaRenderable` was not viable for the delivered editor path, so the accepted implementation uses the controlled custom editor fallback with the workspace controller owning input, cursor, viewport, and wrap state.
 - Add visible cursor, arrow navigation, paste support, word-wrap toggle, overflow indicator, and responsive chrome.
 - Merge/redesign editor topbar to show note name, directory, and latest updated time.
 - Merge/redesign bottom/status bar to show save/autosave state, latest updated time, shortcuts, and wrap mode.

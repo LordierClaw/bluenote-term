@@ -44,8 +44,8 @@ export interface DefaultWorkspaceControllerOptions {
 export function getTuiBootstrapInfo(): TuiBootstrapInfo {
   return {
     appName: "BlueNote",
-    status: "phase-3-tui-workspace",
-    nextPhase: "phase-4-search-editing-and-recovery",
+    status: "phase-4b-editor-input-cursor-responsive-chrome",
+    nextPhase: "phase-4c-manager-performance-responsive-layout-style",
   }
 }
 
