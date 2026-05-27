@@ -523,17 +523,23 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         return ok()
       }
 
-      const created = deps.createNote?.(title, "")
-      if (!created) {
-        state = setManagerCreateStatus(state, "Create unavailable")
+      try {
+        const created = deps.createNote?.(title, "")
+        if (!created) {
+          state = setManagerCreateStatus(state, "Create unavailable")
+          applyManagerBrowserModel()
+          return ok()
+        }
+
+        deps.rebuildIndexes?.()
+        refreshManager()
+        setEditorNote(deps.showNote(created.key))
+        return ok()
+      } catch {
+        state = setManagerCreateStatus(state, "Create failed")
         applyManagerBrowserModel()
         return ok()
       }
-
-      deps.rebuildIndexes?.()
-      refreshManager()
-      setEditorNote(deps.showNote(created.key))
-      return ok()
     },
 
     cancelManagerCreate: () => {

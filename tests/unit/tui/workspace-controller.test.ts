@@ -527,6 +527,35 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(calls, ["list", "create:Project Plan:", "rebuild", "list", "show:project-plan"])
   })
 
+  test("manager create keeps prompt recoverable when create or refresh fails", async () => {
+    const failingCreateController = createWorkspaceController(createDeps({
+      createNote: () => {
+        throw new Error("create failed")
+      },
+    }).deps)
+    failingCreateController.openManagerCreate()
+    failingCreateController.updateManagerCreateTitle("Broken Note")
+
+    await failingCreateController.submitManagerCreate()
+
+    assert.equal(failingCreateController.getState().mode, "manager.create")
+    assert.equal(failingCreateController.getState().manager.createDraft?.status, "Create failed")
+
+    const failingRefreshController = createWorkspaceController(createDeps({
+      createNote: () => ({ key: "daily-plan" }),
+      rebuildIndexes: () => {
+        throw new Error("rebuild failed")
+      },
+    }).deps)
+    failingRefreshController.openManagerCreate()
+    failingRefreshController.updateManagerCreateTitle("Broken Rebuild")
+
+    await failingRefreshController.submitManagerCreate()
+
+    assert.equal(failingRefreshController.getState().mode, "manager.create")
+    assert.equal(failingRefreshController.getState().manager.createDraft?.status, "Create failed")
+  })
+
   test("empty manager create title stays in the prompt with calm validation and does not create", async () => {
     const { deps, calls } = createDeps({
       createNote: (title, body) => {

@@ -2,8 +2,8 @@
 
 > **For implementer:** Use TDD throughout. Write or adjust the failing test first, watch it fail for the intended reason, then implement the minimum change to make it pass. Keep commits small and task-scoped.
 
-**Status:** Draft for approval  
-**Date:** 2026-05-27  
+**Status:** Draft for approval
+**Date:** 2026-05-27
 **Goal:** Address the second manual-test feedback pass for the Phase 3 OpenTUI workspace: reduce noisy color usage, make the editor actually accept/route text input, simplify the manager chrome, and add manager create/delete-with-confirm actions.
 
 **Architecture:** This is a narrow follow-up to Phase 3. It must not restart or accidentally execute the older `2026-05-26` Phase 3 refinement tasks by phase label alone. Keep the existing service-backed TUI architecture and the plain-note storage contract; route manager mutations through existing core services and make runtime focus/input ownership explicit.
