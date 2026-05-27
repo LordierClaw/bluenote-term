@@ -25,6 +25,8 @@ const CONFLICT_MESSAGE = "Cannot migrate legacy .state because .data already con
 const CONFLICT_HINT = "Review .state and .data, keep the desired BlueNote metadata under .data, then retry."
 const UNSAFE_PATH_MESSAGE = "Cannot migrate legacy .state because .data contains unsafe app-state paths."
 const UNSAFE_PATH_HINT = "Remove symlinks from .data app-state paths before retrying migration."
+const UNSAFE_LEGACY_PATH_MESSAGE = "Cannot migrate legacy .state because .state contains unsafe app-state paths."
+const UNSAFE_LEGACY_PATH_HINT = "Remove symlinks from .state app-state paths before retrying migration."
 const SUPPORT_DIRECTORIES = [
   ["recovery", STATE_RECOVERY_DIRECTORY],
   ["tmp", STATE_TMP_DIRECTORY],
@@ -68,6 +70,12 @@ function throwConflict(): never {
 function throwUnsafePath(): never {
   throw new UsageError(UNSAFE_PATH_MESSAGE, {
     hint: UNSAFE_PATH_HINT,
+  })
+}
+
+function throwUnsafeLegacyPath(): never {
+  throw new UsageError(UNSAFE_LEGACY_PATH_MESSAGE, {
+    hint: UNSAFE_LEGACY_PATH_HINT,
   })
 }
 
@@ -115,6 +123,15 @@ function assertExistingDestinationFileIsSafe(destinationPath: string): void {
   }
 }
 
+function getSafeSourceStats(sourcePath: string): fs.Stats {
+  const stats = fs.lstatSync(sourcePath)
+  if (stats.isSymbolicLink()) {
+    throwUnsafeLegacyPath()
+  }
+
+  return stats
+}
+
 function copyFileIfMissingOrIdentical(rootPath: string, sourcePath: string, destinationPath: string): boolean {
   const safeDestinationPath = assertExistingDestinationParentsAreSafe(rootPath, destinationPath)
   assertExistingDestinationFileIsSafe(safeDestinationPath)
@@ -156,7 +173,7 @@ function copyDirectoryIfMissingOrIdentical(rootPath: string, sourceDirectory: st
     return 0
   }
 
-  const sourceStats = fs.statSync(sourceDirectory)
+  const sourceStats = getSafeSourceStats(sourceDirectory)
   if (!sourceStats.isDirectory()) {
     return 0
   }
@@ -168,6 +185,10 @@ function copyDirectoryIfMissingOrIdentical(rootPath: string, sourceDirectory: st
   for (const entry of fs.readdirSync(sourceDirectory, { withFileTypes: true })) {
     const sourcePath = path.join(sourceDirectory, entry.name)
     const destinationPath = assertPathInsideRoot(rootPath, path.join(safeDestinationDirectory, entry.name))
+
+    if (entry.isSymbolicLink()) {
+      throwUnsafeLegacyPath()
+    }
 
     if (entry.isDirectory()) {
       migratedFileCount += copyDirectoryIfMissingOrIdentical(rootPath, sourcePath, destinationPath)
@@ -191,7 +212,7 @@ function copyLegacyNotes(rootPath: string, legacyNotesPath: string, dataNotesPat
     return 0
   }
 
-  const legacyNotesStats = fs.statSync(legacyNotesPath)
+  const legacyNotesStats = getSafeSourceStats(legacyNotesPath)
   if (!legacyNotesStats.isDirectory()) {
     return 0
   }
@@ -201,6 +222,10 @@ function copyLegacyNotes(rootPath: string, legacyNotesPath: string, dataNotesPat
 
   let migratedFileCount = 0
   for (const entry of fs.readdirSync(legacyNotesPath, { withFileTypes: true })) {
+    if (entry.isSymbolicLink()) {
+      throwUnsafeLegacyPath()
+    }
+
     if (!entry.isFile() || path.extname(entry.name) !== ".json") {
       continue
     }
