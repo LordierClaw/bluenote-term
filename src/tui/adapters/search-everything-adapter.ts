@@ -131,7 +131,7 @@ function folderNameFor(path: string): string {
   return filenameFor(path)
 }
 
-function fuzzyScore(query: string, value: string): number {
+function containsScore(query: string, value: string): number {
   return scoreContainsMatch(value, query)
 }
 
@@ -245,7 +245,7 @@ function buildFolderResults(query: string, noteSummaries: readonly NoteManagerSu
   return collectFolders(noteSummaries)
     .map((folder) => ({
       ...folder,
-      score: Math.max(fuzzyScore(query, folder.path), fuzzyScore(query, folder.name)),
+      score: Math.max(containsScore(query, folder.path), containsScore(query, folder.name)),
     }))
     .filter((folder) => folder.score > 0)
 }
