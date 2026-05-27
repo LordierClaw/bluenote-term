@@ -95,8 +95,20 @@ function assertDestinationDirectoryIsSafe(rootPath: string, destinationDirectory
   return assertPathInsideRoot(rootPath, destinationDirectory)
 }
 
+function assertExistingDestinationFileIsSafe(destinationPath: string): void {
+  if (!pathExists(destinationPath)) {
+    return
+  }
+
+  const stats = fs.lstatSync(destinationPath)
+  if (stats.isSymbolicLink() || !stats.isFile()) {
+    throwUnsafePath()
+  }
+}
+
 function copyFileIfMissingOrIdentical(rootPath: string, sourcePath: string, destinationPath: string): boolean {
   const safeDestinationPath = assertExistingDestinationParentsAreSafe(rootPath, destinationPath)
+  assertExistingDestinationFileIsSafe(safeDestinationPath)
 
   if (pathExists(safeDestinationPath)) {
     const source = fs.readFileSync(sourcePath)
@@ -118,6 +130,7 @@ function copyFileIfMissingOrIdentical(rootPath: string, sourcePath: string, dest
       throw error
     }
 
+    assertExistingDestinationFileIsSafe(safeDestinationPath)
     const source = fs.readFileSync(sourcePath)
     const destination = fs.readFileSync(safeDestinationPath)
 
