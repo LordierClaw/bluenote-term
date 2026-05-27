@@ -155,6 +155,35 @@ test("searchNotes includes title, path, and body matches that contain numeric qu
   }
 })
 
+test("searchNotes finds arbitrary substring contains matches that MiniSearch token search misses", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-search-notes-substring-"))
+
+  try {
+    rebuildIndexStore({
+      rootPath,
+      notes: [
+        {
+          key: "alpha-project",
+          title: "Alpha Project",
+          description: "Substring fixture",
+          body: "Body contains foobar for substring search.\n",
+          relativePath: path.join("notes", "inbox", "alpha-project.md"),
+          createdAt: "2026-05-21T10:22:00.000Z",
+          updatedAt: "2026-05-21T10:22:00.000Z",
+          archivedAt: null,
+        },
+      ],
+    })
+
+    assert.deepEqual(searchNotes("pha", { override: rootPath }).map((result) => result.key), ["alpha-project"])
+    const bodyResults = searchNotes("oba", { override: rootPath })
+    assert.deepEqual(bodyResults.map((result) => result.key), ["alpha-project"])
+    assert.equal(bodyResults[0]?.match.label, "content line 1")
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
 test("listNotes prefers derived index summaries when available", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-list-notes-index-"))
 

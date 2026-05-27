@@ -1,5 +1,5 @@
 import path from "node:path"
-import { mkdirSync } from "node:fs"
+import { lstatSync, mkdirSync } from "node:fs"
 
 import {
   LEGACY_STATE_DIRECTORY,
@@ -67,12 +67,50 @@ export function getArchiveNotePath(rootPath: string, key: string): string {
   return assertPathInsideRoot(archivePath, path.join(archivePath, `${key}.md`))
 }
 
+function existingPathIsSymlink(filePath: string): boolean {
+  try {
+    return lstatSync(filePath).isSymbolicLink()
+  } catch (error) {
+    if (typeof error === "object" && error !== null && (error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false
+    }
+
+    throw error
+  }
+}
+
+function assertNoExistingLayoutSymlinks(rootPath: string, targetPath: string): void {
+  const relativePath = path.relative(rootPath, targetPath)
+  const parts = relativePath === "" ? [] : relativePath.split(path.sep).filter(Boolean)
+  let currentPath = rootPath
+
+  if (existingPathIsSymlink(currentPath)) {
+    throw new UsageError(`Managed root path '${rootPath}' must not be a symlink.`, {
+      hint: "Use a real directory for BLUENOTE_ROOT, then retry.",
+    })
+  }
+
+  for (const part of parts) {
+    currentPath = path.join(currentPath, part)
+    if (existingPathIsSymlink(currentPath)) {
+      throw new UsageError(`Managed root layout path '${path.relative(rootPath, currentPath)}' must not be a symlink.`, {
+        hint: "Remove symlinks from BlueNote-managed layout paths before retrying.",
+      })
+    }
+  }
+}
+
 export function ensureManagedRoot(rootPath: string): string {
   const normalizedRootPath = path.resolve(rootPath)
 
   try {
+    assertNoExistingLayoutSymlinks(normalizedRootPath, normalizedRootPath)
+    mkdirSync(normalizedRootPath, { recursive: true })
+
     for (const relativePath of MANAGED_ROOT_LAYOUT) {
-      mkdirSync(path.join(normalizedRootPath, relativePath), { recursive: true })
+      const targetPath = path.join(normalizedRootPath, relativePath)
+      assertNoExistingLayoutSymlinks(normalizedRootPath, targetPath)
+      mkdirSync(targetPath, { recursive: true })
     }
   } catch (error) {
     throw new UsageError(`Could not initialize BlueNote root at '${normalizedRootPath}'.`, {

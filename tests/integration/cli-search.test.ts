@@ -131,6 +131,32 @@ test("bn search 123 only prints notes with fields containing 123", async () => {
   }
 })
 
+test("bn search finds arbitrary substring contains matches through the real index", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-search-substring-")
+
+  try {
+    await harness.writeNote(
+      path.join("notes", "inbox", "alpha.md"),
+      noteMarkdown({ id: "note-alpha", title: "Alpha Project", body: "Opening line.\nBody contains foobar for substring search.\n" }),
+    )
+
+    const rebuildResult = harness.run(["rebuild"])
+    assert.equal(rebuildResult.exitCode, 0)
+
+    const titleResult = harness.run(["search", "pha"])
+    assert.equal(titleResult.exitCode, 0)
+    assert.equal(titleResult.stderr, "")
+    assert.match(titleResult.stdout, /^Alpha Project\n  key: note-alpha\n  path: notes[\\/]inbox[\\/]alpha\.md\n  match: title/m)
+
+    const bodyResult = harness.run(["search", "oba"])
+    assert.equal(bodyResult.exitCode, 0)
+    assert.equal(bodyResult.stderr, "")
+    assert.match(bodyResult.stdout, /^Alpha Project\n  key: note-alpha\n  path: notes[\\/]inbox[\\/]alpha\.md\n  match: content line 2/m)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
 test("bn search returns actionable rebuild guidance when derived indexes are missing", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-search-missing-index-")
 

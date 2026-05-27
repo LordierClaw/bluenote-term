@@ -107,6 +107,28 @@ function getContainsScore(matches: readonly ContainsFieldMatch[]): number {
   return matches.reduce((highestScore, match) => Math.max(highestScore, match.score), 0)
 }
 
+interface SerializedSearchIndex {
+  storedFields?: Record<string, Partial<SearchIndexMatch>>
+}
+
+function getStoredSearchMatches(searchJson: string): SearchIndexMatch[] {
+  const parsed = JSON.parse(searchJson) as SerializedSearchIndex
+  const storedFields = parsed.storedFields
+
+  if (storedFields === undefined || typeof storedFields !== "object" || storedFields === null) {
+    return []
+  }
+
+  return Object.values(storedFields).map((stored): SearchIndexMatch => ({
+    key: String(stored.key ?? ""),
+    id: String(stored.id ?? stored.key ?? ""),
+    title: String(stored.title ?? ""),
+    description: String(stored.description ?? ""),
+    body: String(stored.body ?? ""),
+    relativePath: String(stored.relativePath ?? ""),
+  }))
+}
+
 function deriveLegacyDescription(note: ParsedNote): string {
   return note.body
     .split("\n")
@@ -244,10 +266,11 @@ export function loadIndexStore(rootPath: string): LoadedIndexStore {
       const activeSummaries = summaries.filter((summary) => summary.archivedAt === null)
       const activeKeys = new Set(activeSummaries.map((summary) => summary.key))
 
-      const searchEngine = MiniSearch.loadJSON<SearchIndexMatch>(searchJson, {
+      MiniSearch.loadJSON<SearchIndexMatch>(searchJson, {
         fields: [...SEARCH_FIELDS],
         storeFields: [...SEARCH_STORE_FIELDS],
       })
+      const searchableMatches = getStoredSearchMatches(searchJson)
 
       return {
         listSummaries() {
@@ -263,30 +286,10 @@ export function loadIndexStore(rootPath: string): LoadedIndexStore {
             return []
           }
 
-          return searchEngine.search(query)
-            .filter((match) => activeKeys.has(String(match.key)))
+          return searchableMatches
+            .filter((match) => activeKeys.has(match.key))
             .flatMap((match): SearchIndexMatch[] => {
-              const mappedMatch: SearchIndexMatch = {
-                key: String(match.key),
-                id: String(match.id),
-                title: String(match.title),
-                description: String(match.description),
-                body: typeof match.body === "string" ? match.body : "",
-                relativePath: String(match.relativePath),
-                score: typeof match.score === "number" ? match.score : undefined,
-                termMatches:
-                  match.match !== undefined && typeof match.match === "object" && match.match !== null
-                    ? Object.fromEntries(
-                        Object.entries(match.match)
-                          .filter(([term, fields]) => typeof term === "string" && Array.isArray(fields))
-                          .map(([term, fields]) => [
-                            term,
-                            fields.filter((field): field is string => typeof field === "string"),
-                          ]),
-                      )
-                    : undefined,
-              }
-              const containsMatches = collectSearchIndexContainsMatches(query, mappedMatch)
+              const containsMatches = collectSearchIndexContainsMatches(query, match)
 
               if (containsMatches.length === 0) {
                 return []
@@ -294,7 +297,7 @@ export function loadIndexStore(rootPath: string): LoadedIndexStore {
 
               return [
                 {
-                  ...mappedMatch,
+                  ...match,
                   containsMatches,
                   score: getContainsScore(containsMatches),
                 },

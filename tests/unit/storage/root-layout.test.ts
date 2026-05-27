@@ -2,7 +2,7 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
-import { access, mkdtemp, rm, stat, writeFile } from "node:fs/promises"
+import { access, mkdtemp, rm, stat, symlink, writeFile } from "node:fs/promises"
 
 import {
   APP_STATE_DIRECTORY,
@@ -77,5 +77,30 @@ test("ensureManagedRoot wraps filesystem failures in a UsageError", async () => 
     )
   } finally {
     await rm(tempRoot, { recursive: true, force: true })
+  }
+})
+
+test("ensureManagedRoot rejects symlinked app-state directories without creating files outside the root", async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), "bluenote-root-layout-symlink-"))
+  const outsideRoot = await mkdtemp(path.join(os.tmpdir(), "bluenote-root-layout-outside-"))
+
+  try {
+    await symlink(outsideRoot, path.join(tempRoot, ".data"), "dir")
+
+    assert.throws(
+      () => ensureManagedRoot(tempRoot),
+      (error) => {
+        assert.ok(error instanceof UsageError)
+        assert.match(error.message, /Could not initialize BlueNote root at/)
+        assert.equal(error.hint, "Ensure BLUENOTE_ROOT points to a writable directory path.")
+        return true
+      },
+    )
+
+    await assert.rejects(() => access(path.join(outsideRoot, "notes")))
+    await assert.rejects(() => access(path.join(outsideRoot, "metadata.sqlite")))
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true })
+    await rm(outsideRoot, { recursive: true, force: true })
   }
 })
