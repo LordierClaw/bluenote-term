@@ -77,7 +77,7 @@ export function buildSearchEverythingViewModel(
     input: "primaryAccent",
     result: "panel",
     selectedResult: "activeItem",
-    preview: "secondaryAccent",
+    preview: "panel",
   }
   const preview = buildHighlightedSearchEverythingPreview(results, selectedIndex)
 
@@ -199,7 +199,7 @@ export function renderSearchEverythingScreen(options: RenderSearchEverythingScre
     )
   }
   if (vm.preview) {
-    previewRegion.add(new TextRenderable(options.renderer, { content: vm.preview.title, height: 1, fg: tuiTheme.primaryAccent, bg: tuiTheme.panel }))
+    previewRegion.add(new TextRenderable(options.renderer, { content: vm.preview.title, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
     previewRegion.add(new TextRenderable(options.renderer, { content: vm.preview.subtitle, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
     for (const line of vm.preview.lines) {
       previewRegion.add(new TextRenderable(options.renderer, { content: line, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))

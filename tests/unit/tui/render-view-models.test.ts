@@ -91,10 +91,10 @@ describe("TUI render view models", () => {
       ],
     )
     assert.deepEqual(
-      vm.rows.map((row) => ({ key: row.key, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent, openStyleIntent: row.openStyleIntent, metadataStyleIntent: row.metadataStyleIntent })),
+      vm.rows.map((row) => ({ key: row.key, type: row.type, icon: row.icon, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent, openStyleIntent: row.openStyleIntent, metadataStyleIntent: row.metadataStyleIntent })),
       [
-        { key: "notes/inbox", styleIntent: "panel", itemStyleIntent: "secondaryAccent", openStyleIntent: null, metadataStyleIntent: "mutedText" },
-        { key: "daily-plan", styleIntent: "focusedRow", itemStyleIntent: "primaryAccent", openStyleIntent: "activeItem", metadataStyleIntent: "mutedText" },
+        { key: "notes/inbox", type: "folder", icon: "📁", styleIntent: "panel", itemStyleIntent: "mutedText", openStyleIntent: null, metadataStyleIntent: "mutedText" },
+        { key: "daily-plan", type: "note", icon: "📄", styleIntent: "focusedRow", itemStyleIntent: "mutedText", openStyleIntent: "activeItem", metadataStyleIntent: "mutedText" },
       ],
     )
   })
@@ -166,7 +166,7 @@ describe("TUI render view models", () => {
     )
   })
 
-  test("manager browser view model exposes colored two-column topbar, rows, and folder preview", () => {
+  test("manager browser view model exposes two-column rows and folder preview without decorative type coloring", () => {
     const summaries: NoteManagerSummary[] = [
       { key: "root-note", title: "Root Note", description: "A top-level note.", relativePath: "notes/root-note.md", body: "# Root Note" },
       { key: "api-roadmap", title: "API Roadmap", description: "Ship API work.", relativePath: "notes/projects/api-roadmap.md" },
@@ -201,16 +201,16 @@ describe("TUI render view models", () => {
     assert.deepEqual(
       vm.layout1.rows.map((row) => ({ filename: row.filename, columns: row.columns, focused: row.focused, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent })),
       [
-        { filename: "projects", columns: { filename: "projects", title: "", description: "" }, focused: true, styleIntent: "focusedRow", itemStyleIntent: "secondaryAccent" },
-        { filename: "root-note.md", columns: { filename: "root-note.md", title: "Root Note", description: "A top-level note." }, focused: false, styleIntent: "panel", itemStyleIntent: "primaryAccent" },
+        { filename: "projects", columns: { filename: "projects", title: "", description: "" }, focused: true, styleIntent: "focusedRow", itemStyleIntent: "mutedText" },
+        { filename: "root-note.md", columns: { filename: "root-note.md", title: "Root Note", description: "A top-level note." }, focused: false, styleIntent: "panel", itemStyleIntent: "mutedText" },
       ],
     )
     assert.equal(vm.layout2.preview.type, "folder")
     assert.deepEqual(
       vm.layout2.preview.rows.map((row) => ({ filename: row.filename, columns: row.columns, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent })),
       [
-        { filename: "client", columns: { filename: "client", title: "", description: "" }, styleIntent: "panel", itemStyleIntent: "secondaryAccent" },
-        { filename: "api-roadmap.md", columns: { filename: "api-roadmap.md", title: "API Roadmap", description: "Ship API work." }, styleIntent: "panel", itemStyleIntent: "primaryAccent" },
+        { filename: "client", columns: { filename: "client", title: "", description: "" }, styleIntent: "panel", itemStyleIntent: "mutedText" },
+        { filename: "api-roadmap.md", columns: { filename: "api-roadmap.md", title: "API Roadmap", description: "Ship API work." }, styleIntent: "panel", itemStyleIntent: "mutedText" },
       ],
     )
   })
@@ -414,7 +414,7 @@ describe("TUI render view models", () => {
       input: "primaryAccent",
       result: "panel",
       selectedResult: "activeItem",
-      preview: "secondaryAccent",
+      preview: "panel",
     })
     assert.deepEqual(vm.shortcuts, ["type search", "↑/↓ select", "Enter open/run", "Esc editor"])
     assert.deepEqual(
@@ -429,7 +429,7 @@ describe("TUI render view models", () => {
       title: "/replace",
       subtitle: "Find and replace text in the active editor buffer",
       lines: ["Usage: /replace <query> <replacement>", "Shortcut: Ctrl+H"],
-      styleIntent: "secondaryAccent",
+      styleIntent: "panel",
     })
 
     const contentVm = buildSearchEverythingViewModel(

@@ -18,16 +18,3 @@ export const tuiTheme: Record<TuiColorIntent, `#${string}`> = {
   primaryAccent: "#38bdf8",
   secondaryAccent: "#22d3ee",
 }
-
-export interface TuiIntentStyle {
-  foreground?: string
-  background?: string
-}
-
-export function styleForIntent(intent: TuiColorIntent): TuiIntentStyle {
-  if (intent === "background" || intent === "panel" || intent === "focusedRow" || intent === "activeItem") {
-    return { background: tuiTheme[intent] }
-  }
-
-  return { foreground: tuiTheme[intent] }
-}
