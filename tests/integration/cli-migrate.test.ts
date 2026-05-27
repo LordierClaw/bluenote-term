@@ -123,8 +123,8 @@ test("bn migrate reports a clean rollback error when rebuild cannot write derive
     )
     await assert.rejects(() => access(path.join(harness.rootPath, "notes", "inbox", "rollback-recovery-note-51u7i0.md")))
     await assert.rejects(() => access(path.join(harness.rootPath, ".data", "notes", "rollback-recovery-note-51u7i0.json")))
-    await assert.rejects(() => access(path.join(harness.rootPath, ".state", "metadata.sqlite")))
-    await assert.rejects(() => access(path.join(harness.rootPath, ".state", "search-index.json")))
+    await assert.rejects(() => access(path.join(harness.rootPath, ".data", "metadata.sqlite")))
+    await assert.rejects(() => access(path.join(harness.rootPath, ".data", "search-index.json")))
   } finally {
     await harness.cleanup()
   }

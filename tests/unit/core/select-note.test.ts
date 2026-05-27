@@ -39,7 +39,7 @@ async function writePlainNoteWithSidecar(
   },
 ) {
   const notePath = path.join(rootPath, relativePath)
-  const sidecarPath = path.join(rootPath, ".state", "notes", `${key}.json`)
+  const sidecarPath = path.join(rootPath, ".data", "notes", `${key}.json`)
 
   await mkdir(path.dirname(notePath), { recursive: true })
   await mkdir(path.dirname(sidecarPath), { recursive: true })

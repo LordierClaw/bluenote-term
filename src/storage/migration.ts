@@ -22,6 +22,7 @@ import type { ParsedNote } from "./note-schema"
 import { normalizePlainNoteBody } from "./plain-note"
 import { createSidecarRepository } from "./sidecar-repository"
 import { ensureManagedRoot, getStateNotesPath } from "./root-layout"
+import { STATE_DIRECTORY, STATE_RECOVERY_DIRECTORY } from "../config/root"
 
 export interface StorageFormatSummary {
   kind: "empty-root" | "old-format" | "new-format" | "mixed-format"
@@ -196,7 +197,7 @@ function formatRecoveryDirectoryName(migratedAt: string): string {
 }
 
 function getRecoveryDirectoryPath(rootPath: string, migratedAt: string): string {
-  return assertPathInsideRoot(rootPath, path.join(rootPath, ".state", "recovery", formatRecoveryDirectoryName(migratedAt)))
+  return assertPathInsideRoot(rootPath, path.join(rootPath, STATE_RECOVERY_DIRECTORY, formatRecoveryDirectoryName(migratedAt)))
 }
 
 function writeRecoverySnapshot(rootPath: string, migratedAt: string, candidates: readonly LegacyMigrationCandidate[]): string {
@@ -239,8 +240,8 @@ function writeRecoveryKeyMap(
 
 function clearDerivedIndexes(rootPath: string): void {
   const indexPaths = [
-    path.join(rootPath, ".state", "metadata.sqlite"),
-    path.join(rootPath, ".state", "search-index.json"),
+    path.join(rootPath, STATE_DIRECTORY, "metadata.sqlite"),
+    path.join(rootPath, STATE_DIRECTORY, "search-index.json"),
   ]
 
   for (const indexPath of indexPaths) {
@@ -404,7 +405,7 @@ export function migrateLegacyStorage(options: MigrateLegacyStorageOptions): Migr
 
     if (rollbackErrors.length > 0) {
       throw new UsageError("Legacy storage migration failed and rollback also failed.", {
-        hint: "Inspect .state/recovery/ and fix the reported filesystem issues before retrying bn migrate.",
+        hint: "Inspect .data/recovery/ and fix the reported filesystem issues before retrying bn migrate.",
         cause: new AggregateError([error, ...rollbackErrors], "Migration failed and rollback also failed."),
       })
     }

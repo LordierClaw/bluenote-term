@@ -42,7 +42,7 @@ test("detectStorageFormat classifies empty, old, new, and mixed managed roots", 
     const newRelativePath = path.join("notes", "inbox", "new-note-abcd12.md")
     await writeFile(path.join(newRoot, newRelativePath), "Plain note body.\n", "utf8")
     await writeFile(
-      path.join(newRoot, ".state", "notes", "new-note-abcd12.json"),
+      path.join(newRoot, ".data", "notes", "new-note-abcd12.json"),
       sidecarJson({
         key: "new-note-abcd12",
         title: "New Note",
@@ -64,7 +64,7 @@ test("detectStorageFormat classifies empty, old, new, and mixed managed roots", 
     const mixedRelativePath = path.join("notes", "inbox", "already-new-qwerty.md")
     await writeFile(path.join(mixedRoot, mixedRelativePath), "Already migrated body.\n", "utf8")
     await writeFile(
-      path.join(mixedRoot, ".state", "notes", "already-new-qwerty.json"),
+      path.join(mixedRoot, ".data", "notes", "already-new-qwerty.json"),
       sidecarJson({
         key: "already-new-qwerty",
         title: "Already New",
@@ -180,7 +180,7 @@ test("migrateLegacyStorage converts legacy frontmatter notes into plain notes, s
     assert.equal(await readFile(path.join(rootPath, migratedInboxRelativePath), "utf8"), inboxBody)
     assert.equal(await readFile(path.join(rootPath, migratedArchiveRelativePath), "utf8"), archiveBody)
 
-    assert.deepEqual(JSON.parse(await readFile(path.join(rootPath, ".state", "notes", `${inboxKey}.json`), "utf8")), {
+    assert.deepEqual(JSON.parse(await readFile(path.join(rootPath, ".data", "notes", `${inboxKey}.json`), "utf8")), {
       key: inboxKey,
       title: "Alpha Launch Plan",
       description: createNoteDescription(inboxBody),
@@ -190,7 +190,7 @@ test("migrateLegacyStorage converts legacy frontmatter notes into plain notes, s
       archivedAt: null,
       namingVersion: 1,
     })
-    assert.deepEqual(JSON.parse(await readFile(path.join(rootPath, ".state", "notes", `${archiveKey}.json`), "utf8")), {
+    assert.deepEqual(JSON.parse(await readFile(path.join(rootPath, ".data", "notes", `${archiveKey}.json`), "utf8")), {
       key: archiveKey,
       title: "Archived Rollback Checklist",
       description: createNoteDescription(archiveBody),
@@ -201,11 +201,11 @@ test("migrateLegacyStorage converts legacy frontmatter notes into plain notes, s
       namingVersion: 1,
     })
 
-    const recoveryEntries = (await readdir(path.join(rootPath, ".state", "recovery"))).sort()
+    const recoveryEntries = (await readdir(path.join(rootPath, ".data", "recovery"))).sort()
     assert.equal(recoveryEntries.length, 1)
     assert.match(recoveryEntries[0] ?? "", /^migrate-2026-05-24T12-00-00-000Z$/)
 
-    const recoveryPath = path.join(rootPath, ".state", "recovery", recoveryEntries[0]!)
+    const recoveryPath = path.join(rootPath, ".data", "recovery", recoveryEntries[0]!)
     assert.deepEqual(JSON.parse(await readFile(path.join(recoveryPath, "key-map.json"), "utf8")), {
       migratedAt: MIGRATED_AT,
       notes: [
@@ -281,9 +281,9 @@ test("migrateLegacyStorage removes partial derived indexes and restores legacy n
   const legacyRelativePath = path.join("notes", "inbox", "legacy-rollback-uuid.md")
   const legacyPath = path.join(rootPath, legacyRelativePath)
   const migratedPath = path.join(rootPath, migratedRelativePath)
-  const sidecarPath = path.join(rootPath, ".state", "notes", `${legacyKey}.json`)
-  const metadataPath = path.join(rootPath, ".state", "metadata.sqlite")
-  const searchIndexPath = path.join(rootPath, ".state", "search-index.json")
+  const sidecarPath = path.join(rootPath, ".data", "notes", `${legacyKey}.json`)
+  const metadataPath = path.join(rootPath, ".data", "metadata.sqlite")
+  const searchIndexPath = path.join(rootPath, ".data", "search-index.json")
   const legacyMarkdown = legacyNoteMarkdown({
     id: "legacy-rollback-uuid",
     title: "Rollback Recovery Note",
@@ -330,7 +330,7 @@ test("migrateLegacyStorage is a calm no-op for already migrated roots and reject
     const relativePath = path.join("notes", "inbox", "already-new-51u7i0.md")
     await writeFile(path.join(newRoot, relativePath), "Already migrated body.\n", "utf8")
     await writeFile(
-      path.join(newRoot, ".state", "notes", "already-new-51u7i0.json"),
+      path.join(newRoot, ".data", "notes", "already-new-51u7i0.json"),
       sidecarJson({
         key: "already-new-51u7i0",
         title: "Already New",
@@ -351,7 +351,7 @@ test("migrateLegacyStorage is a calm no-op for already migrated roots and reject
     )
     await writeFile(path.join(mixedRoot, relativePath), "Already migrated body.\n", "utf8")
     await writeFile(
-      path.join(mixedRoot, ".state", "notes", "already-new-51u7i0.json"),
+      path.join(mixedRoot, ".data", "notes", "already-new-51u7i0.json"),
       sidecarJson({
         key: "already-new-51u7i0",
         title: "Already New",

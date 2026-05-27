@@ -89,7 +89,7 @@ export function renameNote(options: RenameNoteOptions): RenameNoteSummary {
     }
 
     throw new UsageError(`Could not rename note '${selected.sourcePath}'.`, {
-      hint: "Inspect .state/recovery/ for the staged rename artifact, then repair or retry the rename.",
+      hint: "Inspect .data/recovery/ for the staged rename artifact, then repair or retry the rename.",
       cause: error,
     })
   }

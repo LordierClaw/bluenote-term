@@ -89,7 +89,8 @@ test("Phase 1 CLI workflow stays consistent across init, create, rebuild, list, 
     assert.match(postEditSearchResult.stdout, /key: reference-note/)
     assert.match(postEditSearchResult.stdout, /path: notes[\\/]journal[\\/]reference-note\.md/)
     assert.match(postEditSearchResult.stdout, /match: content(?: line \d+)?/)
-    assert.match(postEditSearchResult.stdout, /Reference Note Edited/)
+    assert.match(postEditSearchResult.stdout, /excerpt:/)
+    assert.match(postEditSearchResult.stdout, /Edited zebra tokens stay searchable before archive/)
 
     const archiveResult = runOk("bn archive reference-note", ["archive", "reference-note"])
     assert.match(archiveResult.stdout, /Archived note: notes[\\/]archive[\\/]reference-note\.md/)

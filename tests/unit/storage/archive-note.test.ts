@@ -15,7 +15,7 @@ async function writeNote(rootPath: string, relativePath: string, markdown: strin
 }
 
 async function writeSidecar(rootPath: string, key: string, json: string) {
-  const sidecarPath = path.join(rootPath, ".state", "notes", `${key}.json`)
+  const sidecarPath = path.join(rootPath, ".data", "notes", `${key}.json`)
   await mkdir(path.dirname(sidecarPath), { recursive: true })
   await Bun.write(sidecarPath, json)
 }

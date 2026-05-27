@@ -24,7 +24,7 @@ async function writePlainNoteWithSidecar(
   },
 ) {
   const notePath = path.join(rootPath, relativePath)
-  const sidecarPath = path.join(rootPath, ".state", "notes", `${key}.json`)
+  const sidecarPath = path.join(rootPath, ".data", "notes", `${key}.json`)
 
   await mkdir(path.dirname(notePath), { recursive: true })
   await mkdir(path.dirname(sidecarPath), { recursive: true })
@@ -77,10 +77,10 @@ test("renameNote renames the key, file, and sidecar and reports the previous and
     assert.equal(summary.relativePath, path.join("notes", "inbox", "renamed-title-00000a.md"))
 
     await assert.rejects(() => access(path.join(rootPath, relativePath)))
-    await assert.rejects(() => access(path.join(rootPath, ".state", "notes", "original-note.json")))
+    await assert.rejects(() => access(path.join(rootPath, ".data", "notes", "original-note.json")))
 
     const sidecar = JSON.parse(
-      await readFile(path.join(rootPath, ".state", "notes", "renamed-title-00000a.json"), "utf8"),
+      await readFile(path.join(rootPath, ".data", "notes", "renamed-title-00000a.json"), "utf8"),
     ) as {
       description: string
       key: string
@@ -174,7 +174,7 @@ test("renameNote leaves a recovery artifact behind when rename staging fails", a
       },
     )
 
-    const recoveryPath = path.join(rootPath, ".state", "recovery")
+    const recoveryPath = path.join(rootPath, ".data", "recovery")
     let entries: string[] = []
 
     try {
