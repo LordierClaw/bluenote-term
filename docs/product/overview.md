@@ -26,11 +26,13 @@ Delivered by the distinct Phase 2 CLI storage/UX pivot and Phase 3 TUI workspace
 
 ## Phase 3 TUI model
 
-The TUI workspace launches with `bn tui` and is intentionally split into separate screens:
+The TUI workspace launches with `bn tui` and is intentionally split into separate screens. It uses semantic colors for focus, muted secondary text, warning/success states, and consistent top/bottom chrome rather than hard-coded presentation rules:
 
-- **Manager:** note navigation over CLI-compatible note summaries, paths, keys, titles, and descriptions.
-- **Editor:** focused inline editing of the selected plain Markdown note body. Current wired Phase 3 behavior includes Unicode-safe buffer updates, save, and dirty-state handling; select-all, cut/copy/paste, and find/replace are covered in the adapter/controller layer but are not all wired as default runtime actions yet. The Editor does not add metadata frontmatter to note files.
-- **Search Everything:** global note/content/folder search plus slash-prefixed command entries for workspace/action discovery. `/save` is wired as a built-in runtime action; the other command entries are discoverable adapter outputs until command handlers are connected.
+- **Manager:** a two-column browser/preview model over CLI-compatible note summaries, paths, keys, titles, and descriptions. Right/open navigates into folders or opens notes; left/back returns to the previous folder or screen.
+- **Editor:** focused inline editing of the selected plain Markdown note body. Current wired Phase 3 behavior includes Unicode-safe buffer updates, save, dirty-state handling, `Ctrl+F` find mode, and 750ms autosave with stale-completion guards. Select-all and cut/copy/paste remain adapter/controller groundwork for follow-on runtime wiring. The Editor does not add metadata frontmatter to note files.
+- **Search Everything:** global note/content/folder search plus slash-prefixed command entries for workspace/action discovery, presented as a single input, result list, and preview. `/save` is wired as a built-in runtime action; the other command entries are discoverable adapter outputs until command handlers are connected.
+
+Across screens, `Escape` and `Ctrl+[` apply the same back rule: close the active mode or overlay first, then return to the prior screen/folder toward the root manager. Quitting remains an explicit `q` or `Ctrl+C` action.
 
 Shell completion remains shell setup through `bn completion <bash|zsh|fish>`, not a TUI action. The TUI may surface command discovery, but completion script generation belongs to the CLI.
 

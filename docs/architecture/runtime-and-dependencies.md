@@ -17,13 +17,13 @@
 
 ## Phase 3 TUI runtime shape
 
-The OpenTUI runtime hosts three separate workspace screens:
+The OpenTUI runtime hosts three separate workspace screens with shared semantic colors and status chrome:
 
-- **Manager** for note/folder navigation over existing note summaries and selectors
-- **Editor** for focused inline editing of plain Markdown note bodies with top/bottom status chrome
-- **Search Everything** for global note, content, folder/path, and slash-command entry search; `/save` is wired by default, while other entries require command handlers before they perform mutations
+- **Manager** for two-column browser/preview note and folder navigation over existing note summaries and selectors. Right/open enters folders or opens notes; left/back returns to the previous folder or screen.
+- **Editor** for focused inline editing of plain Markdown note bodies with top/bottom status chrome, `Ctrl+F` find mode, and 750ms autosave guarded against stale completion.
+- **Search Everything** for global note, content, folder/path, and slash-command entry search in a single-input, result-list, and preview layout; `/save` is wired by default, while other entries require command handlers before they perform mutations.
 
-The TUI consumes the same core services and storage layout as the CLI. `bn tui` is the workspace launch command; shell completion remains CLI shell setup through `bn completion <bash|zsh|fish>`, not a TUI action.
+The TUI consumes the same core services and storage layout as the CLI. `bn tui` is the workspace launch command; shell completion remains CLI shell setup through `bn completion <bash|zsh|fish>`, not a TUI action. `Escape` and `Ctrl+[` apply the global back rule by closing the active mode/overlay first, then navigating back through workspace history toward the root manager; exit stays explicit through `q` or `Ctrl+C`.
 
 ## Validation expectations
 

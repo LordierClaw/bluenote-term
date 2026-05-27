@@ -9,7 +9,7 @@ The workspace is launched with `bn tui` and remains a presentation/input layer o
 ## Primary outcomes
 
 - OpenTUI renderer/bootstrap flow reachable from the BlueNote entrypoint through `bn tui`
-- beautiful, elegant full-screen layout with command/status chrome
+- beautiful, elegant full-screen layout with semantic colors and command/status chrome
 - separate **Manager**, **Editor**, and **Search Everything** screens instead of one overloaded pane
 - Manager screen backed by the same note list/selectors as the CLI
 - Search Everything screen backed by the same indexed search service as `bn search`, including notes, content excerpts, folders/paths, and slash-prefixed command entries
@@ -21,15 +21,19 @@ The workspace is launched with `bn tui` and remains a presentation/input layer o
 
 ### Manager
 
-The Manager is the workspace home screen. It presents note and folder rows derived from existing note summaries and paths, tracks the focused item, and opens selected notes into the Editor. Navigation stays selector-compatible with the CLI by using note keys and relative paths.
+The Manager is the workspace home screen. It presents a two-column browser/preview layout: the browser lists note and folder rows derived from existing note summaries and paths, while the preview shows context for the focused item. Navigation stays selector-compatible with the CLI by using note keys and relative paths. Right/open enters a folder or opens the selected note into the Editor; left/back returns to the previous folder or screen.
 
 ### Editor
 
-The Editor is a focused note-body surface with only the TUI topbar, editor body, and bottombar/status chrome. Current wired Phase 3 behavior covers inline body editing, Unicode-safe changes, saving, and dirty-state protection. Selection, cut/copy/paste, and find/replace are tested in the adapter/controller layer and reserved for follow-on runtime wiring. The Editor writes the selected note body back to the same plain Markdown file; it does not add frontmatter or create a TUI-only storage format.
+The Editor is a focused note-body surface with only the TUI topbar, editor body, and bottombar/status chrome. Current wired Phase 3 behavior covers inline body editing, Unicode-safe changes, explicit saving, `Ctrl+F` find mode, 750ms autosave with stale-completion guards, and dirty-state protection. Selection and cut/copy/paste are tested in the adapter/controller layer and reserved for follow-on runtime wiring. The Editor writes the selected note body back to the same plain Markdown file; it does not add frontmatter or create a TUI-only storage format.
 
 ### Search Everything
 
-Search Everything is a global screen/overlay that can be opened from the Manager or Editor and cancelled back to the invoking screen. It searches notes by title/key/filename/path/description, content matches from the existing search index, folder/path results, and slash-prefixed command entries such as `/new`, `/archive`, `/delete`, `/rebuild`, `/migrate`, `/find`, `/replace`, and `/save`. These entries support command discovery; in the current runtime, only `/save` is wired as a built-in action and the others need explicit command handlers before they mutate notes.
+Search Everything is a global screen/overlay that can be opened from the Manager or Editor and cancelled back to the invoking screen. It uses a single input, result list, and preview to search notes by title/key/filename/path/description, content matches from the existing search index, folder/path results, and slash-prefixed command entries such as `/new`, `/archive`, `/delete`, `/rebuild`, `/migrate`, `/find`, `/replace`, and `/save`. These entries support command discovery; in the current runtime, only `/save` is wired as a built-in action and the others need explicit command handlers before they mutate notes.
+
+## Back and visual rules
+
+`Escape` and `Ctrl+[` share one back rule across the workspace: close the active mode or overlay first, then navigate back through folders/screens toward the root manager. Quitting the workspace remains an explicit `q` or `Ctrl+C` action. TUI styling uses semantic colors for focus, muted metadata, status, warning, and success states, plus consistent top/bottom chrome, so behavior is described by meaning rather than by fixed terminal colors.
 
 ## Completion boundary
 

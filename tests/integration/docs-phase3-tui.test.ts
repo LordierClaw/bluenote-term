@@ -9,7 +9,27 @@ async function readRepoFile(relativePath: string): Promise<string> {
   return readFile(path.join(workspaceRoot, relativePath), "utf8")
 }
 
-test("README documents the Phase 3 TUI workspace launch and screen model", async () => {
+function assertRefinedTuiBehavior(content: string): void {
+  assert.match(content, /two-column/i)
+  assert.match(content, /browser/i)
+  assert.match(content, /preview/i)
+  assert.match(content, /right|→/i)
+  assert.match(content, /left|←/i)
+  assert.match(content, /open/i)
+  assert.match(content, /back/i)
+  assert.match(content, /Ctrl\+F/i)
+  assert.match(content, /find/i)
+  assert.match(content, /750\s*ms/i)
+  assert.match(content, /autosave/i)
+  assert.match(content, /single-input|single input|one input/i)
+  assert.match(content, /result-list|result list/i)
+  assert.match(content, /Escape/i)
+  assert.match(content, /Ctrl\+\[/i)
+  assert.match(content, /semantic colors|semantic colour/i)
+  assert.match(content, /chrome/i)
+}
+
+test("README documents the refined Phase 3 TUI workspace behavior", async () => {
   const readme = await readRepoFile("README.md")
 
   assert.match(readme, /bn tui/)
@@ -18,9 +38,10 @@ test("README documents the Phase 3 TUI workspace launch and screen model", async
   assert.match(readme, /Search Everything/i)
   assert.match(readme, /shell completion/i)
   assert.match(readme, /not a TUI action/i)
+  assertRefinedTuiBehavior(readme)
 })
 
-test("product and phase docs describe separate Manager, Editor, and Search Everything Phase 3 scope", async () => {
+test("product and phase docs describe refined Manager, Editor, and Search Everything Phase 3 scope", async () => {
   const overview = await readRepoFile("docs/product/overview.md")
   const phase = await readRepoFile("docs/phases/phase-3-tui-workspace.md")
 
@@ -29,6 +50,7 @@ test("product and phase docs describe separate Manager, Editor, and Search Every
     assert.match(content, /Manager/i)
     assert.match(content, /Editor/i)
     assert.match(content, /Search Everything/i)
+    assertRefinedTuiBehavior(content)
   }
 
   assert.match(phase, /plain Markdown/i)
@@ -38,7 +60,7 @@ test("product and phase docs describe separate Manager, Editor, and Search Every
   assert.doesNotMatch(phase, /command\/action layer covering the available CLI workflows/i)
 })
 
-test("runtime docs identify OpenTUI as the Phase 3 workspace runtime", async () => {
+test("runtime docs identify OpenTUI as the refined Phase 3 workspace runtime", async () => {
   const runtime = await readRepoFile("docs/architecture/runtime-and-dependencies.md")
 
   assert.match(runtime, /@opentui\/core/)
@@ -47,4 +69,5 @@ test("runtime docs identify OpenTUI as the Phase 3 workspace runtime", async () 
   assert.match(runtime, /Manager/i)
   assert.match(runtime, /Editor/i)
   assert.match(runtime, /Search Everything/i)
+  assertRefinedTuiBehavior(runtime)
 })

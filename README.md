@@ -49,11 +49,11 @@ bun run ./bin/bn.ts tui
 
 ## Phase 3 TUI workspace
 
-Launch the workspace with `bn tui` (or `bun run ./bin/bn.ts tui` from the repo) from an interactive terminal. It is organized as separate screens rather than a single mixed view:
+Launch the workspace with `bn tui` (or `bun run ./bin/bn.ts tui` from the repo) from an interactive terminal. It is organized as separate screens rather than a single mixed view and uses semantic colors for focused rows, muted metadata, warnings, and status chrome:
 
-- **Manager** — file-style note navigation backed by the same note list/selectors as the CLI, with active-note focus and shortcuts for opening notes and Search Everything.
-- **Editor** — a focused inline note editing screen with top/bottom bars around the editor body. Current wired Phase 3 behavior covers Unicode-safe buffer changes, save, and dirty-state handling; select-all, cut/copy/paste, and find/replace live in the tested editor adapter/controller groundwork for follow-on runtime wiring.
-- **Search Everything** — a global search/command screen for notes, content matches, folders/paths, and discoverable slash-prefixed command entries such as `/new`, `/archive`, `/delete`, `/rebuild`, `/migrate`, `/find`, `/replace`, and `/save`. In the current runtime, `/save` is the built-in wired action; other command entries require handler wiring before they mutate notes.
+- **Manager** — a two-column browser/preview home screen backed by the same note list/selectors as the CLI. Use right/open to enter a folder or open the selected note, and left/back to return to the previous folder or screen. `Escape` and `Ctrl+[` follow the same back rule for closing active modes and returning toward the root manager; quitting remains `q` or `Ctrl+C`.
+- **Editor** — a focused inline note editing screen with top/bottom bars around the editor body. Current wired Phase 3 behavior covers Unicode-safe buffer changes, explicit save, dirty-state handling, `Ctrl+F` find mode, and 750ms autosave guarded against stale completions. Select-all and cut/copy/paste remain adapter/controller groundwork for follow-on runtime wiring.
+- **Search Everything** — a global search/command screen with a single input, result list, and preview for notes, content matches, folders/paths, and discoverable slash-prefixed command entries such as `/new`, `/archive`, `/delete`, `/rebuild`, `/migrate`, `/find`, `/replace`, and `/save`. In the current runtime, `/save` is the built-in wired action; other command entries require handler wiring before they mutate notes. `Escape` or `Ctrl+[` backs out to the invoking screen.
 
 The TUI reads and writes the same plain Markdown note files and `.state/notes/` sidecars as the CLI; note files remain plain and do not gain frontmatter. Agents can verify the real interactive path with `bun run smoke:opentui:interactive`, which launches `bn tui` inside a tmux-backed TTY and captures the Manager screen.
 
