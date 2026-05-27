@@ -4,12 +4,20 @@ import path from "node:path"
 import { UsageError } from "../core/errors"
 
 export const DEFAULT_BLUENOTE_ROOT_DIRECTORY = ".bluenote"
-export const STATE_DIRECTORY = ".state"
-export const STATE_NOTES_DIRECTORY = path.join(STATE_DIRECTORY, "notes")
-export const STATE_RECOVERY_DIRECTORY = path.join(STATE_DIRECTORY, "recovery")
-export const STATE_COMPLETIONS_DIRECTORY = path.join(STATE_DIRECTORY, "completions")
-export const STATE_TMP_DIRECTORY = path.join(STATE_DIRECTORY, "tmp")
-export const STATE_LOGS_DIRECTORY = path.join(STATE_DIRECTORY, "logs")
+export const APP_STATE_DIRECTORY = ".data"
+export const APP_STATE_NOTES_DIRECTORY = path.join(APP_STATE_DIRECTORY, "notes")
+export const APP_STATE_RECOVERY_DIRECTORY = path.join(APP_STATE_DIRECTORY, "recovery")
+export const APP_STATE_COMPLETIONS_DIRECTORY = path.join(APP_STATE_DIRECTORY, "completions")
+export const APP_STATE_TMP_DIRECTORY = path.join(APP_STATE_DIRECTORY, "tmp")
+export const APP_STATE_LOGS_DIRECTORY = path.join(APP_STATE_DIRECTORY, "logs")
+export const LEGACY_STATE_DIRECTORY = ".state"
+export const LEGACY_STATE_NOTES_DIRECTORY = path.join(LEGACY_STATE_DIRECTORY, "notes")
+export const STATE_DIRECTORY = APP_STATE_DIRECTORY
+export const STATE_NOTES_DIRECTORY = APP_STATE_NOTES_DIRECTORY
+export const STATE_RECOVERY_DIRECTORY = APP_STATE_RECOVERY_DIRECTORY
+export const STATE_COMPLETIONS_DIRECTORY = APP_STATE_COMPLETIONS_DIRECTORY
+export const STATE_TMP_DIRECTORY = APP_STATE_TMP_DIRECTORY
+export const STATE_LOGS_DIRECTORY = APP_STATE_LOGS_DIRECTORY
 export const STATE_MANIFEST_FILENAME = "manifest.json"
 export const STORAGE_SCHEMA_VERSION = 2
 

@@ -4,6 +4,11 @@ import os from "node:os"
 import path from "node:path"
 import { access, mkdtemp, rm, stat, writeFile } from "node:fs/promises"
 
+import {
+  APP_STATE_DIRECTORY,
+  APP_STATE_NOTES_DIRECTORY,
+  LEGACY_STATE_DIRECTORY,
+} from "../../../src/config/root"
 import { UsageError } from "../../../src/core/errors"
 import {
   ensureManagedRoot,
@@ -29,6 +34,7 @@ test("ensureManagedRoot creates the full managed root layout", async () => {
     }
 
     await assert.rejects(access(path.join(tempRoot, ".bluenote")))
+    await assert.rejects(access(path.join(tempRoot, ".state")))
   } finally {
     await rm(tempRoot, { recursive: true, force: true })
   }
@@ -41,7 +47,10 @@ test("root layout helpers expose note and sidecar paths for repository storage",
     const resolvedRoot = ensureManagedRoot(tempRoot)
 
     assert.equal(getNotesPath(resolvedRoot), path.join(resolvedRoot, "notes"))
-    assert.equal(getStateNotesPath(resolvedRoot), path.join(resolvedRoot, ".state", "notes"))
+    assert.equal(getStateNotesPath(resolvedRoot), path.join(resolvedRoot, ".data", "notes"))
+    assert.equal(APP_STATE_DIRECTORY, ".data")
+    assert.equal(APP_STATE_NOTES_DIRECTORY, path.join(".data", "notes"))
+    assert.equal(LEGACY_STATE_DIRECTORY, ".state")
     assert.equal(getInboxNotePath(resolvedRoot, "note-123"), path.join(resolvedRoot, "notes", "inbox", "note-123.md"))
     assert.equal(getArchiveNotePath(resolvedRoot, "note-123"), path.join(resolvedRoot, "notes", "archive", "note-123.md"))
   } finally {
