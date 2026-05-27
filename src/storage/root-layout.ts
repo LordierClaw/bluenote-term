@@ -2,6 +2,7 @@ import path from "node:path"
 import { mkdirSync } from "node:fs"
 
 import {
+  LEGACY_STATE_DIRECTORY,
   STATE_COMPLETIONS_DIRECTORY,
   STATE_DIRECTORY,
   STATE_LOGS_DIRECTORY,
@@ -44,6 +45,14 @@ export function getArchivePath(rootPath: string): string {
 
 export function getStateNotesPath(rootPath: string): string {
   return assertPathInsideRoot(rootPath, path.join(path.resolve(rootPath), STATE_NOTES_DIRECTORY))
+}
+
+export function getStatePath(rootPath: string): string {
+  return assertPathInsideRoot(rootPath, path.join(path.resolve(rootPath), STATE_DIRECTORY))
+}
+
+export function getLegacyStatePath(rootPath: string): string {
+  return assertPathInsideRoot(rootPath, path.join(path.resolve(rootPath), LEGACY_STATE_DIRECTORY))
 }
 
 export function getInboxNotePath(rootPath: string, key: string): string {

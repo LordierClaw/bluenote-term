@@ -1,0 +1,177 @@
+import fs from "node:fs"
+import path from "node:path"
+
+import {
+  LEGACY_STATE_NOTES_DIRECTORY,
+  STATE_COMPLETIONS_DIRECTORY,
+  STATE_LOGS_DIRECTORY,
+  STATE_MANIFEST_FILENAME,
+  STATE_NOTES_DIRECTORY,
+  STATE_RECOVERY_DIRECTORY,
+  STATE_TMP_DIRECTORY,
+} from "../config/root"
+import { UsageError } from "../core/errors"
+import { assertPathInsideRoot } from "../platform/path-safety"
+import { ensureManagedRoot, getLegacyStatePath, getStatePath } from "./root-layout"
+
+export interface AppStateMigrationResult {
+  status: "noop" | "migrated"
+  migratedFileCount: number
+  legacyStatePath: string
+  dataStatePath: string
+}
+
+const CONFLICT_MESSAGE = "Cannot migrate legacy .state because .data already contains conflicting app state."
+const CONFLICT_HINT = "Review .state and .data, keep the desired BlueNote metadata under .data, then retry."
+const SUPPORT_DIRECTORIES = [
+  ["recovery", STATE_RECOVERY_DIRECTORY],
+  ["tmp", STATE_TMP_DIRECTORY],
+  ["logs", STATE_LOGS_DIRECTORY],
+  ["completions", STATE_COMPLETIONS_DIRECTORY],
+] as const
+
+function pathExists(filePath: string): boolean {
+  return fs.existsSync(filePath)
+}
+
+function getResult(
+  status: AppStateMigrationResult["status"],
+  migratedFileCount: number,
+  legacyStatePath: string,
+  dataStatePath: string,
+): AppStateMigrationResult {
+  return {
+    status,
+    migratedFileCount,
+    legacyStatePath,
+    dataStatePath,
+  }
+}
+
+function throwConflict(): never {
+  throw new UsageError(CONFLICT_MESSAGE, {
+    hint: CONFLICT_HINT,
+  })
+}
+
+function copyFileIfMissingOrIdentical(rootPath: string, sourcePath: string, destinationPath: string): boolean {
+  const safeDestinationPath = assertPathInsideRoot(rootPath, destinationPath)
+
+  if (pathExists(safeDestinationPath)) {
+    const source = fs.readFileSync(sourcePath)
+    const destination = fs.readFileSync(safeDestinationPath)
+
+    if (!source.equals(destination)) {
+      throwConflict()
+    }
+
+    return false
+  }
+
+  fs.mkdirSync(path.dirname(safeDestinationPath), { recursive: true })
+  fs.copyFileSync(sourcePath, safeDestinationPath)
+  return true
+}
+
+function copyDirectoryIfMissingOrIdentical(rootPath: string, sourceDirectory: string, destinationDirectory: string): number {
+  if (!pathExists(sourceDirectory)) {
+    return 0
+  }
+
+  const sourceStats = fs.statSync(sourceDirectory)
+  if (!sourceStats.isDirectory()) {
+    return 0
+  }
+
+  const safeDestinationDirectory = assertPathInsideRoot(rootPath, destinationDirectory)
+  fs.mkdirSync(safeDestinationDirectory, { recursive: true })
+
+  let migratedFileCount = 0
+  for (const entry of fs.readdirSync(sourceDirectory, { withFileTypes: true })) {
+    const sourcePath = path.join(sourceDirectory, entry.name)
+    const destinationPath = assertPathInsideRoot(rootPath, path.join(safeDestinationDirectory, entry.name))
+
+    if (entry.isDirectory()) {
+      migratedFileCount += copyDirectoryIfMissingOrIdentical(rootPath, sourcePath, destinationPath)
+      continue
+    }
+
+    if (!entry.isFile()) {
+      continue
+    }
+
+    if (copyFileIfMissingOrIdentical(rootPath, sourcePath, destinationPath)) {
+      migratedFileCount += 1
+    }
+  }
+
+  return migratedFileCount
+}
+
+function copyLegacyNotes(rootPath: string, legacyNotesPath: string, dataNotesPath: string): number {
+  if (!pathExists(legacyNotesPath)) {
+    return 0
+  }
+
+  const legacyNotesStats = fs.statSync(legacyNotesPath)
+  if (!legacyNotesStats.isDirectory()) {
+    return 0
+  }
+
+  fs.mkdirSync(assertPathInsideRoot(rootPath, dataNotesPath), { recursive: true })
+
+  let migratedFileCount = 0
+  for (const entry of fs.readdirSync(legacyNotesPath, { withFileTypes: true })) {
+    if (!entry.isFile() || path.extname(entry.name) !== ".json") {
+      continue
+    }
+
+    const sourcePath = path.join(legacyNotesPath, entry.name)
+    const destinationPath = path.join(dataNotesPath, entry.name)
+    if (copyFileIfMissingOrIdentical(rootPath, sourcePath, destinationPath)) {
+      migratedFileCount += 1
+    }
+  }
+
+  return migratedFileCount
+}
+
+export function migrateLegacyAppStateToData(rootPath: string): AppStateMigrationResult {
+  const normalizedRootPath = path.resolve(rootPath)
+  const legacyStatePath = getLegacyStatePath(normalizedRootPath)
+  const dataStatePath = getStatePath(normalizedRootPath)
+
+  if (!pathExists(legacyStatePath)) {
+    return getResult("noop", 0, legacyStatePath, dataStatePath)
+  }
+
+  if (!pathExists(dataStatePath)) {
+    ensureManagedRoot(normalizedRootPath)
+  }
+
+  let migratedFileCount = 0
+
+  const legacyManifestPath = path.join(legacyStatePath, STATE_MANIFEST_FILENAME)
+  if (pathExists(legacyManifestPath) && fs.statSync(legacyManifestPath).isFile()) {
+    const dataManifestPath = path.join(dataStatePath, STATE_MANIFEST_FILENAME)
+    if (copyFileIfMissingOrIdentical(normalizedRootPath, legacyManifestPath, dataManifestPath)) {
+      migratedFileCount += 1
+    }
+  }
+
+  migratedFileCount += copyLegacyNotes(
+    normalizedRootPath,
+    assertPathInsideRoot(normalizedRootPath, path.join(normalizedRootPath, LEGACY_STATE_NOTES_DIRECTORY)),
+    assertPathInsideRoot(normalizedRootPath, path.join(normalizedRootPath, STATE_NOTES_DIRECTORY)),
+  )
+
+  for (const [legacyDirectoryName, stateDirectory] of SUPPORT_DIRECTORIES) {
+    migratedFileCount += copyDirectoryIfMissingOrIdentical(
+      normalizedRootPath,
+      assertPathInsideRoot(normalizedRootPath, path.join(legacyStatePath, legacyDirectoryName)),
+      assertPathInsideRoot(normalizedRootPath, path.join(normalizedRootPath, stateDirectory)),
+    )
+  }
+
+  return getResult(migratedFileCount > 0 ? "migrated" : "noop", migratedFileCount, legacyStatePath, dataStatePath)
+}
