@@ -242,3 +242,26 @@ test("migrateLegacyAppStateToData rejects symlinked destination app-state files"
     await rm(outsidePath, { recursive: true, force: true })
   }
 })
+
+test("migrateLegacyAppStateToData rejects dangling destination app-state symlinks", async () => {
+  const rootPath = await createTempRoot("bluenote-app-state-migration-dangling-symlink-")
+
+  try {
+    await mkdir(path.join(rootPath, ".state", "notes"), { recursive: true })
+    await mkdir(path.join(rootPath, ".data", "notes"), { recursive: true })
+    await writeFile(path.join(rootPath, ".state", "notes", "foo.json"), "{\"title\":\"State\"}", "utf8")
+    await symlink(path.join(rootPath, "missing-target.json"), path.join(rootPath, ".data", "notes", "foo.json"))
+
+    assert.throws(
+      () => migrateLegacyAppStateToData(rootPath),
+      (error) => {
+        assert.ok(error instanceof UsageError)
+        assert.equal(error.message, "Cannot migrate legacy .state because .data contains unsafe app-state paths.")
+        assert.equal(error.hint, "Remove symlinks from .data app-state paths before retrying migration.")
+        return true
+      },
+    )
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})

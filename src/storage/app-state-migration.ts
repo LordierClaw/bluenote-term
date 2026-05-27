@@ -33,7 +33,16 @@ const SUPPORT_DIRECTORIES = [
 ] as const
 
 function pathExists(filePath: string): boolean {
-  return fs.existsSync(filePath)
+  try {
+    fs.lstatSync(filePath)
+    return true
+  } catch (error) {
+    if (typeof error === "object" && error !== null && (error as NodeJS.ErrnoException).code === "ENOENT") {
+      return false
+    }
+
+    throw error
+  }
 }
 
 function getResult(
