@@ -271,7 +271,7 @@ try {
   expectPaneContains(editorPane, "Ctrl+F find", "editor open")
   wait(500, "editor focus settle")
 
-  const typedEditorText = "smoke body input"
+  const typedEditorText = "editor-input-regression-token"
   sendText(sessionName, typedEditorText)
   const editorTypedPane = capturePaneUntil(sessionName, "editor body typing", typedEditorText, 30)
   expectPaneContains(editorTypedPane, "Root Editor", "editor body typing")
