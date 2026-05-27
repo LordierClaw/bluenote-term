@@ -44,7 +44,7 @@ const NOTE_ARCHIVED = {
   archivedAt: "2026-05-22T09:30:00.000Z",
 }
 
-test("rebuildIndexStore writes rebuildable derived artifacts under .state and preserves sidecar metadata", async () => {
+test("rebuildIndexStore writes rebuildable derived artifacts under .data and preserves sidecar metadata", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-index-store-"))
 
   try {
@@ -54,8 +54,8 @@ test("rebuildIndexStore writes rebuildable derived artifacts under .state and pr
     })
 
     assert.equal(result.noteCount, 2)
-    assert.equal(result.metadataDatabasePath, path.join(rootPath, ".state", "metadata.sqlite"))
-    assert.equal(result.searchIndexPath, path.join(rootPath, ".state", "search-index.json"))
+    assert.equal(result.metadataDatabasePath, path.join(rootPath, ".data", "metadata.sqlite"))
+    assert.equal(result.searchIndexPath, path.join(rootPath, ".data", "search-index.json"))
 
     await access(result.metadataDatabasePath)
     await access(result.searchIndexPath)
@@ -192,7 +192,7 @@ test("loadIndexStore wraps corrupt metadata artifacts as IndexUnavailableError w
 
     assert.ok(caughtError instanceof IndexUnavailableError)
     assert.equal(caughtError.message, "Derived indexes are unavailable.")
-    assert.equal(caughtError.hint, "Run bn rebuild to recreate .state artifacts from note files and sidecars.")
+    assert.equal(caughtError.hint, "Run bn rebuild to recreate .data artifacts from note files and sidecars.")
     assert.notEqual(caughtError.cause, undefined)
     assert.equal(caughtError.cause instanceof IndexUnavailableError, false)
   } finally {
@@ -221,7 +221,7 @@ test("loadIndexStore wraps corrupt search artifacts as IndexUnavailableError wit
 
     assert.ok(caughtError instanceof IndexUnavailableError)
     assert.equal(caughtError.message, "Derived indexes are unavailable.")
-    assert.equal(caughtError.hint, "Run bn rebuild to recreate .state artifacts from note files and sidecars.")
+    assert.equal(caughtError.hint, "Run bn rebuild to recreate .data artifacts from note files and sidecars.")
     assert.notEqual(caughtError.cause, undefined)
     assert.equal(caughtError.cause instanceof IndexUnavailableError, false)
   } finally {

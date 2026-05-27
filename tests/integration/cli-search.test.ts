@@ -103,7 +103,7 @@ test("bn search returns actionable rebuild guidance when derived indexes are mis
     assert.equal(result.exitCode, 2)
     assert.equal(result.stdout, "")
     assert.match(result.stderr, /Derived indexes are unavailable\./)
-    assert.match(result.stderr, /Hint: Run bn rebuild to recreate \.state artifacts from note files and sidecars\./)
+    assert.match(result.stderr, /Hint: Run bn rebuild to recreate \.data artifacts from note files and sidecars\./)
   } finally {
     await harness.cleanup()
   }

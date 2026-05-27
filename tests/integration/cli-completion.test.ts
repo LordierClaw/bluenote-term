@@ -126,8 +126,8 @@ test("bn complete selectors stays quiet when the root or indexes are missing", a
     })
     assert.equal(created.exitCode, 0)
 
-    await rm(path.join(harness.rootPath, ".state", "metadata.sqlite"), { force: true })
-    await rm(path.join(harness.rootPath, ".state", "search-index.json"), { force: true })
+    await rm(path.join(harness.rootPath, ".data", "metadata.sqlite"), { force: true })
+    await rm(path.join(harness.rootPath, ".data", "search-index.json"), { force: true })
 
     const missingIndexesResult = harness.run(["complete", "selectors", "show", "mission-"])
     assert.equal(missingIndexesResult.exitCode, 0)

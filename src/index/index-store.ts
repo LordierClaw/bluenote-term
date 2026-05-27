@@ -18,7 +18,7 @@ const METADATA_FILENAME = "metadata.sqlite"
 const SEARCH_FILENAME = "search-index.json"
 const SEARCH_FIELDS = ["key", "title", "description", "body", "relativePath"] as const
 const SEARCH_STORE_FIELDS = ["id", "key", "title", "description", "body", "relativePath"] as const
-const REBUILD_INDEX_HINT = "Run bn rebuild to recreate .state artifacts from note files and sidecars."
+const REBUILD_INDEX_HINT = "Run bn rebuild to recreate .data artifacts from note files and sidecars."
 
 export interface IndexedNoteSummary {
   key: string

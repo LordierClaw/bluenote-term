@@ -33,14 +33,14 @@ function sidecarJson(input: {
   )}\n`
 }
 
-test("bn rebuild reads plain note bodies plus sidecars and writes derived artifacts under .state", async () => {
+test("bn rebuild reads plain note bodies plus sidecars and writes derived artifacts under .data", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-rebuild-")
 
   try {
     const relativePath = path.join("notes", "inbox", "alpha-note.md")
     await harness.writeNote(relativePath, "Alpha plain body mentions comet trails.\n")
     await harness.writeNote(
-      path.join(".state", "notes", "alpha-note.json"),
+      path.join(".data", "notes", "alpha-note.json"),
       sidecarJson({
         key: "alpha-note",
         title: "Alpha Note",
@@ -55,8 +55,8 @@ test("bn rebuild reads plain note bodies plus sidecars and writes derived artifa
     assert.equal(result.stderr, "")
     assert.match(result.stdout, /Rebuilt indexes for 1 note\(s\)\./)
 
-    const metadataPath = path.join(harness.rootPath, ".state", "metadata.sqlite")
-    const searchPath = path.join(harness.rootPath, ".state", "search-index.json")
+    const metadataPath = path.join(harness.rootPath, ".data", "metadata.sqlite")
+    const searchPath = path.join(harness.rootPath, ".data", "search-index.json")
 
     assert.equal(await Bun.file(metadataPath).exists(), true)
     assert.equal(await Bun.file(searchPath).exists(), true)
@@ -79,7 +79,7 @@ test("bn rebuild exits 2 and reports a missing sidecar for a plain note", async 
     assert.equal(result.exitCode, 2)
     assert.equal(result.stdout, "")
     assert.match(result.stderr, /Validation failed while rebuilding indexes\./)
-    assert.match(result.stderr, /Could not read sidecar '\.state[\\/]notes[\\/]missing-sidecar\.json'\./)
+    assert.match(result.stderr, /Could not read sidecar '\.data[\\/]notes[\\/]missing-sidecar\.json'\./)
   } finally {
     await harness.cleanup()
   }
@@ -136,14 +136,14 @@ test("bn rebuild fails for legacy frontmatter notes when an invalid sidecar alre
         body: "Legacy frontmatter should not bypass corrupt sidecar metadata.\n",
       }),
     )
-    await harness.writeNote(path.join(".state", "notes", "legacy-invalid-sidecar.json"), "{not-valid-json\n")
+    await harness.writeNote(path.join(".data", "notes", "legacy-invalid-sidecar.json"), "{not-valid-json\n")
 
     const result = harness.run(["rebuild"])
 
     assert.equal(result.exitCode, 2)
     assert.equal(result.stdout, "")
     assert.match(result.stderr, /Validation failed while rebuilding indexes\./)
-    assert.match(result.stderr, /Could not parse sidecar '\.state[\\/]notes[\\/]legacy-invalid-sidecar\.json'\./)
+    assert.match(result.stderr, /Could not parse sidecar '\.data[\\/]notes[\\/]legacy-invalid-sidecar\.json'\./)
   } finally {
     await harness.cleanup()
   }
@@ -158,7 +158,7 @@ test("bn rebuild preserves archived sidecar notes in derived artifacts without s
 
     await harness.writeNote(relativePath, "Archived body keeps lunar breadcrumb text.\n")
     await harness.writeNote(
-      path.join(".state", "notes", "archived-note.json"),
+      path.join(".data", "notes", "archived-note.json"),
       sidecarJson({
         key: "archived-note",
         title: "Archived Note",
@@ -187,7 +187,7 @@ test("bn rebuild exits 2 and reports a sidecar whose note file is missing", asyn
 
   try {
     await harness.writeNote(
-      path.join(".state", "notes", "orphaned-note.json"),
+      path.join(".data", "notes", "orphaned-note.json"),
       sidecarJson({
         key: "orphaned-note",
         title: "Orphaned Note",
@@ -201,7 +201,7 @@ test("bn rebuild exits 2 and reports a sidecar whose note file is missing", asyn
     assert.equal(result.exitCode, 2)
     assert.equal(result.stdout, "")
     assert.match(result.stderr, /Validation failed while rebuilding indexes\./)
-    assert.match(result.stderr, /Sidecar '\.state[\\/]notes[\\/]orphaned-note\.json' points to missing note 'notes[\\/]inbox[\\/]orphaned-note\.md'\./)
+    assert.match(result.stderr, /Sidecar '\.data[\\/]notes[\\/]orphaned-note\.json' points to missing note 'notes[\\/]inbox[\\/]orphaned-note\.md'\./)
   } finally {
     await harness.cleanup()
   }
@@ -214,7 +214,7 @@ test("bn rebuild exits 2 and reports sidecar key and path mismatches", async () 
     const relativePath = path.join("notes", "inbox", "alpha-note.md")
     await harness.writeNote(relativePath, "Mismatch body.\n")
     await harness.writeNote(
-      path.join(".state", "notes", "alpha-note.json"),
+      path.join(".data", "notes", "alpha-note.json"),
       sidecarJson({
         key: "other-key",
         title: "Alpha Note",
@@ -228,7 +228,7 @@ test("bn rebuild exits 2 and reports sidecar key and path mismatches", async () 
     assert.equal(result.exitCode, 2)
     assert.equal(result.stdout, "")
     assert.match(result.stderr, /Validation failed while rebuilding indexes\./)
-    assert.match(result.stderr, /Sidecar '\.state[\\/]notes[\\/]alpha-note\.json' declares key 'other-key' but is stored for note key 'alpha-note'\./)
+    assert.match(result.stderr, /Sidecar '\.data[\\/]notes[\\/]alpha-note\.json' declares key 'other-key' but is stored for note key 'alpha-note'\./)
     assert.match(result.stderr, /Note metadata for 'other-key' points to 'notes[\\/]journal[\\/]alpha-note\.md' instead of 'notes[\\/]inbox[\\/]alpha-note\.md'\./)
   } finally {
     await harness.cleanup()
@@ -241,9 +241,9 @@ test("bn rebuild exits 2 and surfaces invalid sidecar validation errors", async 
   try {
     const relativePath = path.join("notes", "inbox", "broken-sidecar.md")
     await harness.writeNote(relativePath, "Broken metadata body.\n")
-    await mkdir(path.join(harness.rootPath, ".state", "notes"), { recursive: true })
+    await mkdir(path.join(harness.rootPath, ".data", "notes"), { recursive: true })
     await Bun.write(
-      path.join(harness.rootPath, ".state", "notes", "broken-sidecar.json"),
+      path.join(harness.rootPath, ".data", "notes", "broken-sidecar.json"),
       JSON.stringify(
         {
           key: "broken-sidecar",
@@ -264,20 +264,20 @@ test("bn rebuild exits 2 and surfaces invalid sidecar validation errors", async 
     assert.equal(result.exitCode, 2)
     assert.equal(result.stdout, "")
     assert.match(result.stderr, /Validation failed while rebuilding indexes\./)
-    assert.match(result.stderr, /Invalid sidecar metadata in \.state[\\/]notes[\\/]broken-sidecar\.json: missing required field 'description'\./)
+    assert.match(result.stderr, /Invalid sidecar metadata in \.data[\\/]notes[\\/]broken-sidecar\.json: missing required field 'description'\./)
   } finally {
     await harness.cleanup()
   }
 })
 
-test("bn rebuild exits 2 with a controlled error when .state/notes cannot be scanned", async () => {
+test("bn rebuild exits 2 with a controlled error when .data/notes cannot be scanned", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-rebuild-sidecar-scan-")
 
   try {
     const relativePath = path.join("notes", "inbox", "alpha-note.md")
     await harness.writeNote(relativePath, "Alpha body.\n")
     await harness.writeNote(
-      path.join(".state", "notes", "alpha-note.json"),
+      path.join(".data", "notes", "alpha-note.json"),
       sidecarJson({
         key: "alpha-note",
         title: "Alpha Note",
@@ -293,7 +293,7 @@ test("bn rebuild exits 2 with a controlled error when .state/notes cannot be sca
     assert.equal(result.exitCode, 2)
     assert.equal(result.stdout, "")
     assert.match(result.stderr, /Validation failed while rebuilding indexes\./)
-    assert.match(result.stderr, /Could not scan sidecar directory '\.state[\\/]notes'\./)
+    assert.match(result.stderr, /Could not scan sidecar directory '\.data[\\/]notes'\./)
     assert.doesNotMatch(result.stderr, /Forced sidecar scan failure for tests\./)
   } finally {
     await harness.cleanup()

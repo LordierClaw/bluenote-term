@@ -109,7 +109,7 @@ test("searchNotes returns actionable rebuild guidance when derived indexes are m
       (error) => {
         assert.ok(error instanceof IndexUnavailableError)
         assert.equal(error.message, "Derived indexes are unavailable.")
-        assert.equal(error.hint, "Run bn rebuild to recreate .state artifacts from note files and sidecars.")
+        assert.equal(error.hint, "Run bn rebuild to recreate .data artifacts from note files and sidecars.")
         return true
       },
     )
