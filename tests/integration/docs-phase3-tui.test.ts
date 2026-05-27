@@ -53,9 +53,13 @@ function assertDataStorageAndContainsSearchContract(content: string): void {
   assert.match(content, /\.data\/search-index\.json/)
   assert.match(content, /contains-style|contains style/i)
   assert.match(content, /123.*contain|contain.*123/i)
-  assert.doesNotMatch(content, /\.state\/notes\//)
   assert.doesNotMatch(content, /\.state\/metadata\.sqlite|\.state\/search-index\.json/)
   assert.doesNotMatch(content, /fuzzy search|fuzzy-style search|fuzzy matching/i)
+}
+
+function assertNoCanonicalStateSidecars(content: string): void {
+  assert.doesNotMatch(content, /canonical[^\n.]*\.state\/notes\//i)
+  assert.doesNotMatch(content, /\.state\/notes\/[^\n.]*canonical/i)
 }
 
 test("README documents the refined Phase 3 TUI workspace behavior", async () => {
@@ -115,5 +119,6 @@ test("active docs describe canonical data storage and contains search contracts"
 
   for (const content of docs) {
     assertDataStorageAndContainsSearchContract(content)
+    assertNoCanonicalStateSidecars(content)
   }
 })

@@ -4,7 +4,7 @@
 
 Build the first full OpenTUI workspace for BlueNote now that Phase 0 repository preparation, Phase 1 core CLI/storage, and Phase 2 CLI storage/UX pivot are complete.
 
-The workspace is launched with `bn tui` and remains a presentation/input layer over the existing BlueNote core services. It must keep note files as plain Markdown without required frontmatter and keep canonical metadata in `.state/notes/` sidecars.
+The workspace is launched with `bn tui` and remains a presentation/input layer over the existing BlueNote core services. It must keep note files as plain Markdown without required frontmatter and keep canonical metadata in `.data/notes/` sidecars. Legacy `.state/notes/` sidecars are migration input only, not current TUI storage.
 
 ## Primary outcomes
 
