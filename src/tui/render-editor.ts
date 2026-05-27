@@ -373,6 +373,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     height: "100%",
     flexGrow: 1,
     flexShrink: 1,
+    wrapMode: vm.body.wrapMode,
     fg: vm.body.value.length > 0 ? tuiTheme.primaryAccent : tuiTheme.mutedText,
     bg: tuiTheme.panel,
   })

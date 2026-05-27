@@ -399,10 +399,18 @@ describe("TUI render keyboard routing", () => {
       renderer.root.add(screen)
 
       const bodyInput = findById(screen, "bluenote-editor-body-input") as { height?: unknown; yogaNode?: { getFlexGrow?: () => number } } | undefined
-      const bodyDisplay = findById(screen, "bluenote-editor-body") as { height?: unknown; yogaNode?: { getFlexGrow?: () => number } } | undefined
+      const bodyDisplay = findById(screen, "bluenote-editor-body") as { height?: unknown; wrapMode?: "word" | "none"; yogaNode?: { getFlexGrow?: () => number } } | undefined
       assert.notEqual(bodyInput?.height, 20)
       assert.equal(bodyInput?.yogaNode?.getFlexGrow?.(), 1)
       assert.equal(bodyDisplay?.yogaNode?.getFlexGrow?.(), 1)
+
+      controller.toggleEditorWrapMode()
+      renderer.root.remove(screen.id)
+      screen.destroyRecursively()
+      screen = renderEditorScreen({ renderer, controller })
+      renderer.root.add(screen)
+      const noWrapBodyDisplay = findById(screen, "bluenote-editor-body") as { wrapMode?: "word" | "none" } | undefined
+      assert.equal(noWrapBodyDisplay?.wrapMode, "none")
 
       renderer.root.remove(screen.id)
       screen.destroyRecursively()
