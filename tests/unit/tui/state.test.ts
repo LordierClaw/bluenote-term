@@ -16,7 +16,9 @@ import {
   markEditorSaved,
   openEditorFind,
   openEditorForNote,
+  openManagerCreate,
   openSearchEverything,
+  setManagerCreateTitle,
   setManagerFilter,
   setManagerFolderPath,
   type ManagerItem,
@@ -189,6 +191,26 @@ describe("TUI screen state", () => {
     const searching = openSearchEverything(finding, { query: "plan" })
     assert.equal(searching.screen, "search")
     assert.equal(searching.mode, "search.input")
+  })
+
+  test("manager create mode stores a single focused title draft and can be cancelled", () => {
+    const manager = createInitialTuiState()
+    const creating = openManagerCreate(manager)
+
+    assert.equal(creating.screen, "manager")
+    assert.equal(creating.mode, "manager.create")
+    assert.deepEqual(creating.manager.createDraft, {
+      title: "",
+      status: null,
+    })
+
+    const typed = setManagerCreateTitle(creating, "Project Plan")
+    assert.equal(typed.manager.createDraft?.title, "Project Plan")
+    assert.equal(typed.manager.createDraft?.status, null)
+
+    const cancelled = closeTransientMode(typed)
+    assert.equal(cancelled.mode, "manager.browse")
+    assert.equal(cancelled.manager.createDraft, null)
   })
 
   test("Search Everything stores and restores previous screen and mode", () => {

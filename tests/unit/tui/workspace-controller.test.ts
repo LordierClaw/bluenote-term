@@ -487,6 +487,97 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().manager.currentFolderPath, "")
   })
 
+  test("manager create submits a new note title, refreshes indexes, and opens the created note", async () => {
+    let currentSummaries = noteSummaries
+    const createdNote: TuiNote = {
+      key: "project-plan",
+      title: "Project Plan",
+      description: "",
+      relativePath: "notes/project-plan.md",
+      body: "",
+    }
+    const { deps, calls } = createDeps({
+      listNotes: () => {
+        calls.push("list")
+        return currentSummaries
+      },
+      createNote: (title, body) => {
+        calls.push(`create:${title}:${body}`)
+        currentSummaries = [...noteSummaries, createdNote]
+        return createdNote
+      },
+      rebuildIndexes: () => {
+        calls.push("rebuild")
+      },
+      showNote: (selector) => {
+        calls.push(`show:${selector}`)
+        return selector === createdNote.key ? createdNote : notesByKey[selector]
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    controller.openManagerCreate()
+    controller.updateManagerCreateTitle("Project Plan")
+    const result = await controller.submitManagerCreate()
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().mode, "editor.body")
+    assert.equal(controller.getState().editor?.note.key, "project-plan")
+    assert.deepEqual(calls, ["list", "create:Project Plan:", "rebuild", "list", "show:project-plan"])
+  })
+
+  test("empty manager create title stays in the prompt with calm validation and does not create", async () => {
+    const { deps, calls } = createDeps({
+      createNote: (title, body) => {
+        calls.push(`create:${title}:${body}`)
+        return notesByKey["daily-plan"]
+      },
+      rebuildIndexes: () => calls.push("rebuild"),
+    })
+    const controller = createWorkspaceController(deps)
+
+    controller.openManagerCreate()
+    controller.updateManagerCreateTitle("   ")
+    const result = await controller.submitManagerCreate()
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().mode, "manager.create")
+    assert.equal(controller.getState().manager.createDraft?.status, "Title required")
+    assert.deepEqual(calls, ["list"])
+  })
+
+  test("cancel manager create exits without creating", () => {
+    const { deps, calls } = createDeps({
+      createNote: (title, body) => {
+        calls.push(`create:${title}:${body}`)
+        return notesByKey["daily-plan"]
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    controller.openManagerCreate()
+    controller.updateManagerCreateTitle("Ignored")
+    controller.cancelManagerCreate()
+
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().manager.createDraft, null)
+    assert.deepEqual(calls, ["list"])
+  })
+
+  test("goBack cancels manager create mode and clears the draft", () => {
+    const controller = createWorkspaceController(createDeps().deps)
+
+    controller.openManagerCreate()
+    controller.updateManagerCreateTitle("Draft Title")
+    const result = controller.goBack()
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().manager.createDraft, null)
+  })
+
   test("manager filter updates visible manager state and preview, and clear restores browsing", () => {
     const { deps } = createDeps()
     const controller = createWorkspaceController(deps)

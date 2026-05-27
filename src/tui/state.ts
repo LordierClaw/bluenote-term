@@ -2,6 +2,7 @@ export type TuiScreen = "manager" | "editor" | "search"
 export type TuiMode =
   | "manager.browse"
   | "manager.filter"
+  | "manager.create"
   | "editor.body"
   | "editor.find"
   | "editor.replace"
@@ -33,6 +34,12 @@ export interface ManagerState {
   currentFolderPath?: string
   hoveredPath?: string | null
   filterQuery?: string
+  createDraft?: ManagerCreateDraft | null
+}
+
+export interface ManagerCreateDraft {
+  title: string
+  status: string | null
 }
 
 export interface EditorBufferState {
@@ -112,6 +119,7 @@ function cloneManagerState(manager: ManagerState): ManagerState {
     currentFolderPath: normalizeManagerPath(manager.currentFolderPath),
     hoveredPath: manager.hoveredPath ?? null,
     filterQuery: manager.filterQuery ?? "",
+    createDraft: manager.createDraft ? { ...manager.createDraft } : null,
   }
 }
 
@@ -122,6 +130,7 @@ const defaultManagerState = (): ManagerState => ({
   currentFolderPath: "",
   hoveredPath: null,
   filterQuery: "",
+  createDraft: null,
 })
 
 export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}): TuiState {
@@ -264,6 +273,77 @@ export function clearManagerFilter(state: TuiState): TuiState {
   }
 }
 
+export function openManagerCreate(state: TuiState): TuiState {
+  return {
+    ...state,
+    screen: "manager",
+    mode: "manager.create",
+    manager: {
+      ...state.manager,
+      items: cloneManagerItems(state.manager.items),
+      createDraft: { title: "", status: null },
+    },
+    search: null,
+  }
+}
+
+export function setManagerCreateTitle(state: TuiState, title: string): TuiState {
+  if (currentMode(state) !== "manager.create") {
+    return state
+  }
+
+  return {
+    ...state,
+    screen: "manager",
+    mode: "manager.create",
+    manager: {
+      ...state.manager,
+      items: cloneManagerItems(state.manager.items),
+      createDraft: { title, status: null },
+    },
+    search: null,
+  }
+}
+
+export function setManagerCreateStatus(state: TuiState, status: string | null): TuiState {
+  if (currentMode(state) !== "manager.create") {
+    return state
+  }
+
+  return {
+    ...state,
+    screen: "manager",
+    mode: "manager.create",
+    manager: {
+      ...state.manager,
+      items: cloneManagerItems(state.manager.items),
+      createDraft: {
+        title: state.manager.createDraft?.title ?? "",
+        status,
+      },
+    },
+    search: null,
+  }
+}
+
+export function cancelManagerCreate(state: TuiState): TuiState {
+  if (currentMode(state) !== "manager.create") {
+    return state
+  }
+
+  return {
+    ...state,
+    screen: "manager",
+    mode: "manager.browse",
+    manager: {
+      ...state.manager,
+      items: cloneManagerItems(state.manager.items),
+      createDraft: null,
+    },
+    search: null,
+  }
+}
+
 export function setManagerFolderPath(state: TuiState, path: string): TuiState {
   return {
     ...state,
@@ -296,6 +376,8 @@ export function closeTransientMode(state: TuiState): TuiState {
       return closeEditorFind(state)
     case "manager.filter":
       return clearManagerFilter(state)
+    case "manager.create":
+      return cancelManagerCreate(state)
     default:
       return state
   }

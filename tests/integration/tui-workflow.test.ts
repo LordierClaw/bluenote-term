@@ -94,6 +94,26 @@ describe("TUI workspace workflows", () => {
     assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), changedBody)
   })
 
+  test("manager create prompt creates a real plain Markdown note through core services", async () => {
+    const controller = createDefaultWorkspaceController({ rootPath, clock: fixedClock("2026-05-26T10:02:00.000Z") })
+
+    controller.openManagerCreate()
+    controller.updateManagerCreateTitle("TUI Created Note")
+    const result = await controller.submitManagerCreate()
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.title, "TUI Created Note")
+    assert.equal(controller.getState().editor?.body, "")
+
+    const created = controller.getState().editor!.note
+    const noteText = await readFile(path.join(rootPath, created.relativePath), "utf8")
+    assert.equal(noteText, "")
+    assert.doesNotMatch(noteText, /^---/)
+    assert.equal(showNote({ override: rootPath, selector: created.key }).title, "TUI Created Note")
+    assert.equal(showNote({ override: rootPath, selector: created.key }).body, "")
+  })
+
   test("opens Search Everything from editor, selects a content match, and returns to editor", () => {
     const first = createNote({
       override: rootPath,

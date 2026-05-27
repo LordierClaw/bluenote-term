@@ -15,6 +15,7 @@ import {
 } from "./adapters/search-everything-adapter"
 import {
   clearManagerFilter as clearManagerFilterState,
+  cancelManagerCreate as cancelManagerCreateState,
   closeSearchEverything,
   closeTransientMode,
   createInitialTuiState,
@@ -24,7 +25,10 @@ import {
   markAutosaveSaving,
   markEditorBodyChanged,
   openEditorForNote,
+  openManagerCreate as openManagerCreateState,
   openSearchEverything,
+  setManagerCreateStatus,
+  setManagerCreateTitle as setManagerCreateTitleState,
   setManagerFilter as setManagerFilterState,
   type EditorBufferState,
   type ManagerItem,
@@ -60,6 +64,8 @@ export interface WorkspaceControllerDependencies {
   listNotes: () => readonly NoteManagerSummary[]
   showNote: (selector: string) => TuiNote
   searchNotes: (query: string) => readonly SearchNoteMatch[]
+  createNote?: (title: string, body: string) => TuiNote | { key: string }
+  rebuildIndexes?: () => void
   persistEditorBody?: SaveEditorBufferDependencies["persist"]
   autosaveScheduler?: WorkspaceDebounceScheduler
   onAutosaveStateChange?: () => void
@@ -84,6 +90,10 @@ export interface WorkspaceController {
   cancelSearch: () => void
   goBack: () => WorkspaceActionResult
   openManagerFilter: () => void
+  openManagerCreate: () => void
+  updateManagerCreateTitle: (title: string) => void
+  submitManagerCreate: () => Promise<WorkspaceActionResult>
+  cancelManagerCreate: () => void
   setManagerFilter: (query: string) => void
   updateManagerFilter: (query: string) => void
   clearManagerFilter: () => void
@@ -141,6 +151,7 @@ function cloneStateSnapshot(source: TuiState): TuiState {
     manager: {
       ...source.manager,
       items: source.manager.items.map(cloneManagerItem),
+      createDraft: source.manager.createDraft ? { ...source.manager.createDraft } : null,
     },
     editor: source.editor
       ? {
@@ -447,7 +458,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     },
 
     goBack: () => {
-      if (state.screen === "search" || state.mode === "editor.find" || state.mode === "editor.replace" || state.mode === "manager.filter") {
+      if (state.screen === "search" || state.mode === "editor.find" || state.mode === "editor.replace" || state.mode === "manager.filter" || state.mode === "manager.create") {
         state = closeTransientMode(state)
         if (state.screen === "manager") {
           applyManagerBrowserModel()
@@ -482,6 +493,42 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
     openManagerFilter: () => {
       state = setManagerFilterState(state, state.manager.filterQuery ?? "")
+      applyManagerBrowserModel()
+    },
+
+    openManagerCreate: () => {
+      state = openManagerCreateState(state)
+      applyManagerBrowserModel()
+    },
+
+    updateManagerCreateTitle: (title) => {
+      state = setManagerCreateTitleState(state, title)
+      applyManagerBrowserModel()
+    },
+
+    submitManagerCreate: async () => {
+      const title = state.manager.createDraft?.title.trim() ?? ""
+      if (!title) {
+        state = setManagerCreateStatus(state, "Title required")
+        applyManagerBrowserModel()
+        return ok()
+      }
+
+      const created = deps.createNote?.(title, "")
+      if (!created) {
+        state = setManagerCreateStatus(state, "Create unavailable")
+        applyManagerBrowserModel()
+        return ok()
+      }
+
+      deps.rebuildIndexes?.()
+      refreshManager()
+      setEditorNote(deps.showNote(created.key))
+      return ok()
+    },
+
+    cancelManagerCreate: () => {
+      state = cancelManagerCreateState(state)
       applyManagerBrowserModel()
     },
 

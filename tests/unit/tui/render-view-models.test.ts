@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import { createCliRenderer, InputRenderable, type Renderable } from "@opentui/core"
 
 import { buildEditorViewModel } from "../../../src/tui/render-editor"
-import { buildManagerViewModel } from "../../../src/tui/render-manager"
+import { buildManagerViewModel, renderManagerScreen } from "../../../src/tui/render-manager"
 import { buildSearchEverythingViewModel, renderSearchEverythingScreen } from "../../../src/tui/render-search-everything"
 import { tuiTheme } from "../../../src/tui/theme"
 import { buildManagerBrowserModel, type NoteManagerSummary } from "../../../src/tui/adapters/note-manager-adapter"
@@ -83,6 +83,22 @@ describe("TUI render view models", () => {
     assert.equal(vm.title, "notes/")
     assert.equal(vm.status, "2 items · selected daily-plan")
     assert.deepEqual(vm.shortcuts, ["↑↓ move", "→/Enter open", "n new", "d delete", "/ filter", "Esc back", "q quit"])
+    const creatingVm = buildManagerViewModel({
+      ...baseState,
+      mode: "manager.create",
+      manager: { ...baseState.manager, createDraft: { title: "Project Plan", status: "Title required" } },
+    })
+    assert.deepEqual(creatingVm.createPrompt, {
+      visible: true,
+      title: "Project Plan",
+      status: "Title required",
+      inputId: "bluenote-manager-create-title",
+      placeholder: "Note title…",
+      focused: true,
+      styleIntent: "secondaryAccent",
+      statusIntent: "mutedText",
+    })
+    assert.equal(Number(creatingVm.createPrompt?.focused), 1)
     const managerChrome = [vm.title, vm.topbar.title, vm.status, ...vm.shortcuts, vm.panels.layout1.title, vm.panels.layout2.title].join(" ")
     assert.doesNotMatch(managerChrome, /BlueNote(?: TUI| Manager)?/i)
     assert.deepEqual(
@@ -480,6 +496,29 @@ describe("TUI render view models", () => {
     assert.deepEqual(vm.regions.map((region) => region.id), ["input", "result-list", "preview"])
     assert.equal(vm.regions.findIndex((region) => region.id === "preview") > vm.regions.findIndex((region) => region.id === "result-list"), true)
     assert.equal(vm.regions.filter((region) => region.kind === "input").length, 1)
+  })
+
+  test("manager create renderer builds one stable focused title input", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const controller = createWorkspaceController({
+        listNotes: () => [],
+        showNote: () => ({ ...baseState.editor!.note }),
+        searchNotes: () => [],
+      })
+      controller.openManagerCreate()
+      controller.updateManagerCreateTitle("Project Plan")
+      const screen = renderManagerScreen({ renderer, controller })
+      renderer.root.add(screen)
+      const inputs = screen.getChildren().flatMap((child) => [child, ...child.getChildren()]).filter((node) => node instanceof InputRenderable)
+
+      assert.equal(inputs.length, 1)
+      assert.equal(inputs[0]?.id, "bluenote-manager-create-title")
+      assert.equal(inputs[0]?.focused, true)
+      assert.equal((inputs[0] as InputRenderable | undefined)?.value, "Project Plan")
+    } finally {
+      renderer.destroy()
+    }
   })
 
   test("Search Everything renderer builds one stable focused input and no duplicate input regions", async () => {

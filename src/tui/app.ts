@@ -2,6 +2,7 @@ import path from "node:path"
 import { createCliRenderer, BoxRenderable, type CliRenderer, type Renderable } from "@opentui/core"
 
 import { resolveBlueNoteRoot } from "../config/root"
+import { createNote } from "../core/create-note"
 import { IndexUnavailableError } from "../core/errors"
 import { listNotes } from "../core/list-notes"
 import { rebuildIndexes } from "../core/rebuild-indexes"
@@ -85,6 +86,7 @@ export function createDefaultWorkspaceController(options: DefaultWorkspaceContro
     listNotes: () => listNotes({ override: rootPath }),
     showNote: (selector) => showNote({ override: rootPath, selector }),
     searchNotes: (query) => searchNotes(query, { override: rootPath }),
+    createNote: (title, body) => createNote({ override: rootPath, title, body, clock }),
     persistEditorBody: (note, body) => persistTuiEditorBody(rootPath, note, body, clock),
     commandHandlers: {
       "/rebuild": () => {},
@@ -138,7 +140,7 @@ export function routeWorkspaceKey(
     return { handled: routeEditorKey(sequence, controller, onExit, onInvalidate) }
   }
 
-  if (sequence === "q" && state.mode !== "manager.filter") {
+  if (sequence === "q" && state.mode !== "manager.filter" && state.mode !== "manager.create") {
     const quit = controller.requestQuit()
     if (!quit.blocked) {
       onExit()
@@ -182,7 +184,7 @@ function editorBodyForInputSequence(body: string, sequence: string): string | nu
 
 export function focusActiveWorkspaceInput(screen: Renderable): void {
   const activeInput = renderableDescendants(screen).find((node) =>
-    node.id === "bluenote-search-query" || node.id === "bluenote-editor-find-query" || node.id === "bluenote-manager-filter-query",
+    node.id === "bluenote-search-query" || node.id === "bluenote-editor-find-query" || node.id === "bluenote-manager-filter-query" || node.id === "bluenote-manager-create-title",
   )
   if (!activeInput) {
     return
@@ -198,7 +200,7 @@ export function focusActiveWorkspaceInput(screen: Renderable): void {
 
 export function blurWorkspaceInputs(screen: Renderable): void {
   for (const node of renderableDescendants(screen)) {
-    if (node.id === "bluenote-search-query" || node.id === "bluenote-editor-find-query" || node.id === "bluenote-editor-body" || node.id === "bluenote-manager-filter-query") {
+    if (node.id === "bluenote-search-query" || node.id === "bluenote-editor-find-query" || node.id === "bluenote-editor-body" || node.id === "bluenote-manager-filter-query" || node.id === "bluenote-manager-create-title") {
       node.blur()
     }
   }

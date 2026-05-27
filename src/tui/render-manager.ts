@@ -88,6 +88,16 @@ export interface ManagerViewModel {
   rows: ManagerRowViewModel[]
   status: string
   shortcuts: string[]
+  createPrompt?: {
+    visible: true
+    inputId: string
+    title: string
+    placeholder: string
+    status: string | null
+    focused: true
+    styleIntent: TuiColorIntent
+    statusIntent: TuiColorIntent
+  }
 }
 
 type BrowserishRow = ManagerBrowserRow | ManagerItem
@@ -183,6 +193,18 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
   }
 
   const currentPath = currentPathLabel(currentFolderPath)
+  const createPrompt = state.mode === "manager.create"
+    ? {
+        visible: true as const,
+        inputId: "bluenote-manager-create-title",
+        title: state.manager.createDraft?.title ?? "",
+        placeholder: "Note title…",
+        status: state.manager.createDraft?.status ?? null,
+        focused: true as const,
+        styleIntent: "secondaryAccent" as const,
+        statusIntent: "mutedText" as const,
+      }
+    : undefined
 
   return {
     title: currentPath,
@@ -206,6 +228,7 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
     rows,
     status: statusParts.join(" · "),
     shortcuts: ["↑↓ move", "→/Enter open", "n new", "d delete", "/ filter", "Esc back", "q quit"],
+    createPrompt,
   }
 }
 
@@ -357,6 +380,42 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     root.add(filterBar)
     filterInput.focus()
   }
+  if (vm.createPrompt) {
+    const createBar = new BoxRenderable(options.renderer, {
+      id: "bluenote-manager-create-bar",
+      flexDirection: "row",
+      width: "100%",
+      height: 3,
+      border: true,
+      borderColor: tuiTheme[vm.createPrompt.styleIntent],
+      backgroundColor: tuiTheme.panel,
+      title: "New note",
+    })
+    const createInput = new InputRenderable(options.renderer, {
+      id: vm.createPrompt.inputId,
+      value: vm.createPrompt.title,
+      placeholder: vm.createPrompt.placeholder,
+      width: "60%",
+    })
+    const createHint = new TextRenderable(options.renderer, {
+      content: `  Enter create  Esc cancel${vm.createPrompt.status ? `  ${vm.createPrompt.status}` : ""}`,
+      height: 1,
+      fg: tuiTheme[vm.createPrompt.statusIntent],
+      bg: tuiTheme.panel,
+    })
+    createInput.on(InputRenderableEvents.INPUT, () => {
+      options.controller.updateManagerCreateTitle(createInput.value)
+      options.onInvalidate?.()
+    })
+    createInput.on(InputRenderableEvents.CHANGE, () => {
+      options.controller.updateManagerCreateTitle(createInput.value)
+      options.onInvalidate?.()
+    })
+    createBar.add(createInput)
+    createBar.add(createHint)
+    root.add(createBar)
+    createInput.focus()
+  }
   root.add(new TextRenderable(options.renderer, { content: vm.status, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
   root.add(new TextRenderable(options.renderer, { content: vm.shortcuts.join("  "), height: 1, fg: tuiTheme.secondaryAccent, bg: tuiTheme.panel }))
 
@@ -364,6 +423,26 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
 }
 
 export function routeManagerKey(sequence: string, controller: WorkspaceController, onExit?: () => void): boolean {
+  if (controller.getState().mode === "manager.create") {
+    const currentTitle = controller.getState().manager.createDraft?.title ?? ""
+    if (sequence === "\u001b" || sequence === "\u001b[") {
+      controller.cancelManagerCreate()
+      return true
+    }
+    if (sequence === "\r" || sequence === "\n") {
+      void controller.submitManagerCreate()
+      return true
+    }
+    if (sequence === "\u007f" || sequence === "\b") {
+      controller.updateManagerCreateTitle(currentTitle.slice(0, -1))
+      return true
+    }
+    if (sequence.length === 1 && sequence >= " " && sequence !== "\u007f") {
+      controller.updateManagerCreateTitle(`${currentTitle}${sequence}`)
+      return true
+    }
+  }
+
   if (controller.getState().mode === "manager.filter") {
     const currentQuery = controller.getState().manager.filterQuery ?? ""
     if (sequence === "\u001b" || sequence === "\u001b[" || sequence === "\r" || sequence === "\n") {
@@ -403,6 +482,9 @@ export function routeManagerKey(sequence: string, controller: WorkspaceControlle
     case "/":
     case "\u0006":
       controller.openManagerFilter()
+      return true
+    case "n":
+      controller.openManagerCreate()
       return true
     case "s":
       controller.openSearch()

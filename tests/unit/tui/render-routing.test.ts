@@ -74,6 +74,13 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
       return { blocked: false }
     },
     openManagerFilter: () => calls.push("openManagerFilter"),
+    openManagerCreate: () => calls.push("openManagerCreate"),
+    updateManagerCreateTitle: (title) => calls.push(`updateManagerCreateTitle:${title}`),
+    submitManagerCreate: async () => {
+      calls.push("submitManagerCreate")
+      return { blocked: false }
+    },
+    cancelManagerCreate: () => calls.push("cancelManagerCreate"),
     setManagerFilter: (query) => calls.push(`setManagerFilter:${query}`),
     updateManagerFilter: (query) => calls.push(`updateManagerFilter:${query}`),
     clearManagerFilter: () => calls.push("clearManagerFilter"),
@@ -355,6 +362,15 @@ describe("TUI render keyboard routing", () => {
     assert.deepEqual(calls, ["updateManagerFilter:q"])
   })
 
+  test("workspace route leaves q available for manager create title input", () => {
+    const { controller, calls } = createController("manager")
+    controller.getState().mode = "manager.create"
+    controller.getState().manager.createDraft = { title: "Qui", status: null }
+
+    assert.deepEqual(routeWorkspaceKey("q", controller, () => {}), { handled: true })
+    assert.deepEqual(calls, ["updateManagerCreateTitle:Quiq"])
+  })
+
   test("manager route maps browser navigation and filter keys", () => {
     const { controller, calls } = createController("manager")
 
@@ -366,12 +382,32 @@ describe("TUI render keyboard routing", () => {
       ["\u001b[D", "goBack"],
       ["\u001b", "goBack"],
       ["\u001b[", "goBack"],
+      ["n", "openManagerCreate"],
       ["/", "openManagerFilter"],
       ["\u0006", "openManagerFilter"],
     ] as const) {
       assert.equal(routeManagerKey(sequence, controller), true, sequence)
       assert.equal(calls.at(-1), expected, sequence)
     }
+  })
+
+  test("manager create route edits title, submits on Enter, and cancels on Escape or Ctrl+[", () => {
+    const { controller, calls } = createController("manager")
+    controller.getState().mode = "manager.create"
+    controller.getState().manager.createDraft = { title: "Ne", status: null }
+
+    assert.equal(routeManagerKey("w", controller), true)
+    assert.equal(routeManagerKey("\u007f", controller), true)
+    assert.equal(routeManagerKey("\r", controller), true)
+    assert.equal(routeManagerKey("\u001b", controller), true)
+    assert.equal(routeManagerKey("\u001b[", controller), true)
+    assert.deepEqual(calls, [
+      "updateManagerCreateTitle:New",
+      "updateManagerCreateTitle:N",
+      "submitManagerCreate",
+      "cancelManagerCreate",
+      "cancelManagerCreate",
+    ])
   })
 
   test("search route appends printable query input and supports backspace fallback for real terminal keys", () => {
