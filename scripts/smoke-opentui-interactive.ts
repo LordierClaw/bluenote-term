@@ -163,6 +163,15 @@ function capturePaneUntil(sessionName: string, context: string, expected: string
   return pane
 }
 
+function resizeSession(sessionName: string, width: number, height: number, context: string): void {
+  assertWithinSmokeDeadline(context)
+  const result = run("tmux", ["resize-window", "-t", sessionName, "-x", String(width), "-y", String(height)])
+  if (result.status !== 0) {
+    throw new Error(`${context}: failed to resize tmux TUI pane: ${result.stderr || result.stdout}`)
+  }
+  wait(500, context)
+}
+
 function createSmokeNote(rootPath: string, title: string, body: string, moveToFolder?: string): ReturnType<typeof createNote> {
   const summary = createNote({
     override: rootPath,
@@ -339,6 +348,13 @@ try {
   const editorPane = capturePaneUntil(sessionName, "editor open", "Ctrl+F find", 30)
   expectPaneContains(editorPane, "Root Editor", "editor open")
   expectPaneContains(editorPane, "Ctrl+F find", "editor open")
+  resizeSession(sessionName, 54, 15, "editor responsive resize")
+  const resizedEditorPane = capturePaneUntil(sessionName, "editor responsive resize", "Ctrl+S save", 20)
+  expectPaneContains(resizedEditorPane, "Root Editor", "editor responsive resize")
+  expectPaneContains(resizedEditorPane, "Line ", "editor responsive resize")
+  expectPaneContains(resizedEditorPane, "Ctrl+S save", "editor responsive resize")
+  expectPaneContains(resizedEditorPane, "Ctrl+F find", "editor responsive resize")
+  resizeSession(sessionName, 100, 30, "editor restore after responsive resize")
   wait(500, "editor focus settle")
 
   const typedEditorText = "editor-input-regression-token"

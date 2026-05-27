@@ -46,7 +46,13 @@ export interface EditorBodyViewModel {
   focused: boolean
   cursor: { line: number; column: number }
   wrapMode: "word" | "none"
-  overflow: boolean
+  overflow: EditorOverflowViewModel
+}
+
+export interface EditorOverflowViewModel {
+  above: boolean
+  below: boolean
+  indicator: "" | "↑" | "↓" | "↕"
 }
 
 export interface EditorFindViewModel {
@@ -69,6 +75,9 @@ export interface EditorBottombarViewModel {
   updatedLabel: string
   wrapLabel: string
   shortcuts: EditorShortcutViewModel[]
+  visibleHints: string[]
+  hiddenShortcutCount: number
+  overflowIndicator: string
 }
 
 export interface EditorViewModel {
@@ -76,6 +85,11 @@ export interface EditorViewModel {
   find: EditorFindViewModel | null
   body: EditorBodyViewModel
   bottombar: EditorBottombarViewModel
+}
+
+export interface EditorResponsiveOptions {
+  width?: number
+  bodyViewportLines?: number
 }
 
 function normalizeRelativePath(relativePath: string): string {
@@ -175,7 +189,59 @@ function editorShortcuts(): EditorShortcutViewModel[] {
   ]
 }
 
-export function buildEditorViewModel(state: TuiState): EditorViewModel {
+function visibleShortcutHints(shortcuts: EditorShortcutViewModel[], width: number): { visibleHints: string[]; hiddenShortcutCount: number } {
+  const sortedShortcuts = [...shortcuts].sort((left, right) => left.priority - right.priority)
+  if (width <= 0) {
+    return { visibleHints: sortedShortcuts.map((shortcut) => shortcut.label), hiddenShortcutCount: 0 }
+  }
+
+  const separatorWidth = 2
+  const hiddenIndicatorWidth = 3
+  const visibleHints: string[] = []
+  let usedWidth = 0
+
+  for (const shortcut of sortedShortcuts) {
+    const hiddenAfterThis = sortedShortcuts.length - visibleHints.length - 1
+    const nextWidth = shortcut.label.length + (visibleHints.length > 0 ? separatorWidth : 0)
+    const reservedWidth = hiddenAfterThis > 0 ? hiddenIndicatorWidth + separatorWidth : 0
+    if (visibleHints.length > 0 && usedWidth + nextWidth + reservedWidth > width) {
+      break
+    }
+    if (visibleHints.length === 0 && shortcut.label.length + reservedWidth > width && width < shortcut.label.length) {
+      break
+    }
+    visibleHints.push(shortcut.label)
+    usedWidth += nextWidth
+  }
+
+  return { visibleHints, hiddenShortcutCount: Math.max(0, sortedShortcuts.length - visibleHints.length) }
+}
+
+function editorScrollTopFor(lineCount: number, cursorLine: number, bodyViewportLines: number): number {
+  if (!Number.isFinite(bodyViewportLines) || bodyViewportLines <= 0 || lineCount <= bodyViewportLines) {
+    return 0
+  }
+
+  return Math.max(0, Math.min(cursorLine - bodyViewportLines, lineCount - bodyViewportLines))
+}
+
+function editorOverflowFor(lineCount: number, cursorLine: number, bodyViewportLines: number): EditorOverflowViewModel {
+  if (!Number.isFinite(bodyViewportLines) || bodyViewportLines <= 0 || lineCount <= bodyViewportLines) {
+    return { above: false, below: false, indicator: "" }
+  }
+
+  const scrollTop = editorScrollTopFor(lineCount, cursorLine, bodyViewportLines)
+  const above = scrollTop > 0
+  const below = scrollTop + bodyViewportLines < lineCount
+  const indicator = above && below ? "↕" : above ? "↑" : below ? "↓" : ""
+  return { above, below, indicator }
+}
+
+function editorStatusLabel(parts: string[], overflowIndicator: string): string {
+  return [...parts, ...(overflowIndicator ? [overflowIndicator] : [])].join(" · ")
+}
+
+export function buildEditorViewModel(state: TuiState, responsive: EditorResponsiveOptions = {}): EditorViewModel {
   const editor = state.editor as EditorBufferWithAutosave | null
   const note = editor?.note
   const body = editor?.body ?? ""
@@ -192,6 +258,10 @@ export function buildEditorViewModel(state: TuiState): EditorViewModel {
   const cursorLabel = `Line ${cursor.line}, Col ${cursor.column}`
   const wrapLabel = `Wrap ${editor?.wrapMode ?? "word"}`
   const shortcuts = editorShortcuts()
+  const lineCount = countLines(body)
+  const overflow = editorOverflowFor(lineCount, cursor.line, responsive.bodyViewportLines ?? Number.POSITIVE_INFINITY)
+  const overflowIndicator = overflow.indicator ? `More ${overflow.indicator}` : ""
+  const { visibleHints, hiddenShortcutCount } = visibleShortcutHints(shortcuts, responsive.width ?? 0)
 
   return {
     topbar: {
@@ -221,16 +291,16 @@ export function buildEditorViewModel(state: TuiState): EditorViewModel {
     body: {
       inputId: "bluenote-editor-body-input",
       value: body,
-      lineCount: countLines(body),
+      lineCount,
       characterCount: Array.from(body).length,
       placeholder: "Write your note…",
       focused: !findMode,
       cursor,
       wrapMode: editor?.wrapMode ?? "word",
-      overflow: false,
+      overflow,
     },
     bottombar: {
-      status: `${cursorLabel} · ${wrapLabel} · ${saveStatusLabel} · ${updatedLabel}`,
+      status: editorStatusLabel([cursorLabel, wrapLabel, saveStatusLabel, updatedLabel], overflowIndicator),
       statusIntent,
       hints: shortcuts.map((shortcut) => shortcut.label),
       cursorLabel,
@@ -238,6 +308,9 @@ export function buildEditorViewModel(state: TuiState): EditorViewModel {
       updatedLabel,
       wrapLabel,
       shortcuts,
+      visibleHints,
+      hiddenShortcutCount,
+      overflowIndicator,
     },
   }
 }
@@ -250,7 +323,12 @@ export interface RenderEditorScreenOptions {
 }
 
 export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRenderable {
-  const vm = buildEditorViewModel(options.controller.getState())
+  const rendererSize = options.renderer as CliRenderer & { width?: number; height?: number; terminalWidth?: number; terminalHeight?: number }
+  const screenWidth = rendererSize.width ?? rendererSize.terminalWidth ?? 80
+  const screenHeight = rendererSize.height ?? rendererSize.terminalHeight ?? 24
+  const findBarRows = options.controller.getState().mode === "editor.find" ? 3 : 0
+  const bodyViewportLines = Math.max(1, screenHeight - 1 - findBarRows - 2 - 4)
+  const vm = buildEditorViewModel(options.controller.getState(), { width: Math.max(0, screenWidth - 4), bodyViewportLines })
   const root = new BoxRenderable(options.renderer, {
     id: "bluenote-editor-screen",
     flexDirection: "column",
@@ -277,7 +355,11 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   const bodyPanel = new BoxRenderable(options.renderer, {
     id: vm.body.inputId,
     width: "100%",
-    height: 20,
+    height: "100%",
+    flexGrow: 1,
+    flexShrink: 1,
+    minHeight: 1,
+    overflow: "hidden",
     border: true,
     borderColor: vm.body.focused ? tuiTheme.primaryAccent : tuiTheme.mutedText,
     backgroundColor: tuiTheme.panel,
@@ -288,11 +370,14 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   const bodyDisplay = new TextRenderable(options.renderer, {
     id: "bluenote-editor-body",
     content: renderControlledBodyValue(vm.body.value, editor ? editorCursorOffset(editor) : 0, vm.body.focused),
-    height: 18,
+    height: "100%",
+    flexGrow: 1,
+    flexShrink: 1,
     fg: vm.body.value.length > 0 ? tuiTheme.primaryAccent : tuiTheme.mutedText,
     bg: tuiTheme.panel,
   })
   bodyPanel.add(bodyDisplay)
+  bodyDisplay.scrollY = editorScrollTopFor(vm.body.lineCount, vm.body.cursor.line, bodyViewportLines)
 
   root.add(topbar)
   if (vm.find) {
@@ -336,8 +421,9 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   }
   root.add(bodyPanel)
   root.add(bottombarStatus)
+  const shortcutHints = [...vm.bottombar.visibleHints, ...(vm.bottombar.hiddenShortcutCount > 0 ? [`+${vm.bottombar.hiddenShortcutCount}`] : [])]
   root.add(new TextRenderable(options.renderer, {
-    content: vm.bottombar.hints.join("  "),
+    content: shortcutHints.join("  "),
     height: 1,
     fg: tuiTheme.secondaryAccent,
     bg: tuiTheme.panel,

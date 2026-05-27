@@ -2,7 +2,7 @@ import { describe, test } from "bun:test"
 import assert from "node:assert/strict"
 import { createCliRenderer, InputRenderable, type Renderable } from "@opentui/core"
 
-import { buildEditorViewModel } from "../../../src/tui/render-editor"
+import { buildEditorViewModel, renderEditorScreen } from "../../../src/tui/render-editor"
 import { buildManagerViewModel, renderManagerScreen } from "../../../src/tui/render-manager"
 import { buildSearchEverythingViewModel, renderSearchEverythingScreen } from "../../../src/tui/render-search-everything"
 import { tuiTheme } from "../../../src/tui/theme"
@@ -48,6 +48,10 @@ const baseState: TuiState = {
     dirty: false,
   },
   search: null,
+}
+
+function descendants(node: Renderable): Renderable[] {
+  return [node, ...node.getChildren().flatMap((child) => descendants(child))]
 }
 
 describe("TUI render view models", () => {
@@ -348,7 +352,7 @@ describe("TUI render view models", () => {
       focused: true,
       cursor: { line: 3, column: 23 },
       wrapMode: "word",
-      overflow: false,
+      overflow: { above: false, below: false, indicator: "" },
     })
     assert.equal(vm.find, null)
     assert.deepEqual(vm.bottombar.shortcuts, [
@@ -364,6 +368,9 @@ describe("TUI render view models", () => {
     assert.equal(vm.bottombar.saveStatusLabel, "Saved")
     assert.equal(vm.bottombar.updatedLabel, "Updated unknown")
     assert.equal(vm.bottombar.wrapLabel, "Wrap word")
+    assert.equal(vm.bottombar.overflowIndicator, "")
+    assert.deepEqual(vm.bottombar.visibleHints, ["Ctrl+S save", "Ctrl+F find", "Alt+Z wrap", "Ctrl+P search", "Esc manager", "Ctrl+C quit"])
+    assert.equal(vm.bottombar.hiddenShortcutCount, 0)
     assert.equal(vm.bottombar.status, "Line 3, Col 23 · Wrap word · Saved · Updated unknown")
     assert.equal(vm.bottombar.statusIntent, "mutedText")
 
@@ -382,6 +389,38 @@ describe("TUI render view models", () => {
     assert.equal(autosaveVm.bottombar.saveStatusLabel, "Autosaving…")
     assert.equal(autosaveVm.topbar.statusIntent, "secondaryAccent")
     assert.equal(autosaveVm.bottombar.statusIntent, "secondaryAccent")
+  })
+
+  test("editor responsive view model hides low-priority shortcuts first and reports body overflow", () => {
+    const longBody = Array.from({ length: 30 }, (_, index) => `line ${index + 1}`).join("\n")
+    const narrowVm = buildEditorViewModel({
+      ...baseState,
+      screen: "editor",
+      editor: { ...baseState.editor!, body: longBody, savedBody: longBody, cursorOffset: 0, selectionStart: 0, selectionEnd: 0 },
+    }, { width: 34, bodyViewportLines: 8 })
+
+    assert.deepEqual(narrowVm.bottombar.visibleHints, ["Ctrl+S save", "Ctrl+F find"])
+    assert.equal(narrowVm.bottombar.hiddenShortcutCount, 4)
+    assert.deepEqual(narrowVm.body.overflow, { above: false, below: true, indicator: "↓" })
+    assert.equal(narrowVm.bottombar.overflowIndicator, "More ↓")
+    assert.match(narrowVm.bottombar.status, /More ↓/u)
+
+    const bodyLength = Array.from(longBody).length
+    const bottomCursorVm = buildEditorViewModel({
+      ...baseState,
+      screen: "editor",
+      editor: {
+        ...baseState.editor!,
+        body: longBody,
+        savedBody: longBody,
+        cursorOffset: bodyLength,
+        selectionStart: bodyLength,
+        selectionEnd: bodyLength,
+      },
+    }, { width: 80, bodyViewportLines: 8 })
+
+    assert.deepEqual(bottomCursorVm.body.overflow, { above: true, below: false, indicator: "↑" })
+    assert.equal(bottomCursorVm.bottombar.overflowIndicator, "More ↑")
   })
 
   test("editor chrome extracts note directory and latest updated or modified labels from metadata", () => {

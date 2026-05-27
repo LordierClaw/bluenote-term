@@ -386,6 +386,38 @@ describe("TUI render keyboard routing", () => {
     assert.deepEqual(calls, ["insertEditorText:/"])
   })
 
+  test("editor body chrome uses flex sizing and find mode has a single focused input", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const controller = createWorkspaceController({
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }),
+        searchNotes: () => [],
+      })
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+      let screen = renderEditorScreen({ renderer, controller })
+      renderer.root.add(screen)
+
+      const bodyInput = findById(screen, "bluenote-editor-body-input") as { height?: unknown; yogaNode?: { getFlexGrow?: () => number } } | undefined
+      const bodyDisplay = findById(screen, "bluenote-editor-body") as { height?: unknown; yogaNode?: { getFlexGrow?: () => number } } | undefined
+      assert.notEqual(bodyInput?.height, 20)
+      assert.equal(bodyInput?.yogaNode?.getFlexGrow?.(), 1)
+      assert.equal(bodyDisplay?.yogaNode?.getFlexGrow?.(), 1)
+
+      renderer.root.remove(screen.id)
+      screen.destroyRecursively()
+      controller.openEditorFind()
+      screen = renderEditorScreen({ renderer, controller })
+      renderer.root.add(screen)
+      focusActiveWorkspaceInput(screen)
+
+      const focusOwners = descendants(screen).filter((node) => (node.id === "bluenote-editor-find-query" || node.id === "bluenote-editor-body-input") && node.focused)
+      assert.deepEqual(focusOwners.map((node) => node.id), ["bluenote-editor-find-query"])
+    } finally {
+      renderer.destroy()
+    }
+  })
+
   test("editor body renders as a focused controlled input owner", async () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
