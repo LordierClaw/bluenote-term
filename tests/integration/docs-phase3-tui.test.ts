@@ -32,6 +32,14 @@ function assertRefinedTuiBehavior(content: string): void {
   assert.match(content, /chrome/i)
 }
 
+function assertMinimalManagerChrome(content: string): void {
+  assert.match(content, /minimal manager|minimal .*Manager|Manager .*minimal/i)
+  assert.match(content, /current folder|current path|folder path/i)
+  assert.match(content, /focused item|selected item|hovered path/i)
+  assert.match(content, /short action hints|compact .*hints|minimal .*hints/i)
+  assert.doesNotMatch(content, /BlueNote Manager|BlueNote TUI|branded title screen|decorative title/i)
+}
+
 test("README documents the refined Phase 3 TUI workspace behavior", async () => {
   const readme = await readRepoFile("README.md")
 
@@ -42,6 +50,7 @@ test("README documents the refined Phase 3 TUI workspace behavior", async () => 
   assert.match(readme, /shell completion/i)
   assert.match(readme, /not a TUI action/i)
   assertRefinedTuiBehavior(readme)
+  assertMinimalManagerChrome(readme)
 })
 
 test("product and phase docs describe refined Manager, Editor, and Search Everything Phase 3 scope", async () => {
@@ -54,6 +63,7 @@ test("product and phase docs describe refined Manager, Editor, and Search Everyt
     assert.match(content, /Editor/i)
     assert.match(content, /Search Everything/i)
     assertRefinedTuiBehavior(content)
+    assertMinimalManagerChrome(content)
   }
 
   assert.match(phase, /plain Markdown/i)

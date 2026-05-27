@@ -21,7 +21,7 @@ The workspace is launched with `bn tui` and remains a presentation/input layer o
 
 ### Manager
 
-The Manager is the workspace home screen. It presents a two-column browser/preview layout: the browser lists note and folder rows derived from existing note summaries and paths, while the preview shows context for the focused item. Navigation stays selector-compatible with the CLI by using note keys and relative paths. Right/open enters a folder or opens the selected note into the Editor; left/back returns to the previous folder or screen.
+The Manager is the workspace home screen. It presents a minimal Manager screen with a two-column browser/preview layout: the browser lists note and folder rows derived from existing note summaries and paths, while the preview shows context for the focused item. Its chrome is not a title screen; it stays on useful context only: the current folder path, focused item/hovered path, and short action hints for move, open, filter, back, and quit. Navigation stays selector-compatible with the CLI by using note keys and relative paths. Right/open enters a folder or opens the selected note into the Editor; left/back returns to the previous folder or screen.
 
 ### Editor
 

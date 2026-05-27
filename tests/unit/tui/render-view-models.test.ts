@@ -77,12 +77,14 @@ describe("TUI render view models", () => {
     }
   })
 
-  test("manager view model includes rows with filename/key, title, description, focus marker, and shortcut/status hints", () => {
+  test("manager view model includes rows with filename/key, title, description, focus marker, and minimal shortcut/status hints", () => {
     const vm = buildManagerViewModel(baseState)
 
-    assert.equal(vm.title, "BlueNote Manager")
+    assert.equal(vm.title, "notes/")
     assert.equal(vm.status, "2 items · selected daily-plan")
-    assert.deepEqual(vm.shortcuts, ["↑/↓ move", "→/Enter open", "←/Esc back", "/ filter", "Ctrl+P search", "q quit"])
+    assert.deepEqual(vm.shortcuts, ["↑↓ move", "→/Enter open", "n new", "d delete", "/ filter", "Esc back", "q quit"])
+    const managerChrome = [vm.title, vm.topbar.title, vm.status, ...vm.shortcuts, vm.panels.layout1.title, vm.panels.layout2.title].join(" ")
+    assert.doesNotMatch(managerChrome, /BlueNote(?: TUI| Manager)?/i)
     assert.deepEqual(
       vm.rows.map((row) => ({ marker: row.focusMarker, key: row.key, filename: row.filename, title: row.title, description: row.description, focused: row.focused })),
       [
@@ -189,7 +191,7 @@ describe("TUI render view models", () => {
     } as TuiState, browser)
 
     assert.deepEqual(vm.topbar, {
-      title: "BlueNote Manager",
+      title: "notes/",
       currentPath: "notes/",
       hoveredPath: "notes/projects",
       styleIntent: "primaryAccent",

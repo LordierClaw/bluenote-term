@@ -28,7 +28,7 @@ Delivered by the distinct Phase 2 CLI storage/UX pivot and Phase 3 TUI workspace
 
 The TUI workspace launches with `bn tui` and is intentionally split into separate screens. It uses a restrained blue palette for focus, active items, muted secondary text, and consistent top/bottom chrome rather than broad state-by-color presentation rules:
 
-- **Manager:** a two-column browser/preview model over CLI-compatible note summaries, paths, keys, titles, and descriptions. Right/open navigates into folders or opens notes; left/back returns to the previous folder or screen.
+- **Manager:** a minimal Manager screen with a two-column browser/preview model over CLI-compatible note summaries, paths, keys, titles, and descriptions. Its chrome stays contextual: current folder path, focused item/hovered path, and short action hints for move, open, filter, back, and quit. Right/open navigates into folders or opens notes; left/back returns to the previous folder or screen.
 - **Editor:** focused inline editing of the selected plain Markdown note body. Current wired Phase 3 behavior includes Unicode-safe buffer updates, save, dirty-state handling, `Ctrl+F` find mode, and 750ms autosave with stale-completion guards. Select-all and cut/copy/paste remain adapter/controller groundwork for follow-on runtime wiring. The Editor does not add metadata frontmatter to note files.
 - **Search Everything:** global note/content/folder search plus slash-prefixed command entries for workspace/action discovery, presented as a single input, result list, and preview. `/save` is wired as a built-in runtime action; the other command entries are discoverable adapter outputs until command handlers are connected.
 

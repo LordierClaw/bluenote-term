@@ -182,11 +182,13 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
     statusParts.push(`selected ${openNoteKey}`)
   }
 
+  const currentPath = currentPathLabel(currentFolderPath)
+
   return {
-    title: "BlueNote Manager",
+    title: currentPath,
     topbar: {
-      title: "BlueNote Manager",
-      currentPath: currentPathLabel(currentFolderPath),
+      title: currentPath,
+      currentPath,
       hoveredPath,
       styleIntent: "primaryAccent",
     },
@@ -203,7 +205,7 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
     },
     rows,
     status: statusParts.join(" · "),
-    shortcuts: ["↑/↓ move", "→/Enter open", "←/Esc back", "/ filter", "Ctrl+P search", "q quit"],
+    shortcuts: ["↑↓ move", "→/Enter open", "n new", "d delete", "/ filter", "Esc back", "q quit"],
   }
 }
 
@@ -257,8 +259,9 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     title: vm.title,
   })
 
+  const topbarPath = vm.topbar.hoveredPath ? `${vm.topbar.currentPath} → ${vm.topbar.hoveredPath}` : vm.topbar.currentPath
   root.add(new TextRenderable(options.renderer, {
-    content: `${vm.topbar.title}  ${vm.topbar.currentPath} → ${vm.topbar.hoveredPath ?? ""}`,
+    content: `${topbarPath}  ${vm.shortcuts.join(" · ")}`,
     height: 1,
     fg: tuiTheme.primaryAccent,
     bg: tuiTheme.panel,
