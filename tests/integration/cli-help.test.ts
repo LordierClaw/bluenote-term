@@ -9,6 +9,7 @@ const workspaceRoot = path.resolve(import.meta.dir, "../..")
 const packageJsonPath = path.join(workspaceRoot, "package.json")
 const agentGuidePath = path.join(workspaceRoot, "AGENTS.md")
 const developmentWorkflowPath = path.join(workspaceRoot, "docs/workflow/development-workflow.md")
+const interactiveSmokePath = path.join(workspaceRoot, "scripts/smoke-opentui-interactive.ts")
 
 test("bn --help prints the visible Phase 2 command surface and Phase 3 TUI launch command", () => {
   const result = runCli(["--help"])
@@ -37,6 +38,17 @@ test("project verification commands cover CLI plus import-only and interactive O
   assert.match(packageJson.scripts?.check ?? "", /bun run smoke:opentui:interactive/)
   assert.match(agentGuide, /Run `bun run smoke:opentui:interactive`/)
   assert.match(developmentWorkflow, /^bun run smoke:opentui:interactive$/m)
+})
+
+test("interactive OpenTUI smoke covers live manager create and delete flows", async () => {
+  const smokeScript = await readFile(interactiveSmokePath, "utf8")
+
+  assert.match(smokeScript, /expectPaneExcludes\(managerPane, "BlueNote"/)
+  assert.match(smokeScript, /Live Smoke Manager Note/)
+  assert.match(smokeScript, /manager create opens editor/)
+  assert.match(smokeScript, /manager delete confirmation/)
+  assert.match(smokeScript, /manager delete cancellation/)
+  assert.match(smokeScript, /expectNoteArtifactsDeleted/)
 })
 
 test("smoke-cli script exercises --help and init against a temporary root", async () => {
