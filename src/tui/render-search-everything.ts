@@ -76,7 +76,7 @@ export function buildSearchEverythingViewModel(
     panel: "panel",
     input: "primaryAccent",
     result: "panel",
-    selectedResult: "focusedRow",
+    selectedResult: "activeItem",
     preview: "secondaryAccent",
   }
   const preview = buildHighlightedSearchEverythingPreview(results, selectedIndex)

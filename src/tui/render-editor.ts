@@ -76,14 +76,15 @@ function countLines(value: string): number {
 function statusIntentForEditor(editor: EditorBufferWithAutosave | null): TuiColorIntent {
   switch (editor?.autosaveStatus) {
     case "pending":
+      return "primaryAccent"
     case "saving":
-      return "warning"
+      return "secondaryAccent"
     case "saved":
-      return "success"
+      return "mutedText"
     case "error":
       return "danger"
     default:
-      return editor?.dirty ? "warning" : "success"
+      return editor?.dirty ? "primaryAccent" : "mutedText"
   }
 }
 

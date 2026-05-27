@@ -9,7 +9,7 @@ The workspace is launched with `bn tui` and remains a presentation/input layer o
 ## Primary outcomes
 
 - OpenTUI renderer/bootstrap flow reachable from the BlueNote entrypoint through `bn tui`
-- beautiful, elegant full-screen layout with semantic colors and command/status chrome
+- beautiful, elegant full-screen layout with a restrained blue palette and command/status chrome
 - separate **Manager**, **Editor**, and **Search Everything** screens instead of one overloaded pane
 - Manager screen backed by the same note list/selectors as the CLI
 - Search Everything screen backed by the same indexed search service as `bn search`, including notes, content excerpts, folders/paths, and slash-prefixed command entries
@@ -33,7 +33,7 @@ Search Everything is a global screen/overlay that can be opened from the Manager
 
 ## Back and visual rules
 
-`Escape` and `Ctrl+[` share one back rule across the workspace: close the active mode or overlay first, then navigate back through folders/screens toward the root manager. Quitting the workspace remains an explicit `q` or `Ctrl+C` action. TUI styling uses semantic colors for focus, muted metadata, status, warning, and success states, plus consistent top/bottom chrome, so behavior is described by meaning rather than by fixed terminal colors.
+`Escape` and `Ctrl+[` share one back rule across the workspace: close the active mode or overlay first, then navigate back through folders/screens toward the root manager. Quitting the workspace remains an explicit `q` or `Ctrl+C` action. TUI styling uses a restrained blue palette for focus, active items, muted metadata, and consistent top/bottom chrome; red is reserved for destructive confirmation and actual errors.
 
 ## Completion boundary
 

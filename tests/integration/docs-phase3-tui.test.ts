@@ -25,7 +25,10 @@ function assertRefinedTuiBehavior(content: string): void {
   assert.match(content, /result-list|result list/i)
   assert.match(content, /Escape/i)
   assert.match(content, /Ctrl\+\[/i)
-  assert.match(content, /semantic colors|semantic colour/i)
+  assert.match(content, /restrained blue|blue palette|blue theme/i)
+  assert.match(content, /focus/i)
+  assert.match(content, /muted/i)
+  assert.doesNotMatch(content, /warning\/success|success states|semantic colors|semantic colour/i)
   assert.match(content, /chrome/i)
 }
 

@@ -17,7 +17,7 @@
 
 ## Phase 3 TUI runtime shape
 
-The OpenTUI runtime hosts three separate workspace screens with shared semantic colors and status chrome:
+The OpenTUI runtime hosts three separate workspace screens with a shared restrained blue theme for focus, active items, muted metadata, and status chrome:
 
 - **Manager** for two-column browser/preview note and folder navigation over existing note summaries and selectors. Right/open enters folders or opens notes; left/back returns to the previous folder or screen.
 - **Editor** for focused inline editing of plain Markdown note bodies with top/bottom status chrome, `Ctrl+F` find mode, and 750ms autosave guarded against stale completion.

@@ -2,10 +2,8 @@ export type TuiColorIntent =
   | "background"
   | "panel"
   | "focusedRow"
-  | "selectedOpenNote"
+  | "activeItem"
   | "mutedText"
-  | "success"
-  | "warning"
   | "danger"
   | "primaryAccent"
   | "secondaryAccent"
@@ -14,13 +12,11 @@ export const tuiTheme: Record<TuiColorIntent, `#${string}`> = {
   background: "#0f172a",
   panel: "#111827",
   focusedRow: "#1e3a8a",
-  selectedOpenNote: "#0e7490",
+  activeItem: "#0e7490",
   mutedText: "#94a3b8",
-  success: "#22c55e",
-  warning: "#f59e0b",
   danger: "#ef4444",
   primaryAccent: "#38bdf8",
-  secondaryAccent: "#a78bfa",
+  secondaryAccent: "#22d3ee",
 }
 
 export interface TuiIntentStyle {
@@ -29,7 +25,7 @@ export interface TuiIntentStyle {
 }
 
 export function styleForIntent(intent: TuiColorIntent): TuiIntentStyle {
-  if (intent === "background" || intent === "panel" || intent === "focusedRow" || intent === "selectedOpenNote") {
+  if (intent === "background" || intent === "panel" || intent === "focusedRow" || intent === "activeItem") {
     return { background: tuiTheme[intent] }
   }
 

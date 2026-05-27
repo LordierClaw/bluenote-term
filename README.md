@@ -49,7 +49,7 @@ bun run ./bin/bn.ts tui
 
 ## Phase 3 TUI workspace
 
-Launch the workspace with `bn tui` (or `bun run ./bin/bn.ts tui` from the repo) from an interactive terminal. It is organized as separate screens rather than a single mixed view and uses semantic colors for focused rows, muted metadata, warnings, and status chrome:
+Launch the workspace with `bn tui` (or `bun run ./bin/bn.ts tui` from the repo) from an interactive terminal. It is organized as separate screens rather than a single mixed view and uses a restrained blue theme for focused rows, active items, muted metadata, and status chrome:
 
 - **Manager** — a two-column browser/preview home screen backed by the same note list/selectors as the CLI. Use right/open to enter a folder or open the selected note, and left/back to return to the previous folder or screen. `Escape` and `Ctrl+[` follow the same back rule for closing active modes and returning toward the root manager; quitting remains `q` or `Ctrl+C`.
 - **Editor** — a focused inline note editing screen with top/bottom bars around the editor body. Current wired Phase 3 behavior covers Unicode-safe buffer changes, explicit save, dirty-state handling, `Ctrl+F` find mode, and 750ms autosave guarded against stale completions. Select-all and cut/copy/paste remain adapter/controller groundwork for follow-on runtime wiring.

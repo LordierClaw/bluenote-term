@@ -51,8 +51,9 @@ const baseState: TuiState = {
 }
 
 describe("TUI render view models", () => {
-  test("semantic TUI theme exposes required color tokens", () => {
+  test("TUI theme exposes restrained blue palette tokens only", () => {
     assert.deepEqual(Object.keys(tuiTheme).sort(), [
+      "activeItem",
       "background",
       "danger",
       "focusedRow",
@@ -60,10 +61,17 @@ describe("TUI render view models", () => {
       "panel",
       "primaryAccent",
       "secondaryAccent",
-      "selectedOpenNote",
-      "success",
-      "warning",
     ])
+    assert.equal(tuiTheme.background, "#0f172a")
+    assert.equal(tuiTheme.panel, "#111827")
+    assert.equal(tuiTheme.focusedRow, "#1e3a8a")
+    assert.equal(tuiTheme.activeItem, "#0e7490")
+    assert.equal(tuiTheme.primaryAccent, "#38bdf8")
+    assert.equal(tuiTheme.secondaryAccent, "#22d3ee")
+    assert.equal(tuiTheme.mutedText, "#94a3b8")
+    assert.equal(tuiTheme.danger, "#ef4444")
+    assert.equal("success" in tuiTheme, false)
+    assert.equal("warning" in tuiTheme, false)
     for (const color of Object.values(tuiTheme)) {
       assert.match(color, /^#[0-9a-f]{6}$/iu)
     }
@@ -86,7 +94,7 @@ describe("TUI render view models", () => {
       vm.rows.map((row) => ({ key: row.key, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent, openStyleIntent: row.openStyleIntent, metadataStyleIntent: row.metadataStyleIntent })),
       [
         { key: "notes/inbox", styleIntent: "panel", itemStyleIntent: "secondaryAccent", openStyleIntent: null, metadataStyleIntent: "mutedText" },
-        { key: "daily-plan", styleIntent: "focusedRow", itemStyleIntent: "primaryAccent", openStyleIntent: "selectedOpenNote", metadataStyleIntent: "mutedText" },
+        { key: "daily-plan", styleIntent: "focusedRow", itemStyleIntent: "primaryAccent", openStyleIntent: "activeItem", metadataStyleIntent: "mutedText" },
       ],
     )
   })
@@ -133,7 +141,7 @@ describe("TUI render view models", () => {
       vm.rows.map((row) => ({ key: row.key, styleIntent: row.styleIntent, openStyleIntent: row.openStyleIntent })),
       [
         { key: "note-a", styleIntent: "focusedRow", openStyleIntent: null },
-        { key: "note-b", styleIntent: "panel", openStyleIntent: "selectedOpenNote" },
+        { key: "note-b", styleIntent: "panel", openStyleIntent: "activeItem" },
       ],
     )
   })
@@ -249,7 +257,7 @@ describe("TUI render view models", () => {
     assert.equal(vm.layout1.rows[0]?.styleIntent, "focusedRow")
     assert.equal(vm.layout1.rows[0]?.openMarker, "●")
     assert.notEqual(vm.layout1.rows[0]?.openMarker, vm.layout1.rows[0]?.focusMarker)
-    assert.equal(vm.layout1.rows[0]?.openStyleIntent, "selectedOpenNote")
+    assert.equal(vm.layout1.rows[0]?.openStyleIntent, "activeItem")
   })
 
   test("runtime manager controller exposes the browser preview model used by renderer", () => {
@@ -287,7 +295,7 @@ describe("TUI render view models", () => {
       key: "daily-plan",
       dirty: false,
       status: "saved",
-      statusIntent: "success",
+      statusIntent: "mutedText",
     })
     assert.deepEqual(vm.body, {
       value: "# Daily Plan\n\nShip renderer screens.",
@@ -299,15 +307,15 @@ describe("TUI render view models", () => {
     assert.equal(vm.find, null)
     assert.deepEqual(vm.bottombar.hints, ["Ctrl+S save", "Ctrl+F find", "Ctrl+P search", "Esc manager", "Ctrl+C quit"])
     assert.equal(vm.bottombar.status, "Line 1, Col 1 · saved")
-    assert.equal(vm.bottombar.statusIntent, "success")
+    assert.equal(vm.bottombar.statusIntent, "mutedText")
 
     const dirtyVm = buildEditorViewModel({ ...baseState, screen: "editor", editor: { ...baseState.editor!, dirty: true, body: `${baseState.editor!.body}\nunsaved` } })
-    assert.equal(dirtyVm.topbar.statusIntent, "warning")
-    assert.equal(dirtyVm.bottombar.statusIntent, "warning")
+    assert.equal(dirtyVm.topbar.statusIntent, "primaryAccent")
+    assert.equal(dirtyVm.bottombar.statusIntent, "primaryAccent")
 
     const autosaveVm = buildEditorViewModel({ ...baseState, screen: "editor", editor: { ...baseState.editor!, autosaveStatus: "saving" } as TuiState["editor"] })
-    assert.equal(autosaveVm.topbar.statusIntent, "warning")
-    assert.equal(autosaveVm.bottombar.statusIntent, "warning")
+    assert.equal(autosaveVm.topbar.statusIntent, "secondaryAccent")
+    assert.equal(autosaveVm.bottombar.statusIntent, "secondaryAccent")
   })
 
   test("editor bottom bar displays autosave status labels", () => {
@@ -325,9 +333,9 @@ describe("TUI render view models", () => {
     assert.deepEqual(
       [statusFor("pending"), statusFor("saving"), statusFor("saved", false), statusFor("error")].map((bar) => ({ status: bar.status, intent: bar.statusIntent })),
       [
-        { status: "Line 1, Col 1 · Unsaved", intent: "warning" },
-        { status: "Line 1, Col 1 · Autosaving…", intent: "warning" },
-        { status: "Line 1, Col 1 · Saved", intent: "success" },
+        { status: "Line 1, Col 1 · Unsaved", intent: "primaryAccent" },
+        { status: "Line 1, Col 1 · Autosaving…", intent: "secondaryAccent" },
+        { status: "Line 1, Col 1 · Saved", intent: "mutedText" },
         { status: "Line 1, Col 1 · Autosave failed", intent: "danger" },
       ],
     )
@@ -405,7 +413,7 @@ describe("TUI render view models", () => {
       panel: "panel",
       input: "primaryAccent",
       result: "panel",
-      selectedResult: "focusedRow",
+      selectedResult: "activeItem",
       preview: "secondaryAccent",
     })
     assert.deepEqual(vm.shortcuts, ["type search", "↑/↓ select", "Enter open/run", "Esc editor"])
@@ -416,7 +424,7 @@ describe("TUI render view models", () => {
         { marker: "›", kind: "command", label: "/replace", detail: "Find and replace text in the active editor buffer", selected: true },
       ],
     )
-    assert.deepEqual(vm.results.map((row) => row.styleIntent), ["panel", "focusedRow"])
+    assert.deepEqual(vm.results.map((row) => row.styleIntent), ["panel", "activeItem"])
     assert.deepEqual(vm.preview, {
       title: "/replace",
       subtitle: "Find and replace text in the active editor buffer",

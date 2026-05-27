@@ -126,7 +126,7 @@ function toRowViewModel(row: BrowserishRow, index: number, focused: boolean, ope
     columns: columnsFor(row),
     styleIntent: focused ? "focusedRow" : "panel",
     itemStyleIntent: row.type === "folder" ? "secondaryAccent" : "primaryAccent",
-    openStyleIntent: open ? "selectedOpenNote" : null,
+    openStyleIntent: open ? "activeItem" : null,
     metadataStyleIntent: "mutedText",
   }
 }
