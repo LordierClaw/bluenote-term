@@ -9,7 +9,7 @@ test("Phase 2 CLI workflow stays consistent through the real bin/bn.ts entrypoin
   const harness = await createManagedRootHarness("bluenote-phase-2-e2e-")
 
   const readSidecar = async (key: string) =>
-    JSON.parse(await readFile(path.join(harness.rootPath, ".state", "notes", `${key}.json`), "utf8")) as {
+    JSON.parse(await readFile(path.join(harness.rootPath, ".data", "notes", `${key}.json`), "utf8")) as {
       archivedAt: string | null
       createdAt: string
       description: string
@@ -33,7 +33,7 @@ test("Phase 2 CLI workflow stays consistent through the real bin/bn.ts entrypoin
     const initResult = runOk("bn init", ["init"])
     assert.match(initResult.stdout, new RegExp(`Initialized BlueNote root: ${harness.escapeForRegExp(harness.rootPath)}`))
 
-    await access(path.join(harness.rootPath, ".state", "notes"))
+    await access(path.join(harness.rootPath, ".data", "notes"))
 
     const createFirstResult = runOk("bn new first", ["new", "--title", "Workflow Alpha"])
     assert.match(createFirstResult.stdout, /^Created note\nKey: workflow-alpha-[a-z0-9]{6}\nPath: notes\/inbox\/workflow-alpha-[a-z0-9]{6}\.md\n$/)
@@ -93,7 +93,7 @@ test("Phase 2 CLI workflow stays consistent through the real bin/bn.ts entrypoin
     assert.match(editResult.stdout, new RegExp(`Edited note: notes/inbox/${harness.escapeForRegExp(renamedKey)}\\.md`))
 
     await assert.rejects(() => access(path.join(harness.rootPath, "notes", "inbox", `${secondKey}.md`)), { code: "ENOENT" })
-    await assert.rejects(() => access(path.join(harness.rootPath, ".state", "notes", `${secondKey}.json`)), { code: "ENOENT" })
+    await assert.rejects(() => access(path.join(harness.rootPath, ".data", "notes", `${secondKey}.json`)), { code: "ENOENT" })
 
     const postEditShowResult = runOk("bn show renamed", ["show", renamedKey])
     assert.match(postEditShowResult.stdout, /^Title: Workflow Beta Renamed\n/m)
@@ -113,13 +113,13 @@ test("Phase 2 CLI workflow stays consistent through the real bin/bn.ts entrypoin
     assert.match(deleteResult.stdout, new RegExp(`Deleted note: notes/inbox/${harness.escapeForRegExp(firstKey)}\\.md`))
 
     await assert.rejects(() => access(path.join(harness.rootPath, "notes", "inbox", `${firstKey}.md`)), { code: "ENOENT" })
-    await assert.rejects(() => access(path.join(harness.rootPath, ".state", "notes", `${firstKey}.json`)), { code: "ENOENT" })
+    await assert.rejects(() => access(path.join(harness.rootPath, ".data", "notes", `${firstKey}.json`)), { code: "ENOENT" })
 
     const rebuildResult = runOk("bn rebuild", ["rebuild"])
     assert.equal(rebuildResult.stdout, "Rebuilt indexes for 1 note(s).\n")
 
-    await access(path.join(harness.rootPath, ".state", "metadata.sqlite"))
-    await access(path.join(harness.rootPath, ".state", "search-index.json"))
+    await access(path.join(harness.rootPath, ".data", "metadata.sqlite"))
+    await access(path.join(harness.rootPath, ".data", "search-index.json"))
 
     const finalListResult = runOk("bn list after archive and delete", ["list"])
     assert.equal(finalListResult.stdout, "")

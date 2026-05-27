@@ -38,7 +38,7 @@ test("bn new --title \"Example\" creates a plain note plus sidecar and prints ke
     const markdown = await readFile(notePath, "utf8")
     assert.equal(markdown, "")
 
-    const sidecar = JSON.parse(await readFile(path.join(harness.rootPath, ".state", "notes", "example-51u7i0.json"), "utf8"))
+    const sidecar = JSON.parse(await readFile(path.join(harness.rootPath, ".data", "notes", "example-51u7i0.json"), "utf8"))
     assert.deepEqual(sidecar, {
       key: "example-51u7i0",
       title: "Example",
@@ -94,14 +94,14 @@ test("bn new reports auto-rebuild validation failures after creating the note", 
     assert.equal(result.exitCode, 2)
     assert.equal(result.stdout, "")
     assert.match(result.stderr, /Created note 'fresh-note-51u7i0', but derived indexes could not be rebuilt\./)
-    assert.match(result.stderr, /Could not read sidecar '\.state[\\/]notes[\\/]orphaned\.json'\./)
+    assert.match(result.stderr, /Could not read sidecar '\.data[\\/]notes[\\/]orphaned\.json'\./)
     assert.match(result.stderr, /Hint: Run bn rebuild after fixing the reported validation errors\./)
 
     const createdNotePath = path.join(harness.rootPath, "notes", "inbox", "fresh-note-51u7i0.md")
     assert.equal(await readFile(createdNotePath, "utf8"), "")
 
     const createdSidecar = JSON.parse(
-      await readFile(path.join(harness.rootPath, ".state", "notes", "fresh-note-51u7i0.json"), "utf8"),
+      await readFile(path.join(harness.rootPath, ".data", "notes", "fresh-note-51u7i0.json"), "utf8"),
     )
     assert.equal(createdSidecar.key, "fresh-note-51u7i0")
 
@@ -142,7 +142,7 @@ test("bn new retries when an orphaned sidecar collides with the first generated 
 
   try {
     await Bun.write(
-      path.join(harness.rootPath, ".state", "notes", "example-51u7i0.json"),
+      path.join(harness.rootPath, ".data", "notes", "example-51u7i0.json"),
       JSON.stringify(
         {
           key: "example-51u7i0",
@@ -167,17 +167,17 @@ test("bn new retries when an orphaned sidecar collides with the first generated 
     assert.equal(result.exitCode, 2)
     assert.equal(result.stdout, "")
     assert.match(result.stderr, /Created note 'example-wtycr4', but derived indexes could not be rebuilt\./)
-    assert.match(result.stderr, /Sidecar '\.state[\\/]notes[\\/]example-51u7i0\.json' points to missing note 'notes[\\/]inbox[\\/]example-51u7i0\.md'\./)
+    assert.match(result.stderr, /Sidecar '\.data[\\/]notes[\\/]example-51u7i0\.json' points to missing note 'notes[\\/]inbox[\\/]example-51u7i0\.md'\./)
     assert.doesNotMatch(result.stderr, /Could not create note 'notes[\\/]inbox[\\/]example-51u7i0\.md'\./)
 
     const noteFiles = await readdir(path.join(harness.rootPath, "notes", "inbox"))
     assert.deepEqual(noteFiles, ["example-wtycr4.md"])
     assert.equal(
-      JSON.parse(await readFile(path.join(harness.rootPath, ".state", "notes", "example-51u7i0.json"), "utf8")).key,
+      JSON.parse(await readFile(path.join(harness.rootPath, ".data", "notes", "example-51u7i0.json"), "utf8")).key,
       "example-51u7i0",
     )
     assert.equal(
-      JSON.parse(await readFile(path.join(harness.rootPath, ".state", "notes", "example-wtycr4.json"), "utf8")).key,
+      JSON.parse(await readFile(path.join(harness.rootPath, ".data", "notes", "example-wtycr4.json"), "utf8")).key,
       "example-wtycr4",
     )
   } finally {

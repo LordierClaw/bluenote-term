@@ -20,19 +20,36 @@ const FIXED_SIDECAR = {
   namingVersion: 1,
 } as const
 
-test("sidecar repository writes and reads sidecars under .state/notes", async () => {
+test("sidecar repository writes and reads sidecars under .data/notes", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-sidecar-repository-"))
 
   try {
     const repository = createSidecarRepository(rootPath)
     const sidecarPath = repository.write(FIXED_SIDECAR)
 
-    assert.equal(sidecarPath, path.join(rootPath, ".state", "notes", "note-work-24-abc123.json"))
+    assert.equal(sidecarPath, path.join(rootPath, ".data", "notes", "note-work-24-abc123.json"))
 
     const sidecarJson = await readFile(sidecarPath, "utf8")
     assert.deepEqual(JSON.parse(sidecarJson), FIXED_SIDECAR)
 
     assert.deepEqual(repository.read(FIXED_SIDECAR.key), FIXED_SIDECAR)
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("sidecar repository writes canonical metadata under .data/notes", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-sidecar-repository-data-canonical-"))
+
+  try {
+    const repository = createSidecarRepository(rootPath)
+
+    repository.write(FIXED_SIDECAR)
+
+    await access(path.join(rootPath, ".data", "notes", "note-work-24-abc123.json"))
+    await assert.rejects(() => access(path.join(rootPath, ".state", "notes", "note-work-24-abc123.json")), {
+      code: "ENOENT",
+    })
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }
@@ -160,7 +177,7 @@ test("sidecar repository rejects invalid stored sidecars", async () => {
 
   try {
     const repository = createSidecarRepository(rootPath)
-    const sidecarPath = path.join(rootPath, ".state", "notes", "note-work-24-abc123.json")
+    const sidecarPath = path.join(rootPath, ".data", "notes", "note-work-24-abc123.json")
 
     await mkdir(path.dirname(sidecarPath), { recursive: true })
     await writeFile(
@@ -191,7 +208,7 @@ test("sidecar repository rejects invalid stored sidecars", async () => {
   }
 })
 
-test("sidecar repository rejects keys that escape .state/notes", async () => {
+test("sidecar repository rejects keys that escape .data/notes", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-sidecar-repository-invalid-key-"))
 
   try {

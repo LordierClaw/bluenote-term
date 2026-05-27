@@ -136,7 +136,7 @@ describe("TUI workspace workflows", () => {
     assert.equal(controller.getState().editor, null)
     assert.equal(controller.getState().manager.items.some((item) => item.key === created.key), false)
     await assert.rejects(() => access(path.join(rootPath, created.relativePath)))
-    await assert.rejects(() => access(path.join(rootPath, ".state", "notes", `${created.key}.json`)))
+    await assert.rejects(() => access(path.join(rootPath, ".data", "notes", `${created.key}.json`)))
   })
 
   test("opens Search Everything from editor, selects a content match, and returns to editor", () => {

@@ -30,7 +30,7 @@ async function writePlainNoteWithSidecar(
   await harnessLikeWrite(rootPath, relativePath, body)
   await harnessLikeWrite(
     rootPath,
-    path.join(".state", "notes", `${key}.json`),
+    path.join(".data", "notes", `${key}.json`),
     JSON.stringify(
       {
         key,
@@ -101,7 +101,7 @@ test("bn archive <selector> moves the plain note to notes/archive, preserves the
     assert.equal(archivedMarkdown, "Searchable before archive.\n")
 
     const archivedSidecar = JSON.parse(
-      await readFile(path.join(harness.rootPath, ".state", "notes", "archive-target.json"), "utf8"),
+      await readFile(path.join(harness.rootPath, ".data", "notes", "archive-target.json"), "utf8"),
     )
     assert.equal(archivedSidecar.key, "archive-target")
     assert.equal(archivedSidecar.relativePath, archivedRelativePath)

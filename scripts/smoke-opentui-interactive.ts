@@ -64,17 +64,17 @@ interface NoteArtifacts {
 }
 
 function findNoteArtifactsByTitle(rootPath: string, title: string): NoteArtifacts | null {
-  const stateNotesPath = path.join(rootPath, ".state", "notes")
-  if (!existsSync(stateNotesPath)) {
+  const dataNotesPath = path.join(rootPath, ".data", "notes")
+  if (!existsSync(dataNotesPath)) {
     return null
   }
 
-  for (const entry of readdirSync(stateNotesPath, { withFileTypes: true })) {
+  for (const entry of readdirSync(dataNotesPath, { withFileTypes: true })) {
     if (!entry.isFile() || !entry.name.endsWith(".json")) {
       continue
     }
 
-    const sidecarPath = path.join(stateNotesPath, entry.name)
+    const sidecarPath = path.join(dataNotesPath, entry.name)
     const sidecar = JSON.parse(readFileSync(sidecarPath, "utf8")) as { key?: string; title?: string; relativePath?: string }
     if (sidecar.title !== title || !sidecar.key || !sidecar.relativePath) {
       continue
@@ -174,7 +174,7 @@ function createSmokeNote(rootPath: string, title: string, body: string, moveToFo
   mkdirSync(path.dirname(nextNotePath), { recursive: true })
   renameSync(summary.notePath, nextNotePath)
 
-  const sidecarPath = path.join(rootPath, ".state", "notes", `${summary.key}.json`)
+  const sidecarPath = path.join(rootPath, ".data", "notes", `${summary.key}.json`)
   const sidecar = JSON.parse(readFileSync(sidecarPath, "utf8")) as { relativePath: string }
   sidecar.relativePath = nextRelativePath
   writeFileSync(sidecarPath, JSON.stringify(sidecar, null, 2) + "\n", "utf8")

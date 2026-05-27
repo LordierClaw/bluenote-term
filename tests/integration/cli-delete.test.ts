@@ -28,7 +28,7 @@ async function writePlainNoteWithSidecar(
   },
 ) {
   const notePath = path.join(rootPath, relativePath)
-  const sidecarPath = path.join(rootPath, ".state", "notes", `${key}.json`)
+  const sidecarPath = path.join(rootPath, ".data", "notes", `${key}.json`)
 
   await mkdir(path.dirname(notePath), { recursive: true })
   await mkdir(path.dirname(sidecarPath), { recursive: true })
@@ -81,7 +81,7 @@ test("bn delete <key|path> --force removes the note file and sidecar and rebuild
     assert.match(result.stdout, /Deleted note: notes[\\/]inbox[\\/]delete-target\.md/)
 
     await assert.rejects(() => access(path.join(harness.rootPath, relativePath)))
-    await assert.rejects(() => access(path.join(harness.rootPath, ".state", "notes", "delete-target.json")))
+    await assert.rejects(() => access(path.join(harness.rootPath, ".data", "notes", "delete-target.json")))
 
     const showResult = harness.run(["show", "delete-target"])
     assert.equal(showResult.exitCode, 1)
@@ -122,7 +122,7 @@ test("bn delete requires --force", async () => {
 
     assert.equal(await readFile(path.join(harness.rootPath, relativePath), "utf8"), "Disposable note.\n")
     assert.equal(
-      JSON.parse(await readFile(path.join(harness.rootPath, ".state", "notes", "delete-target.json"), "utf8")).key,
+      JSON.parse(await readFile(path.join(harness.rootPath, ".data", "notes", "delete-target.json"), "utf8")).key,
       "delete-target",
     )
   } finally {

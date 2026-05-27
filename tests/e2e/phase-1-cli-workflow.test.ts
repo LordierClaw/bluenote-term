@@ -44,8 +44,8 @@ test("Phase 1 CLI workflow stays consistent across init, create, rebuild, list, 
     const rebuildResult = runOk("bn rebuild", ["rebuild"])
     assert.match(rebuildResult.stdout, /Rebuilt indexes for 2 note\(s\)\./)
 
-    await access(path.join(harness.rootPath, ".state", "metadata.sqlite"))
-    await access(path.join(harness.rootPath, ".state", "search-index.json"))
+    await access(path.join(harness.rootPath, ".data", "metadata.sqlite"))
+    await access(path.join(harness.rootPath, ".data", "search-index.json"))
 
     const listResult = runOk("bn list", ["list"])
     assert.match(listResult.stdout, /Workflow Example\s+workflow-example-[a-z0-9]+\s+\s*notes[\\/]inbox[\\/]workflow-example-[a-z0-9]+\.md/)
@@ -100,7 +100,7 @@ test("Phase 1 CLI workflow stays consistent across init, create, rebuild, list, 
     assert.equal(archivedMarkdown, editedMarkdown)
 
     const archivedSidecar = JSON.parse(
-      await readFile(path.join(harness.rootPath, ".state", "notes", "reference-note.json"), "utf8"),
+      await readFile(path.join(harness.rootPath, ".data", "notes", "reference-note.json"), "utf8"),
     )
     assert.match(`archivedAt: ${archivedSidecar.archivedAt}`, timestampFieldPattern("archivedAt"))
 

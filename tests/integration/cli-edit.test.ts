@@ -23,7 +23,7 @@ async function writePlainNoteWithSidecar(
   },
 ) {
   const notePath = path.join(rootPath, relativePath)
-  const sidecarPath = path.join(rootPath, ".state", "notes", `${key}.json`)
+  const sidecarPath = path.join(rootPath, ".data", "notes", `${key}.json`)
 
   await mkdir(path.dirname(notePath), { recursive: true })
   await mkdir(path.dirname(sidecarPath), { recursive: true })
@@ -51,7 +51,7 @@ async function writePlainNoteWithSidecar(
 test("bn edit <selector> updates sidecar metadata and rebuilds derived state after a body edit", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-edit-")
   const relativePath = path.join("notes", "journal", "edit-with-key.md")
-  const sidecarPath = path.join(harness.rootPath, ".state", "notes", "edit-with-key.json")
+  const sidecarPath = path.join(harness.rootPath, ".data", "notes", "edit-with-key.json")
   const updatedBody = "Updated sidecar body with zebra tokens.\n"
 
   try {
@@ -144,9 +144,9 @@ test("bn edit renames the note key, file, and sidecar when the markdown heading 
     const newRelativePath = path.join("notes", "inbox", `${newKey}.md`)
 
     await assert.rejects(() => access(path.join(harness.rootPath, relativePath)))
-    await assert.rejects(() => access(path.join(harness.rootPath, ".state", "notes", "original-note.json")))
+    await assert.rejects(() => access(path.join(harness.rootPath, ".data", "notes", "original-note.json")))
 
-    const renamedSidecarPath = path.join(harness.rootPath, ".state", "notes", `${newKey}.json`)
+    const renamedSidecarPath = path.join(harness.rootPath, ".data", "notes", `${newKey}.json`)
     const renamedSidecar = JSON.parse(await readFile(renamedSidecarPath, "utf8")) as {
       key: string
       relativePath: string
