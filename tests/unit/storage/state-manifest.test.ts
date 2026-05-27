@@ -19,12 +19,12 @@ test("createDefaultStateManifest returns the current storage schema version", ()
   })
 })
 
-test("writeStateManifest stores manifest.json under .state and readStateManifest loads it", async () => {
+test("writeStateManifest stores manifest.json under .data and readStateManifest loads it", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-state-manifest-"))
 
   try {
     const manifestPath = await writeStateManifest(rootPath)
-    assert.equal(manifestPath, path.join(rootPath, ".state", "manifest.json"))
+    assert.equal(manifestPath, path.join(rootPath, ".data", "manifest.json"))
 
     const manifestJson = await readFile(manifestPath, "utf8")
     assert.deepEqual(JSON.parse(manifestJson), {
@@ -46,7 +46,7 @@ test("readStateManifest raises a root-initialization error when manifest data is
     assert.throws(() => readStateManifest(rootPath), (error: unknown) => {
       assert.ok(error instanceof RootNotInitializedError)
       assert.equal(error.message, "BlueNote root is not initialized.")
-      assert.equal(error.hint, "Run 'bn init' to create a valid .state/manifest.json.")
+      assert.equal(error.hint, "Run 'bn init' to create a valid .data/manifest.json.")
       assert.doesNotMatch(error.message, /ENOENT|Unexpected token|SyntaxError/i)
       return true
     })
@@ -57,7 +57,7 @@ test("readStateManifest raises a root-initialization error when manifest data is
     assert.throws(() => readStateManifest(rootPath), (error: unknown) => {
       assert.ok(error instanceof RootNotInitializedError)
       assert.equal(error.message, "BlueNote root is not initialized.")
-      assert.equal(error.hint, "Run 'bn init' to create a valid .state/manifest.json.")
+      assert.equal(error.hint, "Run 'bn init' to create a valid .data/manifest.json.")
       assert.doesNotMatch(error.message, /ENOENT|Unexpected token|SyntaxError/i)
       return true
     })
@@ -76,7 +76,7 @@ test("readStateManifest raises a root-initialization error when manifest JSON ha
     assert.throws(() => readStateManifest(rootPath), (error: unknown) => {
       assert.ok(error instanceof RootNotInitializedError)
       assert.equal(error.message, "BlueNote root is not initialized.")
-      assert.equal(error.hint, "Run 'bn init' to create a valid .state/manifest.json.")
+      assert.equal(error.hint, "Run 'bn init' to create a valid .data/manifest.json.")
       assert.doesNotMatch(error.message, /oops|TypeError|SyntaxError/i)
       return true
     })
