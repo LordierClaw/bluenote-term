@@ -392,3 +392,25 @@ test("migrateLegacyAppStateToData rejects symlinked data root even when legacy s
     await rm(outsidePath, { recursive: true, force: true })
   }
 })
+
+test("migrateLegacyAppStateToData creates only data layout and leaves unrelated note symlinks untouched", async () => {
+  const rootPath = await createTempRoot("bluenote-app-state-migration-narrow-layout-")
+  const outsidePath = await createTempRoot("bluenote-app-state-migration-narrow-outside-")
+
+  try {
+    await mkdir(path.join(rootPath, ".state", "notes"), { recursive: true })
+    await writeFile(path.join(rootPath, ".state", "notes", "foo.json"), "{\"title\":\"State\"}", "utf8")
+    await symlink(outsidePath, path.join(rootPath, "notes"), "dir")
+
+    const result = migrateLegacyAppStateToData(rootPath)
+
+    assert.equal(result.status, "migrated")
+    assert.equal(await exists(path.join(rootPath, ".data", "notes", "foo.json")), true)
+    assert.equal(await exists(path.join(outsidePath, "inbox")), false)
+    assert.equal(await exists(path.join(outsidePath, "journal")), false)
+    assert.equal(await exists(path.join(outsidePath, "archive")), false)
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+    await rm(outsidePath, { recursive: true, force: true })
+  }
+})

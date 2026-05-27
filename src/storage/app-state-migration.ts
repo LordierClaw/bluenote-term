@@ -4,6 +4,7 @@ import path from "node:path"
 import {
   LEGACY_STATE_NOTES_DIRECTORY,
   STATE_COMPLETIONS_DIRECTORY,
+  STATE_DIRECTORY,
   STATE_LOGS_DIRECTORY,
   STATE_MANIFEST_FILENAME,
   STATE_NOTES_DIRECTORY,
@@ -12,7 +13,7 @@ import {
 } from "../config/root"
 import { UsageError } from "../core/errors"
 import { assertPathInsideRoot } from "../platform/path-safety"
-import { ensureManagedRoot, getLegacyStatePath, getStatePath } from "./root-layout"
+import { getLegacyStatePath, getStatePath } from "./root-layout"
 
 export interface AppStateMigrationResult {
   status: "noop" | "migrated"
@@ -32,6 +33,14 @@ const SUPPORT_DIRECTORIES = [
   ["tmp", STATE_TMP_DIRECTORY],
   ["logs", STATE_LOGS_DIRECTORY],
   ["completions", STATE_COMPLETIONS_DIRECTORY],
+] as const
+const DATA_LAYOUT_DIRECTORIES = [
+  STATE_DIRECTORY,
+  STATE_NOTES_DIRECTORY,
+  STATE_RECOVERY_DIRECTORY,
+  STATE_COMPLETIONS_DIRECTORY,
+  STATE_TMP_DIRECTORY,
+  STATE_LOGS_DIRECTORY,
 ] as const
 
 function pathExists(filePath: string): boolean {
@@ -110,6 +119,13 @@ function assertExistingDestinationParentsAreSafe(rootPath: string, destinationPa
 function assertDestinationDirectoryIsSafe(rootPath: string, destinationDirectory: string): string {
   assertExistingDestinationParentsAreSafe(rootPath, path.join(destinationDirectory, ".keep"))
   return assertPathInsideRoot(rootPath, destinationDirectory)
+}
+
+function ensureDataStateLayout(rootPath: string): void {
+  for (const relativeDirectory of DATA_LAYOUT_DIRECTORIES) {
+    const directoryPath = assertDestinationDirectoryIsSafe(rootPath, path.join(path.resolve(rootPath), relativeDirectory))
+    fs.mkdirSync(directoryPath, { recursive: true })
+  }
 }
 
 function assertExistingDestinationFileIsSafe(destinationPath: string): void {
@@ -260,7 +276,7 @@ export function migrateLegacyAppStateToData(rootPath: string): AppStateMigration
   }
 
   if (!pathExists(dataStatePath)) {
-    ensureManagedRoot(normalizedRootPath)
+    ensureDataStateLayout(normalizedRootPath)
   } else {
     assertDestinationDirectoryIsSafe(normalizedRootPath, dataStatePath)
   }
