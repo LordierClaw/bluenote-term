@@ -133,6 +133,11 @@ function getSafeSourceStats(sourcePath: string): fs.Stats {
 }
 
 function copyFileIfMissingOrIdentical(rootPath: string, sourcePath: string, destinationPath: string): boolean {
+  const sourceStats = getSafeSourceStats(sourcePath)
+  if (!sourceStats.isFile()) {
+    return false
+  }
+
   const safeDestinationPath = assertExistingDestinationParentsAreSafe(rootPath, destinationPath)
   assertExistingDestinationFileIsSafe(safeDestinationPath)
 
@@ -249,14 +254,21 @@ export function migrateLegacyAppStateToData(rootPath: string): AppStateMigration
     return getResult("noop", 0, legacyStatePath, dataStatePath)
   }
 
+  const legacyStateStats = getSafeSourceStats(legacyStatePath)
+  if (!legacyStateStats.isDirectory()) {
+    return getResult("noop", 0, legacyStatePath, dataStatePath)
+  }
+
   if (!pathExists(dataStatePath)) {
     ensureManagedRoot(normalizedRootPath)
+  } else {
+    assertDestinationDirectoryIsSafe(normalizedRootPath, dataStatePath)
   }
 
   let migratedFileCount = 0
 
   const legacyManifestPath = path.join(legacyStatePath, STATE_MANIFEST_FILENAME)
-  if (pathExists(legacyManifestPath) && fs.statSync(legacyManifestPath).isFile()) {
+  if (pathExists(legacyManifestPath) && getSafeSourceStats(legacyManifestPath).isFile()) {
     const dataManifestPath = path.join(dataStatePath, STATE_MANIFEST_FILENAME)
     if (copyFileIfMissingOrIdentical(normalizedRootPath, legacyManifestPath, dataManifestPath)) {
       migratedFileCount += 1
