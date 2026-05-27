@@ -29,7 +29,7 @@ function wrapSidecarRepositoryError(action: "read" | "write", relativePath: stri
   const message = action === "read" ? `Could not read sidecar '${relativePath}'.` : `Could not write sidecar '${relativePath}'.`
   const hint =
     action === "read"
-      ? "Ensure the sidecar exists inside BLUENOTE_ROOT/.data/notes and is readable."
+      ? `Ensure the sidecar exists inside BLUENOTE_ROOT/${STATE_NOTES_DIRECTORY} and is readable.`
       : "Ensure BLUENOTE_ROOT points to a writable directory path."
 
   throw new UsageError(message, {
