@@ -65,10 +65,12 @@ function sendKeys(sessionName: string, ...keys: string[]): void {
 }
 
 function sendText(sessionName: string, text: string): void {
-  for (const character of Array.from(text)) {
-    sendKeys(sessionName, character)
-    wait(50)
+  assertWithinSmokeDeadline(`send text ${text}`)
+  const result = run("tmux", ["send-keys", "-l", "-t", sessionName, text])
+  if (result.status !== 0) {
+    throw new Error(`Failed to send literal text ${text}: ${result.stderr || result.stdout}`)
   }
+  wait(250)
 }
 
 function capturePane(sessionName: string, context: string): string {
@@ -267,12 +269,29 @@ try {
   const editorPane = capturePaneUntil(sessionName, "editor open", "Ctrl+F find", 30)
   expectPaneContains(editorPane, "Root Editor", "editor open")
   expectPaneContains(editorPane, "Ctrl+F find", "editor open")
+  wait(500, "editor focus settle")
+
+  const typedEditorText = "smoke body input"
+  sendText(sessionName, typedEditorText)
+  const editorTypedPane = capturePaneUntil(sessionName, "editor body typing", typedEditorText, 30)
+  expectPaneContains(editorTypedPane, "Root Editor", "editor body typing")
+  expectPaneContains(editorTypedPane, typedEditorText, "editor body typing")
+
+  sendKeys(sessionName, "C-s")
+  const editorSavedPane = capturePaneUntil(sessionName, "editor ctrl-s save", "Saved", 30)
+  expectPaneContains(editorSavedPane, typedEditorText, "editor ctrl-s save")
 
   sendKeys(sessionName, "C-f")
   wait(500)
   const editorAfterFindShortcutPane = capturePane(sessionName, "editor ctrl-f shortcut")
   expectPaneContains(editorAfterFindShortcutPane, "Root Editor", "editor ctrl-f shortcut")
-  expectPaneContains(editorAfterFindShortcutPane, "Ctrl+F find", "editor ctrl-f shortcut")
+  expectPaneContains(editorAfterFindShortcutPane, "Find in note", "editor ctrl-f shortcut")
+
+  sendKeys(sessionName, "Escape")
+  wait(500)
+  const editorBodyReturnPane = capturePane(sessionName, "editor find return to body")
+  expectPaneContains(editorBodyReturnPane, typedEditorText, "editor find return to body")
+  expectPaneExcludes(editorBodyReturnPane, "Find in note", "editor find return to body")
 
   sendKeys(sessionName, "Escape")
   const managerReturnPane = capturePaneUntil(sessionName, "editor return to manager", "BlueNote Manager", 20)

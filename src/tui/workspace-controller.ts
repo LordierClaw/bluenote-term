@@ -467,6 +467,16 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         }
         applyManagerBrowserModel()
       }
+
+      if (state.screen === "editor") {
+        state = {
+          ...state,
+          screen: "manager",
+          mode: "manager.browse",
+          search: null,
+        }
+        applyManagerBrowserModel()
+      }
       return ok()
     },
 

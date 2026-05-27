@@ -10,6 +10,14 @@ import type { TuiState } from "../../../src/tui/state"
 import { createWorkspaceController, type WorkspaceController } from "../../../src/tui/workspace-controller"
 import type { ManagerBrowserModel } from "../../../src/tui/adapters/note-manager-adapter"
 
+function descendants(node: { getChildren: () => any[] }): any[] {
+  return node.getChildren().flatMap((child) => [child, ...descendants(child)])
+}
+
+function findById(node: { getChildren: () => any[] }, id: string): any | undefined {
+  return descendants(node).find((child) => child.id === id)
+}
+
 function createController(screen: TuiState["screen"]): { controller: WorkspaceController; calls: string[] } {
   const calls: string[] = []
   const state: TuiState = {
@@ -230,12 +238,90 @@ describe("TUI render keyboard routing", () => {
     assert.equal(state.editor?.body, "alpha beta alpha")
   })
 
-  test("workspace route opens Search Everything with Ctrl+P but leaves slash to editor textarea", () => {
+  test("workspace route opens Search Everything with Ctrl+P but leaves slash to editor body input", () => {
     const { controller, calls } = createController("editor")
 
     assert.deepEqual(routeWorkspaceKey("/", controller, () => {}), { handled: false })
     assert.deepEqual(routeWorkspaceKey("\u0010", controller, () => {}), { handled: true })
     assert.deepEqual(calls, ["openSearch:"])
+  })
+
+  test("workspace routing leaves printable editor body input for the runtime body handler", () => {
+    const { controller, calls } = createController("editor")
+    controller.getState().mode = "editor.body"
+    controller.getState().editor = {
+      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" },
+      body: "body",
+      savedBody: "body",
+      dirty: false,
+    }
+
+    assert.deepEqual(routeWorkspaceKey("x", controller, () => {}), { handled: false })
+    assert.deepEqual(routeWorkspaceKey(" ", controller, () => {}), { handled: false })
+    assert.deepEqual(routeWorkspaceKey("/", controller, () => {}), { handled: false })
+    assert.deepEqual(calls, [])
+  })
+
+  test("editor body renders as a controlled display surface updated by workspace input", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const controller = createWorkspaceController({
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" }),
+        searchNotes: () => [],
+      })
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+      const screen = renderEditorScreen({ renderer, controller })
+      renderer.root.add(screen)
+      focusActiveWorkspaceInput(screen)
+      const bodyDisplay = findById(screen, "bluenote-editor-body")
+
+      assert.equal(bodyDisplay?.focused, false)
+      assert.equal(bodyDisplay?.content?.chunks?.[0]?.text, "Write your note…")
+      assert.equal(controller.getState().editor?.body, "")
+      assert.equal(controller.getState().editor?.dirty, false)
+    } finally {
+      renderer.destroy()
+    }
+  })
+
+  test("editor Escape and Ctrl+[ use the global back rule while Ctrl+S still saves", async () => {
+    const { controller, calls } = createController("editor")
+    controller.getState().mode = "editor.body"
+
+    assert.deepEqual(routeWorkspaceKey("\u0013", controller, () => {}), { handled: true })
+    await Promise.resolve()
+    assert.deepEqual(routeWorkspaceKey("\u001b", controller, () => {}), { handled: true })
+    assert.deepEqual(routeWorkspaceKey("\u001b[", controller, () => {}), { handled: true })
+    assert.deepEqual(calls, ["saveEditor", "goBack", "goBack"])
+  })
+
+  test("repeated editor render invalidations do not focus the body display surface", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const controller = createWorkspaceController({
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }),
+        searchNotes: () => [],
+      })
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+
+      for (let index = 0; index < 3; index += 1) {
+        for (const child of renderer.root.getChildren()) {
+          blurWorkspaceInputs(child)
+          renderer.root.remove(child.id)
+          child.destroyRecursively()
+        }
+        const screen = renderEditorScreen({ renderer, controller })
+        renderer.root.add(screen)
+        focusActiveWorkspaceInput(screen)
+      }
+
+      const focusedBodyDisplays = descendants(renderer.root).filter((node) => node.id === "bluenote-editor-body" && node.focused)
+      assert.equal(focusedBodyDisplays.length, 0)
+    } finally {
+      renderer.destroy()
+    }
   })
 
   test("workspace route toggles out of Search Everything with Ctrl+P", () => {

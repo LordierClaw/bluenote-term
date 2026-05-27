@@ -26,7 +26,7 @@
 
 - **Storage contract stays unchanged:** notes are plain Markdown under `notes/`; BlueNote metadata stays in `.state/notes/`; no frontmatter or TUI-only metadata format.
 - **Theme:** neutral background + blue primary + blue/cyan secondary + red only for destructive/error confirmation. Saved/dirty/pending states should use text labels/icons and restrained emphasis, not rainbow success/warning colors.
-- **Editor input model:** exactly one focused editable body component in editor body mode. Printable characters, arrows, paste, and editing keys must reach the OpenTUI `TextareaRenderable`; global routing should only consume screen-level shortcuts.
+- **Editor input model:** the editor body uses a controller-owned, controlled display surface for this follow-up. Manual testing and tmux smoke reproduced that OpenTUI `TextareaRenderable` focus can accept/dirty keys without reliable live text entry in this runtime; therefore screen-level routing owns plain body text updates while global shortcuts remain explicit and find/search inputs stay focused OpenTUI inputs.
 - **Manager create:** `n` opens a minimal create-note prompt from the manager. Enter creates the note through the existing core create path, rebuilds indexes, refreshes manager state, and opens the new note in the editor.
 - **Manager delete:** `d` opens an explicit confirmation for the focused note. Confirmed delete uses the existing core delete path, rebuilds indexes, refreshes manager state, and never deletes folders in this follow-up.
 
@@ -94,10 +94,10 @@ git add src/tui/theme.ts src/tui/render-manager.ts src/tui/render-editor.ts src/
 **Step 1: Write the failing tests/checks**
 
 Add tests proving:
-- when `state.screen === "editor"` and `state.mode === "editor.body"`, printable keys are not swallowed by global routing before the focused `TextareaRenderable` receives them.
-- editor body changes update `controller.updateEditorBody(...)` with the actual textarea plain text, not only dirty status.
+- when `state.screen === "editor"` and `state.mode === "editor.body"`, route-only logic does not steal printable editor text from the body input path.
+- editor body changes update `controller.updateEditorBody(...)` with the actual body text, not only dirty status.
 - editor `Escape`/`Ctrl+[` returns via the global back rule, and `Ctrl+S` still saves.
-- repeated render invalidations leave exactly one editor body textarea focused.
+- repeated render invalidations do not focus or stack stale body capture components.
 - the interactive smoke script opens a note, sends normal text, captures that text in the pane, sends `Ctrl+S` or waits for autosave, and can return/quit cleanly.
 
 **Step 2: Run tests/smoke — confirm they fail**
@@ -112,10 +112,10 @@ Expected: FAIL or reproduce the reported behavior: editor dirty state changes bu
 **Step 3: Root-cause and implement minimal fix**
 
 - Inspect the exact OpenTUI key/input event path in `startTuiWorkspace`, `routeWorkspaceKey`, and `renderEditorScreen` before patching.
-- Ensure the editor `TextareaRenderable` is focusable and explicitly focused in body mode.
-- Do not consume printable keys in `routeWorkspaceKey`/`routeEditorKey` while the textarea owns input.
+- Keep the editor body as a controlled display surface and route plain printable text/newline/backspace through the workspace input handler.
+- Do not consume printable keys in `routeWorkspaceKey`/`routeEditorKey`; only the runtime workspace input handler should mutate body text in editor body mode.
 - Keep screen-level shortcuts (`Ctrl+S`, `Ctrl+F`, `Escape`, `Ctrl+[`, `Ctrl+C`) routed once and only once.
-- Remove/reuse stale textarea instances when the screen re-renders so an old focused component cannot trap input.
+- Remove/reuse stale body renderables when the screen re-renders so an old component cannot trap input or display stale text.
 
 **Step 4: Run tests/smoke — confirm they pass**
 

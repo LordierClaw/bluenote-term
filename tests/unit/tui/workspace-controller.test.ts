@@ -469,6 +469,10 @@ describe("TUI workspace controller", () => {
     controller.goBack()
     assert.equal(controller.getState().screen, "editor")
     assert.equal(controller.getState().mode, "editor.body")
+    controller.goBack()
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().editor?.note.key, "daily-plan")
 
     controller.showManager()
     controller.openManagerFilter()

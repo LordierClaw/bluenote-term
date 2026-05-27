@@ -166,11 +166,34 @@ function renderableDescendants(node: Renderable): Renderable[] {
   return [node, ...node.getChildren().flatMap((child) => renderableDescendants(child))]
 }
 
+function editorBodyForInputSequence(body: string, sequence: string): string | null {
+  if (sequence === "\r" || sequence === "\n") {
+    return `${body}\n`
+  }
+  if (sequence === "\u007f" || sequence === "\b") {
+    return body.slice(0, -1)
+  }
+  const firstCode = sequence.charCodeAt(0)
+  if (firstCode >= 32 && firstCode !== 127) {
+    return `${body}${sequence}`
+  }
+  return null
+}
+
 export function focusActiveWorkspaceInput(screen: Renderable): void {
   const activeInput = renderableDescendants(screen).find((node) =>
-    node.id === "bluenote-search-query" || node.id === "bluenote-editor-find-query" || node.id === "bluenote-editor-body" || node.id === "bluenote-manager-filter-query",
+    node.id === "bluenote-search-query" || node.id === "bluenote-editor-find-query" || node.id === "bluenote-manager-filter-query",
   )
-  activeInput?.focus()
+  if (!activeInput) {
+    return
+  }
+  // OpenTUI focus registration is tied to the live renderable tree. Renderers may
+  // focus inputs while composing a screen, before that screen is attached to the
+  // root, so re-register the active component after attach.
+  if (activeInput.focused) {
+    activeInput.blur()
+  }
+  activeInput.focus()
 }
 
 export function blurWorkspaceInputs(screen: Renderable): void {
@@ -239,7 +262,18 @@ export async function startTuiWorkspace(options: StartTuiWorkspaceOptions = {}):
       return false
     }
 
-    const routed = routeWorkspaceKey(sequence, controller, destroy, rerender)
+    let routed = routeWorkspaceKey(sequence, controller, destroy, rerender)
+    if (!routed.handled) {
+      const state = controller.getState()
+      if (state.screen === "editor" && state.mode === "editor.body" && state.editor) {
+        const nextBody = editorBodyForInputSequence(state.editor.body, sequence)
+        if (nextBody !== null) {
+          controller.updateEditorBody(nextBody)
+          routed = { handled: true }
+        }
+      }
+    }
+
     if (routed.handled && !routed.exit) {
       scheduleRerender()
     }
@@ -252,8 +286,8 @@ export async function startTuiWorkspace(options: StartTuiWorkspaceOptions = {}):
     renderer.addInputHandler(workspaceInputHandler)
   }
 
-  rerender()
   renderer.start()
+  rerender()
 
   return { renderer, controller, destroy }
 }
