@@ -30,6 +30,12 @@ function assertRefinedTuiBehavior(content: string): void {
   assert.match(content, /muted/i)
   assert.doesNotMatch(content, /warning\/success|success states|semantic colors|semantic colour/i)
   assert.match(content, /chrome/i)
+  assert.match(content, /typing|input regression|editor input/i)
+  assert.match(content, /\bn\b.*new|new.*\bn\b|create note/i)
+  assert.match(content, /\bd\b.*delete|delete.*\bd\b/i)
+  assert.match(content, /confirm|confirmation/i)
+  assert.match(content, /plain Markdown/i)
+  assert.match(content, /without required frontmatter|no .*frontmatter|do not gain frontmatter/i)
 }
 
 function assertMinimalManagerChrome(content: string): void {

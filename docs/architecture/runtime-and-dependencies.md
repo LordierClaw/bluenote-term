@@ -19,11 +19,11 @@
 
 The OpenTUI runtime hosts three separate workspace screens with a shared restrained blue theme for focus, active items, muted metadata, and status chrome:
 
-- **Manager** for two-column browser/preview note and folder navigation over existing note summaries and selectors. Right/open enters folders or opens notes; left/back returns to the previous folder or screen.
-- **Editor** for focused inline editing of plain Markdown note bodies with top/bottom status chrome, `Ctrl+F` find mode, and 750ms autosave guarded against stale completion.
+- **Manager** for two-column browser/preview note and folder navigation over existing note summaries and selectors. Right/open enters folders or opens notes; left/back returns to the previous folder or screen; `n` creates a new note; `d` deletes the focused note only after confirmation.
+- **Editor** for focused inline editing of plain Markdown note bodies with top/bottom status chrome, live typing/input regression coverage, `Ctrl+F` find mode, and 750ms autosave guarded against stale completion.
 - **Search Everything** for global note, content, folder/path, and slash-command entry search in a single-input, result-list, and preview layout; `/save` is wired by default, while other entries require command handlers before they perform mutations.
 
-The TUI consumes the same core services and storage layout as the CLI. `bn tui` is the workspace launch command; shell completion remains CLI shell setup through `bn completion <bash|zsh|fish>`, not a TUI action. `Escape` and `Ctrl+[` apply the global back rule by closing the active mode/overlay first, then navigating back through workspace history toward the root manager; exit stays explicit through `q` or `Ctrl+C`.
+The TUI consumes the same core services and storage layout as the CLI: note files remain plain Markdown with no required frontmatter, and BlueNote metadata stays in `.state/notes/` sidecars. `bn tui` is the workspace launch command; shell completion remains CLI shell setup through `bn completion <bash|zsh|fish>`, not a TUI action. `Escape` and `Ctrl+[` apply the global back rule by closing the active mode/overlay first, then navigating back through workspace history toward the root manager; exit stays explicit through `q` or `Ctrl+C`.
 
 ## Validation expectations
 
