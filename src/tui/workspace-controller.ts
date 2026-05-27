@@ -90,7 +90,8 @@ export interface WorkspaceController {
   toggleSearch: (query?: string) => void
   openEditorFind: (query?: string) => void
   updateEditorFindQuery: (query: string) => void
-  advanceEditorFind: () => void
+  advanceEditorFind: (direction?: "next" | "previous") => void
+  requestQuit: (options?: WorkspaceActionOptions) => WorkspaceActionResult
   dispose: () => void
   setAutosaveStateChangeHandler: (handler: (() => void) | null) => void
   selectSearchResult: (result?: SearchEverythingResult, options?: WorkspaceActionOptions) => WorkspaceActionResult
@@ -523,15 +524,18 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       })
     },
 
-    advanceEditorFind: () => {
+    advanceEditorFind: (direction = "next") => {
       if (!state.editor) {
         return
       }
       const findState = findInEditorBody(state.editor, state.editor.findQuery ?? "")
       const activeIndex = state.editor.activeFindIndex ?? findState.currentIndex
+      const currentIndex = direction === "previous" && findState.matches.length > 0
+        ? (activeIndex - 2 + findState.matches.length) % findState.matches.length
+        : activeIndex
       const advanced = advanceEditorFindState(state.editor, {
         ...findState,
-        currentIndex: activeIndex,
+        currentIndex,
         currentMatch: activeIndex >= 0 ? findState.matches[activeIndex] ?? null : null,
       })
       state = openEditorFindState(state, {
@@ -561,6 +565,14 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
           search: null,
         }
       }
+      return ok()
+    },
+
+    requestQuit: (options = {}) => {
+      if (editorRequiresDestructiveConfirmation(state.editor) && options.confirmed !== true) {
+        return dirtyBlocked()
+      }
+
       return ok()
     },
 
@@ -595,16 +607,22 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       clearAutosaveTimer()
       const noteToPersist = toTuiNote(state.editor.note)
       const submittedBody = state.editor.body
-      const persistedNote = persistEditorSnapshot(noteToPersist, submittedBody)
+      try {
+        const persistedNote = persistEditorSnapshot(noteToPersist, submittedBody)
 
-      if (isPromiseLike(persistedNote)) {
-        const savedNote = await persistedNote
-        state = applySavedEditor(state, savedNote, submittedBody)
+        if (isPromiseLike(persistedNote)) {
+          const savedNote = await persistedNote
+          state = applySavedEditor(state, savedNote, submittedBody)
+          return ok()
+        }
+
+        state = applySavedEditor(state, persistedNote, submittedBody)
         return ok()
+      } catch {
+        state = markAutosaveError(state)
+        notifyAutosaveStateChange()
+        return dirtyBlocked()
       }
-
-      state = applySavedEditor(state, persistedNote, submittedBody)
-      return ok()
     },
 
     openSearch: (query = "") => {

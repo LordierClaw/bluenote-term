@@ -227,7 +227,7 @@ try {
   expectPaneContains(managerPane, "projects", "manager launch")
   expectPaneContains(managerPane, "Root Editor", "manager launch")
 
-  sendKeys(sessionName, "s")
+  sendKeys(sessionName, "C-p")
   wait(500)
   const searchPromptPane = capturePane(sessionName, "search prompt")
   expectPaneContains(searchPromptPane, "Search Everything", "search prompt")
@@ -267,6 +267,12 @@ try {
   const editorPane = capturePaneUntil(sessionName, "editor open", "Ctrl+F find", 30)
   expectPaneContains(editorPane, "Root Editor", "editor open")
   expectPaneContains(editorPane, "Ctrl+F find", "editor open")
+
+  sendKeys(sessionName, "C-f")
+  wait(500)
+  const editorAfterFindShortcutPane = capturePane(sessionName, "editor ctrl-f shortcut")
+  expectPaneContains(editorAfterFindShortcutPane, "Root Editor", "editor ctrl-f shortcut")
+  expectPaneContains(editorAfterFindShortcutPane, "Ctrl+F find", "editor ctrl-f shortcut")
 
   sendKeys(sessionName, "Escape")
   const managerReturnPane = capturePaneUntil(sessionName, "editor return to manager", "BlueNote Manager", 20)

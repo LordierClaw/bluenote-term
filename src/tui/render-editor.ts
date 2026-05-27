@@ -4,25 +4,20 @@ import {
   InputRenderableEvents,
   TextareaRenderable,
   TextRenderable,
-  defaultTextareaKeyBindings,
   type CliRenderer,
+  type KeyBinding as TextareaKeyBinding,
 } from "@opentui/core"
 
 import type { TuiState } from "./state"
-import type { TuiColorIntent } from "./theme"
+import { tuiTheme, type TuiColorIntent } from "./theme"
 import type { WorkspaceController } from "./workspace-controller"
 
 type EditorAutosaveStatus = "idle" | "pending" | "saving" | "saved" | "error"
 type EditorBufferWithAutosave = NonNullable<TuiState["editor"]> & { autosaveStatus?: EditorAutosaveStatus }
 
-const editorBodyKeyBindings = defaultTextareaKeyBindings.filter(
-  (binding) => !(
-    binding.ctrl === true &&
-    binding.shift !== true &&
-    binding.meta !== true &&
-    (binding.name === "f" || binding.name === "s" || binding.name === "c")
-  ),
-)
+const editorBodyKeyBindings: TextareaKeyBinding[] = [
+  { name: "f", ctrl: true, action: "submit" },
+]
 
 export interface EditorTopbarViewModel {
   title: string
@@ -172,14 +167,23 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     width: "100%",
     height: "100%",
     border: true,
+    borderColor: tuiTheme.primaryAccent,
+    backgroundColor: tuiTheme.background,
     title: vm.topbar.title,
   })
 
   const topbar = new TextRenderable(options.renderer, {
     content: `${vm.topbar.title}  ${vm.topbar.path}  ${vm.topbar.key}  ${vm.topbar.status}`,
     height: 1,
+    fg: tuiTheme[vm.topbar.statusIntent],
+    bg: tuiTheme.panel,
   })
-  const bottombarStatus = new TextRenderable(options.renderer, { content: vm.bottombar.status, height: 1 })
+  const bottombarStatus = new TextRenderable(options.renderer, {
+    content: vm.bottombar.status,
+    height: 1,
+    fg: tuiTheme[vm.bottombar.statusIntent],
+    bg: tuiTheme.panel,
+  })
   let findInput: InputRenderable | null = null
   const textarea = new TextareaRenderable(options.renderer, {
     id: "bluenote-editor-body",
@@ -189,40 +193,51 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     width: "100%",
     wrapMode: "word",
     keyBindings: editorBodyKeyBindings,
+    onSubmit() {
+      options.controller.openEditorFind()
+      options.onInvalidate?.()
+    },
     onContentChange() {
       const rawBody = textarea.plainText
       const nextBody = rawBody.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
-      if (nextBody !== rawBody) {
-        textarea.initialValue = nextBody
-      }
-      options.controller.updateEditorBody(nextBody)
       if (rawBody.includes("\u0006")) {
+        if (nextBody !== rawBody) {
+          textarea.initialValue = nextBody
+        }
         options.controller.openEditorFind()
         options.onInvalidate?.()
         return
       }
       if (rawBody.includes("\u0013")) {
-        void options.controller.saveEditor().then(() => options.onInvalidate?.())
+        if (nextBody !== rawBody) {
+          textarea.initialValue = nextBody
+        }
+        void options.controller.saveEditor().then(() => options.onInvalidate?.()).catch(() => options.onInvalidate?.())
         return
       }
-      const nextVm = buildEditorViewModel(options.controller.getState())
-      topbar.content = `${nextVm.topbar.title}  ${nextVm.topbar.path}  ${nextVm.topbar.key}  ${nextVm.topbar.status}`
-      bottombarStatus.content = nextVm.bottombar.status
+      options.controller.updateEditorBody(nextBody)
+      if (nextBody !== rawBody) {
+        textarea.initialValue = nextBody
+        options.onInvalidate?.()
+      }
     },
   })
   const defaultTextareaHandleKeyPress = textarea.handleKeyPress.bind(textarea)
   textarea.handleKeyPress = (key: Parameters<TextareaRenderable["handleKeyPress"]>[0]): boolean => {
-    if ((key.ctrl === true && key.name === "f") || key.sequence === "\u0006") {
+    if ((key.ctrl === true && key.name === "f") || key.sequence === "\u0006" || key.sequence === "\u001b[27;5;102~") {
       options.controller.openEditorFind()
       options.onInvalidate?.()
       return true
     }
     if ((key.ctrl === true && key.name === "s") || key.sequence === "\u0013") {
-      void options.controller.saveEditor().then(() => options.onInvalidate?.())
+      void options.controller.saveEditor().then(() => options.onInvalidate?.()).catch(() => options.onInvalidate?.())
       return true
     }
     if ((key.ctrl === true && key.name === "c") || key.sequence === "\u0003") {
-      options.onExit?.()
+      const quit = options.controller.requestQuit()
+      if (!quit.blocked) {
+        options.onExit?.()
+      }
       return true
     }
     return defaultTextareaHandleKeyPress(key)
@@ -234,7 +249,11 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
       id: "bluenote-editor-find-bar",
       flexDirection: "row",
       width: "100%",
-      height: 1,
+      height: 3,
+      border: true,
+      borderColor: tuiTheme[vm.find.styleIntent],
+      backgroundColor: tuiTheme.panel,
+      title: "Find in note",
     })
     findInput = new InputRenderable(options.renderer, {
       id: "bluenote-editor-find-query",
@@ -242,7 +261,12 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
       placeholder: vm.find.placeholder,
       width: "70%",
     })
-    const matchCount = new TextRenderable(options.renderer, { content: ` ${vm.find.countLabel}  Enter next  Esc close`, height: 1 })
+    const matchCount = new TextRenderable(options.renderer, {
+      content: ` ${vm.find.countLabel}  Enter next  Shift+Enter previous  Esc close`,
+      height: 1,
+      fg: tuiTheme.mutedText,
+      bg: tuiTheme.panel,
+    })
     findInput.on(InputRenderableEvents.INPUT, () => {
       options.controller.updateEditorFindQuery(findInput?.value ?? "")
       options.onInvalidate?.()
@@ -261,7 +285,12 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   }
   root.add(textarea)
   root.add(bottombarStatus)
-  root.add(new TextRenderable(options.renderer, { content: vm.bottombar.hints.join("  "), height: 1 }))
+  root.add(new TextRenderable(options.renderer, {
+    content: vm.bottombar.hints.join("  "),
+    height: 1,
+    fg: tuiTheme.secondaryAccent,
+    bg: tuiTheme.panel,
+  }))
   if (findInput) {
     findInput.focus()
   } else {
@@ -278,6 +307,10 @@ export function routeEditorKey(sequence: string, controller: WorkspaceController
       controller.goBack()
       return true
     }
+    if (sequence === "\u001b[13;2u" || sequence === "\u001b\r") {
+      controller.advanceEditorFind("previous")
+      return true
+    }
     if (sequence === "\r" || sequence === "\n") {
       controller.advanceEditorFind()
       return true
@@ -286,9 +319,10 @@ export function routeEditorKey(sequence: string, controller: WorkspaceController
 
   switch (sequence) {
     case "\u0013":
-      void controller.saveEditor().then(() => onInvalidate?.())
+      void controller.saveEditor().then(() => onInvalidate?.()).catch(() => onInvalidate?.())
       return true
     case "\u0006":
+    case "\u001b[27;5;102~":
       controller.openEditorFind()
       return true
     case "\u001b":

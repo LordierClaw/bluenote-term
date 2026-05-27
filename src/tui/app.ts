@@ -114,8 +114,11 @@ export function routeWorkspaceKey(
   const state = controller.getState()
 
   if (sequence === "\u0003") {
-    onExit()
-    return { handled: true, exit: true }
+    const quit = controller.requestQuit()
+    if (!quit.blocked) {
+      onExit()
+    }
+    return { handled: true, exit: !quit.blocked || undefined }
   }
 
   if (sequence === "\u0010") {
@@ -135,7 +138,15 @@ export function routeWorkspaceKey(
     return { handled: routeEditorKey(sequence, controller, onExit, onInvalidate) }
   }
 
-  return { handled: routeManagerKey(sequence, controller, onExit), exit: sequence === "q" || undefined }
+  if (sequence === "q" && state.mode !== "manager.filter") {
+    const quit = controller.requestQuit()
+    if (!quit.blocked) {
+      onExit()
+    }
+    return { handled: true, exit: !quit.blocked || undefined }
+  }
+
+  return { handled: routeManagerKey(sequence, controller, onExit) }
 }
 
 function renderWorkspace(renderer: CliRenderer, controller: WorkspaceController, onExit: () => void, onInvalidate: () => void): BoxRenderable {
@@ -148,7 +159,7 @@ function renderWorkspace(renderer: CliRenderer, controller: WorkspaceController,
     return renderEditorScreen({ renderer, controller, onExit, onInvalidate })
   }
 
-  return renderManagerScreen({ renderer, controller, onExit })
+  return renderManagerScreen({ renderer, controller, onExit, onInvalidate })
 }
 
 function renderableDescendants(node: Renderable): Renderable[] {
@@ -157,14 +168,14 @@ function renderableDescendants(node: Renderable): Renderable[] {
 
 export function focusActiveWorkspaceInput(screen: Renderable): void {
   const activeInput = renderableDescendants(screen).find((node) =>
-    node.id === "bluenote-search-query" || node.id === "bluenote-editor-find-query",
+    node.id === "bluenote-search-query" || node.id === "bluenote-editor-find-query" || node.id === "bluenote-editor-body" || node.id === "bluenote-manager-filter-query",
   )
   activeInput?.focus()
 }
 
 export function blurWorkspaceInputs(screen: Renderable): void {
   for (const node of renderableDescendants(screen)) {
-    if (node.id === "bluenote-search-query" || node.id === "bluenote-editor-find-query") {
+    if (node.id === "bluenote-search-query" || node.id === "bluenote-editor-find-query" || node.id === "bluenote-editor-body" || node.id === "bluenote-manager-filter-query") {
       node.blur()
     }
   }
@@ -223,7 +234,7 @@ export async function startTuiWorkspace(options: StartTuiWorkspaceOptions = {}):
 
   controller.setAutosaveStateChangeHandler(rerender)
 
-  renderer.addInputHandler((sequence) => {
+  const workspaceInputHandler = (sequence: string): boolean => {
     if (destroyed || renderer.isDestroyed) {
       return false
     }
@@ -233,7 +244,13 @@ export async function startTuiWorkspace(options: StartTuiWorkspaceOptions = {}):
       scheduleRerender()
     }
     return routed.handled
-  })
+  }
+  const inputRegistration = renderer as unknown as { prependInputHandler?: (handler: (sequence: string) => boolean) => void }
+  if (inputRegistration.prependInputHandler) {
+    inputRegistration.prependInputHandler(workspaceInputHandler)
+  } else {
+    renderer.addInputHandler(workspaceInputHandler)
+  }
 
   rerender()
   renderer.start()

@@ -72,7 +72,11 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
     toggleSearch: (query) => calls.push(`toggleSearch:${query ?? ""}`),
     openEditorFind: (query) => calls.push(`openEditorFind:${query ?? ""}`),
     updateEditorFindQuery: (query) => calls.push(`updateEditorFindQuery:${query}`),
-    advanceEditorFind: () => calls.push("advanceEditorFind"),
+    advanceEditorFind: (direction = "next") => calls.push(`advanceEditorFind:${direction}`),
+    requestQuit: () => {
+      calls.push("requestQuit")
+      return { blocked: false }
+    },
     dispose: () => calls.push("dispose"),
     setAutosaveStateChangeHandler: () => calls.push("setAutosaveStateChangeHandler"),
     selectSearchResult: () => {
@@ -172,7 +176,7 @@ describe("TUI render keyboard routing", () => {
     assert.equal(routeEditorKey("\r", controller), true)
     assert.equal(routeEditorKey("\u001b", controller), true)
 
-    assert.deepEqual(calls, ["advanceEditorFind", "goBack"])
+    assert.deepEqual(calls, ["advanceEditorFind:next", "goBack"])
   })
 
   test("editor find mode treats Ctrl+[ as Escape", () => {
@@ -255,6 +259,14 @@ describe("TUI render keyboard routing", () => {
 
     assert.deepEqual(routeWorkspaceKey("q", controller, () => { exitCount += 1 }), { handled: true, exit: true })
     assert.equal(exitCount, 1)
+  })
+
+  test("workspace route leaves q available for manager filter input", () => {
+    const { controller, calls } = createController("manager")
+    controller.getState().mode = "manager.filter"
+
+    assert.deepEqual(routeWorkspaceKey("q", controller, () => {}), { handled: true })
+    assert.deepEqual(calls, ["updateManagerFilter:q"])
   })
 
   test("manager route maps browser navigation and filter keys", () => {

@@ -569,6 +569,11 @@ describe("TUI workspace controller", () => {
     assert.equal(blockedQuit.reason, "dirty-editor")
     assert.equal(calls.includes("command:/quit"), false)
 
+    const blockedDirectQuit = controller.requestQuit()
+    assert.equal(blockedDirectQuit.blocked, true)
+    assert.equal(blockedDirectQuit.reason, "dirty-editor")
+    assert.equal(controller.requestQuit({ confirmed: true }).blocked, false)
+
     const cleanEditor = {
       note: notesByKey["daily-plan"],
       body: "Original daily body",

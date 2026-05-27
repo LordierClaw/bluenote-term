@@ -1,4 +1,4 @@
-import { BoxRenderable, TextRenderable, type CliRenderer } from "@opentui/core"
+import { BoxRenderable, InputRenderable, InputRenderableEvents, TextRenderable, type CliRenderer } from "@opentui/core"
 
 import type { ManagerBrowserModel, ManagerBrowserRow, ManagerPreviewModel } from "./adapters/note-manager-adapter"
 import type { ManagerItem, TuiState } from "./state"
@@ -211,6 +211,7 @@ export interface RenderManagerScreenOptions {
   renderer: CliRenderer
   controller: WorkspaceController
   onExit?: () => void
+  onInvalidate?: () => void
 }
 
 function rowSegment(options: RenderManagerScreenOptions, content: string, fg: string, bg: string, width?: number): TextRenderable {
@@ -317,6 +318,42 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
   panels.add(layout1)
   panels.add(layout2)
   root.add(panels)
+  if (options.controller.getState().mode === "manager.filter") {
+    const filterBar = new BoxRenderable(options.renderer, {
+      id: "bluenote-manager-filter-bar",
+      flexDirection: "row",
+      width: "100%",
+      height: 3,
+      border: true,
+      borderColor: tuiTheme.secondaryAccent,
+      backgroundColor: tuiTheme.panel,
+      title: "Filter current folder",
+    })
+    const filterInput = new InputRenderable(options.renderer, {
+      id: "bluenote-manager-filter-query",
+      value: options.controller.getState().manager.filterQuery ?? "",
+      placeholder: "Type to filter…",
+      width: "70%",
+    })
+    const filterHint = new TextRenderable(options.renderer, {
+      content: "  Esc close  Enter apply",
+      height: 1,
+      fg: tuiTheme.mutedText,
+      bg: tuiTheme.panel,
+    })
+    filterInput.on(InputRenderableEvents.INPUT, () => {
+      options.controller.updateManagerFilter(filterInput.value)
+      options.onInvalidate?.()
+    })
+    filterInput.on(InputRenderableEvents.CHANGE, () => {
+      options.controller.updateManagerFilter(filterInput.value)
+      options.onInvalidate?.()
+    })
+    filterBar.add(filterInput)
+    filterBar.add(filterHint)
+    root.add(filterBar)
+    filterInput.focus()
+  }
   root.add(new TextRenderable(options.renderer, { content: vm.status, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
   root.add(new TextRenderable(options.renderer, { content: vm.shortcuts.join("  "), height: 1, fg: tuiTheme.secondaryAccent, bg: tuiTheme.panel }))
 
@@ -324,6 +361,22 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
 }
 
 export function routeManagerKey(sequence: string, controller: WorkspaceController, onExit?: () => void): boolean {
+  if (controller.getState().mode === "manager.filter") {
+    const currentQuery = controller.getState().manager.filterQuery ?? ""
+    if (sequence === "\u001b" || sequence === "\u001b[" || sequence === "\r" || sequence === "\n") {
+      controller.goBack()
+      return true
+    }
+    if (sequence === "\u007f" || sequence === "\b") {
+      controller.updateManagerFilter(currentQuery.slice(0, -1))
+      return true
+    }
+    if (sequence.length === 1 && sequence >= " " && sequence !== "\u007f") {
+      controller.updateManagerFilter(`${currentQuery}${sequence}`)
+      return true
+    }
+  }
+
   switch (sequence) {
     case "\u001b[A":
     case "k":
@@ -354,9 +407,13 @@ export function routeManagerKey(sequence: string, controller: WorkspaceControlle
     case "e":
       controller.showEditor()
       return true
-    case "q":
-      onExit?.()
+    case "q": {
+      const quit = controller.requestQuit()
+      if (!quit.blocked) {
+        onExit?.()
+      }
       return true
+    }
     default:
       return false
   }
