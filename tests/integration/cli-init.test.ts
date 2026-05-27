@@ -17,10 +17,11 @@ test("bn init exits 0 and reports the initialized root", async () => {
     assert.match(result.stdout, new RegExp(`Initialized BlueNote root: ${harness.escapeForRegExp(harness.rootPath)}`))
     await assertManagedRootLayout(harness.rootPath)
 
-    await access(path.join(harness.rootPath, ".state", "manifest.json"))
+    await access(path.join(harness.rootPath, ".data", "manifest.json"))
 
-    const manifestJson = await readFile(path.join(harness.rootPath, ".state", "manifest.json"), "utf8")
+    const manifestJson = await readFile(path.join(harness.rootPath, ".data", "manifest.json"), "utf8")
     assert.deepEqual(JSON.parse(manifestJson), { schemaVersion: STORAGE_SCHEMA_VERSION })
+    await assert.rejects(access(path.join(harness.rootPath, ".state")))
     await assert.rejects(access(path.join(harness.rootPath, ".bluenote")))
   } finally {
     await harness.cleanup()
@@ -60,11 +61,11 @@ test("bn init reports a user-facing error when BLUENOTE_ROOT points to a file", 
   }
 })
 
-test("bn init reports a user-facing error when writing .state\/manifest.json fails", async () => {
+test("bn init reports a user-facing error when writing .data/manifest.json fails", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-init-manifest-error-")
 
   try {
-    await mkdir(path.join(harness.rootPath, ".state", "manifest.json"), { recursive: true })
+    await mkdir(path.join(harness.rootPath, ".data", "manifest.json"), { recursive: true })
 
     const result = harness.run(["init"])
 

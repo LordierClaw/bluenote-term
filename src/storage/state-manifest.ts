@@ -48,7 +48,7 @@ export function readStateManifest(rootPath: string): StateManifest {
     return manifest
   } catch (error) {
     throw new RootNotInitializedError("BlueNote root is not initialized.", {
-      hint: "Run 'bn init' to create a valid .state/manifest.json.",
+      hint: "Run 'bn init' to create a valid .data/manifest.json.",
       cause: error,
     })
   }

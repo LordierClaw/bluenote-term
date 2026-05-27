@@ -23,9 +23,10 @@ try {
 
   await assertManagedRootLayout(managedRoot)
 
-  const manifestPath = path.join(managedRoot, ".state", "manifest.json")
+  const manifestPath = path.join(managedRoot, ".data", "manifest.json")
   const manifestStats = await stat(manifestPath)
-  assert.equal(manifestStats.isFile(), true, ".state/manifest.json should exist after smoke init")
+  assert.equal(manifestStats.isFile(), true, ".data/manifest.json should exist after smoke init")
+  await assert.rejects(() => access(path.join(managedRoot, ".state")), { code: "ENOENT" })
   await assert.rejects(() => access(path.join(managedRoot, ".bluenote")), { code: "ENOENT" })
 
   const newResult = runBinCli(["new", "--title", "Smoke Note"], { rootPath: managedRoot })
