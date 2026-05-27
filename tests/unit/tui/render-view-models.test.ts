@@ -337,15 +337,19 @@ describe("TUI render view models", () => {
       statusIntent: "mutedText",
     })
     assert.deepEqual(vm.body, {
+      inputId: "bluenote-editor-body-input",
       value: "# Daily Plan\n\nShip renderer screens.",
       lineCount: 3,
       characterCount: 36,
       placeholder: "Write your note…",
       focused: true,
+      cursor: { line: 3, column: 23 },
+      wrapMode: "word",
+      overflow: false,
     })
     assert.equal(vm.find, null)
     assert.deepEqual(vm.bottombar.hints, ["Ctrl+S save", "Ctrl+F find", "Ctrl+P search", "Esc manager", "Ctrl+C quit"])
-    assert.equal(vm.bottombar.status, "Line 1, Col 1 · saved")
+    assert.equal(vm.bottombar.status, "Line 3, Col 23 · saved")
     assert.equal(vm.bottombar.statusIntent, "mutedText")
 
     const dirtyVm = buildEditorViewModel({ ...baseState, screen: "editor", editor: { ...baseState.editor!, dirty: true, body: `${baseState.editor!.body}\nunsaved` } })
@@ -372,10 +376,10 @@ describe("TUI render view models", () => {
     assert.deepEqual(
       [statusFor("pending"), statusFor("saving"), statusFor("saved", false), statusFor("error")].map((bar) => ({ status: bar.status, intent: bar.statusIntent })),
       [
-        { status: "Line 1, Col 1 · Unsaved", intent: "primaryAccent" },
-        { status: "Line 1, Col 1 · Autosaving…", intent: "secondaryAccent" },
-        { status: "Line 1, Col 1 · Saved", intent: "mutedText" },
-        { status: "Line 1, Col 1 · Autosave failed", intent: "danger" },
+        { status: "Line 3, Col 23 · Unsaved", intent: "primaryAccent" },
+        { status: "Line 3, Col 23 · Autosaving…", intent: "secondaryAccent" },
+        { status: "Line 3, Col 23 · Saved", intent: "mutedText" },
+        { status: "Line 3, Col 23 · Autosave failed", intent: "danger" },
       ],
     )
   })

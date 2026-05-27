@@ -39,6 +39,8 @@ export interface EditorEditResult {
   selection: EditorSelection
 }
 
+export type EditorCursorDirection = "left" | "right" | "up" | "down" | "home" | "end"
+
 export interface ReplaceCurrentMatchResult {
   editor: EditorBufferState
   findState: EditorFindState
@@ -112,6 +114,112 @@ function cloneEditor(editor: EditorBufferState, body = editor.body): EditorBuffe
   }
 }
 
+function withCursor(editor: EditorBufferState, cursorOffset: number, preferredColumn: number | null = null): EditorBufferState {
+  const offset = normalizeOffset(cursorOffset, codePointLength(editor.body))
+  return {
+    ...editor,
+    cursorOffset: offset,
+    selectionStart: offset,
+    selectionEnd: offset,
+    preferredColumn,
+    wrapMode: editor.wrapMode ?? "word",
+  }
+}
+
+function currentSelection(editor: EditorBufferState): EditorSelection {
+  const bodyLength = codePointLength(editor.body)
+  const fallback = normalizeOffset(editor.cursorOffset ?? bodyLength, bodyLength)
+  return selectionFor(editor.body, editor.selectionStart ?? fallback, editor.selectionEnd ?? fallback)
+}
+
+export function editorCursorOffset(editor: EditorBufferState): number {
+  return currentSelection(editor).end
+}
+
+export function editorCursorPosition(editor: EditorBufferState, offset = editorCursorOffset(editor)): { line: number; column: number } {
+  const chars = codePoints(editor.body)
+  const normalized = normalizeOffset(offset, chars.length)
+  let line = 1
+  let column = 1
+  for (let index = 0; index < normalized; index += 1) {
+    if (chars[index] === "\n") {
+      line += 1
+      column = 1
+    } else {
+      column += 1
+    }
+  }
+  return { line, column }
+}
+
+function lineRanges(body: string): Array<{ start: number; end: number }> {
+  const chars = codePoints(body)
+  const ranges: Array<{ start: number; end: number }> = []
+  let start = 0
+  for (let index = 0; index < chars.length; index += 1) {
+    if (chars[index] === "\n") {
+      ranges.push({ start, end: index })
+      start = index + 1
+    }
+  }
+  ranges.push({ start, end: chars.length })
+  return ranges
+}
+
+function lineIndexForOffset(ranges: Array<{ start: number; end: number }>, offset: number): number {
+  for (let index = 0; index < ranges.length; index += 1) {
+    const range = ranges[index]!
+    const inclusiveEnd = range.end
+    if (offset >= range.start && offset <= inclusiveEnd) return index
+  }
+  return Math.max(0, ranges.length - 1)
+}
+
+export function insertTextAtEditorCursor(editor: EditorBufferState, text: string): EditorBufferState {
+  const result = pasteText(editor, currentSelection(editor), text)
+  return withCursor(result.editor, result.selection.end)
+}
+
+export function backspaceAtEditorCursor(editor: EditorBufferState): EditorBufferState {
+  const selection = currentSelection(editor)
+  if (!selection.collapsed) {
+    const result = cutSelection(editor, selection, { readText: () => "", writeText: () => {} })
+    return withCursor(result.editor, result.selection.end)
+  }
+  if (selection.start <= 0) return withCursor(editor, 0)
+  const body = replaceRangeByCodePoint(editor.body, selection.start - 1, selection.start, "")
+  return withCursor(replaceEditorBody(editor, body), selection.start - 1)
+}
+
+export function deleteAtEditorCursor(editor: EditorBufferState): EditorBufferState {
+  const selection = currentSelection(editor)
+  if (!selection.collapsed) {
+    const result = cutSelection(editor, selection, { readText: () => "", writeText: () => {} })
+    return withCursor(result.editor, result.selection.end)
+  }
+  const length = codePointLength(editor.body)
+  if (selection.start >= length) return withCursor(editor, length)
+  const body = replaceRangeByCodePoint(editor.body, selection.start, selection.start + 1, "")
+  return withCursor(replaceEditorBody(editor, body), selection.start)
+}
+
+export function moveEditorCursor(editor: EditorBufferState, direction: EditorCursorDirection): EditorBufferState {
+  const length = codePointLength(editor.body)
+  const cursor = normalizeOffset(editorCursorOffset(editor), length)
+  if (direction === "left") return withCursor(editor, cursor - 1)
+  if (direction === "right") return withCursor(editor, cursor + 1)
+  const ranges = lineRanges(editor.body)
+  const lineIndex = lineIndexForOffset(ranges, cursor)
+  const range = ranges[lineIndex]!
+  const currentColumn = Math.max(0, Math.min(cursor, range.end) - range.start)
+  const preferredColumn = editor.preferredColumn ?? currentColumn
+  if (direction === "home") return withCursor(editor, range.start, 0)
+  if (direction === "end") return withCursor(editor, range.end, range.end - range.start)
+  const targetIndex = direction === "up" ? Math.max(0, lineIndex - 1) : Math.min(ranges.length - 1, lineIndex + 1)
+  const target = ranges[targetIndex]!
+  return withCursor(editor, target.start + Math.min(preferredColumn, target.end - target.start), preferredColumn)
+}
+
 function emptyFindState(query: string): EditorFindState {
   return {
     query,
@@ -136,7 +244,8 @@ function currentMatchIsValid(editor: EditorBufferState, findState: EditorFindSta
 }
 
 export function replaceEditorBody(editor: EditorBufferState, body: string): EditorBufferState {
-  return cloneEditor(editor, body)
+  const next = cloneEditor(editor, body)
+  return withCursor(next, editor.cursorOffset ?? codePointLength(body))
 }
 
 export function selectAllEditorBody(editor: EditorBufferState): EditorSelection {
@@ -315,10 +424,16 @@ export async function saveEditorBuffer(
 ): Promise<EditorBufferState> {
   const persistedNote = await deps.persist(cloneNote(editor.note), editor.body)
 
+  const cursorOffset = normalizeOffset(editor.cursorOffset ?? codePointLength(persistedNote.body), codePointLength(persistedNote.body))
   return {
     note: cloneNote(persistedNote),
     body: persistedNote.body,
     savedBody: persistedNote.body,
     dirty: false,
+    cursorOffset,
+    selectionStart: cursorOffset,
+    selectionEnd: cursorOffset,
+    preferredColumn: null,
+    wrapMode: editor.wrapMode ?? "word",
   }
 }

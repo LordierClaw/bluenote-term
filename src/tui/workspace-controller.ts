@@ -1,5 +1,5 @@
-import type { SaveEditorBufferDependencies } from "./adapters/editor-buffer-adapter"
-import { advanceEditorFindState, findInEditorBody } from "./adapters/editor-buffer-adapter"
+import type { EditorCursorDirection, SaveEditorBufferDependencies } from "./adapters/editor-buffer-adapter"
+import { advanceEditorFindState, backspaceAtEditorCursor, deleteAtEditorCursor, findInEditorBody, insertTextAtEditorCursor, moveEditorCursor } from "./adapters/editor-buffer-adapter"
 import {
   buildManagerBrowserModel,
   goToManagerParent,
@@ -86,6 +86,10 @@ export interface WorkspaceController {
   showManager: () => WorkspaceActionResult
   showEditor: () => WorkspaceActionResult
   updateEditorBody: (body: string) => void
+  insertEditorText: (text: string) => void
+  backspaceEditor: () => void
+  deleteEditor: () => void
+  moveEditorCursor: (direction: EditorCursorDirection) => void
   saveEditor: () => Promise<WorkspaceActionResult>
   openSearch: (query?: string) => void
   updateSearchQuery: (query: string) => void
@@ -199,9 +203,12 @@ function applySavedEditor(state: TuiState, persistedNote: TuiNote, submittedBody
     return state
   }
 
+  const currentEditor = state.editor
+
   return {
     ...state,
     editor: {
+      ...currentEditor,
       note: toTuiNote(persistedNote),
       body: persistedNote.body,
       savedBody: persistedNote.body,
@@ -377,6 +384,30 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       },
     }
     applyManagerBrowserModel()
+  }
+
+  function applyEditorChange(nextEditor: EditorBufferState): void {
+    state = {
+      ...state,
+      editor: nextEditor,
+    }
+    const editor = state.editor
+    if (!editor) return
+    if (!editor.dirty) {
+      clearAutosaveTimer()
+      state = {
+        ...state,
+        editor: {
+          ...editor,
+          autosaveStatus: "saved",
+        },
+      }
+      notifyAutosaveStateChange()
+      return
+    }
+    state = markAutosavePending(state)
+    notifyAutosaveStateChange()
+    scheduleAutosave()
   }
 
   const controller: WorkspaceController = {
@@ -711,26 +742,41 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     },
 
     updateEditorBody: (body) => {
+      const previousEditor = state.editor
       state = markEditorBodyChanged(state, body)
       if (!state.editor) {
         clearAutosaveTimer()
         return
       }
-      if (!state.editor.dirty) {
-        clearAutosaveTimer()
-        state = {
-          ...state,
-          editor: {
-            ...state.editor,
-            autosaveStatus: "saved",
-          },
-        }
-        notifyAutosaveStateChange()
-        return
+      applyEditorChange({
+        ...state.editor,
+        cursorOffset: previousEditor?.cursorOffset ?? Array.from(body).length,
+        selectionStart: previousEditor?.cursorOffset ?? Array.from(body).length,
+        selectionEnd: previousEditor?.cursorOffset ?? Array.from(body).length,
+      })
+    },
+
+    insertEditorText: (text) => {
+      if (!state.editor || text.length === 0) return
+      applyEditorChange(insertTextAtEditorCursor(state.editor, text))
+    },
+
+    backspaceEditor: () => {
+      if (!state.editor) return
+      applyEditorChange(backspaceAtEditorCursor(state.editor))
+    },
+
+    deleteEditor: () => {
+      if (!state.editor) return
+      applyEditorChange(deleteAtEditorCursor(state.editor))
+    },
+
+    moveEditorCursor: (direction) => {
+      if (!state.editor) return
+      state = {
+        ...state,
+        editor: moveEditorCursor(state.editor, direction),
       }
-      state = markAutosavePending(state)
-      notifyAutosaveStateChange()
-      scheduleAutosave()
     },
 
     saveEditor: async () => {

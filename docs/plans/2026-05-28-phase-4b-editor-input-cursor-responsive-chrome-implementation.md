@@ -62,6 +62,8 @@ The first implementation slice must try the OpenTUI textarea path behind an expl
 - If it fails because OpenTUI does not deliver usable key/paste/cursor behavior in the real TTY path, commit the failing evidence in the task notes and switch the remaining tasks to the controlled custom editor fallback.
 - Do not keep both input models active in production. One body input owner only.
 
+**Task 1 outcome (2026-05-28):** `TextareaRenderable` was attempted first and passed unit-level focus/render checks, but failed the real tmux smoke path: after sending `editor-input-regression-token`, the editor pane still showed only the original note body. Phase 4B therefore switched to the approved controlled fallback path. Production editor body input is now owned by the workspace-level controlled router and body panel, not `TextareaRenderable`.
+
 ---
 
 ## Task 1: Add editor input viability probe and body-input identity tests

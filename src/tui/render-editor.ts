@@ -6,6 +6,8 @@ import {
   type CliRenderer,
 } from "@opentui/core"
 
+import { editorCursorOffset, editorCursorPosition } from "./adapters/editor-buffer-adapter"
+
 import type { TuiState } from "./state"
 import { tuiTheme, type TuiColorIntent } from "./theme"
 import type { WorkspaceController } from "./workspace-controller"
@@ -24,11 +26,15 @@ export interface EditorTopbarViewModel {
 }
 
 export interface EditorBodyViewModel {
+  inputId: string
   value: string
   lineCount: number
   characterCount: number
   placeholder: string
   focused: boolean
+  cursor: { line: number; column: number }
+  wrapMode: "word"
+  overflow: boolean
 }
 
 export interface EditorFindViewModel {
@@ -65,6 +71,14 @@ function countLines(value: string): number {
   }
 
   return value.split("\n").length
+}
+
+function renderControlledBodyValue(value: string, cursorOffset: number, focused: boolean): string {
+  const chars = Array.from(value)
+  if (!focused) return value.length > 0 ? value : "Write your note…"
+  chars.splice(Math.max(0, Math.min(cursorOffset, chars.length)), 0, "▌")
+  const rendered = chars.join("")
+  return rendered.length > 0 ? rendered : "▌"
 }
 
 function statusIntentForEditor(editor: EditorBufferWithAutosave | null): TuiColorIntent {
@@ -110,6 +124,8 @@ export function buildEditorViewModel(state: TuiState): EditorViewModel {
   const findMatchCount = editor?.findMatchCount ?? 0
   const activeFindIndex = editor?.activeFindIndex ?? null
 
+  const cursor = editor ? editorCursorPosition(editor, editorCursorOffset(editor)) : { line: 1, column: 1 }
+
   return {
     topbar: {
       title: note?.title ?? "No note open",
@@ -133,14 +149,18 @@ export function buildEditorViewModel(state: TuiState): EditorViewModel {
         }
       : null,
     body: {
+      inputId: "bluenote-editor-body-input",
       value: body,
       lineCount: countLines(body),
       characterCount: Array.from(body).length,
       placeholder: "Write your note…",
       focused: !findMode,
+      cursor,
+      wrapMode: "word",
+      overflow: false,
     },
     bottombar: {
-      status: `Line 1, Col 1 · ${bottomBarStatus}`,
+      status: `Line ${cursor.line}, Col ${cursor.column} · ${bottomBarStatus}`,
       statusIntent,
       hints: ["Ctrl+S save", "Ctrl+F find", "Ctrl+P search", "Esc manager", "Ctrl+C quit"],
     },
@@ -180,14 +200,25 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     bg: tuiTheme.panel,
   })
   let findInput: InputRenderable | null = null
-  const body = new TextRenderable(options.renderer, {
-    id: "bluenote-editor-body",
-    content: vm.body.value || vm.body.placeholder,
-    height: 20,
+  const bodyPanel = new BoxRenderable(options.renderer, {
+    id: vm.body.inputId,
     width: "100%",
-    fg: vm.body.value ? tuiTheme.primaryAccent : tuiTheme.mutedText,
+    height: 20,
+    border: true,
+    borderColor: vm.body.focused ? tuiTheme.primaryAccent : tuiTheme.mutedText,
+    backgroundColor: tuiTheme.panel,
+    title: `Editor body · Line ${vm.body.cursor.line}, Col ${vm.body.cursor.column}`,
+  })
+  const state = options.controller.getState()
+  const editor = state.editor
+  const bodyDisplay = new TextRenderable(options.renderer, {
+    id: "bluenote-editor-body",
+    content: renderControlledBodyValue(vm.body.value, editor ? editorCursorOffset(editor) : 0, vm.body.focused),
+    height: 18,
+    fg: vm.body.value.length > 0 ? tuiTheme.primaryAccent : tuiTheme.mutedText,
     bg: tuiTheme.panel,
   })
+  bodyPanel.add(bodyDisplay)
 
   root.add(topbar)
   if (vm.find) {
@@ -229,7 +260,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     findBar.add(matchCount)
     root.add(findBar)
   }
-  root.add(body)
+  root.add(bodyPanel)
   root.add(bottombarStatus)
   root.add(new TextRenderable(options.renderer, {
     content: vm.bottombar.hints.join("  "),

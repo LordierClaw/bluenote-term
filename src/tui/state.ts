@@ -57,6 +57,11 @@ export interface EditorBufferState {
   body: string
   savedBody: string
   dirty: boolean
+  cursorOffset?: number
+  selectionStart?: number
+  selectionEnd?: number
+  preferredColumn?: number | null
+  wrapMode?: "word"
   findQuery?: string
   findMatchCount?: number
   activeFindIndex?: number | null
@@ -198,6 +203,7 @@ export function closeSearchEverything(state: TuiState): TuiState {
 
 export function openEditorForNote(state: TuiState, note: TuiNote): TuiState {
   const editorNote = cloneNote(note)
+  const cursorOffset = Array.from(editorNote.body).length
 
   return {
     ...state,
@@ -213,6 +219,11 @@ export function openEditorForNote(state: TuiState, note: TuiNote): TuiState {
       body: editorNote.body,
       savedBody: editorNote.body,
       dirty: false,
+      cursorOffset,
+      selectionStart: cursorOffset,
+      selectionEnd: cursorOffset,
+      preferredColumn: null,
+      wrapMode: "word",
       findQuery: "",
       findMatchCount: 0,
       activeFindIndex: null,
@@ -467,6 +478,9 @@ export function markEditorBodyChanged(state: TuiState, body: string): TuiState {
       ...state.editor,
       body,
       dirty: body !== state.editor.savedBody,
+      cursorOffset: Math.min(state.editor.cursorOffset ?? Array.from(body).length, Array.from(body).length),
+      selectionStart: Math.min(state.editor.cursorOffset ?? Array.from(body).length, Array.from(body).length),
+      selectionEnd: Math.min(state.editor.cursorOffset ?? Array.from(body).length, Array.from(body).length),
     },
   }
 }

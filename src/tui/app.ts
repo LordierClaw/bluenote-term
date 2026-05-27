@@ -172,18 +172,55 @@ function renderableDescendants(node: Renderable): Renderable[] {
   return [node, ...node.getChildren().flatMap((child) => renderableDescendants(child))]
 }
 
-function editorBodyForInputSequence(body: string, sequence: string): string | null {
-  if (sequence === "\r" || sequence === "\n") {
-    return `${body}\n`
+function routeControlledEditorBodyInput(controller: WorkspaceController, sequence: string): boolean {
+  const state = controller.getState()
+  if (state.screen !== "editor" || state.mode !== "editor.body" || !state.editor) return false
+
+  switch (sequence) {
+    case "\r":
+    case "\n":
+      controller.insertEditorText("\n")
+      return true
+    case "\u007f":
+    case "\b":
+      controller.backspaceEditor()
+      return true
+    case "\u001b[3~":
+      controller.deleteEditor()
+      return true
+    case "\u001b[D":
+    case "\u001bOD":
+      controller.moveEditorCursor("left")
+      return true
+    case "\u001b[C":
+    case "\u001bOC":
+      controller.moveEditorCursor("right")
+      return true
+    case "\u001b[A":
+    case "\u001bOA":
+      controller.moveEditorCursor("up")
+      return true
+    case "\u001b[B":
+    case "\u001bOB":
+      controller.moveEditorCursor("down")
+      return true
+    case "\u001b[H":
+    case "\u001b[1~":
+      controller.moveEditorCursor("home")
+      return true
+    case "\u001b[F":
+    case "\u001b[4~":
+      controller.moveEditorCursor("end")
+      return true
+    default: {
+      const firstCode = sequence.charCodeAt(0)
+      if (sequence.length > 0 && firstCode >= 32 && firstCode !== 127) {
+        controller.insertEditorText(sequence)
+        return true
+      }
+      return false
+    }
   }
-  if (sequence === "\u007f" || sequence === "\b") {
-    return body.slice(0, -1)
-  }
-  const firstCode = sequence.charCodeAt(0)
-  if (firstCode >= 32 && firstCode !== 127) {
-    return `${body}${sequence}`
-  }
-  return null
 }
 
 export function focusActiveWorkspaceInput(screen: Renderable): void {
@@ -204,7 +241,7 @@ export function focusActiveWorkspaceInput(screen: Renderable): void {
 
 export function blurWorkspaceInputs(screen: Renderable): void {
   for (const node of renderableDescendants(screen)) {
-    if (node.id === "bluenote-search-query" || node.id === "bluenote-editor-find-query" || node.id === "bluenote-editor-body" || node.id === "bluenote-manager-filter-query" || node.id === "bluenote-manager-create-title") {
+    if (node.id === "bluenote-search-query" || node.id === "bluenote-editor-find-query" || node.id === "bluenote-editor-body-input" || node.id === "bluenote-editor-body" || node.id === "bluenote-manager-filter-query" || node.id === "bluenote-manager-create-title") {
       node.blur()
     }
   }
@@ -269,15 +306,8 @@ export async function startTuiWorkspace(options: StartTuiWorkspaceOptions = {}):
     }
 
     let routed = routeWorkspaceKey(sequence, controller, destroy, rerender)
-    if (!routed.handled) {
-      const state = controller.getState()
-      if (state.screen === "editor" && state.mode === "editor.body" && state.editor) {
-        const nextBody = editorBodyForInputSequence(state.editor.body, sequence)
-        if (nextBody !== null) {
-          controller.updateEditorBody(nextBody)
-          routed = { handled: true }
-        }
-      }
+    if (!routed.handled && routeControlledEditorBodyInput(controller, sequence)) {
+      routed = { handled: true }
     }
 
     if (routed.handled && !routed.exit) {

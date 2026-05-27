@@ -57,6 +57,10 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
       return { blocked: false }
     },
     updateEditorBody: (body) => calls.push(`updateEditorBody:${body}`),
+    insertEditorText: (text) => calls.push(`insertEditorText:${text}`),
+    backspaceEditor: () => calls.push("backspaceEditor"),
+    deleteEditor: () => calls.push("deleteEditor"),
+    moveEditorCursor: (direction) => calls.push(`moveEditorCursor:${direction}`),
     saveEditor: async () => {
       calls.push("saveEditor")
       return { blocked: false }
@@ -275,7 +279,7 @@ describe("TUI render keyboard routing", () => {
     assert.deepEqual(calls, [])
   })
 
-  test("editor body renders as a controlled display surface updated by workspace input", async () => {
+  test("editor body renders as a focused controlled input owner", async () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const controller = createWorkspaceController({
@@ -287,10 +291,11 @@ describe("TUI render keyboard routing", () => {
       const screen = renderEditorScreen({ renderer, controller })
       renderer.root.add(screen)
       focusActiveWorkspaceInput(screen)
+      const bodyInput = findById(screen, "bluenote-editor-body-input")
       const bodyDisplay = findById(screen, "bluenote-editor-body")
 
+      assert.equal(bodyInput?.id, "bluenote-editor-body-input")
       assert.equal(bodyDisplay?.focused, false)
-      assert.equal(bodyDisplay?.content?.chunks?.[0]?.text, "Write your note…")
       assert.equal(controller.getState().editor?.body, "")
       assert.equal(controller.getState().editor?.dirty, false)
     } finally {
@@ -309,7 +314,7 @@ describe("TUI render keyboard routing", () => {
     assert.deepEqual(calls, ["saveEditor", "goBack", "goBack"])
   })
 
-  test("repeated editor render invalidations do not focus the body display surface", async () => {
+  test("editor body has exactly one focusable input owner after repeated rerenders", async () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const controller = createWorkspaceController({
@@ -330,8 +335,23 @@ describe("TUI render keyboard routing", () => {
         focusActiveWorkspaceInput(screen)
       }
 
+      const bodyInputs = descendants(renderer.root).filter((node) => node.id === "bluenote-editor-body-input")
       const focusedBodyDisplays = descendants(renderer.root).filter((node) => node.id === "bluenote-editor-body" && node.focused)
+      assert.equal(bodyInputs.length, 1)
       assert.equal(focusedBodyDisplays.length, 0)
+    } finally {
+      renderer.destroy()
+    }
+  })
+
+  test("editor renderer tolerates editor screen without an open note", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const { controller } = createController("editor")
+      const screen = renderEditorScreen({ renderer, controller })
+      renderer.root.add(screen)
+      const bodyDisplay = findById(screen, "bluenote-editor-body")
+      assert.equal(typeof bodyDisplay?.content?.chunks?.[0]?.text, "string")
     } finally {
       renderer.destroy()
     }

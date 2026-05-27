@@ -173,6 +173,50 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(calls, ["list", "show:daily-plan"])
   })
 
+  test("controlled editor input mutates at cursor and preserves autosave behavior", () => {
+    const scheduler = createFakeScheduler()
+    const { deps } = createDeps({ autosaveScheduler: scheduler })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText("!")
+    assert.equal(controller.getState().editor?.body, "Original daily body!")
+    controller.moveEditorCursor("left")
+    controller.insertEditorText(" before bang")
+    assert.equal(controller.getState().editor?.body, "Original daily body before bang!")
+    controller.backspaceEditor()
+    assert.equal(controller.getState().editor?.body, "Original daily body before ban!")
+    controller.deleteEditor()
+    assert.equal(controller.getState().editor?.body, "Original daily body before ban")
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+    assert.deepEqual(scheduler.activeTasks().map((task) => task.delay), [750])
+  })
+
+  test("manual save preserves controlled cursor metadata", async () => {
+    const { deps } = createDeps({
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText("!")
+    controller.moveEditorCursor("left")
+    controller.insertEditorText(" before bang")
+    const beforeSave = controller.getState().editor
+    assert.equal(beforeSave?.cursorOffset, Array.from("Original daily body before bang").length)
+
+    await controller.saveEditor()
+
+    const afterSave = controller.getState().editor
+    assert.equal(afterSave?.dirty, false)
+    assert.equal(afterSave?.autosaveStatus, "saved")
+    assert.equal(afterSave?.cursorOffset, beforeSave?.cursorOffset)
+    assert.equal(afterSave?.selectionStart, beforeSave?.selectionStart)
+    assert.equal(afterSave?.selectionEnd, beforeSave?.selectionEnd)
+    assert.equal(afterSave?.preferredColumn, beforeSave?.preferredColumn)
+    assert.equal(afterSave?.wrapMode, beforeSave?.wrapMode)
+  })
+
   test("switches editor and manager with shortcut actions while preserving dirty editor state", () => {
     const { deps } = createDeps()
     const controller = createWorkspaceController(deps)

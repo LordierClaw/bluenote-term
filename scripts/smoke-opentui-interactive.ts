@@ -48,6 +48,13 @@ function countVisibleOccurrences(pane: string, text: string): number {
   return pane.split(text).length - 1
 }
 
+function expectSingleVisibleOccurrence(pane: string, text: string, context: string): void {
+  const count = countVisibleOccurrences(pane, text)
+  if (count !== 1) {
+    throw new Error(`${context}: expected exactly one visible occurrence of ${JSON.stringify(text)}, found ${count}. Captured:\n${pane}`)
+  }
+}
+
 function expectLatestScreen(pane: string, latest: string, previous: string, context: string): void {
   const latestIndex = pane.lastIndexOf(latest)
   const previousIndex = pane.lastIndexOf(previous)
@@ -125,7 +132,7 @@ function sendKeys(sessionName: string, ...keys: string[]): void {
 
 function sendText(sessionName: string, text: string): void {
   assertWithinSmokeDeadline(`send text ${text}`)
-  const result = run("tmux", ["send-keys", "-l", "-t", sessionName, text])
+  const result = run("tmux", ["send-keys", "-l", "-t", sessionName, "--", text])
   if (result.status !== 0) {
     throw new Error(`Failed to send literal text ${text}: ${result.stderr || result.stdout}`)
   }
@@ -340,9 +347,36 @@ try {
   expectPaneContains(editorTypedPane, "Root Editor", "editor body typing")
   expectPaneContains(editorTypedPane, typedEditorText, "editor body typing")
 
+  const cursorMarker = "-cursor-probe-"
+  const cursorEditedPrefix = `${typedEditorText.slice(0, -1)}${cursorMarker}`
+  sendKeys(sessionName, "Left")
+  wait(250, "editor cursor left")
+  sendText(sessionName, cursorMarker)
+  const editorCursorPane = capturePaneUntil(sessionName, "editor cursor insert before final character", `${cursorMarker}▌${typedEditorText.slice(-1)}`, 30)
+  expectPaneContains(editorCursorPane, `${cursorEditedPrefix.slice(0, -6)}`, "editor cursor insert before final character")
+  expectPaneContains(editorCursorPane, "probe-", "editor cursor insert before final character")
+  expectPaneContains(editorCursorPane, `▌${typedEditorText.slice(-1)}`, "editor cursor insert before final character")
+
+  const multilineText = "newline-body-probe"
+  sendKeys(sessionName, "Enter")
+  wait(250, "editor newline")
+  sendText(sessionName, multilineText)
+  const editorNewlinePane = capturePaneUntil(sessionName, "editor newline insertion", multilineText, 30)
+  expectPaneContains(editorNewlinePane, "editor-input-regression-toke-cursor-", "editor newline insertion")
+  expectPaneContains(editorNewlinePane, "probe-", "editor newline insertion")
+  expectPaneContains(editorNewlinePane, `${multilineText}▌${typedEditorText.slice(-1)}`, "editor newline insertion")
+
+  const pasteFallbackText = "paste-fallback-probe"
+  sendText(sessionName, pasteFallbackText)
+  const editorPastePane = capturePaneUntil(sessionName, "editor paste or literal multi-character input", pasteFallbackText, 30)
+  expectPaneContains(editorPastePane, `${multilineText}${pasteFallbackText}`, "editor paste or literal multi-character input")
+  expectSingleVisibleOccurrence(editorPastePane, "Ctrl+F find", "editor rerender should show one latest editor screen")
+
   sendKeys(sessionName, "C-s")
   const editorSavedPane = capturePaneUntil(sessionName, "editor ctrl-s save", "Saved", 30)
-  expectPaneContains(editorSavedPane, typedEditorText, "editor ctrl-s save")
+  expectPaneContains(editorSavedPane, "editor-input-regression-toke-cursor-", "editor ctrl-s save")
+  expectPaneContains(editorSavedPane, "probe-", "editor ctrl-s save")
+  expectPaneContains(editorSavedPane, `${multilineText}${pasteFallbackText}▌${typedEditorText.slice(-1)}`, "editor ctrl-s save")
 
   sendKeys(sessionName, "C-f")
   wait(500)
@@ -353,12 +387,15 @@ try {
   sendKeys(sessionName, "Escape")
   wait(500)
   const editorBodyReturnPane = capturePane(sessionName, "editor find return to body")
-  expectPaneContains(editorBodyReturnPane, typedEditorText, "editor find return to body")
+  expectPaneContains(editorBodyReturnPane, "editor-input-regression-toke-cursor-", "editor find return to body")
+  expectPaneContains(editorBodyReturnPane, "probe-", "editor find return to body")
+  expectPaneContains(editorBodyReturnPane, `${multilineText}${pasteFallbackText}▌${typedEditorText.slice(-1)}`, "editor find return to body")
   expectPaneExcludes(editorBodyReturnPane, "Find in note", "editor find return to body")
 
   sendKeys(sessionName, "Escape")
   const managerReturnPane = capturePaneUntil(sessionName, "editor return to manager", "Layout 1: current folder", 20)
   expectPaneContains(managerReturnPane, "Root Editor", "editor return to manager")
+  expectLatestScreen(managerReturnPane, "Layout 1: current folder", "Ctrl+F find", "editor return to manager latest screen")
 
   const liveManagerTitle = `Live Smoke Manager Note ${process.pid}`
   sendKeys(sessionName, "n")

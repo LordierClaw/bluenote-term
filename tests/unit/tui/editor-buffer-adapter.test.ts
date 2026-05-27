@@ -12,6 +12,11 @@ import {
   replaceEditorBody,
   saveEditorBuffer,
   selectAllEditorBody,
+  insertTextAtEditorCursor,
+  backspaceAtEditorCursor,
+  deleteAtEditorCursor,
+  moveEditorCursor,
+  editorCursorPosition,
   type ClipboardModel,
   type EditorSelection,
 } from "../../../src/tui/adapters/editor-buffer-adapter"
@@ -29,6 +34,11 @@ function createEditor(body = "Hello world"): EditorBufferState {
     body,
     savedBody: body,
     dirty: false,
+    cursorOffset: Array.from(body).length,
+    selectionStart: Array.from(body).length,
+    selectionEnd: Array.from(body).length,
+    preferredColumn: null,
+    wrapMode: "word",
   }
 }
 
@@ -53,6 +63,47 @@ function selection(start: number, end: number): EditorSelection {
 }
 
 describe("TUI editor buffer adapter", () => {
+  test("controlled cursor editing inserts, deletes, and moves by Unicode code points", () => {
+    let editor = createEditor("A🌊C\n日本語")
+    editor = moveEditorCursor(editor, "left")
+    editor = moveEditorCursor(editor, "left")
+    editor = insertTextAtEditorCursor(editor, "B")
+    assert.equal(editor.body, "A🌊C\n日B本語")
+    assert.equal(editor.cursorOffset, 6)
+
+    editor = backspaceAtEditorCursor(editor)
+    assert.equal(editor.body, "A🌊C\n日本語")
+    assert.equal(editor.cursorOffset, 5)
+
+    editor = moveEditorCursor(editor, "home")
+    assert.deepEqual(editorCursorPosition(editor), { line: 2, column: 1 })
+    editor = moveEditorCursor(editor, "up")
+    assert.deepEqual(editorCursorPosition(editor), { line: 1, column: 1 })
+    editor = moveEditorCursor(editor, "right")
+    editor = deleteAtEditorCursor(editor)
+    assert.equal(editor.body, "AC\n日本語")
+  })
+
+  test("line navigation treats the offset after a newline as the start of the next line", () => {
+    let editor = createEditor("ab\ncd")
+    editor = { ...editor, cursorOffset: 3, selectionStart: 3, selectionEnd: 3 }
+
+    assert.deepEqual(editorCursorPosition(editor), { line: 2, column: 1 })
+    assert.equal(moveEditorCursor(editor, "home").cursorOffset, 3)
+    assert.equal(moveEditorCursor(editor, "end").cursorOffset, 5)
+    assert.equal(moveEditorCursor(editor, "up").cursorOffset, 0)
+    assert.equal(moveEditorCursor(editor, "down").cursorOffset, 3)
+  })
+
+  test("multi-character literal input and newline insert at current cursor", () => {
+    let editor = createEditor("abc")
+    editor = moveEditorCursor(editor, "left")
+    editor = insertTextAtEditorCursor(editor, "XY")
+    editor = insertTextAtEditorCursor(editor, "\nZ")
+    assert.equal(editor.body, "abXY\nZc")
+    assert.deepEqual(editorCursorPosition(editor), { line: 2, column: 2 })
+  })
+
   test("preserves Unicode text when replacing editor body content", () => {
     const unicodeBody = "Hello 🌊\n今日は世界\nemoji: 🧠✨\n中文段落"
     const original = createEditor("plain")
