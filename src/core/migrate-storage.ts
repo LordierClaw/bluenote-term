@@ -2,6 +2,7 @@ import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions } from "../config/
 import { systemClock, type Clock } from "../platform/clock"
 import { migrateLegacyAppStateToData } from "../storage/app-state-migration"
 import { migrateLegacyStorage, type MigrateLegacyStorageResult } from "../storage/migration"
+import { ensureManagedRoot } from "../storage/root-layout"
 
 export interface MigrateStorageOptions extends ResolveBlueNoteRootOptions {
   clock?: Clock
@@ -9,7 +10,7 @@ export interface MigrateStorageOptions extends ResolveBlueNoteRootOptions {
 }
 
 export function migrateStorage(options: MigrateStorageOptions = {}): MigrateLegacyStorageResult {
-  const rootPath = resolveBlueNoteRoot(options)
+  const rootPath = ensureManagedRoot(resolveBlueNoteRoot(options))
   const clock = options.clock ?? systemClock
 
   migrateLegacyAppStateToData(rootPath)

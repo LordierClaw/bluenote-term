@@ -5,7 +5,7 @@ import { access, readFile } from "node:fs/promises"
 
 import { createNoteDescription } from "../../src/domain/note-description"
 import { loadIndexStore } from "../../src/index/index-store"
-import { createManagedRootHarness } from "../helpers/cli"
+import { createBlockedRootFixture, createManagedRootHarness, runCli } from "../helpers/cli"
 import { legacyNoteMarkdown } from "../helpers/note-fixtures"
 
 test("bn migrate converts legacy frontmatter notes into plain notes, sidecars, and rebuilt indexes", async () => {
@@ -194,6 +194,22 @@ test("bn migrate fails hard on mixed-format roots", async () => {
   }
 })
 
+test("bn migrate reports a clean user-facing error when BLUENOTE_ROOT points to a file", async () => {
+  const fixture = await createBlockedRootFixture("bluenote-cli-migrate-blocked-root-")
+
+  try {
+    const result = runCli(["migrate"], { rootPath: fixture.blockedRoot })
+
+    assert.equal(result.exitCode, 1)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Could not initialize BlueNote root at/)
+    assert.match(result.stderr, /Ensure BLUENOTE_ROOT points to a writable directory path\./)
+    assert.doesNotMatch(result.stderr, /ENOTDIR|statx|at migrateLegacyAppStateToData|src\/storage\/app-state-migration/i)
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
 test("bn migrate reports conflict when .state and .data contain different sidecars", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-migrate-state-conflict-")
 
@@ -221,7 +237,7 @@ test("bn migrate reports conflict when .state and .data contain different sideca
       BLUENOTE_TEST_NOW: "2026-05-24T12:00:00.000Z",
     })
 
-    assert.ok(result.exitCode === 1 || result.exitCode === 2)
+    assert.equal(result.exitCode, 1)
     assert.equal(result.stdout, "")
     assert.match(result.stderr, /Cannot migrate legacy \.state because \.data already contains conflicting app state\./)
     assert.match(result.stderr, /Review \.state and \.data, keep the desired BlueNote metadata under \.data, then retry\./)
