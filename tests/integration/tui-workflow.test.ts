@@ -16,6 +16,25 @@ function fixedClock(iso: string) {
   return { now: () => new Date(iso) }
 }
 
+type DefaultWorkspaceController = ReturnType<typeof createDefaultWorkspaceController>
+
+function openManagerNoteByKey(controller: DefaultWorkspaceController, key: string): void {
+  const rootFolderIndex = controller
+    .getState()
+    .manager.items.findIndex((item) => item.type === "folder" && item.relativePath === "notes/inbox")
+
+  assert.notEqual(rootFolderIndex, -1)
+  controller.focusManagerItem(rootFolderIndex)
+  assert.equal(controller.openFocusedManagerItem().blocked, false)
+  assert.equal(controller.getState().screen, "manager")
+  assert.equal(controller.getState().manager.currentFolderPath, "notes/inbox")
+
+  const noteIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === key)
+  assert.notEqual(noteIndex, -1)
+  controller.focusManagerItem(noteIndex)
+  assert.equal(controller.openFocusedManagerItem().blocked, false)
+}
+
 describe("TUI workspace workflows", () => {
   let rootPath: string
 
@@ -60,11 +79,7 @@ describe("TUI workspace workflows", () => {
 
     const controller = createDefaultWorkspaceController({ rootPath })
 
-    const firstIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === first.key)
-    assert.notEqual(firstIndex, -1)
-
-    controller.focusManagerItem(firstIndex)
-    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    openManagerNoteByKey(controller, first.key)
     assert.equal(controller.getState().screen, "editor")
     assert.equal(controller.getState().editor?.body, "Initial body with café")
 
@@ -96,9 +111,8 @@ describe("TUI workspace workflows", () => {
 
     const controller = createDefaultWorkspaceController({ rootPath })
 
-    const firstIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === first.key)
-    controller.focusManagerItem(firstIndex)
-    controller.openFocusedManagerItem()
+    openManagerNoteByKey(controller, first.key)
+    assert.equal(controller.getState().screen, "editor")
 
     controller.openSearch("quokka")
 
