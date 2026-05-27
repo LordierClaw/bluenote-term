@@ -79,7 +79,7 @@ function listSidecarKeys(rootPath: string, testHooks?: RebuildIndexesOptions["te
       .sort((left, right) => left.localeCompare(right))
   } catch (error) {
     throw new UsageError(`Could not scan sidecar directory '${STATE_NOTES_DIRECTORY}'.`, {
-      hint: "Ensure BLUENOTE_ROOT/.state/notes exists as a readable directory.",
+      hint: `Ensure BLUENOTE_ROOT/${STATE_NOTES_DIRECTORY} exists as a readable directory.`,
       cause: error,
     })
   }
