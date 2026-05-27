@@ -8,6 +8,7 @@ import initSqlJs from "sql.js"
 import { STATE_DIRECTORY } from "../config/root"
 import { IndexUnavailableError } from "../core/errors"
 import { assertPathInsideRoot } from "../platform/path-safety"
+import { collectContainsFieldMatches, type ContainsFieldMatch } from "../search/contains-match"
 import type { ParsedNote } from "../storage/note-schema"
 import { createSearchDocuments, type IndexedSearchNote } from "./search-documents"
 
@@ -59,6 +60,7 @@ export interface SearchIndexMatch {
   relativePath: string
   score?: number
   termMatches?: Record<string, string[]>
+  containsMatches?: ContainsFieldMatch[]
 }
 
 export interface LoadedIndexStore {
@@ -84,6 +86,25 @@ function createSearchEngine() {
     fields: [...SEARCH_FIELDS],
     storeFields: [...SEARCH_STORE_FIELDS],
   })
+}
+
+function getFilename(relativePath: string): string {
+  return path.basename(relativePath)
+}
+
+function collectSearchIndexContainsMatches(query: string, match: SearchIndexMatch): ContainsFieldMatch[] {
+  return collectContainsFieldMatches(query, [
+    { field: "key", value: match.key },
+    { field: "title", value: match.title },
+    { field: "description", value: match.description },
+    { field: "body", value: match.body },
+    { field: "path", value: match.relativePath },
+    { field: "filename", value: getFilename(match.relativePath) },
+  ])
+}
+
+function getContainsScore(matches: readonly ContainsFieldMatch[]): number {
+  return matches.reduce((highestScore, match) => Math.max(highestScore, match.score), 0)
 }
 
 function deriveLegacyDescription(note: ParsedNote): string {
@@ -244,26 +265,41 @@ export function loadIndexStore(rootPath: string): LoadedIndexStore {
 
           return searchEngine.search(query)
             .filter((match) => activeKeys.has(String(match.key)))
-            .map((match) => ({
-              key: String(match.key),
-              id: String(match.id),
-              title: String(match.title),
-              description: String(match.description),
-              body: typeof match.body === "string" ? match.body : "",
-              relativePath: String(match.relativePath),
-              score: typeof match.score === "number" ? match.score : undefined,
-              termMatches:
-                match.match !== undefined && typeof match.match === "object" && match.match !== null
-                  ? Object.fromEntries(
-                      Object.entries(match.match)
-                        .filter(([term, fields]) => typeof term === "string" && Array.isArray(fields))
-                        .map(([term, fields]) => [
-                          term,
-                          fields.filter((field): field is string => typeof field === "string"),
-                        ]),
-                    )
-                  : undefined,
-            }))
+            .flatMap((match): SearchIndexMatch[] => {
+              const mappedMatch: SearchIndexMatch = {
+                key: String(match.key),
+                id: String(match.id),
+                title: String(match.title),
+                description: String(match.description),
+                body: typeof match.body === "string" ? match.body : "",
+                relativePath: String(match.relativePath),
+                score: typeof match.score === "number" ? match.score : undefined,
+                termMatches:
+                  match.match !== undefined && typeof match.match === "object" && match.match !== null
+                    ? Object.fromEntries(
+                        Object.entries(match.match)
+                          .filter(([term, fields]) => typeof term === "string" && Array.isArray(fields))
+                          .map(([term, fields]) => [
+                            term,
+                            fields.filter((field): field is string => typeof field === "string"),
+                          ]),
+                      )
+                    : undefined,
+              }
+              const containsMatches = collectSearchIndexContainsMatches(query, mappedMatch)
+
+              if (containsMatches.length === 0) {
+                return []
+              }
+
+              return [
+                {
+                  ...mappedMatch,
+                  containsMatches,
+                  score: getContainsScore(containsMatches),
+                },
+              ]
+            })
         },
       }
     } finally {

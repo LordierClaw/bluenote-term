@@ -79,6 +79,82 @@ test("searchNotes returns one grouped match per note with ranked source labels",
   }
 })
 
+test("searchNotes does not include fuzzy subsequence-only matches", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-search-notes-no-fuzzy-"))
+
+  try {
+    rebuildIndexStore({
+      rootPath,
+      notes: [
+        {
+          key: "a-big-cat",
+          title: "A Big Cat",
+          description: "Feline reference",
+          body: "This line mentions a-big-cat but not the compact query.\n",
+          relativePath: path.join("notes", "inbox", "a-big-cat.md"),
+          createdAt: "2026-05-21T10:19:00.000Z",
+          updatedAt: "2026-05-21T10:19:00.000Z",
+          archivedAt: null,
+        },
+      ],
+    })
+
+    assert.deepEqual(searchNotes("abc", { override: rootPath }), [])
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("searchNotes includes title, path, and body matches that contain numeric query", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-search-notes-numeric-"))
+
+  try {
+    rebuildIndexStore({
+      rootPath,
+      notes: [
+        {
+          key: "receipt-title",
+          title: "Receipt 123",
+          description: "Purchase record",
+          body: "No numeric content here.\n",
+          relativePath: path.join("notes", "inbox", "receipt-title.md"),
+          createdAt: "2026-05-21T10:19:00.000Z",
+          updatedAt: "2026-05-21T10:19:00.000Z",
+          archivedAt: null,
+        },
+        {
+          key: "meeting-path",
+          title: "Meeting Notes",
+          description: "Planning notes",
+          body: "No numeric content here.\n",
+          relativePath: path.join("notes", "meetings", "meeting-123.md"),
+          createdAt: "2026-05-21T10:20:00.000Z",
+          updatedAt: "2026-05-21T10:20:00.000Z",
+          archivedAt: null,
+        },
+        {
+          key: "body-match",
+          title: "Body Only",
+          description: "Reference note",
+          body: "First line stays quiet.\nTracking code 123 appears here.\n",
+          relativePath: path.join("notes", "inbox", "body-match.md"),
+          createdAt: "2026-05-21T10:21:00.000Z",
+          updatedAt: "2026-05-21T10:21:00.000Z",
+          archivedAt: null,
+        },
+      ],
+    })
+
+    const results = searchNotes("123", { override: rootPath })
+
+    assert.deepEqual(results.map((result) => result.key), ["receipt-title", "body-match", "meeting-path"])
+    assert.deepEqual(results.map((result) => result.match.label), ["title", "content line 2", "key/path"])
+    assert.equal(results[1]?.match.excerpt, "...Tracking code 123 appears here....")
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
 test("listNotes prefers derived index summaries when available", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-list-notes-index-"))
 

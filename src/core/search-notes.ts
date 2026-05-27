@@ -1,5 +1,6 @@
 import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions } from "../config/root"
 import { loadIndexStore, type SearchIndexMatch } from "../index/index-store"
+import { containsSearchQuery, type ContainsMatchField } from "../search/contains-match"
 
 export type SearchMatchSource = "title" | "description" | "content" | "key-path"
 
@@ -20,16 +21,23 @@ function normalizeForMatch(value: string): string {
   return value.toLocaleLowerCase()
 }
 
-function includesAnyToken(value: string, tokens: string[]): boolean {
+function includesAnyToken(value: string, tokens: readonly string[]): boolean {
   const normalized = normalizeForMatch(value)
   return tokens.some((token) => normalized.includes(token))
 }
 
-function createContentExplanation(body: string, tokens: string[]): SearchNoteExplanation {
+function createContentExplanation(
+  body: string,
+  query: string,
+  fallbackTokens: readonly string[] = [],
+): SearchNoteExplanation {
   const lines = body.split(/\r?\n/)
 
   for (const [index, line] of lines.entries()) {
-    if (!includesAnyToken(line, tokens)) {
+    const lineMatchesQuery = containsSearchQuery(line, query)
+    const lineMatchesFallback = fallbackTokens.length > 0 && includesAnyToken(line, fallbackTokens)
+
+    if (!lineMatchesQuery && !lineMatchesFallback) {
       continue
     }
 
@@ -66,7 +74,47 @@ function getBodyMatchTokens(match: SearchIndexMatch): string[] {
     .map(([term]) => term)
 }
 
-function explainMatch(match: SearchIndexMatch): SearchNoteExplanation {
+function getContainsFields(match: SearchIndexMatch): Set<ContainsMatchField> {
+  return new Set((match.containsMatches ?? []).map((containsMatch) => containsMatch.field))
+}
+
+function explainContainsMatch(match: SearchIndexMatch, query: string): SearchNoteExplanation | null {
+  const containsFields = getContainsFields(match)
+
+  if (containsFields.size === 0) {
+    return null
+  }
+
+  if (containsFields.has("title")) {
+    return {
+      source: "title",
+      label: "title",
+    }
+  }
+
+  if (containsFields.has("description")) {
+    return {
+      source: "description",
+      label: "description",
+    }
+  }
+
+  if (containsFields.has("body")) {
+    return createContentExplanation(match.body, query)
+  }
+
+  return {
+    source: "key-path",
+    label: "key/path",
+  }
+}
+
+function explainMatch(match: SearchIndexMatch, query: string): SearchNoteExplanation {
+  const containsExplanation = explainContainsMatch(match, query)
+  if (containsExplanation !== null) {
+    return containsExplanation
+  }
+
   const matchedFields = getMatchedFields(match)
 
   if (matchedFields.has("title")) {
@@ -85,7 +133,7 @@ function explainMatch(match: SearchIndexMatch): SearchNoteExplanation {
 
   if (matchedFields.has("body")) {
     const tokens = getBodyMatchTokens(match)
-    return createContentExplanation(match.body, tokens)
+    return createContentExplanation(match.body, query, tokens)
   }
 
   return {
@@ -116,7 +164,7 @@ export function searchNotes(query: string, options: ResolveBlueNoteRootOptions =
       key: match.key,
       title: match.title,
       relativePath: match.relativePath,
-      match: explainMatch(match),
+      match: explainMatch(match, query),
       score: match.score ?? 0,
     }))
     .sort((left, right) => {

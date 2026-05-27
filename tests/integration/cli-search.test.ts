@@ -89,6 +89,48 @@ test("bn search returns a calm no-result message when nothing matches", async ()
   }
 })
 
+test("bn search 123 only prints notes with fields containing 123", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-search-contains-numeric-")
+
+  try {
+    await harness.writeNote(
+      path.join("notes", "inbox", "receipt.md"),
+      noteMarkdown({ id: "note-receipt", title: "Receipt 123", body: "Purchase details.\n" }),
+    )
+    await harness.writeNote(
+      path.join("notes", "meetings", "meeting-123.md"),
+      noteMarkdown({ id: "note-meeting", title: "Meeting Notes", body: "Planning details.\n" }),
+    )
+    await harness.writeNote(
+      path.join("notes", "inbox", "body-only.md"),
+      noteMarkdown({ id: "note-body", title: "Body Only", body: "First line.\nTracking code 123 appears here.\n" }),
+    )
+    await harness.writeNote(
+      path.join("notes", "inbox", "a-big-cat.md"),
+      noteMarkdown({ id: "note-cat", title: "a-big-cat", body: "a-big-cat reference.\n" }),
+    )
+
+    const rebuildResult = harness.run(["rebuild"])
+    assert.equal(rebuildResult.exitCode, 0)
+
+    const result = harness.run(["search", "123"])
+
+    assert.equal(result.exitCode, 0)
+    assert.equal(result.stderr, "")
+    assert.match(result.stdout, /^Receipt 123\n  key: note-receipt\n  path: notes[\\/]inbox[\\/]receipt\.md\n  match: title/m)
+    assert.match(result.stdout, /^Meeting Notes\n  key: note-meeting\n  path: notes[\\/]meetings[\\/]meeting-123\.md\n  match: key\/path/m)
+    assert.match(result.stdout, /^Body Only\n  key: note-body\n  path: notes[\\/]inbox[\\/]body-only\.md\n  match: content line 2/m)
+    assert.doesNotMatch(result.stdout, /a-big-cat/)
+
+    const compactResult = harness.run(["search", "abc"])
+    assert.equal(compactResult.exitCode, 0)
+    assert.equal(compactResult.stderr, "")
+    assert.doesNotMatch(compactResult.stdout, /a-big-cat/)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
 test("bn search returns actionable rebuild guidance when derived indexes are missing", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-search-missing-index-")
 
