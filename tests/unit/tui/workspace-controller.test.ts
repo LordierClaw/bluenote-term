@@ -192,6 +192,31 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(scheduler.activeTasks().map((task) => task.delay), [750])
   })
 
+  test("cursor-aware no-op edits do not reschedule autosave for unchanged dirty body", () => {
+    const scheduler = createFakeScheduler()
+    const invalidations: string[] = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      onAutosaveStateChange: () => invalidations.push(controller.getState().editor?.autosaveStatus ?? "none"),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText("!")
+    const pendingBeforeNoop = scheduler.activeTasks()[0]
+    assert.ok(pendingBeforeNoop)
+    assert.deepEqual(invalidations, ["pending"])
+
+    controller.moveEditorCursor("home")
+    controller.backspaceEditor()
+
+    assert.equal(controller.getState().editor?.body, "Original daily body!")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+    assert.deepEqual(scheduler.activeTasks(), [pendingBeforeNoop])
+    assert.deepEqual(invalidations, ["pending"])
+  })
+
   test("manual save preserves controlled cursor metadata", async () => {
     const { deps } = createDeps({
       persistEditorBody: (note, body) => ({ ...note, body }),
@@ -728,6 +753,50 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().manager.deleteDraft, null)
     assert.equal(controller.getState().manager.items.some((item) => item.key === "daily-plan"), false)
     assert.deepEqual(calls, ["list", "show:daily-plan", "delete:daily-plan", "rebuild", "list"])
+  })
+
+  test("manager delete confirmation is blocked while the open editor is dirty or autosave failed", async () => {
+    const scheduler = createFakeScheduler()
+    let currentSummaries = [...noteSummaries]
+    const { deps, calls } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: () => Promise.reject(new Error("disk full")),
+      listNotes: () => {
+        calls.push("list")
+        return currentSummaries
+      },
+      deleteNote: (selector) => {
+        calls.push(`delete:${selector}`)
+        currentSummaries = currentSummaries.filter((summary) => summary.key !== selector)
+      },
+      rebuildIndexes: () => calls.push("rebuild"),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText(" dirty")
+    controller.showManager()
+    controller.openManagerDeleteConfirmation()
+
+    const dirtyResult = await controller.confirmManagerDelete()
+    assert.deepEqual(dirtyResult, { blocked: true, reason: "dirty-editor" })
+    assert.equal(controller.getState().mode, "manager.deleteConfirm")
+    assert.equal(controller.getState().editor?.body, "Original daily body dirty")
+    assert.equal(calls.some((call) => call.startsWith("delete:")), false)
+
+    controller.cancelManagerDelete()
+    controller.showEditor()
+    scheduler.runNext()
+    await Promise.resolve()
+    await Promise.resolve()
+    assert.equal(controller.getState().editor?.autosaveStatus, "error")
+
+    controller.showManager()
+    controller.openManagerDeleteConfirmation()
+    const failedAutosaveResult = await controller.confirmManagerDelete()
+    assert.deepEqual(failedAutosaveResult, { blocked: true, reason: "dirty-editor" })
+    assert.equal(controller.getState().mode, "manager.deleteConfirm")
+    assert.equal(calls.some((call) => call.startsWith("delete:")), false)
   })
 
   test("manager delete confirmation cancels and refuses folders without deletion", async () => {

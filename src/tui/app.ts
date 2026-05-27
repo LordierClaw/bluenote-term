@@ -263,7 +263,7 @@ function routeControlledEditorBodyInput(controller: WorkspaceController, sequenc
 
 export function focusActiveWorkspaceInput(screen: Renderable): void {
   const activeInput = renderableDescendants(screen).find((node) =>
-    node.id === "bluenote-search-query" || node.id === "bluenote-editor-find-query" || node.id === "bluenote-manager-filter-query" || node.id === "bluenote-manager-create-title",
+    node.id === "bluenote-search-query" || node.id === "bluenote-editor-find-query" || node.id === "bluenote-editor-body-input" || node.id === "bluenote-manager-filter-query" || node.id === "bluenote-manager-create-title",
   )
   if (!activeInput) {
     return

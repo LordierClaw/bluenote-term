@@ -388,6 +388,14 @@ try {
   expectPaneContains(editorPastePane, `${multilineText}${pasteFallbackText}`, "editor paste or literal multi-character input")
   expectSingleVisibleOccurrence(editorPastePane, "Ctrl+F find", "editor rerender should show one latest editor screen")
 
+  sendKeys(sessionName, "C-p")
+  const dirtySearchPane = capturePaneUntil(sessionName, "dirty editor search open", "Search Everything", 20)
+  expectPaneContains(dirtySearchPane, "Search Everything", "dirty editor search open")
+  sendKeys(sessionName, "Escape")
+  const dirtySearchCancelPane = capturePaneUntil(sessionName, "editor search cancel restores body focus", `${multilineText}${pasteFallbackText}▌${typedEditorText.slice(-1)}`, 30)
+  expectPaneContains(dirtySearchCancelPane, `${multilineText}${pasteFallbackText}▌${typedEditorText.slice(-1)}`, "editor search cancel restores body focus")
+  expectPaneExcludes(dirtySearchCancelPane, "Search Everything", "editor search cancel restores body focus")
+
   sendKeys(sessionName, "C-s")
   const editorSavedPane = capturePaneUntil(sessionName, "editor ctrl-s save", "Saved", 30)
   expectPaneContains(editorSavedPane, "editor-input-regression-toke-cursor-", "editor ctrl-s save")

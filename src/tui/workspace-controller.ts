@@ -597,6 +597,9 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       if (!draft) {
         return ok()
       }
+      if (editorRequiresDestructiveConfirmation(state.editor)) {
+        return dirtyBlocked()
+      }
       if (!deps.deleteNote) {
         state = {
           ...state,
@@ -764,12 +767,30 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
     backspaceEditor: () => {
       if (!state.editor) return
-      applyEditorChange(backspaceAtEditorCursor(state.editor))
+      const previousEditor = state.editor
+      const nextEditor = backspaceAtEditorCursor(previousEditor)
+      if (nextEditor.body === previousEditor.body) {
+        state = {
+          ...state,
+          editor: nextEditor,
+        }
+        return
+      }
+      applyEditorChange(nextEditor)
     },
 
     deleteEditor: () => {
       if (!state.editor) return
-      applyEditorChange(deleteAtEditorCursor(state.editor))
+      const previousEditor = state.editor
+      const nextEditor = deleteAtEditorCursor(previousEditor)
+      if (nextEditor.body === previousEditor.body) {
+        state = {
+          ...state,
+          editor: nextEditor,
+        }
+        return
+      }
+      applyEditorChange(nextEditor)
     },
 
     moveEditorCursor: (direction) => {

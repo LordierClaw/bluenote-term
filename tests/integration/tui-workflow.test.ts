@@ -94,6 +94,36 @@ describe("TUI workspace workflows", () => {
     assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), changedBody)
   })
 
+  test("manual save after cursor-aware editor input persists through core services", async () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Cursor Save",
+      body: "Alpha omega",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerNoteByKey(controller, first.key)
+    controller.moveEditorCursor("left")
+    controller.moveEditorCursor("left")
+    controller.moveEditorCursor("left")
+    controller.moveEditorCursor("left")
+    controller.moveEditorCursor("left")
+    controller.insertEditorText("β ")
+    controller.insertEditorText("line\n")
+
+    const changedBody = "Alpha β line\nomega"
+    assert.equal(controller.getState().editor?.body, changedBody)
+    assert.equal(controller.getState().editor?.dirty, true)
+
+    const saveResult = await controller.saveEditor()
+    assert.equal(saveResult.blocked, false)
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(showNote({ override: rootPath, selector: first.key }).body, changedBody)
+    assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), changedBody)
+  })
+
   test("manager create prompt creates a real plain Markdown note through core services", async () => {
     const controller = createDefaultWorkspaceController({ rootPath, clock: fixedClock("2026-05-26T10:02:00.000Z") })
 
