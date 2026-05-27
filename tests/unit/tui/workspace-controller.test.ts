@@ -578,6 +578,89 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().manager.createDraft, null)
   })
 
+  test("manager delete confirmation deletes a note, refreshes, and clears an open editor", async () => {
+    let currentSummaries = [...noteSummaries]
+    const { deps, calls } = createDeps({
+      listNotes: () => {
+        calls.push("list")
+        return currentSummaries
+      },
+      deleteNote: (selector) => {
+        calls.push(`delete:${selector}`)
+        currentSummaries = currentSummaries.filter((summary) => summary.key !== selector)
+      },
+      rebuildIndexes: () => calls.push("rebuild"),
+    })
+    const controller = createWorkspaceController(deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.openFocusedManagerItem()
+    controller.showManager()
+    controller.openManagerDeleteConfirmation()
+
+    assert.equal(controller.getState().mode, "manager.deleteConfirm")
+    assert.equal(controller.getState().manager.deleteDraft?.key, "daily-plan")
+
+    const result = await controller.confirmManagerDelete()
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().editor, null)
+    assert.equal(controller.getState().manager.deleteDraft, null)
+    assert.equal(controller.getState().manager.items.some((item) => item.key === "daily-plan"), false)
+    assert.deepEqual(calls, ["list", "show:daily-plan", "delete:daily-plan", "rebuild", "list"])
+  })
+
+  test("manager delete confirmation cancels and refuses folders without deletion", async () => {
+    const { deps, calls } = createDeps({
+      deleteNote: (selector) => calls.push(`delete:${selector}`),
+    })
+    const controller = createWorkspaceController(deps)
+
+    controller.openManagerDeleteConfirmation()
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.match(controller.getState().manager.status ?? "", /Folders cannot be deleted here/)
+
+    controller.focusManagerItem(1)
+    assert.equal(controller.getState().manager.status, null)
+    controller.openFocusedManagerItem()
+    controller.openManagerDeleteConfirmation()
+    assert.equal(controller.getState().mode, "manager.deleteConfirm")
+    controller.cancelManagerDelete()
+
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().manager.deleteDraft, null)
+    assert.equal(calls.some((call) => call.startsWith("delete:")), false)
+  })
+
+  test("manager delete confirmation keeps prompt recoverable when delete is unavailable or fails", async () => {
+    const noDeleteController = createWorkspaceController(createDeps().deps)
+    noDeleteController.focusManagerItem(1)
+    noDeleteController.openFocusedManagerItem()
+    noDeleteController.openManagerDeleteConfirmation()
+
+    await noDeleteController.confirmManagerDelete()
+
+    assert.equal(noDeleteController.getState().mode, "manager.deleteConfirm")
+    assert.equal(noDeleteController.getState().manager.deleteDraft?.status, "Delete unavailable")
+
+    const failingController = createWorkspaceController(createDeps({
+      deleteNote: () => {
+        throw new Error("delete failed")
+      },
+    }).deps)
+    failingController.focusManagerItem(1)
+    failingController.openFocusedManagerItem()
+    failingController.openManagerDeleteConfirmation()
+
+    await failingController.confirmManagerDelete()
+
+    assert.equal(failingController.getState().mode, "manager.deleteConfirm")
+    assert.equal(failingController.getState().manager.deleteDraft?.status, "Delete failed")
+  })
+
   test("manager filter updates visible manager state and preview, and clear restores browsing", () => {
     const { deps } = createDeps()
     const controller = createWorkspaceController(deps)

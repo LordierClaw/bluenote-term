@@ -99,6 +99,27 @@ describe("TUI render view models", () => {
       statusIntent: "mutedText",
     })
     assert.equal(Number(creatingVm.createPrompt?.focused), 1)
+    const deletingVm = buildManagerViewModel({
+      ...baseState,
+      mode: "manager.deleteConfirm",
+      manager: {
+        ...baseState.manager,
+        deleteDraft: {
+          key: "daily-plan",
+          title: "Daily Plan",
+          relativePath: "notes/inbox/daily-plan.md",
+          status: null,
+        },
+      },
+    })
+    assert.deepEqual(deletingVm.deletePrompt, {
+      visible: true,
+      key: "daily-plan",
+      title: "Daily Plan",
+      relativePath: "notes/inbox/daily-plan.md",
+      status: null,
+      styleIntent: "danger",
+    })
     const managerChrome = [vm.title, vm.topbar.title, vm.status, ...vm.shortcuts, vm.panels.layout1.title, vm.panels.layout2.title].join(" ")
     assert.doesNotMatch(managerChrome, /BlueNote(?: TUI| Manager)?/i)
     assert.deepEqual(

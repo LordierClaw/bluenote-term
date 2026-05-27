@@ -81,6 +81,12 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
       return { blocked: false }
     },
     cancelManagerCreate: () => calls.push("cancelManagerCreate"),
+    openManagerDeleteConfirmation: () => calls.push("openManagerDeleteConfirmation"),
+    confirmManagerDelete: async () => {
+      calls.push("confirmManagerDelete")
+      return { blocked: false }
+    },
+    cancelManagerDelete: () => calls.push("cancelManagerDelete"),
     setManagerFilter: (query) => calls.push(`setManagerFilter:${query}`),
     updateManagerFilter: (query) => calls.push(`updateManagerFilter:${query}`),
     clearManagerFilter: () => calls.push("clearManagerFilter"),
@@ -383,6 +389,7 @@ describe("TUI render keyboard routing", () => {
       ["\u001b", "goBack"],
       ["\u001b[", "goBack"],
       ["n", "openManagerCreate"],
+      ["d", "openManagerDeleteConfirmation"],
       ["/", "openManagerFilter"],
       ["\u0006", "openManagerFilter"],
     ] as const) {
@@ -407,6 +414,26 @@ describe("TUI render keyboard routing", () => {
       "submitManagerCreate",
       "cancelManagerCreate",
       "cancelManagerCreate",
+    ])
+  })
+
+  test("manager delete confirmation route confirms or cancels", () => {
+    const { controller, calls } = createController("manager")
+    controller.getState().mode = "manager.deleteConfirm"
+
+    assert.equal(routeManagerKey("x", controller), true)
+    assert.equal(routeManagerKey("y", controller), true)
+    assert.equal(routeManagerKey("\r", controller), true)
+    assert.equal(routeManagerKey("\u001b", controller), true)
+    assert.equal(routeManagerKey("\u001b[", controller), true)
+    assert.equal(routeManagerKey("n", controller), true)
+
+    assert.deepEqual(calls, [
+      "confirmManagerDelete",
+      "confirmManagerDelete",
+      "cancelManagerDelete",
+      "cancelManagerDelete",
+      "cancelManagerDelete",
     ])
   })
 

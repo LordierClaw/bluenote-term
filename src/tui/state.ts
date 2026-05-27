@@ -3,6 +3,7 @@ export type TuiMode =
   | "manager.browse"
   | "manager.filter"
   | "manager.create"
+  | "manager.deleteConfirm"
   | "editor.body"
   | "editor.find"
   | "editor.replace"
@@ -34,11 +35,20 @@ export interface ManagerState {
   currentFolderPath?: string
   hoveredPath?: string | null
   filterQuery?: string
+  status?: string | null
   createDraft?: ManagerCreateDraft | null
+  deleteDraft?: ManagerDeleteDraft | null
 }
 
 export interface ManagerCreateDraft {
   title: string
+  status: string | null
+}
+
+export interface ManagerDeleteDraft {
+  key: string
+  title: string
+  relativePath: string
   status: string | null
 }
 
@@ -119,7 +129,9 @@ function cloneManagerState(manager: ManagerState): ManagerState {
     currentFolderPath: normalizeManagerPath(manager.currentFolderPath),
     hoveredPath: manager.hoveredPath ?? null,
     filterQuery: manager.filterQuery ?? "",
+    status: manager.status ?? null,
     createDraft: manager.createDraft ? { ...manager.createDraft } : null,
+    deleteDraft: manager.deleteDraft ? { ...manager.deleteDraft } : null,
   }
 }
 
@@ -130,7 +142,9 @@ const defaultManagerState = (): ManagerState => ({
   currentFolderPath: "",
   hoveredPath: null,
   filterQuery: "",
+  status: null,
   createDraft: null,
+  deleteDraft: null,
 })
 
 export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}): TuiState {
@@ -281,6 +295,7 @@ export function openManagerCreate(state: TuiState): TuiState {
     manager: {
       ...state.manager,
       items: cloneManagerItems(state.manager.items),
+      status: null,
       createDraft: { title: "", status: null },
     },
     search: null,
@@ -299,6 +314,7 @@ export function setManagerCreateTitle(state: TuiState, title: string): TuiState 
     manager: {
       ...state.manager,
       items: cloneManagerItems(state.manager.items),
+      status: null,
       createDraft: { title, status: null },
     },
     search: null,
@@ -338,7 +354,62 @@ export function cancelManagerCreate(state: TuiState): TuiState {
     manager: {
       ...state.manager,
       items: cloneManagerItems(state.manager.items),
+      status: null,
       createDraft: null,
+    },
+    search: null,
+  }
+}
+
+export function openManagerDeleteConfirm(state: TuiState, item: ManagerItem): TuiState {
+  if (item.type !== "note") {
+    return {
+      ...state,
+      screen: "manager",
+      mode: "manager.browse",
+      manager: {
+        ...state.manager,
+        items: cloneManagerItems(state.manager.items),
+        status: "Folders cannot be deleted here",
+        deleteDraft: null,
+      },
+      search: null,
+    }
+  }
+
+  return {
+    ...state,
+    screen: "manager",
+    mode: "manager.deleteConfirm",
+    manager: {
+      ...state.manager,
+      items: cloneManagerItems(state.manager.items),
+      status: null,
+      deleteDraft: {
+        key: item.key,
+        title: item.title,
+        relativePath: item.relativePath,
+        status: null,
+      },
+    },
+    search: null,
+  }
+}
+
+export function cancelManagerDeleteConfirm(state: TuiState): TuiState {
+  if (currentMode(state) !== "manager.deleteConfirm") {
+    return state
+  }
+
+  return {
+    ...state,
+    screen: "manager",
+    mode: "manager.browse",
+    manager: {
+      ...state.manager,
+      items: cloneManagerItems(state.manager.items),
+      status: null,
+      deleteDraft: null,
     },
     search: null,
   }
@@ -378,6 +449,8 @@ export function closeTransientMode(state: TuiState): TuiState {
       return clearManagerFilter(state)
     case "manager.create":
       return cancelManagerCreate(state)
+    case "manager.deleteConfirm":
+      return cancelManagerDeleteConfirm(state)
     default:
       return state
   }

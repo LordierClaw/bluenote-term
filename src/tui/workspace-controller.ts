@@ -16,6 +16,7 @@ import {
 import {
   clearManagerFilter as clearManagerFilterState,
   cancelManagerCreate as cancelManagerCreateState,
+  cancelManagerDeleteConfirm as cancelManagerDeleteConfirmState,
   closeSearchEverything,
   closeTransientMode,
   createInitialTuiState,
@@ -26,6 +27,7 @@ import {
   markEditorBodyChanged,
   openEditorForNote,
   openManagerCreate as openManagerCreateState,
+  openManagerDeleteConfirm as openManagerDeleteConfirmState,
   openSearchEverything,
   setManagerCreateStatus,
   setManagerCreateTitle as setManagerCreateTitleState,
@@ -65,6 +67,7 @@ export interface WorkspaceControllerDependencies {
   showNote: (selector: string) => TuiNote
   searchNotes: (query: string) => readonly SearchNoteMatch[]
   createNote?: (title: string, body: string) => TuiNote | { key: string }
+  deleteNote?: (selector: string) => void
   rebuildIndexes?: () => void
   persistEditorBody?: SaveEditorBufferDependencies["persist"]
   autosaveScheduler?: WorkspaceDebounceScheduler
@@ -94,6 +97,9 @@ export interface WorkspaceController {
   updateManagerCreateTitle: (title: string) => void
   submitManagerCreate: () => Promise<WorkspaceActionResult>
   cancelManagerCreate: () => void
+  openManagerDeleteConfirmation: () => void
+  confirmManagerDelete: () => Promise<WorkspaceActionResult>
+  cancelManagerDelete: () => void
   setManagerFilter: (query: string) => void
   updateManagerFilter: (query: string) => void
   clearManagerFilter: () => void
@@ -152,6 +158,7 @@ function cloneStateSnapshot(source: TuiState): TuiState {
       ...source.manager,
       items: source.manager.items.map(cloneManagerItem),
       createDraft: source.manager.createDraft ? { ...source.manager.createDraft } : null,
+      deleteDraft: source.manager.deleteDraft ? { ...source.manager.deleteDraft } : null,
     },
     editor: source.editor
       ? {
@@ -391,6 +398,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
           focusedIndex,
           hoveredPath: focusedItem?.relativePath ?? null,
           selectedNoteKey: selectedNoteKeyFor(focusedItem),
+          status: null,
         },
       }
       applyManagerBrowserModel()
@@ -408,6 +416,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
           currentFolderPath: previousManager.currentFolderPath,
           hoveredPath: focusedItem?.relativePath ?? null,
           filterQuery: previousManager.filterQuery ?? "",
+          status: null,
         },
       }
       applyManagerBrowserModel()
@@ -458,7 +467,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     },
 
     goBack: () => {
-      if (state.screen === "search" || state.mode === "editor.find" || state.mode === "editor.replace" || state.mode === "manager.filter" || state.mode === "manager.create") {
+      if (state.screen === "search" || state.mode === "editor.find" || state.mode === "editor.replace" || state.mode === "manager.filter" || state.mode === "manager.create" || state.mode === "manager.deleteConfirm") {
         state = closeTransientMode(state)
         if (state.screen === "manager") {
           applyManagerBrowserModel()
@@ -529,6 +538,64 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
     cancelManagerCreate: () => {
       state = cancelManagerCreateState(state)
+      applyManagerBrowserModel()
+    },
+
+    openManagerDeleteConfirmation: () => {
+      const focused = state.manager.items[state.manager.focusedIndex]
+      if (!focused) {
+        return
+      }
+      state = openManagerDeleteConfirmState(state, focused)
+      applyManagerBrowserModel()
+    },
+
+    confirmManagerDelete: async () => {
+      const draft = state.manager.deleteDraft
+      if (!draft) {
+        return ok()
+      }
+      if (!deps.deleteNote) {
+        state = {
+          ...state,
+          manager: {
+            ...state.manager,
+            deleteDraft: { ...draft, status: "Delete unavailable" },
+          },
+        }
+        return ok()
+      }
+      const deletedOpenNote = state.editor?.note.key === draft.key
+      try {
+        deps.deleteNote(draft.key)
+        deps.rebuildIndexes?.()
+        refreshManager()
+        state = cancelManagerDeleteConfirmState(state)
+        if (deletedOpenNote) {
+          state = {
+            ...state,
+            screen: "manager",
+            mode: "manager.browse",
+            editor: null,
+            search: null,
+          }
+        }
+        applyManagerBrowserModel()
+        return ok()
+      } catch {
+        state = {
+          ...state,
+          manager: {
+            ...state.manager,
+            deleteDraft: { ...draft, status: "Delete failed" },
+          },
+        }
+        return ok()
+      }
+    },
+
+    cancelManagerDelete: () => {
+      state = cancelManagerDeleteConfirmState(state)
       applyManagerBrowserModel()
     },
 

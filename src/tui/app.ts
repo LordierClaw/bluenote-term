@@ -3,6 +3,7 @@ import { createCliRenderer, BoxRenderable, type CliRenderer, type Renderable } f
 
 import { resolveBlueNoteRoot } from "../config/root"
 import { createNote } from "../core/create-note"
+import { deleteNote } from "../core/delete-note"
 import { IndexUnavailableError } from "../core/errors"
 import { listNotes } from "../core/list-notes"
 import { rebuildIndexes } from "../core/rebuild-indexes"
@@ -87,6 +88,9 @@ export function createDefaultWorkspaceController(options: DefaultWorkspaceContro
     showNote: (selector) => showNote({ override: rootPath, selector }),
     searchNotes: (query) => searchNotes(query, { override: rootPath }),
     createNote: (title, body) => createNote({ override: rootPath, title, body, clock }),
+    deleteNote: (selector) => {
+      deleteNote({ override: rootPath, selector, force: true })
+    },
     persistEditorBody: (note, body) => persistTuiEditorBody(rootPath, note, body, clock),
     commandHandlers: {
       "/rebuild": () => {},
@@ -140,7 +144,7 @@ export function routeWorkspaceKey(
     return { handled: routeEditorKey(sequence, controller, onExit, onInvalidate) }
   }
 
-  if (sequence === "q" && state.mode !== "manager.filter" && state.mode !== "manager.create") {
+  if (sequence === "q" && state.mode !== "manager.filter" && state.mode !== "manager.create" && state.mode !== "manager.deleteConfirm") {
     const quit = controller.requestQuit()
     if (!quit.blocked) {
       onExit()

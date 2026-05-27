@@ -2,7 +2,7 @@ import { describe, test, beforeEach, afterEach } from "bun:test"
 import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
-import { mkdtemp, rm, readFile } from "node:fs/promises"
+import { mkdtemp, rm, readFile, access } from "node:fs/promises"
 
 import { createNote } from "../../src/core/create-note"
 import { initRoot } from "../../src/core/init-root"
@@ -112,6 +112,31 @@ describe("TUI workspace workflows", () => {
     assert.doesNotMatch(noteText, /^---/)
     assert.equal(showNote({ override: rootPath, selector: created.key }).title, "TUI Created Note")
     assert.equal(showNote({ override: rootPath, selector: created.key }).body, "")
+  })
+
+  test("manager delete confirmation removes a real note file and sidecar through core services", async () => {
+    const created = createNote({
+      override: rootPath,
+      title: "TUI Delete Target",
+      body: "Delete me",
+      clock: fixedClock("2026-05-26T10:03:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerNoteByKey(controller, created.key)
+    controller.showManager()
+    controller.openManagerDeleteConfirmation()
+    assert.equal(controller.getState().mode, "manager.deleteConfirm")
+
+    const result = await controller.confirmManagerDelete()
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().editor, null)
+    assert.equal(controller.getState().manager.items.some((item) => item.key === created.key), false)
+    await assert.rejects(() => access(path.join(rootPath, created.relativePath)))
+    await assert.rejects(() => access(path.join(rootPath, ".state", "notes", `${created.key}.json`)))
   })
 
   test("opens Search Everything from editor, selects a content match, and returns to editor", () => {

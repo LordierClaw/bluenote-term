@@ -98,6 +98,14 @@ export interface ManagerViewModel {
     styleIntent: TuiColorIntent
     statusIntent: TuiColorIntent
   }
+  deletePrompt?: {
+    visible: true
+    key: string
+    title: string
+    relativePath: string
+    status: string | null
+    styleIntent: TuiColorIntent
+  }
 }
 
 type BrowserishRow = ManagerBrowserRow | ManagerItem
@@ -191,6 +199,9 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
   if (openNoteKey) {
     statusParts.push(`selected ${openNoteKey}`)
   }
+  if (state.manager.status) {
+    statusParts.push(state.manager.status)
+  }
 
   const currentPath = currentPathLabel(currentFolderPath)
   const createPrompt = state.mode === "manager.create"
@@ -203,6 +214,16 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
         focused: true as const,
         styleIntent: "secondaryAccent" as const,
         statusIntent: "mutedText" as const,
+      }
+    : undefined
+  const deletePrompt = state.mode === "manager.deleteConfirm" && state.manager.deleteDraft
+    ? {
+        visible: true as const,
+        key: state.manager.deleteDraft.key,
+        title: state.manager.deleteDraft.title,
+        relativePath: state.manager.deleteDraft.relativePath,
+        status: state.manager.deleteDraft.status,
+        styleIntent: "danger" as const,
       }
     : undefined
 
@@ -229,6 +250,7 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
     status: statusParts.join(" · "),
     shortcuts: ["↑↓ move", "→/Enter open", "n new", "d delete", "/ filter", "Esc back", "q quit"],
     createPrompt,
+    deletePrompt,
   }
 }
 
@@ -416,6 +438,31 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     root.add(createBar)
     createInput.focus()
   }
+  if (vm.deletePrompt) {
+    const deleteBar = new BoxRenderable(options.renderer, {
+      id: "bluenote-manager-delete-confirm",
+      flexDirection: "column",
+      width: "100%",
+      height: 4,
+      border: true,
+      borderColor: tuiTheme[vm.deletePrompt.styleIntent],
+      backgroundColor: tuiTheme.panel,
+      title: "Confirm delete",
+    })
+    deleteBar.add(new TextRenderable(options.renderer, {
+      content: `Delete ${vm.deletePrompt.title} — ${vm.deletePrompt.relativePath} (${vm.deletePrompt.key})?`,
+      height: 1,
+      fg: tuiTheme.danger,
+      bg: tuiTheme.panel,
+    }))
+    deleteBar.add(new TextRenderable(options.renderer, {
+      content: `Enter/y confirm  Esc/n cancel${vm.deletePrompt.status ? `  ${vm.deletePrompt.status}` : ""}`,
+      height: 1,
+      fg: tuiTheme.mutedText,
+      bg: tuiTheme.panel,
+    }))
+    root.add(deleteBar)
+  }
   root.add(new TextRenderable(options.renderer, { content: vm.status, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
   root.add(new TextRenderable(options.renderer, { content: vm.shortcuts.join("  "), height: 1, fg: tuiTheme.secondaryAccent, bg: tuiTheme.panel }))
 
@@ -423,6 +470,18 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
 }
 
 export function routeManagerKey(sequence: string, controller: WorkspaceController, onExit?: () => void): boolean {
+  if (controller.getState().mode === "manager.deleteConfirm") {
+    if (sequence === "\u001b" || sequence === "\u001b[" || sequence === "n") {
+      controller.cancelManagerDelete()
+      return true
+    }
+    if (sequence === "y" || sequence === "\r" || sequence === "\n") {
+      void controller.confirmManagerDelete()
+      return true
+    }
+    return true
+  }
+
   if (controller.getState().mode === "manager.create") {
     const currentTitle = controller.getState().manager.createDraft?.title ?? ""
     if (sequence === "\u001b" || sequence === "\u001b[") {
@@ -485,6 +544,9 @@ export function routeManagerKey(sequence: string, controller: WorkspaceControlle
       return true
     case "n":
       controller.openManagerCreate()
+      return true
+    case "d":
+      controller.openManagerDeleteConfirmation()
       return true
     case "s":
       controller.openSearch()
