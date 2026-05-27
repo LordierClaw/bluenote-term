@@ -23,6 +23,8 @@ export interface AppStateMigrationResult {
 
 const CONFLICT_MESSAGE = "Cannot migrate legacy .state because .data already contains conflicting app state."
 const CONFLICT_HINT = "Review .state and .data, keep the desired BlueNote metadata under .data, then retry."
+const UNSAFE_PATH_MESSAGE = "Cannot migrate legacy .state because .data contains unsafe app-state paths."
+const UNSAFE_PATH_HINT = "Remove symlinks from .data app-state paths before retrying migration."
 const SUPPORT_DIRECTORIES = [
   ["recovery", STATE_RECOVERY_DIRECTORY],
   ["tmp", STATE_TMP_DIRECTORY],
@@ -54,8 +56,47 @@ function throwConflict(): never {
   })
 }
 
-function copyFileIfMissingOrIdentical(rootPath: string, sourcePath: string, destinationPath: string): boolean {
+function throwUnsafePath(): never {
+  throw new UsageError(UNSAFE_PATH_MESSAGE, {
+    hint: UNSAFE_PATH_HINT,
+  })
+}
+
+function isAlreadyExistsError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as NodeJS.ErrnoException).code === "EEXIST"
+}
+
+function assertExistingDestinationParentsAreSafe(rootPath: string, destinationPath: string): string {
   const safeDestinationPath = assertPathInsideRoot(rootPath, destinationPath)
+  const relativeParentPath = path.relative(path.resolve(rootPath), path.dirname(safeDestinationPath))
+  let currentPath = path.resolve(rootPath)
+
+  if (relativeParentPath === "") {
+    return safeDestinationPath
+  }
+
+  for (const segment of relativeParentPath.split(path.sep)) {
+    currentPath = path.join(currentPath, segment)
+
+    if (!pathExists(currentPath)) {
+      continue
+    }
+
+    if (fs.lstatSync(currentPath).isSymbolicLink()) {
+      throwUnsafePath()
+    }
+  }
+
+  return safeDestinationPath
+}
+
+function assertDestinationDirectoryIsSafe(rootPath: string, destinationDirectory: string): string {
+  assertExistingDestinationParentsAreSafe(rootPath, path.join(destinationDirectory, ".keep"))
+  return assertPathInsideRoot(rootPath, destinationDirectory)
+}
+
+function copyFileIfMissingOrIdentical(rootPath: string, sourcePath: string, destinationPath: string): boolean {
+  const safeDestinationPath = assertExistingDestinationParentsAreSafe(rootPath, destinationPath)
 
   if (pathExists(safeDestinationPath)) {
     const source = fs.readFileSync(sourcePath)
@@ -69,8 +110,23 @@ function copyFileIfMissingOrIdentical(rootPath: string, sourcePath: string, dest
   }
 
   fs.mkdirSync(path.dirname(safeDestinationPath), { recursive: true })
-  fs.copyFileSync(sourcePath, safeDestinationPath)
-  return true
+  try {
+    fs.copyFileSync(sourcePath, safeDestinationPath, fs.constants.COPYFILE_EXCL)
+    return true
+  } catch (error) {
+    if (!isAlreadyExistsError(error)) {
+      throw error
+    }
+
+    const source = fs.readFileSync(sourcePath)
+    const destination = fs.readFileSync(safeDestinationPath)
+
+    if (!source.equals(destination)) {
+      throwConflict()
+    }
+
+    return false
+  }
 }
 
 function copyDirectoryIfMissingOrIdentical(rootPath: string, sourceDirectory: string, destinationDirectory: string): number {
@@ -83,7 +139,7 @@ function copyDirectoryIfMissingOrIdentical(rootPath: string, sourceDirectory: st
     return 0
   }
 
-  const safeDestinationDirectory = assertPathInsideRoot(rootPath, destinationDirectory)
+  const safeDestinationDirectory = assertDestinationDirectoryIsSafe(rootPath, destinationDirectory)
   fs.mkdirSync(safeDestinationDirectory, { recursive: true })
 
   let migratedFileCount = 0
@@ -118,7 +174,8 @@ function copyLegacyNotes(rootPath: string, legacyNotesPath: string, dataNotesPat
     return 0
   }
 
-  fs.mkdirSync(assertPathInsideRoot(rootPath, dataNotesPath), { recursive: true })
+  const safeDataNotesPath = assertDestinationDirectoryIsSafe(rootPath, dataNotesPath)
+  fs.mkdirSync(safeDataNotesPath, { recursive: true })
 
   let migratedFileCount = 0
   for (const entry of fs.readdirSync(legacyNotesPath, { withFileTypes: true })) {

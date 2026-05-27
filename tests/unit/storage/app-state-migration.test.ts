@@ -1,8 +1,9 @@
-import { test } from "bun:test"
+import { spyOn, test } from "bun:test"
 import assert from "node:assert/strict"
+import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
 
 import { UsageError } from "../../../src/core/errors"
 import { migrateLegacyAppStateToData } from "../../../src/storage/app-state-migration"
@@ -145,5 +146,72 @@ test("migrateLegacyAppStateToData throws UsageError for conflicting app state fi
     )
   } finally {
     await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("migrateLegacyAppStateToData does not overwrite a destination created during copy", async () => {
+  const rootPath = await createTempRoot("bluenote-app-state-migration-race-")
+
+  try {
+    const sourcePath = path.join(rootPath, ".state", "notes", "foo.json")
+    const destinationPath = path.join(rootPath, ".data", "notes", "foo.json")
+    await mkdir(path.dirname(sourcePath), { recursive: true })
+    await writeFile(sourcePath, "{\"title\":\"State\"}", "utf8")
+
+    const originalCopyFileSync = fs.copyFileSync
+    const copyMock = spyOn(fs, "copyFileSync").mockImplementation((source, destination, mode) => {
+      if (String(destination) === destinationPath) {
+        fs.mkdirSync(path.dirname(destinationPath), { recursive: true })
+        fs.writeFileSync(destinationPath, "{\"title\":\"Data\"}", "utf8")
+        const error = new Error("destination already exists") as NodeJS.ErrnoException
+        error.code = "EEXIST"
+        throw error
+      }
+
+      return originalCopyFileSync(source, destination, mode)
+    })
+
+    try {
+      assert.throws(
+        () => migrateLegacyAppStateToData(rootPath),
+        (error) => {
+          assert.ok(error instanceof UsageError)
+          assert.equal(error.message, "Cannot migrate legacy .state because .data already contains conflicting app state.")
+          return true
+        },
+      )
+    } finally {
+      copyMock.mockRestore()
+    }
+
+    assert.equal(await readFile(destinationPath, "utf8"), "{\"title\":\"Data\"}")
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("migrateLegacyAppStateToData rejects symlinked destination app-state directories", async () => {
+  const rootPath = await createTempRoot("bluenote-app-state-migration-symlink-")
+  const outsidePath = await createTempRoot("bluenote-app-state-migration-outside-")
+
+  try {
+    await mkdir(path.join(rootPath, ".state", "notes"), { recursive: true })
+    await writeFile(path.join(rootPath, ".state", "notes", "foo.json"), "{\"title\":\"State\"}", "utf8")
+    await symlink(outsidePath, path.join(rootPath, ".data"), "dir")
+
+    assert.throws(
+      () => migrateLegacyAppStateToData(rootPath),
+      (error) => {
+        assert.ok(error instanceof UsageError)
+        assert.equal(error.message, "Cannot migrate legacy .state because .data contains unsafe app-state paths.")
+        assert.equal(error.hint, "Remove symlinks from .data app-state paths before retrying migration.")
+        return true
+      },
+    )
+
+    assert.equal(await exists(path.join(outsidePath, "notes", "foo.json")), false)
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+    await rm(outsidePath, { recursive: true, force: true })
   }
 })
