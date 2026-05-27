@@ -29,6 +29,18 @@ const noteSummaries = [
     description: "Old ideas to revisit.",
     relativePath: "notes/archive/archive-review.md",
   },
+  {
+    key: "a-big-cat",
+    title: "A Big Cat",
+    description: "Animal notes without a contiguous letter run.",
+    relativePath: "notes/a-big-cat/cat.md",
+  },
+  {
+    key: "incident-123",
+    title: "Incident 123",
+    description: "Follow-up for ticket 123.",
+    relativePath: "notes/incidents/incident-123.md",
+  },
 ]
 
 function createDeps(): SearchEverythingDependencies {
@@ -56,7 +68,7 @@ function createDeps(): SearchEverythingDependencies {
 }
 
 describe("TUI Search Everything adapter", () => {
-  test("returns note results matched by filename/key, title, description, and path/folder", () => {
+  test("returns note results with contains matches by filename/key, title, description, and path/folder", () => {
     const filenameMatch = buildSearchEverythingResults("daily-plan.md", createDeps())
     assert.equal(filenameMatch[0]?.kind, "note")
     assert.equal(filenameMatch[0]?.key, "daily-plan")
@@ -79,6 +91,23 @@ describe("TUI Search Everything adapter", () => {
       (result): result is SearchEverythingNoteResult => result.kind === "note" && result.key === "project-brief",
     )
     assert.deepEqual(noteResult?.matchedFields, ["path"])
+  })
+
+  test("does not include note or folder results for subsequence-only matches", () => {
+    const results = buildSearchEverythingResults("abc", createDeps())
+
+    assert.equal(results.some((result) => result.kind === "note" && result.key === "a-big-cat"), false)
+    assert.equal(results.some((result) => result.kind === "folder" && result.path.includes("a-big-cat")), false)
+  })
+
+  test("returns note and path results containing numeric queries", () => {
+    const results = buildSearchEverythingResults("123", createDeps())
+    const noteResult = results.find(
+      (result): result is SearchEverythingNoteResult => result.kind === "note" && result.key === "incident-123",
+    )
+
+    assert.ok(noteResult)
+    assert.deepEqual(noteResult.matchedFields, ["filename", "key", "title", "description", "path"])
   })
 
   test("returns content results with note excerpts when searchNotes supplies content matches", () => {
@@ -125,6 +154,12 @@ describe("TUI Search Everything adapter", () => {
     assert.deepEqual(
       results.filter((result) => result.kind === "command").map((result) => result.name),
       ["/rebuild", "/replace"],
+    )
+
+    const subsequenceOnlyResults = buildSearchEverythingResults("/ae", createDeps())
+    assert.equal(
+      subsequenceOnlyResults.some((result) => result.kind === "command" && result.name === "/archive"),
+      false,
     )
   })
 

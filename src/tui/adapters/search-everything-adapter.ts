@@ -1,4 +1,5 @@
 import type { SearchNoteMatch } from "../../core/search-notes"
+import { collectContainsFieldMatches, scoreContainsMatch } from "../../search/contains-match"
 import type { NoteManagerSummary } from "./note-manager-adapter"
 import type { SearchEverythingState, TuiScreen } from "../state"
 
@@ -130,66 +131,8 @@ function folderNameFor(path: string): string {
   return filenameFor(path)
 }
 
-function queryTokens(query: string): string[] {
-  return query
-    .toLocaleLowerCase()
-    .split(/\s+/u)
-    .map((token) => token.trim())
-    .filter(Boolean)
-}
-
-function isSubsequence(needle: string, haystack: string): boolean {
-  if (needle.length === 0) {
-    return true
-  }
-
-  let needleIndex = 0
-  for (const char of haystack) {
-    if (char === needle[needleIndex]) {
-      needleIndex += 1
-      if (needleIndex === needle.length) {
-        return true
-      }
-    }
-  }
-
-  return false
-}
-
 function fuzzyScore(query: string, value: string): number {
-  const normalizedQuery = query.trim().toLocaleLowerCase()
-  const normalizedValue = value.toLocaleLowerCase()
-
-  if (normalizedQuery.length === 0 || normalizedValue.length === 0) {
-    return 0
-  }
-
-  const tokens = queryTokens(query)
-  if (tokens.length > 1 && tokens.every((token) => normalizedValue.includes(token))) {
-    return 90 + normalizedQuery.length / Math.max(normalizedValue.length, 1)
-  }
-
-  if (normalizedValue === normalizedQuery) {
-    return 120
-  }
-
-  if (normalizedValue.startsWith(normalizedQuery)) {
-    return 105
-  }
-
-  if (normalizedValue.includes(normalizedQuery)) {
-    return 80 + normalizedQuery.length / Math.max(normalizedValue.length, 1)
-  }
-
-  if (tokens.length > 1) {
-    return 0
-  }
-
-  if (isSubsequence(normalizedQuery, normalizedValue)) {
-    return 30 + normalizedQuery.length / Math.max(normalizedValue.length, 1)
-  }
-
-  return 0
+  return scoreContainsMatch(value, query)
 }
 
 function foldersFor(relativePath: string): string[] {
@@ -232,14 +175,28 @@ function buildNoteResult(query: string, summary: NoteManagerSummary): SearchEver
   const filename = filenameFor(relativePath)
   const filenameStem = filename.replace(/\.[^.]*$/u, "")
   const queryStem = query.replace(/\.[^.\s/\\]*$/u, "")
-  const candidates: Array<{ field: SearchEverythingMatchedField; score: number }> = [
-    { field: "filename", score: fuzzyScore(query, filename) },
-    { field: "key", score: Math.max(fuzzyScore(query, summary.key), fuzzyScore(queryStem, summary.key), fuzzyScore(query, filenameStem)) },
-    { field: "title", score: fuzzyScore(query, summary.title) },
-    { field: "description", score: fuzzyScore(query, summary.description) },
-    { field: "path", score: fuzzyScore(query, relativePath) },
-  ]
-  const fields = candidates.filter((field) => field.score > 0)
+  const fieldScores = new Map<SearchEverythingMatchedField, number>()
+
+  for (const match of [
+    ...collectContainsFieldMatches(query, [
+      { field: "filename", value: filename },
+      { field: "key", value: summary.key },
+      { field: "key", value: filenameStem },
+      { field: "title", value: summary.title },
+      { field: "description", value: summary.description },
+      { field: "path", value: relativePath },
+    ]),
+    ...collectContainsFieldMatches(queryStem, [{ field: "key", value: summary.key }]),
+  ]) {
+    const field = match.field as SearchEverythingMatchedField
+    fieldScores.set(field, Math.max(fieldScores.get(field) ?? 0, match.score))
+  }
+
+  const orderedFields: readonly SearchEverythingMatchedField[] = ["filename", "key", "title", "description", "path"]
+  const fields: Array<{ field: SearchEverythingMatchedField; score: number }> = orderedFields.flatMap((field) => {
+    const score = fieldScores.get(field)
+    return score ? [{ field, score }] : []
+  })
 
   if (fields.length === 0) {
     return null
@@ -294,22 +251,7 @@ function buildFolderResults(query: string, noteSummaries: readonly NoteManagerSu
 }
 
 function strictCommandScore(query: string, commandName: string): number {
-  const normalizedQuery = query.toLocaleLowerCase()
-  const normalizedName = commandName.toLocaleLowerCase()
-
-  if (normalizedName === normalizedQuery) {
-    return 120
-  }
-
-  if (normalizedName.startsWith(normalizedQuery)) {
-    return 105
-  }
-
-  if (normalizedName.includes(normalizedQuery)) {
-    return 80
-  }
-
-  return 0
+  return scoreContainsMatch(commandName, query)
 }
 
 function buildCommandResults(query: string): SearchEverythingCommandResult[] {
