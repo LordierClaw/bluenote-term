@@ -1,5 +1,6 @@
 import type { NoteSummary } from "../../core/list-notes"
 import type { ShowNoteSummary } from "../../core/show-note"
+import { collectContainsFieldMatches } from "../../search/contains-match"
 import type { ManagerItem, ManagerState, TuiNote } from "../state"
 
 export interface NoteManagerSummary extends NoteSummary {
@@ -217,17 +218,21 @@ function immediateRowsForFolder(items: readonly ManagerItem[], currentFolderPath
 }
 
 function filterRows(rows: readonly ManagerItem[], query: string): ManagerItem[] {
-  const normalizedQuery = query.trim().toLocaleLowerCase()
+  const normalizedQuery = query.trim()
 
   if (!normalizedQuery) {
     return [...rows]
   }
 
-  return rows.filter((row) =>
-    [row.filename, row.title, row.description, row.relativePath]
-      .join("\n")
-      .toLocaleLowerCase()
-      .includes(normalizedQuery),
+  return rows.filter(
+    (row) =>
+      collectContainsFieldMatches(normalizedQuery, [
+        { field: "filename", value: row.filename },
+        { field: "key", value: row.key },
+        { field: "title", value: row.title },
+        { field: "description", value: row.description },
+        { field: "path", value: row.relativePath },
+      ]).length > 0,
   )
 }
 

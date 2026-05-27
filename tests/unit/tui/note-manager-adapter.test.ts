@@ -67,16 +67,60 @@ const browserSummaries: NoteManagerSummary[] = [
     relativePath: "notes/scratch.txt",
   },
   {
+    key: "case-123-key",
+    title: "Key Only Match",
+    description: "Visible summary without the digits.",
+    relativePath: "notes/case-key-only.md",
+  },
+  {
+    key: "title-match",
+    title: "Receipt 123",
+    description: "Visible title contains the digits.",
+    relativePath: "notes/receipt-title.md",
+  },
+  {
+    key: "description-match",
+    title: "Description Match",
+    description: "Invoice number 123 is visible.",
+    relativePath: "notes/description-match.md",
+  },
+  {
+    key: "filename-match",
+    title: "Filename Match",
+    description: "Visible summary without the digits.",
+    relativePath: "notes/meeting-123.md",
+  },
+  {
+    key: "folder-path-match",
+    title: "Folder Path Match",
+    description: "Visible summary without the digits.",
+    relativePath: "notes/client-123/project.md",
+  },
+  {
+    key: "a-big-cat",
+    title: "A Big Cat",
+    description: "Body summary is not a manager filter field.",
+    relativePath: "notes/a-big-cat.md",
+    body: "a-big-cat has letters that form a non-contiguous subsequence for abc.",
+  },
+  {
+    key: "abc-visible",
+    title: "ABC Visible",
+    description: "Visible abc appears contiguously.",
+    relativePath: "notes/abc-visible.md",
+    body: "This body is not needed for filtering.",
+  },
+  {
     key: "sidecar",
     title: "Sidecar",
-    description: "Hidden state sidecar.",
-    relativePath: ".state/notes/root-note.json",
+    description: "Hidden data sidecar.",
+    relativePath: ".data/notes/root-note.json",
   },
   {
     key: "hidden-note",
     title: "Hidden Note",
-    description: "Hidden app state.",
-    relativePath: "notes/.state/hidden-note.md",
+    description: "Hidden app data.",
+    relativePath: "notes/.data/hidden-note.md",
   },
 ]
 
@@ -298,7 +342,10 @@ describe("TUI note manager adapter", () => {
   })
 
   test("builds a current-folder browser model with only immediate folders and BlueNote note files", () => {
-    const model = buildManagerBrowserModel(browserSummaries, {
+    const baseBrowserSummaries = browserSummaries.filter((summary) =>
+      ["root-note", "daily-plan", "api-roadmap", "client-brief", "scratch-text", "sidecar", "hidden-note"].includes(summary.key),
+    )
+    const model = buildManagerBrowserModel(baseBrowserSummaries, {
       items: [],
       focusedIndex: 0,
       selectedNoteKey: null,
@@ -472,5 +519,51 @@ describe("TUI note manager adapter", () => {
     assert.equal(model.hoveredPath, "notes/projects")
     assert.equal(model.preview.type, "folder")
     assert.deepEqual(model.preview.rows?.map((row) => row.relativePath), ["notes/projects/client", "notes/projects/api-roadmap.md"])
+  })
+
+  test("filters with contains semantics across visible filename, key, title, description, and path fields", () => {
+    const model = buildManagerBrowserModel(browserSummaries, {
+      items: [],
+      focusedIndex: 0,
+      selectedNoteKey: null,
+      currentFolderPath: "",
+      hoveredPath: null,
+      filterQuery: "123",
+    })
+
+    assert.deepEqual(model.layout1Rows.map((row) => row.relativePath), [
+      "notes/client-123",
+      "notes/case-key-only.md",
+      "notes/description-match.md",
+      "notes/meeting-123.md",
+      "notes/receipt-title.md",
+    ])
+  })
+
+  test("does not include fuzzy subsequence-only or body-only manager filter matches", () => {
+    const model = buildManagerBrowserModel(browserSummaries, {
+      items: [],
+      focusedIndex: 0,
+      selectedNoteKey: null,
+      currentFolderPath: "",
+      hoveredPath: null,
+      filterQuery: "abc",
+    })
+
+    assert.deepEqual(model.layout1Rows.map((row) => row.relativePath), ["notes/abc-visible.md"])
+    assert.equal(model.layout1Rows.some((row) => row.relativePath === "notes/a-big-cat.md"), false)
+  })
+
+  test("filters hidden BlueNote app data paths out of manager browser rows", () => {
+    const model = buildManagerBrowserModel(browserSummaries, {
+      items: [],
+      focusedIndex: 0,
+      selectedNoteKey: null,
+      currentFolderPath: "",
+      hoveredPath: null,
+      filterQuery: "data",
+    })
+
+    assert.deepEqual(model.layout1Rows.map((row) => row.relativePath), [])
   })
 })
