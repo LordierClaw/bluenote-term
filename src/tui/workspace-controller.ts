@@ -523,6 +523,10 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         return ok()
       }
 
+      if (editorRequiresDestructiveConfirmation(state.editor)) {
+        return dirtyBlocked()
+      }
+
       try {
         const created = deps.createNote?.(title, "")
         if (!created) {

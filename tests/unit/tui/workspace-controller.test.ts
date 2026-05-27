@@ -527,6 +527,33 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(calls, ["list", "create:Project Plan:", "rebuild", "list", "show:project-plan"])
   })
 
+  test("manager create blocks before creating when it would replace dirty editor content", async () => {
+    const { deps, calls } = createDeps({
+      createNote: (title, body) => {
+        calls.push(`create:${title}:${body}`)
+        return { key: "daily-plan" }
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    controller.openFocusedManagerItem()
+    assert.equal(controller.getState().screen, "editor")
+    controller.updateEditorBody("Unsaved draft")
+    controller.showManager()
+    controller.openManagerCreate()
+    controller.updateManagerCreateTitle("New Note")
+
+    const result = await controller.submitManagerCreate()
+
+    assert.deepEqual(result, { blocked: true, reason: "dirty-editor" })
+    assert.equal(controller.getState().mode, "manager.create")
+    assert.equal(controller.getState().editor?.body, "Unsaved draft")
+    assert.equal(calls.some((call) => call.startsWith("create:")), false)
+  })
+
   test("manager create keeps prompt recoverable when create or refresh fails", async () => {
     const failingCreateController = createWorkspaceController(createDeps({
       createNote: () => {
