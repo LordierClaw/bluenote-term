@@ -61,7 +61,7 @@ export interface EditorBufferState {
   selectionStart?: number
   selectionEnd?: number
   preferredColumn?: number | null
-  wrapMode?: "word"
+  wrapMode?: "word" | "none"
   findQuery?: string
   findMatchCount?: number
   activeFindIndex?: number | null

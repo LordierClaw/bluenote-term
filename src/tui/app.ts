@@ -141,7 +141,9 @@ export function routeWorkspaceKey(
   }
 
   if (state.screen === "editor") {
-    return { handled: routeEditorKey(sequence, controller, onExit, onInvalidate) }
+    const handled = routeEditorKey(sequence, controller, onExit, onInvalidate)
+    if (handled) return { handled: true }
+    return { handled: routeControlledEditorBodyInput(controller, sequence) }
   }
 
   if (sequence === "q" && state.mode !== "manager.filter" && state.mode !== "manager.create" && state.mode !== "manager.deleteConfirm") {
@@ -172,9 +174,38 @@ function renderableDescendants(node: Renderable): Renderable[] {
   return [node, ...node.getChildren().flatMap((child) => renderableDescendants(child))]
 }
 
+function stripAnsiControlSequences(text: string): string {
+  return text
+    .replace(/\u001b\][\s\S]*?(?:\u0007|\u001b\\)/gu, "")
+    .replace(/\u009d[\s\S]*?(?:\u0007|\u009c|\u001b\\)/gu, "")
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/gu, "")
+    .replace(/\u009b[0-?]*[ -/]*[@-~]/gu, "")
+    .replace(/\u001b[PX^_][\s\S]*?\u001b\\/gu, "")
+    .replace(/[\u0090\u0098\u009e\u009f][\s\S]*?(?:\u009c|\u001b\\)/gu, "")
+    .replace(/\u001b[@-_]/gu, "")
+}
+
+function sanitizePastedEditorText(text: string): string {
+  return Array.from(stripAnsiControlSequences(text)).filter((char) => {
+    const code = char.codePointAt(0) ?? 0
+    return char === "\n" || char === "\r" || char === "\t" || (code >= 32 && code < 127) || code >= 160
+  }).join("").replace(/\r\n?/gu, "\n")
+}
+
 function routeControlledEditorBodyInput(controller: WorkspaceController, sequence: string): boolean {
   const state = controller.getState()
   if (state.screen !== "editor" || state.mode !== "editor.body" || !state.editor) return false
+
+  const bracketedPasteStart = "\u001b[200~"
+  const bracketedPasteEnd = "\u001b[201~"
+  if (sequence.startsWith(bracketedPasteStart) && sequence.endsWith(bracketedPasteEnd)) {
+    const pasted = sequence.slice(bracketedPasteStart.length, -bracketedPasteEnd.length)
+    const sanitized = sanitizePastedEditorText(pasted)
+    if (sanitized.length > 0) {
+      controller.insertEditorText(sanitized)
+    }
+    return true
+  }
 
   switch (sequence) {
     case "\r":
@@ -214,7 +245,14 @@ function routeControlledEditorBodyInput(controller: WorkspaceController, sequenc
       return true
     default: {
       const firstCode = sequence.charCodeAt(0)
-      if (sequence.length > 0 && firstCode >= 32 && firstCode !== 127) {
+      if (sequence.length > 1) {
+        const sanitized = sanitizePastedEditorText(sequence)
+        if (sanitized.length > 0) {
+          controller.insertEditorText(sanitized)
+        }
+        return true
+      }
+      if (sequence.length > 0 && ((firstCode >= 32 && firstCode < 127) || firstCode >= 160)) {
         controller.insertEditorText(sequence)
         return true
       }

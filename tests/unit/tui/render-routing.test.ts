@@ -61,6 +61,7 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
     backspaceEditor: () => calls.push("backspaceEditor"),
     deleteEditor: () => calls.push("deleteEditor"),
     moveEditorCursor: (direction) => calls.push(`moveEditorCursor:${direction}`),
+    toggleEditorWrapMode: () => calls.push("toggleEditorWrapMode"),
     saveEditor: async () => {
       calls.push("saveEditor")
       return { blocked: false }
@@ -142,6 +143,14 @@ describe("TUI render keyboard routing", () => {
 
     assert.equal(routeEditorKey("\u0006", controller), true)
     assert.deepEqual(calls, ["openEditorFind:"])
+  })
+
+  test("editor Alt+Z toggles wrap mode from the body", () => {
+    const { controller, calls } = createController("editor")
+    controller.getState().mode = "editor.body"
+
+    assert.equal(routeEditorKey("\u001bz", controller), true)
+    assert.deepEqual(calls, ["toggleEditorWrapMode"])
   })
 
   test("post-attach focus re-registers the active editor input with OpenTUI key routing", async () => {
@@ -263,7 +272,7 @@ describe("TUI render keyboard routing", () => {
     assert.deepEqual(calls, ["openSearch:"])
   })
 
-  test("workspace routing leaves printable editor body input for the runtime body handler", () => {
+  test("editor command route leaves printable editor body input for the runtime body handler", () => {
     const { controller, calls } = createController("editor")
     controller.getState().mode = "editor.body"
     controller.getState().editor = {
@@ -273,10 +282,108 @@ describe("TUI render keyboard routing", () => {
       dirty: false,
     }
 
-    assert.deepEqual(routeWorkspaceKey("x", controller, () => {}), { handled: false })
-    assert.deepEqual(routeWorkspaceKey(" ", controller, () => {}), { handled: false })
-    assert.deepEqual(routeWorkspaceKey("/", controller, () => {}), { handled: false })
+    assert.equal(routeEditorKey("x", controller), false)
+    assert.equal(routeEditorKey(" ", controller), false)
+    assert.equal(routeEditorKey("/", controller), false)
     assert.deepEqual(calls, [])
+  })
+
+  test("editor body routing treats bracketed paste as text and ignores embedded global shortcuts", () => {
+    const { controller, calls } = createController("editor")
+    controller.getState().mode = "editor.body"
+    controller.getState().editor = {
+      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" },
+      body: "",
+      savedBody: "",
+      dirty: false,
+    }
+
+    assert.deepEqual(routeWorkspaceKey("\u001b[200~/literal \u0010 \u0013 text\u001b[201~", controller, () => {}), { handled: true })
+    assert.deepEqual(calls, ["insertEditorText:/literal   text"])
+  })
+
+  test("editor body routing strips ANSI escape sequences from bracketed paste", () => {
+    const { controller, calls } = createController("editor")
+    controller.getState().mode = "editor.body"
+    controller.getState().editor = {
+      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" },
+      body: "",
+      savedBody: "",
+      dirty: false,
+    }
+
+    assert.deepEqual(routeWorkspaceKey("\u001b[200~\u001b[31mred\u001b[0m \u001b]0;title\u0007text\u001b[201~", controller, () => {}), { handled: true })
+    assert.deepEqual(calls, ["insertEditorText:red text"])
+  })
+
+  test("editor body routing sanitizes non-bracketed multi-character paste fallback", () => {
+    const { controller, calls } = createController("editor")
+    controller.getState().mode = "editor.body"
+    controller.getState().editor = {
+      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" },
+      body: "",
+      savedBody: "",
+      dirty: false,
+    }
+
+    assert.deepEqual(routeWorkspaceKey("plain\u0010\u0013\u001b[31mred\u001b[0m", controller, () => {}), { handled: true })
+    assert.deepEqual(calls, ["insertEditorText:plainred"])
+  })
+
+  test("editor body routing strips ESC-terminated OSC and 8-bit C1 CSI paste residue", () => {
+    const { controller, calls } = createController("editor")
+    controller.getState().mode = "editor.body"
+    controller.getState().editor = {
+      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" },
+      body: "",
+      savedBody: "",
+      dirty: false,
+    }
+
+    assert.deepEqual(routeWorkspaceKey("a\u001b]0;title\u001b\\b\u009b31mred\u009b0m", controller, () => {}), { handled: true })
+    assert.deepEqual(calls, ["insertEditorText:abred"])
+  })
+
+  test("editor body routing strips 8-bit OSC and DCS paste residue", () => {
+    const { controller, calls } = createController("editor")
+    controller.getState().mode = "editor.body"
+    controller.getState().editor = {
+      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" },
+      body: "",
+      savedBody: "",
+      dirty: false,
+    }
+
+    assert.deepEqual(routeWorkspaceKey("\u001b[200~c\u0090payload\u009cd e\u009d0;title\u0007f\u001b[201~", controller, () => {}), { handled: true })
+    assert.deepEqual(calls, ["insertEditorText:cd ef"])
+  })
+
+  test("editor body routing rejects standalone C1 controls", () => {
+    const { controller, calls } = createController("editor")
+    controller.getState().mode = "editor.body"
+    controller.getState().editor = {
+      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" },
+      body: "",
+      savedBody: "",
+      dirty: false,
+    }
+
+    assert.deepEqual(routeWorkspaceKey("\u009b", controller, () => {}), { handled: false })
+    assert.deepEqual(calls, [])
+  })
+
+  test("editor body routing inserts printable slash instead of opening Search Everything", () => {
+    const { controller, calls } = createController("editor")
+    controller.getState().mode = "editor.body"
+    controller.getState().editor = {
+      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" },
+      body: "",
+      savedBody: "",
+      dirty: false,
+    }
+
+    assert.deepEqual(routeWorkspaceKey("/", controller, () => {}), { handled: true })
+    assert.deepEqual(calls, ["insertEditorText:/"])
   })
 
   test("editor body renders as a focused controlled input owner", async () => {

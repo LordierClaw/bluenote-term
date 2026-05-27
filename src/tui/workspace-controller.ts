@@ -90,6 +90,7 @@ export interface WorkspaceController {
   backspaceEditor: () => void
   deleteEditor: () => void
   moveEditorCursor: (direction: EditorCursorDirection) => void
+  toggleEditorWrapMode: () => void
   saveEditor: () => Promise<WorkspaceActionResult>
   openSearch: (query?: string) => void
   updateSearchQuery: (query: string) => void
@@ -776,6 +777,17 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       state = {
         ...state,
         editor: moveEditorCursor(state.editor, direction),
+      }
+    },
+
+    toggleEditorWrapMode: () => {
+      if (!state.editor) return
+      state = {
+        ...state,
+        editor: {
+          ...state.editor,
+          wrapMode: state.editor.wrapMode === "none" ? "word" : "none",
+        },
       }
     },
 

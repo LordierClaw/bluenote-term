@@ -217,6 +217,23 @@ describe("TUI workspace controller", () => {
     assert.equal(afterSave?.wrapMode, beforeSave?.wrapMode)
   })
 
+  test("toggles editor wrap mode without marking the editor dirty", () => {
+    const { deps } = createDeps()
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    assert.equal(controller.getState().editor?.wrapMode, "word")
+
+    controller.toggleEditorWrapMode()
+    assert.equal(controller.getState().editor?.wrapMode, "none")
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "idle")
+
+    controller.toggleEditorWrapMode()
+    assert.equal(controller.getState().editor?.wrapMode, "word")
+    assert.equal(controller.getState().editor?.dirty, false)
+  })
+
   test("switches editor and manager with shortcut actions while preserving dirty editor state", () => {
     const { deps } = createDeps()
     const controller = createWorkspaceController(deps)

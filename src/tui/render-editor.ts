@@ -33,7 +33,7 @@ export interface EditorBodyViewModel {
   placeholder: string
   focused: boolean
   cursor: { line: number; column: number }
-  wrapMode: "word"
+  wrapMode: "word" | "none"
   overflow: boolean
 }
 
@@ -156,11 +156,11 @@ export function buildEditorViewModel(state: TuiState): EditorViewModel {
       placeholder: "Write your note…",
       focused: !findMode,
       cursor,
-      wrapMode: "word",
+      wrapMode: editor?.wrapMode ?? "word",
       overflow: false,
     },
     bottombar: {
-      status: `Line ${cursor.line}, Col ${cursor.column} · ${bottomBarStatus}`,
+      status: `Line ${cursor.line}, Col ${cursor.column} · Wrap ${editor?.wrapMode ?? "word"} · ${bottomBarStatus}`,
       statusIntent,
       hints: ["Ctrl+S save", "Ctrl+F find", "Ctrl+P search", "Esc manager", "Ctrl+C quit"],
     },
@@ -299,6 +299,9 @@ export function routeEditorKey(sequence: string, controller: WorkspaceController
     case "\u0006":
     case "\u001b[27;5;102~":
       controller.openEditorFind()
+      return true
+    case "\u001bz":
+      controller.toggleEditorWrapMode()
       return true
     case "\u001b":
     case "\u001b[":
