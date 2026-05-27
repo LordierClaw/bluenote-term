@@ -10,6 +10,7 @@ import { createSidecarRepository } from "../storage/sidecar-repository"
 import { createNoteRepository } from "../storage/note-repository"
 import type { ParsedNote } from "../storage/note-schema"
 import { ensureManagedRoot } from "../storage/root-layout"
+import { migrateLegacyAppStateToData } from "../storage/app-state-migration"
 
 export interface RebuildIndexesOptions extends ResolveBlueNoteRootOptions {
   testHooks?: {
@@ -94,6 +95,7 @@ function readLegacyFrontmatterNote(rawNote: string, relativePath: string) {
 
 export function rebuildIndexes(options: RebuildIndexesOptions = {}): RebuildIndexesSummary {
   const rootPath = ensureManagedRoot(resolveBlueNoteRoot(options))
+  migrateLegacyAppStateToData(rootPath)
   const repository = createNoteRepository(rootPath)
   const sidecars = createSidecarRepository(rootPath)
   const notes: Array<IndexedNoteRecord | ParsedNote> = []

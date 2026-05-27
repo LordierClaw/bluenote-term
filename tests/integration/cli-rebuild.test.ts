@@ -1,7 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import path from "node:path"
-import { mkdir, readFile } from "node:fs/promises"
+import { access, mkdir, readFile } from "node:fs/promises"
 
 import { loadIndexStore } from "../../src/index/index-store"
 import { createManagedRootHarness } from "../helpers/cli"
@@ -63,6 +63,37 @@ test("bn rebuild reads plain note bodies plus sidecars and writes derived artifa
 
     const searchJson = JSON.parse(await readFile(searchPath, "utf8")) as { documentIds: Record<string, string> }
     assert.equal(searchJson.documentIds["0"], "alpha-note")
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test("bn rebuild migrates .state sidecars before rebuilding .data indexes", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-rebuild-state-migration-")
+
+  try {
+    const relativePath = path.join("notes", "inbox", "legacy-state-note.md")
+    await harness.writeNote(relativePath, "Legacy state sidecar body mentions asteroid dust.\n")
+    await harness.writeNote(
+      path.join(".state", "notes", "legacy-state-note.json"),
+      sidecarJson({
+        key: "legacy-state-note",
+        title: "Legacy State Note",
+        description: "Legacy state sidecar body mentions asteroid dust.",
+        relativePath,
+      }),
+    )
+    await harness.writeNote(path.join(".state", "metadata.sqlite"), "stale metadata must not be copied")
+
+    const result = harness.run(["rebuild"])
+
+    assert.equal(result.exitCode, 0)
+    assert.equal(result.stderr, "")
+    assert.match(result.stdout, /Rebuilt indexes for 1 note\(s\)\./)
+    await access(path.join(harness.rootPath, ".data", "notes", "legacy-state-note.json"))
+    await access(path.join(harness.rootPath, ".data", "metadata.sqlite"))
+    await access(path.join(harness.rootPath, ".data", "search-index.json"))
+    assert.notEqual(await readFile(path.join(harness.rootPath, ".data", "metadata.sqlite"), "utf8"), "stale metadata must not be copied")
   } finally {
     await harness.cleanup()
   }

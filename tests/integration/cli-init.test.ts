@@ -45,6 +45,46 @@ test("bn init is idempotent on subsequent runs", async () => {
   }
 })
 
+test("bn init migrates existing .state metadata into .data without rewriting notes", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-init-state-migration-")
+
+  try {
+    const relativePath = path.join("notes", "inbox", "plain.md")
+    const noteBody = "Plain note body must remain byte-for-byte unchanged.\n"
+    const sidecarJson = `${JSON.stringify(
+      {
+        key: "plain",
+        title: "Plain",
+        description: "Plain note body must remain byte-for-byte unchanged.",
+        relativePath,
+        createdAt: "2026-05-21T10:15:00.000Z",
+        updatedAt: "2026-05-21T10:15:00.000Z",
+        archivedAt: null,
+        namingVersion: 1,
+      },
+      null,
+      2,
+    )}\n`
+
+    await harness.writeNote(relativePath, noteBody)
+    await harness.writeNote(
+      path.join(".state", "manifest.json"),
+      `${JSON.stringify({ schemaVersion: STORAGE_SCHEMA_VERSION }, null, 2)}\n`,
+    )
+    await harness.writeNote(path.join(".state", "notes", "plain.json"), sidecarJson)
+
+    const result = harness.run(["init"])
+
+    assert.equal(result.exitCode, 0)
+    assert.equal(result.stderr, "")
+    await access(path.join(harness.rootPath, ".data", "manifest.json"))
+    await access(path.join(harness.rootPath, ".data", "notes", "plain.json"))
+    assert.equal(await readFile(path.join(harness.rootPath, relativePath), "utf8"), noteBody)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
 test("bn init reports a user-facing error when BLUENOTE_ROOT points to a file", async () => {
   const fixture = await createBlockedRootFixture("bluenote-cli-init-error-")
 
