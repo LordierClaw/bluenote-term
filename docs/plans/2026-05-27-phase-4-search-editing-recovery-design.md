@@ -21,8 +21,9 @@ This phase turns the usable Phase 3 TUI/CLI into a faster, clearer, more robust 
 - Note files remain plain Markdown.
 - BlueNote may redesign internal app state under the managed root.
 - `.data/` becomes the canonical BlueNote-owned internal app-state directory for Phase 4.
-- Existing `.state/` roots need safe migration/compatibility handling.
-- Derived/internal data must remain rebuildable.
+- BlueNote metadata sidecars live under `.data/notes/` while note files remain plain Markdown.
+- Existing `.state/` roots need safe migration/compatibility handling and are used only as migration input after 4A.
+- Derived/internal data remains rebuildable under `.data/`, including `.data/metadata.sqlite` and `.data/search-index.json`.
 - Performance is a top priority: lightweight, low RAM/CPU, fastest possible perceived UX.
 - No default background daemon.
 

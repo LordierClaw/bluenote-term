@@ -2,7 +2,7 @@
 
 ## Current note format
 
-All new notes are plain Markdown files. BlueNote metadata is stored alongside them as sidecar JSON under `.state/notes/`.
+All new notes are plain Markdown files. BlueNote metadata is stored alongside them as sidecar JSON under `.data/notes/`.
 
 Plain note file example:
 
@@ -36,15 +36,16 @@ Selector and CLI expectations:
 
 ## Indexing design
 
-Canonical state lives in files.
+Canonical state lives in files: plain Markdown note bodies under `notes/` and BlueNote metadata sidecars under `.data/notes/`. Legacy `.state/` directories are used only as migration input.
 
 Rebuildable caches:
-- `sql.js` metadata cache
-- MiniSearch full-text index
+- `.data/metadata.sqlite` `sql.js` metadata cache
+- `.data/search-index.json` MiniSearch full-text index artifact
 
 Indexing rules:
 - use content hashes, not mtime alone, for change detection
-- cache deletion must be recoverable by full rebuild from files
+- cache deletion must be recoverable by full rebuild from note files and `.data/notes/` sidecars
 - invalid note/sidecar pairs should be reported, not silently rewritten
 - grouped search output should show one block per note with key, path, match label, and excerpt when available
+- `bn search` uses contains-style matching over key, filename/path, title, description, and body content; query `123` only matches fields or content containing `123`
 - mutation commands should rebuild derived indexes automatically; `bn rebuild` remains the manual recovery path

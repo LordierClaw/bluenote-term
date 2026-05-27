@@ -46,6 +46,18 @@ function assertMinimalManagerChrome(content: string): void {
   assert.doesNotMatch(content, /BlueNote Manager|BlueNote TUI|branded title screen|decorative title/i)
 }
 
+function assertDataStorageAndContainsSearchContract(content: string): void {
+  assert.match(content, /plain Markdown/i)
+  assert.match(content, /\.data\/notes\//)
+  assert.match(content, /\.data\/metadata\.sqlite/)
+  assert.match(content, /\.data\/search-index\.json/)
+  assert.match(content, /contains-style|contains style/i)
+  assert.match(content, /123.*contain|contain.*123/i)
+  assert.doesNotMatch(content, /\.state\/notes\//)
+  assert.doesNotMatch(content, /\.state\/metadata\.sqlite|\.state\/search-index\.json/)
+  assert.doesNotMatch(content, /fuzzy search|fuzzy-style search|fuzzy matching/i)
+}
+
 test("README documents the refined Phase 3 TUI workspace behavior", async () => {
   const readme = await readRepoFile("README.md")
 
@@ -89,4 +101,19 @@ test("runtime docs identify OpenTUI as the refined Phase 3 workspace runtime", a
   assert.match(runtime, /Editor/i)
   assert.match(runtime, /Search Everything/i)
   assertRefinedTuiBehavior(runtime)
+})
+
+test("active docs describe canonical data storage and contains search contracts", async () => {
+  const docs = await Promise.all([
+    readRepoFile("README.md"),
+    readRepoFile("docs/product/overview.md"),
+    readRepoFile("docs/architecture/managed-root-layout.md"),
+    readRepoFile("docs/architecture/note-format-and-indexing.md"),
+    readRepoFile("docs/architecture/runtime-and-dependencies.md"),
+    readRepoFile("docs/phases/phase-4-search-editing-and-recovery.md"),
+  ])
+
+  for (const content of docs) {
+    assertDataStorageAndContainsSearchContract(content)
+  }
 })

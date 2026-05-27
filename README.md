@@ -1,17 +1,17 @@
 # BlueNote
 
-BlueNote is a terminal-native, local-first note tool implemented in Bun and TypeScript. Phase 2 delivered the plain-note CLI storage/UX pivot, and Phase 3 now adds the OpenTUI workspace on top of the same storage contract.
+BlueNote is a terminal-native, local-first note tool implemented in Bun and TypeScript. Phase 2 delivered the plain-note CLI storage/UX pivot, Phase 3 added the OpenTUI workspace, and Phase 4A makes `.data/` the canonical internal app-state layout while preserving the same plain Markdown notes.
 
 ## Status
 
-This repository includes the approved **Phase 2 CLI storage + UX pivot** and the active **Phase 3 — TUI Workspace** implementation. The TUI is a presentation/input layer over the existing core services; it does not introduce a separate storage model.
+This repository includes the approved **Phase 2 CLI storage + UX pivot**, **Phase 3 — TUI Workspace**, and the **Phase 4A `.data` + contains-search foundation**. The TUI is a presentation/input layer over the existing core services; it does not introduce a separate storage model.
 
 Current goals:
 - keep repository and Git hygiene aligned with active CLI/TUI work
 - maintain runtime/tooling conventions
 - keep Hermes and project docs aligned with the implemented workflow
 - verify the command-first CLI workflow with tests and smoke checks
-- preserve the Phase 2 storage contract while using the Phase 3 OpenTUI workspace
+- preserve plain Markdown notes while using the canonical `.data/` app-state layout and Phase 3 OpenTUI workspace
 
 ## Runtime
 
@@ -39,12 +39,13 @@ bun run ./bin/bn.ts tui
 
 ## Current CLI workflow
 
-- Notes are plain `.md` files under `notes/`; canonical BlueNote metadata lives in `.state/notes/<key>.json` sidecars.
-- The managed `.state/` layout includes `notes/`, `completions/`, `tmp/`, `logs/`, `recovery/`, `manifest.json`, `metadata.sqlite`, and `search-index.json`.
-- Derived artifacts such as `.state/metadata.sqlite` and `.state/search-index.json` are rebuildable.
+- Notes are plain `.md` files under `notes/`; canonical BlueNote metadata lives in `.data/notes/<key>.json` sidecars.
+- The managed `.data/` layout includes `notes/`, `completions/`, `tmp/`, `logs/`, `recovery/`, `manifest.json`, `metadata.sqlite`, and `search-index.json`.
+- Derived artifacts such as `.data/metadata.sqlite` and `.data/search-index.json` are rebuildable from note files and sidecars.
+- `.state/` is legacy input for safe migration into `.data/`; new/current roots should not treat `.state/` as canonical app state.
 - `bn new`, `bn edit`, `bn archive`, and `bn delete --force` rebuild derived indexes automatically after mutating note storage.
 - Selectors are key-first for everyday use; `show`, `edit`, `archive`, and `delete --force` accept canonical `key|path` selectors.
-- `bn search` prints grouped note blocks with the title first, then key, path, and the highest-value match label or excerpt.
+- `bn search` uses contains-style matching and prints grouped note blocks with the title first, then key, path, and the highest-value match label or excerpt. Query `123` only matches notes whose key, filename/path, title, description, or content actually contains `123`.
 - The visible CLI command surface is `init`, `new`, `list`, `show`, `search`, `edit`, `archive`, `delete`, `rebuild`, `migrate`, `completion`, and `tui`.
 
 ## Phase 3 TUI workspace
@@ -55,7 +56,7 @@ Launch the workspace with `bn tui` (or `bun run ./bin/bn.ts tui` from the repo) 
 - **Editor** — a focused inline note editing screen with top/bottom bars around the editor body. Current wired Phase 3 behavior covers live typing/input regression coverage, Unicode-safe buffer changes, explicit save, dirty-state handling, `Ctrl+F` find mode, and 750ms autosave guarded against stale completions. Select-all and cut/copy/paste remain adapter/controller groundwork for follow-on runtime wiring.
 - **Search Everything** — a global search/command screen with a single input, result list, and preview for notes, content matches, folders/paths, and discoverable slash-prefixed command entries such as `/new`, `/archive`, `/delete`, `/rebuild`, `/migrate`, `/find`, `/replace`, and `/save`. In the current runtime, `/save` is the built-in wired action; other command entries require handler wiring before they mutate notes. `Escape` or `Ctrl+[` backs out to the invoking screen.
 
-The TUI reads and writes the same plain Markdown note files and `.state/notes/` sidecars as the CLI; note files remain plain and do not gain frontmatter. Agents can verify the real interactive path with `bun run smoke:opentui:interactive`, which launches `bn tui` inside a tmux-backed TTY and captures the Manager screen.
+The TUI reads and writes the same plain Markdown note files and `.data/notes/` sidecars as the CLI; note files remain plain and do not gain frontmatter. Manager filtering and Search Everything follow the same contains-style search contract as `bn search`. Agents can verify the real interactive path with `bun run smoke:opentui:interactive`, which launches `bn tui` inside a tmux-backed TTY and captures the Manager screen.
 
 ## Completion and migration
 
@@ -64,7 +65,7 @@ The TUI reads and writes the same plain Markdown note files and `.state/notes/` 
   - `bun run ./bin/bn.ts completion zsh`
   - `bun run ./bin/bn.ts completion fish`
 - Shell completion is shell setup, not a TUI action. The generated completion scripts call `bn complete selectors <command> <prefix>` directly, and they stay quiet when the root or indexes are unavailable.
-- `bn migrate` converts legacy frontmatter notes into plain note files plus `.state/notes/` sidecars, rebuilds derived indexes, and fails hard on mixed or unsafe roots instead of guessing.
+- `bn migrate` converts legacy frontmatter notes into plain note files plus `.data/notes/` sidecars, migrates legacy `.state/` metadata into `.data/` when safe, rebuilds derived `.data/metadata.sqlite` and `.data/search-index.json` artifacts, and fails hard on mixed or unsafe roots instead of guessing.
 
 ## Repository map
 
@@ -77,4 +78,4 @@ The TUI reads and writes the same plain Markdown note files and `.state/notes/` 
 
 ## Current implementation note
 
-The repository now includes a working Phase 2 storage/UX CLI flow plus the Phase 3 TUI workspace. The roadmap continues with workflow hardening in Phase 4 and release hardening in Phase 5.
+The repository now includes a working CLI flow, the Phase 3 TUI workspace, and the Phase 4A `.data`/contains-search foundation. The roadmap continues with Phase 4B editor input/cursor work, Phase 4C manager performance/responsive layout/style, Phase 4D Search Everything readability/responsiveness, and Phase 5 release hardening.
