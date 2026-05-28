@@ -35,6 +35,16 @@ The user approved proceeding from the manual QA plan into hardening. A fresh `co
 
 Retried real visual capture for Task 7 before making any UI/code changes. `computer-use-linux doctor` still reported no blockers and `list_windows` found the Ubuntu Terminal window `2069271615` at `/home/hainn/blue/code/bluenote-term`, but a targeted screenshot retry against that window still failed: `GNOME Shell screenshot failed: GNOME Shell Screenshot call failed; XDG portal screenshot was denied or cancelled with response code 2`. Because no real screenshot evidence was available, visual scenarios A/B/D/F/I/K were not re-rated and no speculative color/layout/product-code changes were made.
 
+## User-reported blocker update — 2026-05-29
+
+The previous finish-branch attempt is invalidated by live user reports:
+
+- Autosave always fails in the real TUI.
+- The editor cursor does not show.
+- `Ctrl+C` and `q` do not reliably quit.
+
+Treat these as Blocker severity until disproven by reproducible evidence. Phase 4G now owns reproducing, root-causing, fixing, and live-verifying these issues before any visual-polish-only work resumes.
+
 ## Environment and preflight
 
 ### Desktop/tool readiness
