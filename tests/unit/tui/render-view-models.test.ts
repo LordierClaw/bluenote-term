@@ -322,6 +322,51 @@ describe("TUI render view models", () => {
     assert.equal(vm.panels.layout2.title, "root-note.md")
   })
 
+  test("manager view model hides preview responsively at narrow widths without building note content", () => {
+    const browser = buildManagerBrowserModel([
+      {
+        key: "root-note",
+        title: "Root Note",
+        description: "A top-level note.",
+        relativePath: "notes/root-note.md",
+        body: "# Root Note\n\nPreview body.",
+      },
+    ], {
+      items: [],
+      focusedIndex: 0,
+      selectedNoteKey: "root-note",
+      currentFolderPath: "",
+      hoveredPath: "notes/root-note.md",
+      filterQuery: "",
+      previewVisible: true,
+    })
+
+    const wideVm = buildManagerViewModel({
+      ...baseState,
+      manager: {
+        ...browser.state,
+        items: browser.layout1Rows,
+        previewVisible: true,
+      },
+    } as TuiState, browser, { width: 100 })
+    const narrowVm = buildManagerViewModel({
+      ...baseState,
+      manager: {
+        ...browser.state,
+        items: browser.layout1Rows,
+        previewVisible: true,
+      },
+    } as TuiState, browser, { width: 60 })
+
+    assert.equal(wideVm.layout2.preview.type, "note-content")
+    assert.equal(narrowVm.layout2.preview.type, "hidden")
+    assert.equal(narrowVm.layout2.preview.reason, "responsive")
+    assert.equal(narrowVm.panels.layout2.title, "Preview hidden")
+    assert.equal("contentLines" in narrowVm.layout2.preview, false)
+    assert.equal(narrowVm.layout1.rows.length, 1)
+    assert.equal(narrowVm.shortcuts.includes("p preview show"), true)
+  })
+
   test("manager chrome titles current folder and hidden preview states without artificial layout labels", () => {
     const browser = buildManagerBrowserModel([
       { key: "api-roadmap", title: "API Roadmap", description: "Ship API work.", relativePath: "notes/projects/api-roadmap.md" },
@@ -681,6 +726,48 @@ describe("TUI render view models", () => {
       assert.equal(inputs[0]?.id, "bluenote-manager-create-title")
       assert.equal(inputs[0]?.focused, true)
       assert.equal((inputs[0] as InputRenderable | undefined)?.value, "Project Plan")
+    } finally {
+      renderer.destroy()
+    }
+  })
+
+  test("manager renderer uses responsive panes, compact hidden preview hint, and minimal root chrome", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const controller = createWorkspaceController({
+        listNotes: () => [{ key: "root-note", title: "Root Note", description: "A top-level note.", relativePath: "notes/root-note.md", body: "# Root Note\n\nPreview body." }],
+        showNote: () => ({ key: "root-note", title: "Root Note", description: "A top-level note.", relativePath: "notes/root-note.md", body: "# Root Note\n\nPreview body." }),
+        searchNotes: () => [],
+      })
+      controller.refreshManager()
+
+      const wideScreen = renderManagerScreen({ renderer, controller, width: 100 })
+      renderer.root.add(wideScreen)
+      const wideIds = descendants(wideScreen).map((node) => node.id)
+      const wideLayout2 = descendants(wideScreen).find((node) => node.id === "bluenote-manager-layout-2") as { getChildren: () => Renderable[] } | undefined
+      const widePreviewText = wideLayout2?.getChildren().map((node: any) => node.content?.chunks?.[0]?.text ?? node.content ?? "") ?? []
+
+      assert.equal(wideIds.includes("bluenote-manager-layout-1"), true)
+      assert.equal(wideIds.includes("bluenote-manager-layout-2"), true)
+      assert.equal((wideScreen as any).border, false)
+      assert.equal((wideScreen as any).title ?? "", "")
+      assert.deepEqual(widePreviewText.slice(0, 4), ["Root Note", "notes/root-note.md", "# Root Note", ""])
+
+      renderer.root.remove(wideScreen.id)
+      wideScreen.destroyRecursively()
+
+      const narrowScreen = renderManagerScreen({ renderer, controller, width: 60 })
+      renderer.root.add(narrowScreen)
+      const narrowIds = descendants(narrowScreen).map((node) => node.id)
+      const narrowText = descendants(narrowScreen).map((node: any) => node.content?.chunks?.[0]?.text ?? node.content ?? "").join("\n")
+      const narrowLayout1 = descendants(narrowScreen).find((node) => node.id === "bluenote-manager-layout-1") as { width?: unknown } | undefined
+
+      assert.equal(narrowIds.includes("bluenote-manager-layout-1"), true)
+      assert.equal(narrowIds.includes("bluenote-manager-layout-2"), false)
+      assert.equal((narrowLayout1 as any)?._width, "100%")
+      assert.match(narrowText, /root-note\.md/u)
+      assert.match(narrowText, /Preview hidden.*p preview show/u)
+      assert.doesNotMatch(narrowText, /Preview body/u)
     } finally {
       renderer.destroy()
     }

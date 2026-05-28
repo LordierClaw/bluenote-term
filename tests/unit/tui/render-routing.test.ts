@@ -4,7 +4,7 @@ import { createCliRenderer } from "@opentui/core"
 
 import { blurWorkspaceInputs, focusActiveWorkspaceInput, routeWorkspaceKey } from "../../../src/tui/app"
 import { renderEditorScreen, routeEditorKey } from "../../../src/tui/render-editor"
-import { routeManagerKey } from "../../../src/tui/render-manager"
+import { renderManagerScreen, routeManagerKey } from "../../../src/tui/render-manager"
 import { routeSearchEverythingKey } from "../../../src/tui/render-search-everything"
 import type { TuiState } from "../../../src/tui/state"
 import { createWorkspaceController, type WorkspaceController } from "../../../src/tui/workspace-controller"
@@ -575,6 +575,47 @@ describe("TUI render keyboard routing", () => {
     assert.deepEqual(routeWorkspaceKey("\u0010", controller, () => {}), { handled: true })
 
     assert.deepEqual(calls, ["toggleManagerPreview", "openSearch:", "toggleSearch:"])
+  })
+
+  test("manager renderer removes preview pane at narrow widths and keeps browser rows routable", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      let showCalls = 0
+      const controller = createWorkspaceController({
+        listNotes: () => [{ key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md" }],
+        showNote: () => {
+          showCalls += 1
+          return { key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md", body: "# Daily\n\nPreview body" }
+        },
+        searchNotes: () => [],
+      })
+      controller.refreshManager()
+
+      const wideScreen = renderManagerScreen({ renderer, controller, width: 100 })
+      renderer.root.add(wideScreen)
+      assert.notEqual(findById(wideScreen, "bluenote-manager-layout-1"), undefined)
+      assert.notEqual(findById(wideScreen, "bluenote-manager-layout-2"), undefined)
+      renderer.root.remove(wideScreen.id)
+      wideScreen.destroyRecursively()
+      showCalls = 0
+
+      const narrowScreen = renderManagerScreen({ renderer, controller, width: 60 })
+      renderer.root.add(narrowScreen)
+      const narrowLayout1 = findById(narrowScreen, "bluenote-manager-layout-1")
+      const narrowLayout2 = findById(narrowScreen, "bluenote-manager-layout-2")
+      const narrowText = descendants(narrowScreen).map((node) => node.content?.chunks?.[0]?.text ?? node.content ?? "").join("\n")
+
+      assert.equal(showCalls, 0)
+      assert.notEqual(narrowLayout1, undefined)
+      assert.equal(narrowLayout2, undefined)
+      assert.match(narrowText, /daily\.md/u)
+      assert.match(narrowText, /Preview hidden/u)
+      assert.doesNotMatch(narrowText, /Preview body/u)
+
+      assert.equal(routeManagerKey("\u001b[B", controller), true)
+    } finally {
+      renderer.destroy()
+    }
   })
 
   test("manager create route edits title, submits on Enter, and cancels on Escape or Ctrl+[", () => {

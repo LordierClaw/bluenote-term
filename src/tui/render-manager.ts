@@ -85,6 +85,12 @@ export type ManagerPreviewViewModel =
       styleIntent: TuiColorIntent
     }
 
+export interface BuildManagerViewModelOptions {
+  width?: number
+}
+
+export const MANAGER_PREVIEW_NARROW_WIDTH = 72
+
 export interface ManagerViewModel {
   title: string
   topbar: ManagerTopbarViewModel
@@ -197,6 +203,15 @@ function emptyPreview(): ManagerPreviewViewModel {
   }
 }
 
+function hiddenPreview(path: string | null, reason: "manual" | "responsive"): ManagerPreviewViewModel {
+  return {
+    type: "hidden",
+    path,
+    reason,
+    styleIntent: "panel",
+  }
+}
+
 function previewViewModelFor(preview: ManagerPreviewModel | null | undefined, openNoteKey: string | null): ManagerPreviewViewModel {
   if (!preview || preview.type === "empty") {
     return emptyPreview()
@@ -231,20 +246,23 @@ function previewViewModelFor(preview: ManagerPreviewModel | null | undefined, op
   }
 }
 
-export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBrowserModel): ManagerViewModel {
+export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBrowserModel, options: BuildManagerViewModelOptions = {}): ManagerViewModel {
   const openNoteKey = state.editor?.note.key ?? null
   const hoveredPath = browserModel?.hoveredPath ?? state.manager.hoveredPath ?? null
   const currentFolderPath = browserModel?.currentFolderPath ?? state.manager.currentFolderPath ?? ""
+  const responsivePreviewHidden = typeof options.width === "number" && options.width < MANAGER_PREVIEW_NARROW_WIDTH
   const layout1SourceRows = browserModel?.layout1Rows ?? state.manager.items
   const rows = layout1SourceRows.map((item, index) => {
     const focused = browserModel ? item.relativePath === hoveredPath : index === state.manager.focusedIndex
     return toRowViewModel(item, index, focused, openNoteKey)
   })
-  const preview = browserModel
-    ? previewViewModelFor(browserModel.preview, openNoteKey)
-    : state.manager.previewVisible === false
-      ? { type: "hidden" as const, path: hoveredPath, reason: "manual" as const, styleIntent: "panel" as const }
-      : previewViewModelFor(undefined, openNoteKey)
+  const preview = responsivePreviewHidden
+    ? hiddenPreview(hoveredPath, "responsive")
+    : browserModel
+      ? previewViewModelFor(browserModel.preview, openNoteKey)
+      : state.manager.previewVisible === false
+        ? hiddenPreview(hoveredPath, "manual")
+        : previewViewModelFor(undefined, openNoteKey)
   const statusParts = [`${rows.length} ${rows.length === 1 ? "item" : "items"}`]
   if (state.manager.filterQuery) {
     statusParts.push(`filter “${state.manager.filterQuery}”`)
@@ -318,6 +336,7 @@ export interface RenderManagerScreenOptions {
   controller: WorkspaceController
   onExit?: () => void
   onInvalidate?: () => void
+  width?: number
 }
 
 function rowSegment(options: RenderManagerScreenOptions, content: string, fg: string, bg: string, width?: number): TextRenderable {
@@ -351,15 +370,17 @@ function rowRenderable(options: RenderManagerScreenOptions, row: ManagerRowViewM
 }
 
 export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRenderable {
-  const vm = buildManagerViewModel(options.controller.getState(), options.controller.getManagerBrowserModel())
+  const state = options.controller.getState()
+  const responsivePreviewHidden = typeof options.width === "number" && options.width < MANAGER_PREVIEW_NARROW_WIDTH
+  const browserModel = responsivePreviewHidden ? undefined : options.controller.getManagerBrowserModel()
+  const vm = buildManagerViewModel(state, browserModel, { width: options.width })
+  const previewHidden = vm.layout2.preview.type === "hidden"
   const root = new BoxRenderable(options.renderer, {
     id: "bluenote-manager-screen",
     flexDirection: "column",
     width: "100%",
     height: "100%",
-    border: true,
-    borderColor: tuiTheme.primaryAccent,
-    backgroundColor: tuiTheme.background,
+    border: false,
     title: vm.title,
   })
 
@@ -382,14 +403,14 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
   const layout1 = new BoxRenderable(options.renderer, {
     id: "bluenote-manager-layout-1",
     flexDirection: "column",
-    width: "50%",
+    width: previewHidden ? "100%" : "50%",
     height: "100%",
     border: true,
     borderColor: tuiTheme.primaryAccent,
     backgroundColor: tuiTheme.panel,
     title: vm.panels.layout1.title,
   })
-  const layout2 = new BoxRenderable(options.renderer, {
+  const layout2 = previewHidden ? null : new BoxRenderable(options.renderer, {
     id: "bluenote-manager-layout-2",
     flexDirection: "column",
     width: "50%",
@@ -408,22 +429,24 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
   }
 
   const preview = vm.layout2.preview
-  if (preview.type === "folder") {
+  if (layout2 && preview.type === "folder") {
     for (const row of preview.rows) {
       layout2.add(rowRenderable(options, row))
     }
-  } else if (preview.type === "note-content") {
+  } else if (layout2 && preview.type === "note-content") {
     layout2.add(new TextRenderable(options.renderer, { content: preview.title, height: 1, fg: tuiTheme.primaryAccent, bg: tuiTheme.panel }))
     layout2.add(new TextRenderable(options.renderer, { content: preview.path, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
     for (const line of preview.contentLines.slice(0, 20)) {
       layout2.add(new TextRenderable(options.renderer, { content: line, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
     }
-  } else {
+  } else if (layout2) {
     layout2.add(new TextRenderable(options.renderer, { content: "No preview", height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
   }
 
   panels.add(layout1)
-  panels.add(layout2)
+  if (layout2) {
+    panels.add(layout2)
+  }
   root.add(panels)
   if (options.controller.getState().mode === "manager.filter") {
     const filterBar = new BoxRenderable(options.renderer, {
@@ -522,7 +545,8 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     }))
     root.add(deleteBar)
   }
-  root.add(new TextRenderable(options.renderer, { content: vm.status, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
+  const previewHiddenHint = preview.type === "hidden" ? `Preview hidden (${preview.reason === "responsive" ? "narrow width" : "manual"}) · p preview show` : null
+  root.add(new TextRenderable(options.renderer, { content: previewHiddenHint ? `${vm.status} · ${previewHiddenHint}` : vm.status, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
   root.add(new TextRenderable(options.renderer, { content: vm.shortcuts.join("  "), height: 1, fg: tuiTheme.secondaryAccent, bg: tuiTheme.panel }))
 
   return root
