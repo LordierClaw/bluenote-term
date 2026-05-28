@@ -22,6 +22,11 @@ export interface ManagerRowViewModel {
     title: string
     description: string
   }
+  displaySegments: {
+    primary: string
+    secondary: string
+    metadata: string
+  }
   styleIntent: TuiColorIntent
   itemStyleIntent: TuiColorIntent
   openStyleIntent: TuiColorIntent | null
@@ -42,13 +47,35 @@ export interface ManagerPanelViewModel {
   styleIntent: TuiColorIntent
 }
 
+export interface ManagerDashboardViewModel {
+  productLabel: "BlueNote"
+  workspaceLabel: string
+  summaryLabel: string
+  orientation: string
+  primaryActions: string[]
+}
+
+export interface ManagerEmptyStateViewModel {
+  title: string
+  body: string
+  actions: string[]
+  styleIntent: TuiColorIntent
+}
+
+export interface ManagerPreviewSectionViewModel {
+  label: string
+  lines: string[]
+}
+
 export type ManagerPreviewViewModel =
   | {
       type: "empty"
       path: null
+      title: string
+      message: string
+      sections: ManagerPreviewSectionViewModel[]
       rows?: undefined
       noteKey?: undefined
-      title?: undefined
       description?: undefined
       contentLines?: undefined
       styleIntent: TuiColorIntent
@@ -57,9 +84,11 @@ export type ManagerPreviewViewModel =
       type: "hidden"
       path: string | null
       reason: "manual" | "responsive"
+      title: string
+      message: string
+      sections: ManagerPreviewSectionViewModel[]
       rows?: undefined
       noteKey?: undefined
-      title?: undefined
       description?: undefined
       contentLines?: undefined
       styleIntent: TuiColorIntent
@@ -68,8 +97,10 @@ export type ManagerPreviewViewModel =
       type: "folder"
       path: string
       rows: ManagerRowViewModel[]
+      title: string
+      message: string
+      sections: ManagerPreviewSectionViewModel[]
       noteKey?: undefined
-      title?: undefined
       description?: undefined
       contentLines?: undefined
       styleIntent: TuiColorIntent
@@ -81,6 +112,7 @@ export type ManagerPreviewViewModel =
       title: string
       description: string
       contentLines: string[]
+      sections: ManagerPreviewSectionViewModel[]
       rows?: undefined
       styleIntent: TuiColorIntent
     }
@@ -93,6 +125,7 @@ export const MANAGER_PREVIEW_NARROW_WIDTH = 72
 
 export interface ManagerViewModel {
   title: string
+  dashboard: ManagerDashboardViewModel
   topbar: ManagerTopbarViewModel
   panels: {
     layout1: ManagerPanelViewModel
@@ -101,6 +134,7 @@ export interface ManagerViewModel {
   layout1: {
     rows: ManagerRowViewModel[]
     empty: boolean
+    emptyState: ManagerEmptyStateViewModel | null
   }
   layout2: {
     preview: ManagerPreviewViewModel
@@ -187,6 +221,22 @@ function managerShortcutHints(state: TuiState, previewHidden: boolean, width?: n
   return [...primary, { key: "s", action: "Search", priority: "secondary" }]
 }
 
+function displaySegmentsFor(row: BrowserishRow): ManagerRowViewModel["displaySegments"] {
+  if (row.type === "folder") {
+    return {
+      primary: row.title || basenameLabel(row.relativePath) || row.filename.replace(/\/+$/u, ""),
+      secondary: row.description,
+      metadata: `folder · ${row.relativePath}`,
+    }
+  }
+
+  return {
+    primary: row.title || row.filename,
+    secondary: row.description,
+    metadata: `${row.filename} · ${row.relativePath}`,
+  }
+}
+
 function columnsFor(row: BrowserishRow): ManagerRowViewModel["columns"] {
   if ("columns" in row) {
     return { ...row.columns }
@@ -212,8 +262,9 @@ function toRowViewModel(row: BrowserishRow, _index: number, focused: boolean, _o
     openMarker: "",
     icon: row.type === "folder" ? "📁" : "📄",
     columns: columnsFor(row),
+    displaySegments: displaySegmentsFor(row),
     styleIntent: focused ? "focusedRow" : "panel",
-    itemStyleIntent: "mutedText",
+    itemStyleIntent: "textPrimary",
     openStyleIntent: null,
     metadataStyleIntent: "mutedText",
   }
@@ -223,6 +274,9 @@ function emptyPreview(): ManagerPreviewViewModel {
   return {
     type: "empty",
     path: null,
+    title: "Nothing selected",
+    message: "Move through notes to show a preview here.",
+    sections: [],
     styleIntent: "panel",
   }
 }
@@ -232,8 +286,23 @@ function hiddenPreview(path: string | null, reason: "manual" | "responsive"): Ma
     type: "hidden",
     path,
     reason,
-    styleIntent: "panel",
+    title: "Preview hidden",
+    message: reason === "responsive" ? "Preview hidden for narrow terminal · p show" : "Preview hidden · p show",
+    sections: [],
+    styleIntent: "mutedText",
   }
+}
+
+function previewSectionsFor(preview: Extract<ManagerPreviewViewModel, { type: "note-content" }>): ManagerPreviewSectionViewModel[] {
+  const sections: ManagerPreviewSectionViewModel[] = [
+    { label: "Title", lines: [preview.title] },
+    { label: "Path", lines: [preview.path] },
+  ]
+  if (preview.description) {
+    sections.push({ label: "Description", lines: [preview.description] })
+  }
+  sections.push({ label: "Body", lines: preview.contentLines })
+  return sections
 }
 
 function previewViewModelFor(preview: ManagerPreviewModel | null | undefined, openNoteKey: string | null): ManagerPreviewViewModel {
@@ -242,12 +311,7 @@ function previewViewModelFor(preview: ManagerPreviewModel | null | undefined, op
   }
 
   if (preview.type === "hidden") {
-    return {
-      type: "hidden",
-      path: preview.path,
-      reason: preview.reason,
-      styleIntent: "panel",
-    }
+    return hiddenPreview(preview.path, preview.reason)
   }
 
   if (preview.type === "folder") {
@@ -255,18 +319,36 @@ function previewViewModelFor(preview: ManagerPreviewModel | null | undefined, op
       type: "folder",
       path: preview.path,
       rows: preview.rows.map((row, index) => toRowViewModel(row, index, false, openNoteKey)),
+      title: basenameLabel(preview.path) || "Folder",
+      message: `${preview.rows.length} ${preview.rows.length === 1 ? "item" : "items"}`,
+      sections: [
+        { label: "Path", lines: [preview.path] },
+        { label: "Contents", lines: preview.rows.map((row) => displaySegmentsFor(row).primary) },
+      ],
       styleIntent: "panel",
     }
   }
 
-  return {
+  const notePreview: Extract<ManagerPreviewViewModel, { type: "note-content" }> = {
     type: "note-content",
     path: preview.path,
     noteKey: preview.noteKey,
     title: preview.title,
     description: preview.description,
     contentLines: [...preview.contentLines],
+    sections: [],
     styleIntent: "panel",
+  }
+  notePreview.sections = previewSectionsFor(notePreview)
+  return notePreview
+}
+
+function emptyStateFor(currentPath: string): ManagerEmptyStateViewModel {
+  return {
+    title: "No notes here yet",
+    body: `Create a note in ${currentPath} or search your workspace.`,
+    actions: ["[n] New", "[s] Search"],
+    styleIntent: "mutedText",
   }
 }
 
@@ -321,6 +403,13 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
 
   return {
     title: "",
+    dashboard: {
+      productLabel: "BlueNote",
+      workspaceLabel: `Workspace · ${currentPath}`,
+      summaryLabel: `${itemCountLabel} · ${appStatusLabel}`,
+      orientation: "Browse your local Markdown workspace.",
+      primaryActions: shortcutHintLabels(shortcutHints),
+    },
     topbar: {
       leftTitle: "BlueNote",
       itemCountLabel,
@@ -330,12 +419,13 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
       styleIntent: topbarTextIntent(),
     },
     panels: {
-      layout1: { title: currentPath, styleIntent: "panel" },
-      layout2: { title: focusedItemLabel(rows, preview), styleIntent: "panel" },
+      layout1: { title: currentPath, styleIntent: "borderFocus" },
+      layout2: { title: preview.type === "empty" ? "Preview" : focusedItemLabel(rows, preview), styleIntent: "borderSubtle" },
     },
     layout1: {
       rows,
       empty: rows.length === 0,
+      emptyState: rows.length === 0 ? emptyStateFor(currentPath) : null,
     },
     layout2: {
       preview,
@@ -391,9 +481,9 @@ function rowRenderable(options: RenderManagerScreenOptions, row: ManagerRowViewM
     backgroundColor: bg,
   })
 
-  box.add(rowSegment(options, row.columns.filename.padEnd(22), itemColor, bg, 22))
-  box.add(rowSegment(options, ` ${row.columns.title.padEnd(18)}`, metadataColor, bg, 19))
-  box.add(rowSegment(options, ` ${row.columns.description}`, metadataColor, bg))
+  box.add(rowSegment(options, row.displaySegments.primary.padEnd(24), itemColor, bg, 24))
+  box.add(rowSegment(options, ` ${row.displaySegments.secondary.padEnd(22)}`, tuiTheme.textSecondary, bg, 23))
+  box.add(rowSegment(options, ` ${row.displaySegments.metadata}`, metadataColor, bg))
 
   return box
 }
@@ -416,7 +506,7 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
 
   root.add(new TextRenderable(options.renderer, {
     id: "bluenote-manager-topbar",
-    content: `${vm.topbar.leftTitle}  ${vm.topbar.rightLabel}`,
+    content: `${vm.dashboard.productLabel}  ${vm.dashboard.workspaceLabel}  ${vm.dashboard.summaryLabel}`,
     height: 1,
     fg: tuiTheme[vm.topbar.styleIntent],
     bg: tuiTheme.panel,
@@ -436,7 +526,7 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     width: previewHidden ? "100%" : "50%",
     height: "100%",
     border: true,
-    borderColor: tuiTheme.borderSubtle,
+    borderColor: tuiTheme[vm.panels.layout1.styleIntent],
     backgroundColor: tuiTheme.panel,
     title: vm.panels.layout1.title,
   })
@@ -446,7 +536,7 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     width: "50%",
     height: "100%",
     border: true,
-    borderColor: tuiTheme.borderSubtle,
+    borderColor: tuiTheme[vm.panels.layout2.styleIntent],
     backgroundColor: tuiTheme.panel,
     title: vm.panels.layout2.title,
   })
@@ -454,23 +544,34 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
   for (const row of vm.layout1.rows) {
     layout1.add(rowRenderable(options, row))
   }
-  if (vm.layout1.empty) {
-    layout1.add(new TextRenderable(options.renderer, { content: "No notes or folders", height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
+  if (vm.layout1.empty && vm.layout1.emptyState) {
+    layout1.add(new TextRenderable(options.renderer, { content: vm.layout1.emptyState.title, height: 1, fg: tuiTheme.textSecondary, bg: tuiTheme.panel }))
+    layout1.add(new TextRenderable(options.renderer, { content: vm.layout1.emptyState.body, height: 1, fg: tuiTheme[vm.layout1.emptyState.styleIntent], bg: tuiTheme.panel }))
+    layout1.add(new TextRenderable(options.renderer, { content: vm.layout1.emptyState.actions.join("  "), height: 1, fg: tuiTheme[vm.layout1.emptyState.styleIntent], bg: tuiTheme.panel }))
+  }
+  if (vm.layout2.preview.type === "hidden") {
+    layout1.add(new TextRenderable(options.renderer, { content: vm.layout2.preview.message, height: 1, fg: tuiTheme[vm.layout2.preview.styleIntent], bg: tuiTheme.panel }))
   }
 
   const preview = vm.layout2.preview
   if (layout2 && preview.type === "folder") {
+    layout2.add(new TextRenderable(options.renderer, { content: `${preview.title} · ${preview.message}`, height: 1, fg: tuiTheme.textPrimary, bg: tuiTheme.surfacePanelRaised }))
+    layout2.add(new TextRenderable(options.renderer, { content: preview.path, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
     for (const row of preview.rows) {
       layout2.add(rowRenderable(options, row))
     }
   } else if (layout2 && preview.type === "note-content") {
-    layout2.add(new TextRenderable(options.renderer, { content: preview.title, height: 1, fg: tuiTheme.textPrimary, bg: tuiTheme.panel }))
-    layout2.add(new TextRenderable(options.renderer, { content: preview.path, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
-    for (const line of preview.contentLines.slice(0, 20)) {
-      layout2.add(new TextRenderable(options.renderer, { content: line, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
+    for (const section of preview.sections) {
+      layout2.add(new TextRenderable(options.renderer, { content: section.label, height: 1, fg: tuiTheme.textSecondary, bg: section.label === "Title" ? tuiTheme.surfacePanelRaised : tuiTheme.panel }))
+      for (const line of section.lines.slice(0, section.label === "Body" ? 20 : 2)) {
+        layout2.add(new TextRenderable(options.renderer, { content: line, height: 1, fg: section.label === "Body" ? tuiTheme.textPrimary : tuiTheme.mutedText, bg: tuiTheme.panel }))
+      }
     }
+  } else if (layout2 && preview.type === "empty") {
+    layout2.add(new TextRenderable(options.renderer, { content: preview.title, height: 1, fg: tuiTheme.textSecondary, bg: tuiTheme.panel }))
+    layout2.add(new TextRenderable(options.renderer, { content: preview.message, height: 1, fg: tuiTheme[preview.styleIntent], bg: tuiTheme.panel }))
   } else if (layout2) {
-    layout2.add(new TextRenderable(options.renderer, { content: "No preview", height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
+    layout2.add(new TextRenderable(options.renderer, { content: "Preview hidden", height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
   }
 
   panels.add(layout1)

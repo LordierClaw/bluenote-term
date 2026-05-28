@@ -118,6 +118,13 @@ describe("TUI render view models", () => {
     const vm = buildManagerViewModel(baseState)
 
     assert.equal(vm.title, "")
+    assert.deepEqual(vm.dashboard, {
+      productLabel: "BlueNote",
+      workspaceLabel: "Workspace · notes/",
+      summaryLabel: "2 items · Ready",
+      orientation: "Browse your local Markdown workspace.",
+      primaryActions: ["[Enter] Open", "[n] New", "[s] Search"],
+    })
     assert.deepEqual(vm.topbar, {
       leftTitle: "BlueNote",
       itemCountLabel: "2 items",
@@ -127,7 +134,7 @@ describe("TUI render view models", () => {
       styleIntent: "textPrimary",
     })
     assert.equal(vm.panels.layout1.title, "notes/")
-    assert.equal(vm.panels.layout2.title, "daily-plan.md")
+    assert.equal(vm.panels.layout2.title, "Preview")
     assert.equal(vm.status, "Ready")
     assert.deepEqual(vm.shortcutHints, [
       { key: "Enter", action: "Open", priority: "primary" },
@@ -183,12 +190,57 @@ describe("TUI render view models", () => {
       ],
     )
     assert.deepEqual(
-      vm.rows.map((row) => ({ key: row.key, type: row.type, icon: row.icon, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent, openStyleIntent: row.openStyleIntent, metadataStyleIntent: row.metadataStyleIntent })),
+      vm.rows.map((row) => row.displaySegments),
       [
-        { key: "notes/inbox", type: "folder", icon: "📁", styleIntent: "panel", itemStyleIntent: "mutedText", openStyleIntent: null, metadataStyleIntent: "mutedText" },
-        { key: "daily-plan", type: "note", icon: "📄", styleIntent: "focusedRow", itemStyleIntent: "mutedText", openStyleIntent: null, metadataStyleIntent: "mutedText" },
+        { primary: "inbox", secondary: "2 notes", metadata: "folder · notes/inbox" },
+        { primary: "Daily Plan", secondary: "Today priorities.", metadata: "daily-plan.md · notes/inbox/daily-plan.md" },
       ],
     )
+    assert.deepEqual(
+      vm.rows.map((row) => ({ key: row.key, type: row.type, icon: row.icon, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent, openStyleIntent: row.openStyleIntent, metadataStyleIntent: row.metadataStyleIntent })),
+      [
+        { key: "notes/inbox", type: "folder", icon: "📁", styleIntent: "panel", itemStyleIntent: "textPrimary", openStyleIntent: null, metadataStyleIntent: "mutedText" },
+        { key: "daily-plan", type: "note", icon: "📄", styleIntent: "focusedRow", itemStyleIntent: "textPrimary", openStyleIntent: null, metadataStyleIntent: "mutedText" },
+      ],
+    )
+  })
+
+  test("manager dashboard view model has quiet empty, hidden preview, and active panel styling", () => {
+    const emptyVm = buildManagerViewModel({
+      ...baseState,
+      editor: null,
+      manager: { items: [], focusedIndex: 0, selectedNoteKey: null, currentFolderPath: "" },
+    }, { layout1Rows: [], preview: { type: "empty", path: null }, currentFolderPath: "", hoveredPath: null, focusedIndex: 0, empty: true, state: { items: [], focusedIndex: 0, selectedNoteKey: null } })
+
+    assert.deepEqual(emptyVm.layout1.emptyState, {
+      title: "No notes here yet",
+      body: "Create a note in notes/ or search your workspace.",
+      actions: ["[n] New", "[s] Search"],
+      styleIntent: "mutedText",
+    })
+    assert.deepEqual(emptyVm.panels, {
+      layout1: { title: "notes/", styleIntent: "borderFocus" },
+      layout2: { title: "Preview", styleIntent: "borderSubtle" },
+    })
+    assert.deepEqual(emptyVm.layout2.preview, {
+      type: "empty",
+      path: null,
+      title: "Nothing selected",
+      message: "Move through notes to show a preview here.",
+      sections: [],
+      styleIntent: "panel",
+    })
+
+    const hiddenVm = buildManagerViewModel(baseState, undefined, { width: 60 })
+    assert.deepEqual(hiddenVm.layout2.preview, {
+      type: "hidden",
+      path: null,
+      reason: "responsive",
+      title: "Preview hidden",
+      message: "Preview hidden for narrow terminal · p show",
+      sections: [],
+      styleIntent: "mutedText",
+    })
   })
 
   test("manager shortcut chrome prioritizes key/action pairs and demotes secondary hints on narrow widths", () => {
@@ -341,25 +393,25 @@ describe("TUI render view models", () => {
       styleIntent: "textPrimary",
     })
     assert.deepEqual(vm.panels, {
-      layout1: { title: "notes/", styleIntent: "panel" },
-      layout2: { title: "projects", styleIntent: "panel" },
+      layout1: { title: "notes/", styleIntent: "borderFocus" },
+      layout2: { title: "projects", styleIntent: "borderSubtle" },
     })
     assert.match(vm.shortcuts.join(" "), /\[s\] Search/u)
     assert.doesNotMatch(vm.shortcuts.join(" "), /\[\?\] More/u)
     assert.doesNotMatch(JSON.stringify(vm), /Layout 1: current folder|Layout 2: preview/u)
     assert.deepEqual(
-      vm.layout1.rows.map((row) => ({ filename: row.filename, columns: row.columns, focused: row.focused, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent })),
+      vm.layout1.rows.map((row) => ({ filename: row.filename, displaySegments: row.displaySegments, focused: row.focused, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent })),
       [
-        { filename: "projects", columns: { filename: "projects", title: "", description: "" }, focused: true, styleIntent: "focusedRow", itemStyleIntent: "mutedText" },
-        { filename: "root-note.md", columns: { filename: "root-note.md", title: "Root Note", description: "A top-level note." }, focused: false, styleIntent: "panel", itemStyleIntent: "mutedText" },
+        { filename: "projects", displaySegments: { primary: "projects", secondary: "", metadata: "folder · notes/projects" }, focused: true, styleIntent: "focusedRow", itemStyleIntent: "textPrimary" },
+        { filename: "root-note.md", displaySegments: { primary: "Root Note", secondary: "A top-level note.", metadata: "root-note.md · notes/root-note.md" }, focused: false, styleIntent: "panel", itemStyleIntent: "textPrimary" },
       ],
     )
     assert.equal(vm.layout2.preview.type, "folder")
     assert.deepEqual(
-      vm.layout2.preview.rows.map((row) => ({ filename: row.filename, columns: row.columns, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent })),
+      vm.layout2.preview.rows.map((row) => ({ filename: row.filename, displaySegments: row.displaySegments, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent })),
       [
-        { filename: "client", columns: { filename: "client", title: "", description: "" }, styleIntent: "panel", itemStyleIntent: "mutedText" },
-        { filename: "api-roadmap.md", columns: { filename: "api-roadmap.md", title: "API Roadmap", description: "Ship API work." }, styleIntent: "panel", itemStyleIntent: "mutedText" },
+        { filename: "client", displaySegments: { primary: "client", secondary: "", metadata: "folder · notes/projects/client" }, styleIntent: "panel", itemStyleIntent: "textPrimary" },
+        { filename: "api-roadmap.md", displaySegments: { primary: "API Roadmap", secondary: "Ship API work.", metadata: "api-roadmap.md · notes/projects/api-roadmap.md" }, styleIntent: "panel", itemStyleIntent: "textPrimary" },
       ],
     )
   })
@@ -401,6 +453,12 @@ describe("TUI render view models", () => {
       noteKey: "root-note",
       description: "A top-level note.",
       contentLines: ["# Root Note", "", "Preview body."],
+      sections: [
+        { label: "Title", lines: ["Root Note"] },
+        { label: "Path", lines: ["notes/root-note.md"] },
+        { label: "Description", lines: ["A top-level note."] },
+        { label: "Body", lines: ["# Root Note", "", "Preview body."] },
+      ],
       styleIntent: "panel",
     })
     assert.equal(vm.layout1.rows[0]?.styleIntent, "focusedRow")
@@ -1043,11 +1101,11 @@ describe("TUI render view models", () => {
       assert.equal(wideIds.includes("bluenote-manager-layout-2"), true)
       assert.equal((wideScreen as any).border, false)
       assert.equal((wideScreen as any).title ?? "", "")
-      assert.deepEqual(widePreviewText.slice(0, 4), ["Root Note", "notes/root-note.md", "# Root Note", ""])
-      assert.equal(renderedRowText.startsWith("root-note.md"), true)
+      assert.deepEqual(widePreviewText.slice(0, 6), ["Title", "Root Note", "Path", "notes/root-note.md", "Description", "A top-level note."])
+      assert.equal(renderedRowText.startsWith("Root Note"), true)
       assert.doesNotMatch(renderedRowText, /^[\s›●📁📄]/u)
       assert.doesNotMatch(renderedRowText, /[›●]/u)
-      assert.deepEqual(renderedRowSegments.slice(0, 1), ["root-note.md".padEnd(22)])
+      assert.deepEqual(renderedRowSegments.slice(0, 1), ["Root Note".padEnd(24)])
 
       renderer.root.remove(wideScreen.id)
       wideScreen.destroyRecursively()
@@ -1063,7 +1121,7 @@ describe("TUI render view models", () => {
       assert.equal((narrowLayout1 as any)?._width, "100%")
       assert.match(narrowText, /root-note\.md/u)
       assert.doesNotMatch(narrowText, /\[\?\] More/u)
-      assert.doesNotMatch(narrowText, /Preview hidden/u)
+      assert.match(narrowText, /Preview hidden for narrow terminal · p show/u)
       assert.doesNotMatch(narrowText, /Preview body/u)
     } finally {
       renderer.destroy()

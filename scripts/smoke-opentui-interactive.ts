@@ -458,7 +458,7 @@ try {
   }
   expectPaneContains(managerPane, "BlueNote", "manager launch")
   expectPaneContains(managerPane, "[Enter] Open", "manager launch")
-  expectPaneContains(managerPane, "items | Ready", "manager launch")
+  expectPaneContains(managerPane, "items · Ready", "manager launch")
   expectPaneContains(managerPane, "notes/", "manager launch")
   expectPaneContains(managerPane, "projects", "manager launch")
   expectPaneContains(managerPane, "Root Editor", "manager launch")
@@ -467,6 +467,7 @@ try {
   const previewOffPane = capturePaneUntil(sessionName, "manager preview toggle off", "[Enter] Open", 20)
   expectPaneContains(previewOffPane, "[Enter] Open", "manager preview toggle off")
   expectPaneContains(previewOffPane, "projects", "manager preview toggle off")
+
   sendKeys(sessionName, "p")
   const previewOnPane = capturePaneUntil(sessionName, "manager preview toggle on", "[Enter] Open", 20)
   expectPaneExcludes(previewOnPane, "Preview hidden (manual)", "manager preview toggle on")
@@ -475,6 +476,7 @@ try {
   const narrowManagerPane = capturePaneUntil(sessionName, "manager narrow responsive resize", "[Enter] Open", 20)
   expectPaneContains(narrowManagerPane, "projects", "manager narrow responsive resize")
   expectPaneContains(narrowManagerPane, "Root Editor", "manager narrow responsive resize")
+  expectPaneContains(narrowManagerPane, "Preview hidden for narrow terminal · p show", "manager narrow responsive resize")
   resizeSession(sessionName, 100, 30, "manager wide responsive restore")
   const wideManagerPane = capturePaneUntil(sessionName, "manager wide responsive restore", "[Enter] Open", 20)
   expectPaneExcludes(wideManagerPane, "Preview hidden (narrow width)", "manager wide responsive restore")
@@ -485,6 +487,7 @@ try {
   resizeSession(sessionName, 60, 24, "manager manual preview hidden narrow")
   const manualHiddenNarrowPane = capturePaneUntil(sessionName, "manager manual preview hidden narrow", "[Enter] Open", 20)
   expectPaneContains(manualHiddenNarrowPane, "projects", "manager manual preview hidden narrow")
+
   resizeSession(sessionName, 100, 30, "manager manual preview hidden restore")
   const manualHiddenRestoredPane = capturePaneUntil(sessionName, "manager manual preview hidden restore", "[Enter] Open", 20)
   expectPaneContains(manualHiddenRestoredPane, "[Enter] Open", "manager manual preview hidden restore")
