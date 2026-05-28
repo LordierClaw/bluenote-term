@@ -74,6 +74,8 @@ export interface SearchEverythingState {
   selectedIndex: number
   previousScreen: Exclude<TuiScreen, "search">
   previousMode?: Exclude<TuiMode, "search.input">
+  previewVisible?: boolean
+  status?: string | null
 }
 
 export interface TuiState {
@@ -142,6 +144,14 @@ function cloneManagerState(manager: ManagerState): ManagerState {
   }
 }
 
+function cloneSearchEverythingState(search: SearchEverythingState): SearchEverythingState {
+  return {
+    ...search,
+    previewVisible: search.previewVisible ?? true,
+    status: search.status ?? null,
+  }
+}
+
 const defaultManagerState = (): ManagerState => ({
   items: [],
   focusedIndex: 0,
@@ -184,12 +194,14 @@ export function openSearchEverything(
     ...state,
     screen: "search",
     mode: "search.input",
-    search: {
+    search: cloneSearchEverythingState({
       query: options.query ?? "",
       selectedIndex: options.selectedIndex ?? 0,
       previousScreen,
       previousMode,
-    },
+      previewVisible: true,
+      status: null,
+    }),
   }
 }
 

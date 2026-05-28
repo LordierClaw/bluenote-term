@@ -205,6 +205,24 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(calls, ["list", "show:daily-plan"])
   })
 
+  test("toggles Search Everything preview visibility independently from manager preview visibility", () => {
+    const { deps } = createDeps()
+    const controller = createWorkspaceController(deps)
+
+    controller.setManagerPreviewVisible(false)
+    controller.openSearch("daily")
+    assert.equal(controller.getState().search?.previewVisible, true)
+    assert.equal(controller.getState().manager.previewVisible, false)
+
+    controller.toggleSearchPreview()
+    assert.equal(controller.getState().search?.previewVisible, false)
+    assert.equal(controller.getState().manager.previewVisible, false)
+
+    controller.setSearchPreviewVisible(true)
+    assert.equal(controller.getState().search?.previewVisible, true)
+    assert.equal(controller.getState().manager.previewVisible, false)
+  })
+
   test("hidden manager previews do not hydrate the focused note body", () => {
     const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
     const calls: string[] = []
@@ -747,6 +765,24 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().editor?.body, "Archive body")
   })
 
+  test("selecting an unwired command search result keeps search open with safe status and recoverable back navigation", () => {
+    const { deps, calls } = createDeps({ commandHandlers: {} })
+    const controller = createWorkspaceController(deps)
+
+    controller.openSearch("/archive")
+    const result = controller.selectSearchResult(commandResult("/archive"))
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().screen, "search")
+    assert.equal(controller.getState().search?.status, "Command unavailable: /archive")
+    assert.deepEqual(calls, ["list", "search:/archive"])
+
+    const backResult = controller.goBack()
+    assert.equal(backResult.blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().search, null)
+  })
+
   test("selecting a command search result closes search and dispatches by command name", () => {
     const commandContexts: string[] = []
     const { deps } = createDeps({
@@ -765,6 +801,22 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().screen, "manager")
     assert.equal(controller.getState().search, null)
     assert.deepEqual(commandContexts, ["manager:/new Project Plan"])
+  })
+
+  test("dirty destructive command search result blocks before unavailable status or handler dispatch", () => {
+    const { deps, calls } = createDeps({ commandHandlers: {} })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Unsaved daily body")
+    controller.openSearch("/archive")
+    const result = controller.selectSearchResult(commandResult("/archive"))
+
+    assert.deepEqual(result, { blocked: true, reason: "dirty-editor" })
+    assert.equal(controller.getState().screen, "search")
+    assert.equal(controller.getState().search?.status, null)
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.deepEqual(calls, ["list", "show:daily-plan", "search:/archive"])
   })
 
   test("returns immutable snapshots for state, search results, and command handler context", () => {

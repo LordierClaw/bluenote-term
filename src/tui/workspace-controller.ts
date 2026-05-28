@@ -110,6 +110,8 @@ export interface WorkspaceController {
   clearManagerFilter: () => void
   toggleManagerPreview: () => void
   setManagerPreviewVisible: (visible: boolean) => void
+  toggleSearchPreview: () => void
+  setSearchPreviewVisible: (visible: boolean) => void
   toggleSearch: (query?: string) => void
   openEditorFind: (query?: string) => void
   updateEditorFindQuery: (query: string) => void
@@ -173,7 +175,13 @@ function cloneStateSnapshot(source: TuiState): TuiState {
           note: toTuiNote(source.editor.note),
         }
       : null,
-    search: source.search ? { ...source.search } : null,
+    search: source.search
+      ? {
+          ...source.search,
+          previewVisible: source.search.previewVisible ?? true,
+          status: source.search.status ?? null,
+        }
+      : null,
   }
 }
 
@@ -746,6 +754,34 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       }
     },
 
+    toggleSearchPreview: () => {
+      if (!state.search) {
+        return
+      }
+
+      state = {
+        ...state,
+        search: {
+          ...state.search,
+          previewVisible: !(state.search.previewVisible ?? true),
+        },
+      }
+    },
+
+    setSearchPreviewVisible: (visible) => {
+      if (!state.search) {
+        return
+      }
+
+      state = {
+        ...state,
+        search: {
+          ...state.search,
+          previewVisible: visible,
+        },
+      }
+    },
+
     toggleSearch: (query = "") => {
       if (state.screen === "search") {
         state = closeSearchEverything(state)
@@ -942,6 +978,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
           ...state.search,
           query,
           selectedIndex: 0,
+          status: null,
         },
       }
       rebuildSearchResults(query)
@@ -1000,12 +1037,13 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         return dirtyBlocked()
       }
       const command = state.search?.query.trim().startsWith(selected.name) ? state.search.query : selected.name
-      state = closeSearchEverything(state)
       const actionResult = controller.runCommand(command, options)
       if (actionResult.blocked) {
         return actionResult
       }
-      searchResults = []
+      if (!state.search) {
+        searchResults = []
+      }
       return ok()
     },
 
@@ -1016,11 +1054,31 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
       const commandName = commandNameFor(command)
       if (commandName === "/save") {
+        if (state.search) {
+          state = closeSearchEverything(state)
+        }
         void controller.saveEditor()
         return ok()
       }
 
-      deps.commandHandlers?.[commandName]?.({ state: cloneStateSnapshot(state), command })
+      const handler = deps.commandHandlers?.[commandName]
+      if (!handler) {
+        if (state.search) {
+          state = {
+            ...state,
+            search: {
+              ...state.search,
+              status: `Command unavailable: ${commandName}`,
+            },
+          }
+        }
+        return ok()
+      }
+
+      if (state.search) {
+        state = closeSearchEverything(state)
+      }
+      handler({ state: cloneStateSnapshot(state), command })
       return ok()
     },
   }

@@ -234,6 +234,13 @@ describe("TUI screen state", () => {
     assert.equal(cancelled.editor?.findQuery, "tests")
   })
 
+  test("Search Everything preview visibility defaults visible and status defaults empty", () => {
+    const searching = openSearchEverything(createInitialTuiState(), { query: "/archive" })
+
+    assert.equal(searching.search?.previewVisible, true)
+    assert.equal(searching.search?.status, null)
+  })
+
   test("manager state tracks folder path, hover path, filter query, and parent navigation", () => {
     const state = createInitialTuiState({
       manager: {

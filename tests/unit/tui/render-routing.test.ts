@@ -97,6 +97,8 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
     clearManagerFilter: () => calls.push("clearManagerFilter"),
     toggleManagerPreview: () => calls.push("toggleManagerPreview"),
     setManagerPreviewVisible: (visible) => calls.push(`setManagerPreviewVisible:${visible}`),
+    toggleSearchPreview: () => calls.push("toggleSearchPreview"),
+    setSearchPreviewVisible: (visible) => calls.push(`setSearchPreviewVisible:${visible}`),
     toggleSearch: (query) => calls.push(`toggleSearch:${query ?? ""}`),
     openEditorFind: (query) => calls.push(`openEditorFind:${query ?? ""}`),
     updateEditorFindQuery: (query) => calls.push(`updateEditorFindQuery:${query}`),
