@@ -127,6 +127,7 @@ const ok = (): WorkspaceActionResult => ({ blocked: false })
 const dirtyBlocked = (): WorkspaceActionResult => ({ blocked: true, reason: "dirty-editor" })
 
 const destructiveCommands = new Set(["/archive", "/delete", "/migrate", "/quit"])
+const searchIndexUnavailableStatus = "Search index unavailable; showing notes, folders, and commands only"
 
 function clampIndex(index: number, length: number): number {
   if (length <= 0) {
@@ -428,10 +429,27 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   }
 
   function rebuildSearchResults(query: string): void {
-    searchResults = buildSearchEverythingResults(query, {
-      noteSummaries,
-      searchNotes: deps.searchNotes,
-    })
+    try {
+      searchResults = buildSearchEverythingResults(query, {
+        noteSummaries,
+        searchNotes: deps.searchNotes,
+      })
+    } catch {
+      searchResults = buildSearchEverythingResults(query, {
+        noteSummaries,
+        searchNotes: () => [],
+      })
+      if (state.search) {
+        state = {
+          ...state,
+          search: {
+            ...state.search,
+            status: searchIndexUnavailableStatus,
+            selectedIndex: clampIndex(state.search.selectedIndex, searchResults.length),
+          },
+        }
+      }
+    }
   }
 
   function focusFolder(path: string): void {

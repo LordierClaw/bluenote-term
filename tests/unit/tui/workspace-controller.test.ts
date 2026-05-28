@@ -783,6 +783,39 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().search, null)
   })
 
+  test("Search Everything stays usable with partial summary, folder, and command results when the search index is unavailable", () => {
+    const { deps, calls } = createDeps({
+      searchNotes: (query) => {
+        calls.push(`search:${query}`)
+        throw new Error("simulated corrupt search index")
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    controller.openSearch("")
+    assert.doesNotThrow(() => controller.updateSearchQuery("daily"))
+
+    assert.equal(controller.getState().screen, "search")
+    assert.equal(controller.getState().search?.query, "daily")
+    assert.equal(controller.getState().search?.status, "Search index unavailable; showing notes, folders, and commands only")
+    assert.equal(controller.getSearchResults().some((result) => result.kind === "note" && result.key === "daily-plan"), true)
+    assert.equal(controller.getSearchResults().some((result) => result.kind === "content"), false)
+
+    assert.doesNotThrow(() => controller.updateSearchQuery("inbox"))
+    assert.equal(controller.getState().search?.query, "inbox")
+    assert.equal(controller.getState().search?.status, "Search index unavailable; showing notes, folders, and commands only")
+    assert.equal(controller.getSearchResults().some((result) => result.kind === "folder" && result.path === "notes/inbox"), true)
+
+    assert.doesNotThrow(() => controller.updateSearchQuery("/rebuild"))
+    assert.equal(controller.getState().search?.query, "/rebuild")
+    assert.equal(controller.getSearchResults().some((result) => result.kind === "command" && result.name === "/rebuild"), true)
+
+    const backResult = controller.goBack()
+    assert.equal(backResult.blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().search, null)
+  })
+
   test("selecting a command search result closes search and dispatches by command name", () => {
     const commandContexts: string[] = []
     const { deps } = createDeps({

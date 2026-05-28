@@ -6,11 +6,12 @@ import { mkdtemp, rm, readFile, access, readdir } from "node:fs/promises"
 
 import { createNote } from "../../src/core/create-note"
 import { initRoot } from "../../src/core/init-root"
+import { listNotes } from "../../src/core/list-notes"
 import { rebuildIndexes } from "../../src/core/rebuild-indexes"
 import { showNote } from "../../src/core/show-note"
 import { buildSearchEverythingPreview } from "../../src/tui/adapters/search-everything-adapter"
 import { createDefaultWorkspaceController } from "../../src/tui/app"
-import type { WorkspaceCommandContext } from "../../src/tui/workspace-controller"
+import { createWorkspaceController, type WorkspaceCommandContext } from "../../src/tui/workspace-controller"
 
 function fixedClock(iso: string) {
   return { now: () => new Date(iso) }
@@ -236,6 +237,47 @@ describe("TUI workspace workflows", () => {
     assert.equal(controller.getState().screen, "editor")
     assert.equal(controller.getState().editor?.note.key, second.key)
     assert.equal(controller.getState().editor?.body, "Alpha beta gamma delta epsilon quokka zeta eta theta iota")
+  })
+
+  test("Search Everything can select summary results and cancel when content search index is unavailable", () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Fallback Daily",
+      body: "Body text that should not be needed for summary fallback",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    createNote({
+      override: rootPath,
+      title: "Folder Target",
+      body: "Another body",
+      clock: fixedClock("2026-05-26T10:01:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createWorkspaceController({
+      listNotes: () => listNotes({ override: rootPath }),
+      showNote: (selector) => showNote({ override: rootPath, selector }),
+      searchNotes: () => {
+        throw new Error("simulated index failure")
+      },
+    })
+
+    controller.openSearch("")
+    controller.updateSearchQuery("fallback")
+    assert.equal(controller.getState().screen, "search")
+    assert.equal(controller.getState().search?.status, "Search index unavailable; showing notes, folders, and commands only")
+
+    const noteResult = controller.getSearchResults().find((result) => result.kind === "note" && result.key === first.key)
+    assert.ok(noteResult)
+    assert.equal(controller.selectSearchResult(noteResult).blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, first.key)
+
+    controller.openSearch("")
+    controller.updateSearchQuery("inbox")
+    assert.equal(controller.getSearchResults().some((result) => result.kind === "folder" && result.path === "notes/inbox"), true)
+    controller.cancelSearch()
+    assert.equal(controller.getState().screen, "editor")
   })
 
   test("runs a Search Everything slash command with parsed command context", () => {
