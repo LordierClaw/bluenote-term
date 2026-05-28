@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process"
 
 import { createNote } from "../src/core/create-note"
 
-const SMOKE_TIMEOUT_MS = 45_000
+const SMOKE_TIMEOUT_MS = 60_000
 const TMUX_COMMAND_TIMEOUT_MS = 5_000
 const smokeStartedAt = Date.now()
 
@@ -30,6 +30,10 @@ function wait(milliseconds: number, context = "wait"): void {
   assertWithinSmokeDeadline(context)
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds)
   assertWithinSmokeDeadline(context)
+}
+
+function waitWithoutSmokeDeadline(milliseconds: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds)
 }
 
 function expectPaneContains(pane: string, expected: string, context: string): void {
@@ -120,6 +124,33 @@ function expectNoteArtifactsDeleted(artifacts: NoteArtifacts, context: string): 
   if (existsSync(artifacts.sidecarPath)) {
     throw new Error(`${context}: expected sidecar file to be deleted at ${artifacts.sidecarPath}`)
   }
+}
+
+function expectNoteFileContains(notePath: string, expected: string, context: string): void {
+  const body = readFileSync(notePath, "utf8")
+  if (!body.includes(expected)) {
+    throw new Error(`${context}: expected actual note file ${notePath} to include ${JSON.stringify(expected)}. File contents:\n${body}`)
+  }
+}
+
+function expectNoteFileExcludes(notePath: string, unexpected: string, context: string): void {
+  const body = readFileSync(notePath, "utf8")
+  if (body.includes(unexpected)) {
+    throw new Error(`${context}: expected actual note file ${notePath} to exclude ${JSON.stringify(unexpected)} before manual save. File contents:\n${body}`)
+  }
+}
+
+function expectNoteFileContainsWithin(notePath: string, expected: string, context: string, timeoutMs: number): void {
+  const deadline = Date.now() + timeoutMs
+  let body = ""
+  while (Date.now() <= deadline) {
+    body = readFileSync(notePath, "utf8")
+    if (body.includes(expected)) {
+      return
+    }
+    waitWithoutSmokeDeadline(25)
+  }
+  throw new Error(`${context}: expected actual note file ${notePath} to include ${JSON.stringify(expected)} within ${timeoutMs}ms, before autosave can mask manual save. File contents:\n${body}`)
 }
 
 function sendKeys(sessionName: string, ...keys: string[]): void {
@@ -224,7 +255,7 @@ function killTuiProcess(): void {
       // Already exited.
     }
     if (signal === "SIGTERM") {
-      wait(100, "cleanup")
+      waitWithoutSmokeDeadline(100)
     }
   }
 }
@@ -259,7 +290,7 @@ try {
     "Folder smoke note body for preview and navigation.\nContains the folder-query token.",
     "notes/projects",
   )
-  createSmokeNote(
+  const rootEditorSummary = createSmokeNote(
     rootPath,
     "Root Editor Fixture",
     "Root smoke note body.\nFindable alpha token for editor find smoke.",
@@ -462,19 +493,31 @@ try {
   expectPaneContains(editorPastePane, `${multilineText}${pasteFallbackText}`, "editor paste or literal multi-character input")
   expectSingleVisibleOccurrence(editorPastePane, "Ctrl+F find", "editor rerender should show one latest editor screen")
 
+  const autosavePersistenceToken = `autosave-persist-${process.pid}`
+  sendText(sessionName, autosavePersistenceToken)
+  const editorAutosavePane = capturePaneUntil(sessionName, "editor autosave persistence typing", autosavePersistenceToken, 30)
+  expectPaneContains(editorAutosavePane, `${multilineText}${pasteFallbackText}${autosavePersistenceToken}`, "editor autosave persistence typing")
+  wait(1_250, "editor autosave persistence wait")
+  expectNoteFileContains(rootEditorSummary.notePath, autosavePersistenceToken, "editor autosave persistence filesystem")
+
   sendKeys(sessionName, "C-p")
   const dirtySearchPane = capturePaneUntil(sessionName, "dirty editor search open", "Search Everything", 20)
   expectPaneContains(dirtySearchPane, "Search Everything", "dirty editor search open")
   sendKeys(sessionName, "Escape")
-  const dirtySearchCancelPane = capturePaneUntil(sessionName, "editor search cancel restores body focus", `${multilineText}${pasteFallbackText}▌${typedEditorText.slice(-1)}`, 30)
-  expectPaneContains(dirtySearchCancelPane, `${multilineText}${pasteFallbackText}▌${typedEditorText.slice(-1)}`, "editor search cancel restores body focus")
+  const postAutosaveCursorText = `${multilineText}${pasteFallbackText}${autosavePersistenceToken}▌${typedEditorText.slice(-1)}`
+  const dirtySearchCancelPane = capturePaneUntil(sessionName, "editor search cancel restores body focus", postAutosaveCursorText, 30)
+  expectPaneContains(dirtySearchCancelPane, postAutosaveCursorText, "editor search cancel restores body focus")
   expectPaneExcludes(dirtySearchCancelPane, "Search Everything", "editor search cancel restores body focus")
 
+  const manualSavePersistenceToken = `manual-save-persist-${process.pid}`
+  sendText(sessionName, manualSavePersistenceToken)
+  expectNoteFileExcludes(rootEditorSummary.notePath, manualSavePersistenceToken, "editor manual save pre-ctrl-s filesystem")
   sendKeys(sessionName, "C-s")
+  expectNoteFileContainsWithin(rootEditorSummary.notePath, manualSavePersistenceToken, "editor manual save persistence filesystem", 300)
   const editorSavedPane = capturePaneUntil(sessionName, "editor ctrl-s save", "Saved", 30)
-  expectPaneContains(editorSavedPane, "editor-input-regression-toke-cursor-", "editor ctrl-s save")
-  expectPaneContains(editorSavedPane, "probe-", "editor ctrl-s save")
-  expectPaneContains(editorSavedPane, `${multilineText}${pasteFallbackText}▌${typedEditorText.slice(-1)}`, "editor ctrl-s save")
+  const postManualSaveCursorText = `${multilineText}${pasteFallbackText}${autosavePersistenceToken}${manualSavePersistenceToken}▌${typedEditorText.slice(-1)}`
+  expectPaneContains(editorSavedPane, postManualSaveCursorText, "editor ctrl-s save")
+  expectNoteFileContains(rootEditorSummary.notePath, manualSavePersistenceToken, "editor manual save persistence filesystem")
 
   sendKeys(sessionName, "C-f")
   wait(500)
@@ -487,7 +530,7 @@ try {
   const editorBodyReturnPane = capturePane(sessionName, "editor find return to body")
   expectPaneContains(editorBodyReturnPane, "editor-input-regression-toke-cursor-", "editor find return to body")
   expectPaneContains(editorBodyReturnPane, "probe-", "editor find return to body")
-  expectPaneContains(editorBodyReturnPane, `${multilineText}${pasteFallbackText}▌${typedEditorText.slice(-1)}`, "editor find return to body")
+  expectPaneContains(editorBodyReturnPane, postManualSaveCursorText, "editor find return to body")
   expectPaneExcludes(editorBodyReturnPane, "Find in note", "editor find return to body")
 
   sendKeys(sessionName, "Escape")
