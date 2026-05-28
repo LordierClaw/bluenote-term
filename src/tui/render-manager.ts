@@ -28,7 +28,10 @@ export interface ManagerRowViewModel {
 }
 
 export interface ManagerTopbarViewModel {
-  title: string
+  brand: "BlueNote"
+  rebuildLabel: string
+  indexingLabel: string
+  statusText: string
   currentPath: string
   hoveredPath: string | null
   styleIntent: TuiColorIntent
@@ -126,6 +129,32 @@ function currentPathLabel(path: string | null | undefined): string {
   return normalized ? normalized : "notes/"
 }
 
+function basenameLabel(path: string | null | undefined): string {
+  const normalized = (path ?? "").replace(/^\/+|\/+$/gu, "")
+  return normalized.split("/").filter(Boolean).at(-1) ?? ""
+}
+
+function focusedItemLabel(rows: ManagerRowViewModel[], preview: ManagerPreviewViewModel): string {
+  if (preview.type === "hidden") {
+    return "Preview hidden"
+  }
+
+  if (preview.type !== "empty") {
+    return basenameLabel(preview.path) || "Preview"
+  }
+
+  const focused = rows.find((row) => row.focused)
+  return focused ? focused.filename.replace(/\/+$/u, "") : "No preview"
+}
+
+function rebuildStatusLabel(): string {
+  return "Rebuild idle"
+}
+
+function indexingStatusLabel(): string {
+  return "Index ready"
+}
+
 function columnsFor(row: BrowserishRow): ManagerRowViewModel["columns"] {
   if ("columns" in row) {
     return { ...row.columns }
@@ -211,7 +240,11 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
     const focused = browserModel ? item.relativePath === hoveredPath : index === state.manager.focusedIndex
     return toRowViewModel(item, index, focused, openNoteKey)
   })
-  const preview = previewViewModelFor(browserModel?.preview, openNoteKey)
+  const preview = browserModel
+    ? previewViewModelFor(browserModel.preview, openNoteKey)
+    : state.manager.previewVisible === false
+      ? { type: "hidden" as const, path: hoveredPath, reason: "manual" as const, styleIntent: "panel" as const }
+      : previewViewModelFor(undefined, openNoteKey)
   const statusParts = [`${rows.length} ${rows.length === 1 ? "item" : "items"}`]
   if (state.manager.filterQuery) {
     statusParts.push(`filter “${state.manager.filterQuery}”`)
@@ -247,17 +280,23 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
       }
     : undefined
 
+  const status = statusParts.join(" · ")
+  const previewHidden = preview.type === "hidden" || state.manager.previewVisible === false
+
   return {
-    title: currentPath,
+    title: "",
     topbar: {
-      title: currentPath,
+      brand: "BlueNote",
+      rebuildLabel: rebuildStatusLabel(),
+      indexingLabel: indexingStatusLabel(),
+      statusText: status,
       currentPath,
       hoveredPath,
       styleIntent: "primaryAccent",
     },
     panels: {
-      layout1: { title: "Layout 1: current folder", styleIntent: "panel" },
-      layout2: { title: "Layout 2: preview", styleIntent: "panel" },
+      layout1: { title: currentPath, styleIntent: "panel" },
+      layout2: { title: focusedItemLabel(rows, preview), styleIntent: "panel" },
     },
     layout1: {
       rows,
@@ -267,8 +306,8 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
       preview,
     },
     rows,
-    status: statusParts.join(" · "),
-    shortcuts: ["↑↓ move", "→/Enter open", "n new", "d delete", "/ filter", "Esc back", "q quit"],
+    status,
+    shortcuts: ["↑↓ move", "→/Enter open", "n new", "d delete", "/ filter", "s search", previewHidden ? "p preview show" : "p preview hide", "Esc back", "q quit"],
     createPrompt,
     deletePrompt,
   }
@@ -326,7 +365,7 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
 
   const topbarPath = vm.topbar.hoveredPath ? `${vm.topbar.currentPath} → ${vm.topbar.hoveredPath}` : vm.topbar.currentPath
   root.add(new TextRenderable(options.renderer, {
-    content: `${topbarPath}  ${vm.shortcuts.join(" · ")}`,
+    content: `${vm.topbar.brand}  ${vm.topbar.rebuildLabel} | ${vm.topbar.indexingLabel}  ${topbarPath}  ${vm.topbar.statusText}`,
     height: 1,
     fg: tuiTheme.primaryAccent,
     bg: tuiTheme.panel,

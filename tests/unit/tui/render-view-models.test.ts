@@ -84,9 +84,20 @@ describe("TUI render view models", () => {
   test("manager view model includes rows with filename/key, title, description, focus marker, and minimal shortcut/status hints", () => {
     const vm = buildManagerViewModel(baseState)
 
-    assert.equal(vm.title, "notes/")
+    assert.equal(vm.title, "")
+    assert.deepEqual(vm.topbar, {
+      brand: "BlueNote",
+      rebuildLabel: "Rebuild idle",
+      indexingLabel: "Index ready",
+      statusText: "2 items · selected daily-plan",
+      currentPath: "notes/",
+      hoveredPath: null,
+      styleIntent: "primaryAccent",
+    })
+    assert.equal(vm.panels.layout1.title, "notes/")
+    assert.equal(vm.panels.layout2.title, "daily-plan.md")
     assert.equal(vm.status, "2 items · selected daily-plan")
-    assert.deepEqual(vm.shortcuts, ["↑↓ move", "→/Enter open", "n new", "d delete", "/ filter", "Esc back", "q quit"])
+    assert.deepEqual(vm.shortcuts, ["↑↓ move", "→/Enter open", "n new", "d delete", "/ filter", "s search", "p preview hide", "Esc back", "q quit"])
     const creatingVm = buildManagerViewModel({
       ...baseState,
       mode: "manager.create",
@@ -124,8 +135,9 @@ describe("TUI render view models", () => {
       status: null,
       styleIntent: "danger",
     })
-    const managerChrome = [vm.title, vm.topbar.title, vm.status, ...vm.shortcuts, vm.panels.layout1.title, vm.panels.layout2.title].join(" ")
+    const managerChrome = [vm.title, vm.status, ...vm.shortcuts, vm.panels.layout1.title, vm.panels.layout2.title].join(" ")
     assert.doesNotMatch(managerChrome, /BlueNote(?: TUI| Manager)?/i)
+    assert.doesNotMatch(JSON.stringify(vm), /Layout 1: current folder|Layout 2: preview/u)
     assert.deepEqual(
       vm.rows.map((row) => ({ marker: row.focusMarker, key: row.key, filename: row.filename, title: row.title, description: row.description, focused: row.focused })),
       [
@@ -232,15 +244,21 @@ describe("TUI render view models", () => {
     } as TuiState, browser)
 
     assert.deepEqual(vm.topbar, {
-      title: "notes/",
+      brand: "BlueNote",
+      rebuildLabel: "Rebuild idle",
+      indexingLabel: "Index ready",
+      statusText: "2 items · selected daily-plan",
       currentPath: "notes/",
       hoveredPath: "notes/projects",
       styleIntent: "primaryAccent",
     })
     assert.deepEqual(vm.panels, {
-      layout1: { title: "Layout 1: current folder", styleIntent: "panel" },
-      layout2: { title: "Layout 2: preview", styleIntent: "panel" },
+      layout1: { title: "notes/", styleIntent: "panel" },
+      layout2: { title: "projects", styleIntent: "panel" },
     })
+    assert.match(vm.shortcuts.join(" "), /s search/u)
+    assert.match(vm.shortcuts.join(" "), /p preview hide/u)
+    assert.doesNotMatch(JSON.stringify(vm), /Layout 1: current folder|Layout 2: preview/u)
     assert.deepEqual(
       vm.layout1.rows.map((row) => ({ filename: row.filename, columns: row.columns, focused: row.focused, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent })),
       [
@@ -301,6 +319,45 @@ describe("TUI render view models", () => {
     assert.equal(vm.layout1.rows[0]?.openMarker, "●")
     assert.notEqual(vm.layout1.rows[0]?.openMarker, vm.layout1.rows[0]?.focusMarker)
     assert.equal(vm.layout1.rows[0]?.openStyleIntent, "activeItem")
+    assert.equal(vm.panels.layout2.title, "root-note.md")
+  })
+
+  test("manager chrome titles current folder and hidden preview states without artificial layout labels", () => {
+    const browser = buildManagerBrowserModel([
+      { key: "api-roadmap", title: "API Roadmap", description: "Ship API work.", relativePath: "notes/projects/api-roadmap.md" },
+    ], {
+      items: [],
+      focusedIndex: 0,
+      selectedNoteKey: "api-roadmap",
+      currentFolderPath: "notes/projects",
+      hoveredPath: "notes/projects/api-roadmap.md",
+      filterQuery: "",
+      previewVisible: false,
+    }, { previewVisible: false })
+
+    const vm = buildManagerViewModel({
+      ...baseState,
+      manager: {
+        ...browser.state,
+        items: browser.layout1Rows,
+        previewVisible: false,
+      },
+    } as TuiState, browser)
+
+    assert.equal(vm.title, "")
+    assert.equal(vm.panels.layout1.title, "notes/projects")
+    assert.equal(vm.panels.layout2.title, "Preview hidden")
+    assert.equal(vm.layout2.preview.type, "hidden")
+    assert.match(vm.shortcuts.join(" "), /s search/u)
+    const stateOnlyHiddenVm = buildManagerViewModel({
+      ...baseState,
+      manager: {
+        ...baseState.manager,
+        previewVisible: false,
+      },
+    })
+    assert.equal(stateOnlyHiddenVm.panels.layout2.title, "Preview hidden")
+    assert.equal(stateOnlyHiddenVm.shortcuts.includes("p preview show"), true)
   })
 
   test("runtime manager controller exposes the browser preview model used by renderer", () => {
