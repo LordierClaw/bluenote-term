@@ -46,7 +46,7 @@ export interface DefaultWorkspaceControllerOptions {
 export function getTuiBootstrapInfo(): TuiBootstrapInfo {
   return {
     appName: "BlueNote",
-    status: "phase-4e-autosave-atomicity-safe-note-body-writes",
+    status: "phase-4f-tui-cleanup-navigation-save-bugs",
     nextPhase: "phase-4-next-hardening-subplan",
   }
 }

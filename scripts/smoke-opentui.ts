@@ -7,8 +7,8 @@ if (typeof moduleRef.createCliRenderer !== "function") {
 }
 
 const info = getTuiBootstrapInfo()
-if (info.status !== "phase-4e-autosave-atomicity-safe-note-body-writes") {
-  throw new Error(`Expected delivered Phase 4E autosave atomicity / safe note-body write status, received ${info.status}`)
+if (info.status !== "phase-4f-tui-cleanup-navigation-save-bugs") {
+  throw new Error(`Expected delivered Phase 4F TUI cleanup / navigation / save-bug status, received ${info.status}`)
 }
 
 if (info.nextPhase !== "phase-4-next-hardening-subplan") {

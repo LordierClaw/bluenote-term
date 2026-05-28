@@ -113,6 +113,24 @@ function assertPhase4ENotAdvertisedUpcoming(content: string): void {
   assert.doesNotMatch(content, /Phase 4E[^\n.]*upcoming|upcoming[^\n.]*Phase 4E/i)
 }
 
+function assertDeliveredPhase4FTuiCleanupBehavior(content: string): void {
+  assert.match(content, /Phase 4F[^\n.]*TUI cleanup[^\n.]*navigation[^\n.]*save|Phase 4F[^\n.]*cleanup[^\n.]*navigation[^\n.]*filtering[^\n.]*save/i)
+  assert.match(content, /accepted|delivered|complete/i)
+  assert.match(content, /Manager[^\n.]*topbar[^\n.]*filtered count|filtered count[^\n.]*Manager[^\n.]*topbar/i)
+  assert.match(content, /bottom path|bottom-path|open-note bottom path/i)
+  assert.match(content, /filtered result[^\n.]*navigation|navigation[^\n.]*filtered result|filtered results?[^\n.]*open/i)
+  assert.match(content, /editor[^\n.]*border[^\n.]*removed|removed[^\n.]*editor[^\n.]*border|without[^\n.]*editor[^\n.]*border/i)
+  assert.match(content, /Editor body[^\n.]*title[^\n.]*removed|removed[^\n.]*Editor body[^\n.]*title|without[^\n.]*Editor body[^\n.]*title/i)
+  assert.match(content, /editor[^\n.]*topbar[^\n.]*note[^\n.]*path[^\n.]*modified|topbar[^\n.]*note[^\n.]*path[^\n.]*modified/i)
+  assert.match(content, /bottom bar[^\n.]*Line[^\n.]*Col[^\n.]*wrap[^\n.]*save|Line[^\n.]*Col[^\n.]*wrap[^\n.]*save[^\n.]*bottom bar/i)
+  assert.match(content, /autosave[^\n.]*manager switching after edit|manager switching after edit[^\n.]*autosave|switch(?:ing)?[^\n.]*notes?[^\n.]*after[^\n.]*autosave/i)
+}
+
+function assertPhase4FNotAdvertisedUpcoming(content: string): void {
+  assert.doesNotMatch(content, /Phase 4F[^\n.]*upcoming|upcoming[^\n.]*Phase 4F/i)
+  assert.doesNotMatch(content, /Phase 4F[^\n.]*not yet planned|not yet planned[^\n.]*Phase 4F/i)
+}
+
 function assertDataStorageAndContainsSearchContract(content: string): void {
   assert.match(content, /plain Markdown/i)
   assert.match(content, /\.data\/notes\//)
@@ -148,6 +166,8 @@ test("README documents the refined Phase 3 TUI workspace behavior", async () => 
   assertPhase4DNotAdvertisedUpcoming(readme)
   assertDeliveredPhase4ESaveContract(readme)
   assertPhase4ENotAdvertisedUpcoming(readme)
+  assertDeliveredPhase4FTuiCleanupBehavior(readme)
+  assertPhase4FNotAdvertisedUpcoming(readme)
   assertNeutralNextPhaseMarker(readme)
 })
 
@@ -179,34 +199,38 @@ test("product and phase docs describe refined Manager, Editor, and Search Everyt
   assertDeliveredPhase4ESaveContract(phase)
   assertPhase4ENotAdvertisedUpcoming(overview)
   assertPhase4ENotAdvertisedUpcoming(phase)
+  assertDeliveredPhase4FTuiCleanupBehavior(phase)
+  assertPhase4FNotAdvertisedUpcoming(phase)
   assertNeutralNextPhaseMarker(phase)
 })
 
-test("smoke contracts cover delivered Phase 4E save persistence regressions and status metadata", async () => {
+test("smoke contracts cover delivered Phase 4F TUI cleanup regressions and status metadata", async () => {
   const smoke = await readRepoFile("scripts/smoke-opentui.ts")
   const interactiveSmoke = await readRepoFile("scripts/smoke-opentui-interactive.ts")
 
-  assert.match(smoke, /phase-4e-autosave-atomicity-safe-note-body-writes/i)
+  assert.match(smoke, /phase-4f-tui-cleanup-navigation-save-bugs/i)
   assert.match(smoke, /phase-4-next-hardening-subplan/i)
   assertPhase4BNotAdvertisedIncomplete(smoke)
   assertPhase4CNotAdvertisedUpcoming(smoke)
   assertPhase4DNotAdvertisedUpcoming(smoke)
   assertPhase4ENotAdvertisedUpcoming(smoke)
+  assertPhase4FNotAdvertisedUpcoming(smoke)
 
   assert.match(interactiveSmoke, /editor-input-regression-token/)
   assert.match(interactiveSmoke, /cursor-probe/)
   assert.match(interactiveSmoke, /Alt\+Z wrap|wrap/i)
   assert.match(interactiveSmoke, /responsive resize|responsive bottom/i)
   assert.match(interactiveSmoke, /autosave-persist/)
+  assert.match(interactiveSmoke, /manager opens switch target with Enter after autosave/i)
+  assert.match(interactiveSmoke, /manager opens switch target with Arrow Right after autosave/i)
   assert.match(interactiveSmoke, /manual-save-persist/)
   assert.match(interactiveSmoke, /actual note file/i)
   assert.match(interactiveSmoke, /Saved/)
 })
 
-test("Phase 4 docs mark 4E delivered and identify neutral hardening follow-up", async () => {
+test("Phase 4 docs mark 4F delivered and identify neutral hardening follow-up", async () => {
   const docs = await Promise.all([
     readRepoFile("docs/phases/phase-4-search-editing-and-recovery.md"),
-    readRepoFile("docs/plans/2026-05-27-phase-4-search-editing-recovery-design.md"),
   ])
 
   for (const content of docs) {
@@ -216,6 +240,8 @@ test("Phase 4 docs mark 4E delivered and identify neutral hardening follow-up", 
     assertPhase4DNotAdvertisedUpcoming(content)
     assertDeliveredPhase4ESaveContract(content)
     assertPhase4ENotAdvertisedUpcoming(content)
+    assertDeliveredPhase4FTuiCleanupBehavior(content)
+    assertPhase4FNotAdvertisedUpcoming(content)
     assertNeutralNextPhaseMarker(content)
   }
 })
@@ -233,6 +259,8 @@ test("runtime docs identify OpenTUI as the refined Phase 3 workspace runtime", a
   assertDeliveredPhase4DSearchEverythingBehavior(runtime)
   assertDeliveredPhase4ESaveContract(runtime)
   assertPhase4ENotAdvertisedUpcoming(runtime)
+  assertDeliveredPhase4FTuiCleanupBehavior(runtime)
+  assertPhase4FNotAdvertisedUpcoming(runtime)
 })
 
 test("active docs describe canonical data storage and contains search contracts", async () => {
