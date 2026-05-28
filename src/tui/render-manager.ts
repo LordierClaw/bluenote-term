@@ -548,6 +548,9 @@ export function routeManagerKey(sequence: string, controller: WorkspaceControlle
     case "d":
       controller.openManagerDeleteConfirmation()
       return true
+    case "p":
+      controller.toggleManagerPreview()
+      return true
     case "s":
       controller.openSearch()
       return true

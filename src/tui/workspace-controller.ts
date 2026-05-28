@@ -108,6 +108,8 @@ export interface WorkspaceController {
   setManagerFilter: (query: string) => void
   updateManagerFilter: (query: string) => void
   clearManagerFilter: () => void
+  toggleManagerPreview: () => void
+  setManagerPreviewVisible: (visible: boolean) => void
   toggleSearch: (query?: string) => void
   openEditorFind: (query?: string) => void
   updateEditorFindQuery: (query: string) => void
@@ -657,6 +659,26 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     clearManagerFilter: () => {
       state = clearManagerFilterState(state)
       applyManagerBrowserModel()
+    },
+
+    toggleManagerPreview: () => {
+      state = {
+        ...state,
+        manager: {
+          ...state.manager,
+          previewVisible: !(state.manager.previewVisible ?? true),
+        },
+      }
+    },
+
+    setManagerPreviewVisible: (visible) => {
+      state = {
+        ...state,
+        manager: {
+          ...state.manager,
+          previewVisible: visible,
+        },
+      }
     },
 
     toggleSearch: (query = "") => {

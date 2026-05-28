@@ -8,7 +8,7 @@ import {
 } from "../../../src/tui/workspace-controller"
 import type { NoteManagerSummary } from "../../../src/tui/adapters/note-manager-adapter"
 import type { SearchEverythingResult } from "../../../src/tui/adapters/search-everything-adapter"
-import type { TuiNote } from "../../../src/tui/state"
+import { createInitialTuiState, type TuiNote } from "../../../src/tui/state"
 
 function createFakeScheduler() {
   type ScheduledTask = { id: number; callback: () => void; delay: number; cleared: boolean }
@@ -143,6 +143,10 @@ function openArchiveReview(controller: ReturnType<typeof createWorkspaceControll
 }
 
 describe("TUI workspace controller", () => {
+  test("initial TUI manager preview visibility defaults to visible", () => {
+    assert.equal(createInitialTuiState().manager.previewVisible, true)
+  })
+
   test("starts on manager and loads manager items from the adapter", () => {
     const { deps, calls } = createDeps()
     const controller = createWorkspaceController(deps)
@@ -153,6 +157,51 @@ describe("TUI workspace controller", () => {
       ["folder:notes/archive", "folder:notes/inbox"],
     )
     assert.deepEqual(calls, ["list"])
+  })
+
+  test("toggles manager preview visibility without changing manager selection, filter, folder, or editor", () => {
+    const { deps } = createDeps()
+    const controller = createWorkspaceController(deps)
+    openInboxDaily(controller)
+    controller.updateEditorBody("Dirty daily body")
+    controller.showManager()
+    controller.openManagerFilter()
+    controller.updateManagerFilter("daily")
+
+    const before = controller.getState()
+    controller.toggleManagerPreview()
+    const after = controller.getState()
+
+    assert.equal(after.manager.previewVisible, false)
+    assert.equal(after.manager.focusedIndex, before.manager.focusedIndex)
+    assert.equal(after.manager.currentFolderPath, before.manager.currentFolderPath)
+    assert.equal(after.manager.filterQuery, before.manager.filterQuery)
+    assert.deepEqual(after.editor, before.editor)
+    assert.equal(after.manager.selectedNoteKey, before.manager.selectedNoteKey)
+  })
+
+  test("responsive manager preview visibility setter does not dirty/open/close notes", () => {
+    const { deps, calls } = createDeps()
+    const controller = createWorkspaceController(deps)
+    openInboxDaily(controller)
+    controller.showManager()
+
+    const before = controller.getState()
+    controller.setManagerPreviewVisible(false)
+    const hidden = controller.getState()
+    controller.setManagerPreviewVisible(false)
+    const hiddenAgain = controller.getState()
+    controller.setManagerPreviewVisible(true)
+    const shown = controller.getState()
+
+    assert.equal(hidden.manager.previewVisible, false)
+    assert.equal(hiddenAgain.manager.previewVisible, false)
+    assert.equal(shown.manager.previewVisible, true)
+    assert.deepEqual(hidden.editor, before.editor)
+    assert.equal(hidden.editor?.dirty, false)
+    assert.equal(hidden.screen, before.screen)
+    assert.equal(hidden.manager.selectedNoteKey, before.manager.selectedNoteKey)
+    assert.deepEqual(calls, ["list", "show:daily-plan"])
   })
 
   test("switches manager to editor by opening the selected note", () => {

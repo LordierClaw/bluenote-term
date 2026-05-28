@@ -95,6 +95,8 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
     setManagerFilter: (query) => calls.push(`setManagerFilter:${query}`),
     updateManagerFilter: (query) => calls.push(`updateManagerFilter:${query}`),
     clearManagerFilter: () => calls.push("clearManagerFilter"),
+    toggleManagerPreview: () => calls.push("toggleManagerPreview"),
+    setManagerPreviewVisible: (visible) => calls.push(`setManagerPreviewVisible:${visible}`),
     toggleSearch: (query) => calls.push(`toggleSearch:${query ?? ""}`),
     openEditorFind: (query) => calls.push(`openEditorFind:${query ?? ""}`),
     updateEditorFindQuery: (query) => calls.push(`updateEditorFindQuery:${query}`),
@@ -563,6 +565,16 @@ describe("TUI render keyboard routing", () => {
       assert.equal(routeManagerKey(sequence, controller), true, sequence)
       assert.equal(calls.at(-1), expected, sequence)
     }
+  })
+
+  test("manager route maps p to preview toggle while s and Ctrl+P still open Search Everything", () => {
+    const { controller, calls } = createController("manager")
+
+    assert.equal(routeManagerKey("p", controller), true)
+    assert.equal(routeManagerKey("s", controller), true)
+    assert.deepEqual(routeWorkspaceKey("\u0010", controller, () => {}), { handled: true })
+
+    assert.deepEqual(calls, ["toggleManagerPreview", "openSearch:", "toggleSearch:"])
   })
 
   test("manager create route edits title, submits on Enter, and cancels on Escape or Ctrl+[", () => {

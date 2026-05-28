@@ -32,6 +32,7 @@ export interface ManagerState {
   items: ManagerItem[]
   focusedIndex: number
   selectedNoteKey: string | null
+  previewVisible?: boolean
   currentFolderPath?: string
   hoveredPath?: string | null
   filterQuery?: string
@@ -132,6 +133,7 @@ function cloneManagerState(manager: ManagerState): ManagerState {
     ...manager,
     items: cloneManagerItems(manager.items),
     currentFolderPath: normalizeManagerPath(manager.currentFolderPath),
+    previewVisible: manager.previewVisible ?? true,
     hoveredPath: manager.hoveredPath ?? null,
     filterQuery: manager.filterQuery ?? "",
     status: manager.status ?? null,
@@ -144,6 +146,7 @@ const defaultManagerState = (): ManagerState => ({
   items: [],
   focusedIndex: 0,
   selectedNoteKey: null,
+  previewVisible: true,
   currentFolderPath: "",
   hoveredPath: null,
   filterQuery: "",
