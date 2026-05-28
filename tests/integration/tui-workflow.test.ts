@@ -43,6 +43,10 @@ async function countNoteSidecars(rootPath: string): Promise<number> {
   return entries.filter((entry) => entry.isFile() && entry.name.endsWith(".json")).length
 }
 
+async function waitForAutosave(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 900))
+}
+
 describe("TUI workspace workflows", () => {
   let rootPath: string
 
@@ -135,6 +139,51 @@ describe("TUI workspace workflows", () => {
     assert.equal(controller.getState().editor?.dirty, false)
     assert.equal(showNote({ override: rootPath, selector: first.key }).body, changedBody)
     assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), changedBody)
+  })
+
+  test("autosave after editor input persists and manager can switch notes without blocking", async () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Autosave Source",
+      body: "Source body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    const second = createNote({
+      override: rootPath,
+      title: "Autosave Switch Target",
+      body: "Target body",
+      clock: fixedClock("2026-05-26T10:01:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerNoteByKey(controller, first.key)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, first.key)
+
+    controller.insertEditorText(" + autosaved through controller")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+
+    await waitForAutosave()
+
+    assert.equal(controller.getState().editor?.note.key, first.key)
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+    assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), "Source body + autosaved through controller")
+
+    assert.equal(controller.goBack().blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.requestQuit().blocked, false)
+
+    const secondIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === second.key)
+    assert.notEqual(secondIndex, -1)
+    controller.focusManagerItem(secondIndex)
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, second.key)
+    assert.equal(controller.getState().editor?.body, "Target body")
   })
 
   test("manual save after cursor-aware editor input persists through core services", async () => {

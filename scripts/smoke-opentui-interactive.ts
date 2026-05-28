@@ -296,6 +296,12 @@ try {
     "Root smoke note body.\nFindable alpha token for editor find smoke.",
     "notes",
   )
+  createSmokeNote(
+    rootPath,
+    "Switch Target Fixture",
+    "Switch target body.\nThis note proves manager navigation remains routable after editor autosave.",
+    "notes",
+  )
 
   const rebuildResult = run("bun", ["run", "./bin/bn.ts", "rebuild"], { env: { BLUENOTE_ROOT: rootPath } })
   if (rebuildResult.status !== 0) {
@@ -498,13 +504,48 @@ try {
   const editorAutosavePane = capturePaneUntil(sessionName, "editor autosave persistence typing", autosavePersistenceToken, 30)
   expectPaneContains(editorAutosavePane, `${multilineText}${pasteFallbackText}${autosavePersistenceToken}`, "editor autosave persistence typing")
   wait(1_250, "editor autosave persistence wait")
+  const postAutosavePane = capturePane(sessionName, "editor autosave persistence status")
+  expectPaneExcludes(postAutosavePane, "Autosave failed", "editor autosave persistence status")
   expectNoteFileContains(rootEditorSummary.notePath, autosavePersistenceToken, "editor autosave persistence filesystem")
+
+  sendKeys(sessionName, "Escape")
+  const managerAfterAutosavePane = capturePaneUntil(sessionName, "editor autosave return to manager", "Rebuild idle", 20)
+  expectPaneContains(managerAfterAutosavePane, "Root Editor", "editor autosave return to manager")
+  expectLatestScreen(managerAfterAutosavePane, "Rebuild idle", autosavePersistenceToken, "editor autosave return to manager latest screen")
+
+  sendKeys(sessionName, "Down")
+  wait(250, "manager switch target selection via arrow down")
+  sendKeys(sessionName, "Enter")
+  const switchTargetEnterPane = capturePaneUntil(sessionName, "manager opens switch target with Enter after autosave", "Ctrl+F find", 30)
+  expectPaneContains(switchTargetEnterPane, "Ctrl+F find", "manager opens switch target with Enter after autosave")
+  expectPaneContains(switchTargetEnterPane, "Switch target body", "manager opens switch target with Enter after autosave")
+
+  sendKeys(sessionName, "Escape")
+  const managerAfterSwitchEnterPane = capturePaneUntil(sessionName, "switch target return to manager after Enter", "Rebuild idle", 20)
+  expectPaneContains(managerAfterSwitchEnterPane, "Switch Target", "switch target return to manager after Enter")
+  sendKeys(sessionName, "Enter")
+  const switchTargetRightSetupPane = capturePaneUntil(sessionName, "manager reopens switch target with Enter before Right attempt", "Ctrl+F find", 30)
+  expectPaneContains(switchTargetRightSetupPane, "Ctrl+F find", "manager reopens switch target with Enter before Right attempt")
+  sendKeys(sessionName, "Escape")
+  capturePaneUntil(sessionName, "switch target return to manager before Right attempt", "Rebuild idle", 20)
+  sendKeys(sessionName, "Right")
+  const switchTargetRightPane = capturePaneUntil(sessionName, "manager opens switch target with Arrow Right after autosave", "Ctrl+F find", 30)
+  expectPaneContains(switchTargetRightPane, "Ctrl+F find", "manager opens switch target with Arrow Right after autosave")
+  expectPaneContains(switchTargetRightPane, "Switch target body", "manager opens switch target with Arrow Right after autosave")
+
+  sendKeys(sessionName, "Escape")
+  capturePaneUntil(sessionName, "switch target return to manager for original editor", "Rebuild idle", 20)
+  sendKeys(sessionName, "Up")
+  wait(250, "manager select original editor after switch target")
+  sendKeys(sessionName, "Enter")
+  const editorReopenedAfterSwitchPane = capturePaneUntil(sessionName, "manager reopens original editor after switch target", "Ctrl+F find", 30)
+  expectPaneContains(editorReopenedAfterSwitchPane, autosavePersistenceToken, "manager reopens original editor after switch target")
 
   sendKeys(sessionName, "C-p")
   const dirtySearchPane = capturePaneUntil(sessionName, "dirty editor search open", "Search Everything", 20)
   expectPaneContains(dirtySearchPane, "Search Everything", "dirty editor search open")
   sendKeys(sessionName, "Escape")
-  const postAutosaveCursorText = `${multilineText}${pasteFallbackText}${autosavePersistenceToken}▌${typedEditorText.slice(-1)}`
+  const postAutosaveCursorText = `${multilineText}${pasteFallbackText}${autosavePersistenceToken}${typedEditorText.slice(-1)}▌`
   const dirtySearchCancelPane = capturePaneUntil(sessionName, "editor search cancel restores body focus", postAutosaveCursorText, 30)
   expectPaneContains(dirtySearchCancelPane, postAutosaveCursorText, "editor search cancel restores body focus")
   expectPaneExcludes(dirtySearchCancelPane, "Search Everything", "editor search cancel restores body focus")
@@ -515,7 +556,7 @@ try {
   sendKeys(sessionName, "C-s")
   expectNoteFileContainsWithin(rootEditorSummary.notePath, manualSavePersistenceToken, "editor manual save persistence filesystem", 300)
   const editorSavedPane = capturePaneUntil(sessionName, "editor ctrl-s save", "Saved", 30)
-  const postManualSaveCursorText = `${multilineText}${pasteFallbackText}${autosavePersistenceToken}${manualSavePersistenceToken}▌${typedEditorText.slice(-1)}`
+  const postManualSaveCursorText = `${multilineText}${pasteFallbackText}${autosavePersistenceToken}${typedEditorText.slice(-1)}${manualSavePersistenceToken}▌`
   expectPaneContains(editorSavedPane, postManualSaveCursorText, "editor ctrl-s save")
   expectNoteFileContains(rootEditorSummary.notePath, manualSavePersistenceToken, "editor manual save persistence filesystem")
 
