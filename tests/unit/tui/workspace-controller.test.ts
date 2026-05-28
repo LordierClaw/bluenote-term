@@ -160,6 +160,34 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(calls, ["list"])
   })
 
+  test("opening a note preserves updatedAt metadata for editor chrome", () => {
+    const controller = createWorkspaceController({
+      listNotes: () => [
+        {
+          key: "daily-plan",
+          title: "Daily Plan",
+          description: "Today priorities.",
+          relativePath: "notes/inbox/daily-plan.md",
+        },
+      ],
+      showNote: () => ({
+        key: "daily-plan",
+        title: "Daily Plan",
+        description: "Today priorities.",
+        relativePath: "notes/inbox/daily-plan.md",
+        body: "# Daily Plan",
+        updatedAt: "2026-05-28T10:30:00.000Z",
+      }),
+      searchNotes: () => [],
+    })
+
+    controller.refreshManager()
+    controller.openFocusedManagerItem()
+    controller.openFocusedManagerItem()
+
+    assert.equal(controller.getState().editor?.note.updatedAt, "2026-05-28T10:30:00.000Z")
+  })
+
   test("toggles manager preview visibility without changing manager selection, filter, folder, or editor", () => {
     const { deps } = createDeps()
     const controller = createWorkspaceController(deps)

@@ -26,6 +26,9 @@ export interface TuiNote {
   description: string
   relativePath: string
   body: string
+  createdAt?: string
+  updatedAt?: string
+  modifiedAt?: string
 }
 
 export interface ManagerState {

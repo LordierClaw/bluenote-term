@@ -594,12 +594,8 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         return dirtyBlocked()
       }
 
-      const opened = openManagerBrowserItem(state.manager, { showNote: deps.showNote })
-      if (opened.type !== "note") {
-        return ok()
-      }
-
-      setEditorNote(opened.note)
+      const note = deps.showNote(focused.key)
+      setEditorNote(note)
       return ok()
     },
 

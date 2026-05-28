@@ -525,6 +525,25 @@ describe("TUI render view models", () => {
     assert.equal(autosaveVm.bottombar.row1.rightIntent, "warning")
   })
 
+  test("editor topbar shows note updated timestamp when metadata exists", () => {
+    const vm = buildEditorViewModel({
+      ...baseState,
+      screen: "editor",
+      mode: "editor.body",
+      editor: {
+        ...baseState.editor!,
+        note: {
+          ...baseState.editor!.note,
+          updatedAt: "2026-05-28T10:30:00.000Z",
+        },
+      },
+    })
+
+    assert.equal(vm.topbar.updatedLabel, "Updated 2026-05-28T10:30:00.000Z")
+    assert.equal(vm.topbar.updatedIntent, "mutedText")
+    assert.notEqual(vm.topbar.updatedLabel, "Updated unknown")
+  })
+
   test("editor responsive view model hides low-priority shortcuts first and reports body overflow", () => {
     const longBody = Array.from({ length: 30 }, (_, index) => `line ${index + 1}`).join("\n")
     const narrowVm = buildEditorViewModel({

@@ -12,6 +12,7 @@ import { showNote } from "../core/show-note"
 import type { CliResult } from "../core/types"
 import { systemClock, type Clock } from "../platform/clock"
 import { createNoteRepository } from "../storage/note-repository"
+import { createSidecarRepository } from "../storage/sidecar-repository"
 import { cleanupStaleAtomicNoteWriterTemps } from "../storage/atomic-note-writer"
 import { renderEditorScreen, routeEditorKey } from "./render-editor"
 import { renderManagerScreen, routeManagerKey } from "./render-manager"
@@ -64,7 +65,23 @@ function persistTuiEditorBody(rootPath: string, note: TuiNote, body: string, clo
   })
   rebuildIndexes({ override: rootPath })
 
-  return showNote({ override: rootPath, selector: note.key })
+  return showTuiNote(rootPath, note.key)
+}
+
+function showTuiNote(rootPath: string, selector: string): TuiNote {
+  const note = showNote({ override: rootPath, selector })
+  const sidecars = createSidecarRepository(rootPath)
+
+  try {
+    const sidecar = sidecars.read(note.key)
+    return {
+      ...note,
+      createdAt: sidecar.createdAt,
+      updatedAt: sidecar.updatedAt,
+    }
+  } catch {
+    return note
+  }
 }
 
 function ensureTuiIndexes(rootPath: string): void {
@@ -89,7 +106,7 @@ export function createDefaultWorkspaceController(options: DefaultWorkspaceContro
 
   return createWorkspaceController({
     listNotes: () => listNotes({ override: rootPath }),
-    showNote: (selector) => showNote({ override: rootPath, selector }),
+    showNote: (selector) => showTuiNote(rootPath, selector),
     searchNotes: (query) => searchNotes(query, { override: rootPath }),
     createNote: (title, body) => createNote({ override: rootPath, title, body, clock }),
     deleteNote: (selector) => {
