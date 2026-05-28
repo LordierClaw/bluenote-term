@@ -932,6 +932,13 @@ describe("TUI render view models", () => {
       assert.doesNotMatch(resultText, /undefined/u)
       assert.deepEqual(previewLines.slice(0, 5), ["Preview · Daily Plan", "daily-plan.md — notes/inbox/daily-plan.md", "Metadata", "daily-plan.md — notes/inbox/daily-plan.md", "Description"])
       assert.match(text, /Today priorities\./u)
+      controller.openSearch("/archive")
+      controller.selectSearchResult()
+      const statusRoot = renderSearchEverythingScreen({ renderer, controller })
+      const statusText = descendants(statusRoot).map((node: any) => node.content?.chunks?.[0]?.text ?? node.content ?? "").join("\n")
+      assert.match(statusText, /Command unavailable: \/archive/u)
+      root.destroyRecursively()
+      statusRoot.destroyRecursively()
     } finally {
       renderer.destroy()
     }

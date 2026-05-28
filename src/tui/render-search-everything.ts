@@ -78,6 +78,7 @@ export interface SearchEverythingViewModel {
   results: SearchEverythingResultRowViewModel[]
   preview: SearchEverythingPreviewViewModel | null
   shortcuts: string[]
+  status: string | null
 }
 
 export interface SearchEverythingViewModelOptions {
@@ -165,6 +166,7 @@ export function buildSearchEverythingViewModel(
         styleIntent: "mutedText",
       },
     shortcuts: ["type search", "↑/↓ select", "Enter open/run", "Alt+P preview hide/show", `Esc ${previousScreen}`],
+    status: state.search?.status ?? null,
   }
 }
 
@@ -187,6 +189,9 @@ export function renderSearchEverythingScreen(options: RenderSearchEverythingScre
     title: "",
   })
   root.add(new TextRenderable(options.renderer, { content: `Search Everything · Esc ${vm.previousScreen}`, height: 1, fg: tuiTheme.primaryAccent, bg: tuiTheme.background }))
+  if (vm.status) {
+    root.add(new TextRenderable(options.renderer, { content: vm.status, height: 1, fg: tuiTheme.secondaryAccent, bg: tuiTheme.background }))
+  }
 
   const inputRegion = new BoxRenderable(options.renderer, {
     id: "bluenote-search-input-region",
