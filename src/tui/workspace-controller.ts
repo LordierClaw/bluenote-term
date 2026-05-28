@@ -2,6 +2,7 @@ import type { EditorCursorDirection, SaveEditorBufferDependencies } from "./adap
 import { advanceEditorFindState, backspaceAtEditorCursor, deleteAtEditorCursor, findInEditorBody, insertTextAtEditorCursor, moveEditorCursor } from "./adapters/editor-buffer-adapter"
 import {
   buildManagerBrowserModel,
+  focusedManagerBrowserItem,
   goToManagerParent,
   moveManagerSelection,
   openManagerBrowserItem,
@@ -558,7 +559,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     },
 
     openFocusedManagerItem: (options = {}) => {
-      const focused = state.manager.items[state.manager.focusedIndex]
+      const focused = focusedManagerBrowserItem(state.manager).item
       if (!focused) {
         return ok()
       }

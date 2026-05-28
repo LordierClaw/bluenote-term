@@ -533,6 +533,45 @@ describe("TUI note manager adapter", () => {
     })
   })
 
+  test("opens the visible filtered row when filtered focus points at a different full-list item", () => {
+    const unfilteredState = buildManagerBrowserModel(browserSummaries, {
+      items: [],
+      focusedIndex: 0,
+      selectedNoteKey: null,
+      currentFolderPath: "",
+      hoveredPath: null,
+      filterQuery: "",
+    }).state
+    const filteredState: ManagerState = {
+      ...unfilteredState,
+      focusedIndex: 0,
+      hoveredPath: null,
+      filterQuery: "root",
+    }
+
+    assert.notEqual(filteredState.items[0]?.relativePath, "notes/root-note.md")
+    assert.deepEqual(
+      buildManagerBrowserModel(browserSummaries, filteredState).layout1Rows.map((row) => row.relativePath),
+      ["notes/root-note.md"],
+    )
+
+    const opened = openManagerBrowserItem(filteredState, {
+      showNote: (selector) => {
+        assert.equal(selector, "root-note")
+        return {
+          key: "root-note",
+          title: "Root Note",
+          description: "A top-level note.",
+          relativePath: "notes/root-note.md",
+          body: "# Root Note\n\nThis is the real note body.\n",
+        }
+      },
+    })
+
+    assert.equal(opened.type, "note")
+    assert.equal(opened.note.key, "root-note")
+  })
+
   test("moves to the parent folder and calmly no-ops at the manager root", () => {
     const nested: ManagerState = {
       items: [],

@@ -1459,6 +1459,46 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().manager.filterQuery, "")
   })
 
+  test("manager filter Enter and Arrow Right open the visible filtered note when full-list index points at a folder", () => {
+    const rootSummaries: NoteManagerSummary[] = [
+      {
+        key: "project-plan",
+        title: "Project Plan",
+        description: "Nested note that creates a root folder row.",
+        relativePath: "notes/projects/project-plan.md",
+        body: "Project body",
+      },
+      {
+        key: "target-note",
+        title: "Target Note",
+        description: "Top-level note visible after filtering.",
+        relativePath: "notes/target-note.md",
+        body: "Target body",
+      },
+    ]
+    const notes = Object.fromEntries(rootSummaries.map((note) => [note.key, note])) as Record<string, TuiNote>
+    const openWith = (sequence: "\r" | "\u001b[C") => {
+      const { deps } = createDeps({
+        listNotes: () => rootSummaries,
+        showNote: (selector) => notes[selector],
+      })
+      const controller = createWorkspaceController(deps)
+
+      assert.equal(controller.getState().manager.items[0]?.type, "folder")
+      assert.equal(controller.getState().manager.items[0]?.relativePath, "notes/projects")
+      controller.openManagerFilter()
+      controller.updateManagerFilter("target")
+      assert.deepEqual(controller.getManagerBrowserModel().layout1Rows.map((row) => row.relativePath), ["notes/target-note.md"])
+
+      assert.equal(routeManagerKey(sequence, controller), true)
+      assert.equal(controller.getState().screen, "editor")
+      assert.equal(controller.getState().editor?.note.key, "target-note")
+    }
+
+    openWith("\r")
+    openWith("\u001b[C")
+  })
+
   test("toggleSearch records previous mode and toggles back when search is already active", () => {
     const { deps } = createDeps()
     const controller = createWorkspaceController(deps)

@@ -93,6 +93,11 @@ export type OpenManagerBrowserItemResult =
   | { type: "note"; note: TuiNote }
   | { type: "none"; state: ManagerState }
 
+export interface FocusedManagerBrowserItemResult {
+  item: ManagerItem | null
+  focusedIndex: number
+}
+
 export interface ManagerRowViewModel extends ManagerItem {
   index: number
   focused: boolean
@@ -353,12 +358,24 @@ export function buildManagerBrowserModel(
   }
 }
 
+export function focusedManagerBrowserItem(state: ManagerState): FocusedManagerBrowserItemResult {
+  const currentFolderPath = normalizeManagerFolderPath(state.currentFolderPath)
+  const visibleItems = filterRows(immediateRowsForFolder(state.items, currentFolderPath), state.filterQuery ?? "")
+  const focusedIndex = visibleItems.length === 0 ? 0 : clampIndex(state.focusedIndex, visibleItems.length - 1)
+  const requestedHoveredPath = state.hoveredPath ?? null
+  const hoveredItem = visibleItems.find((item) => item.relativePath === requestedHoveredPath) ?? null
+
+  return {
+    item: hoveredItem ?? visibleItems[focusedIndex] ?? null,
+    focusedIndex,
+  }
+}
+
 export function openManagerBrowserItem(
   state: ManagerState,
   deps: OpenManagerBrowserItemDependencies,
 ): OpenManagerBrowserItemResult {
-  const hoveredPath = state.hoveredPath ?? state.items[state.focusedIndex]?.relativePath ?? null
-  const focused = hoveredPath ? state.items.find((item) => item.relativePath === hoveredPath) : state.items[state.focusedIndex]
+  const { item: focused } = focusedManagerBrowserItem(state)
 
   if (!focused) {
     return {
