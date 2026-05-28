@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process"
 
 import { createNote } from "../src/core/create-note"
 
-const SMOKE_TIMEOUT_MS = 60_000
+const SMOKE_TIMEOUT_MS = 90_000
 const TMUX_COMMAND_TIMEOUT_MS = 5_000
 const smokeStartedAt = Date.now()
 
@@ -238,6 +238,114 @@ const sessionName = `bluenote-opentui-${process.pid}`
 let tuiPanePid: number | null = null
 let cleanedUp = false
 
+function tmuxSessionExists(targetSessionName: string): boolean {
+  const result = run("tmux", ["has-session", "-t", targetSessionName], { timeout: 2_000 })
+  return result.status === 0
+}
+
+function expectTmuxSessionExited(targetSessionName: string, context: string, timeoutMs = 5_000): void {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() <= deadline) {
+    assertWithinSmokeDeadline(context)
+    if (!tmuxSessionExists(targetSessionName)) {
+      return
+    }
+    wait(100, context)
+  }
+  throw new Error(`${context}: expected tmux session ${targetSessionName} to exit within ${timeoutMs}ms`)
+}
+
+function assertPostAutosaveQuitRoute(route: "q" | "C-c"): void {
+  const routeRootPath = mkdtempSync(path.join(tmpdir(), `bluenote-opentui-${route}-route-`))
+  const routeSessionName = `bluenote-opentui-${route}-route-${process.pid}`
+  let routePanePid: number | null = null
+
+  const killRouteTuiProcess = (): void => {
+    if (routePanePid === null) {
+      return
+    }
+    for (const signal of ["SIGTERM", "SIGKILL"] as const) {
+      try {
+        process.kill(-routePanePid, signal)
+      } catch {
+        // The pane process may not be its own process group leader in all tmux builds.
+      }
+      try {
+        process.kill(routePanePid, signal)
+      } catch {
+        // Already exited.
+      }
+      if (signal === "SIGTERM") {
+        waitWithoutSmokeDeadline(100)
+      }
+    }
+  }
+
+  try {
+    const initResult = run("bun", ["run", "./bin/bn.ts", "init"], { env: { BLUENOTE_ROOT: routeRootPath } })
+    if (initResult.status !== 0) {
+      throw new Error(`Failed to initialize ${route} route smoke root: ${initResult.stderr || initResult.stdout}`)
+    }
+    const title = `Post Autosave ${route} Route Fixture ${process.pid}`
+    const summary = createSmokeNote(routeRootPath, title, `Post-autosave ${route} route body.`)
+    const rebuildResult = run("bun", ["run", "./bin/bn.ts", "rebuild"], { env: { BLUENOTE_ROOT: routeRootPath } })
+    if (rebuildResult.status !== 0) {
+      throw new Error(`Failed to rebuild ${route} route smoke root: ${rebuildResult.stderr || rebuildResult.stdout}`)
+    }
+
+    const launchResult = run("tmux", [
+      "new-session",
+      "-d",
+      "-s",
+      routeSessionName,
+      "-x",
+      "100",
+      "-y",
+      "30",
+      `cd ${JSON.stringify(process.cwd())} && exec env BLUENOTE_ROOT=${JSON.stringify(routeRootPath)} TERM=xterm-256color bun run ./bin/bn.ts tui`,
+    ])
+    if (launchResult.status !== 0) {
+      throw new Error(`Failed to launch ${route} route tmux TUI smoke session: ${launchResult.stderr || launchResult.stdout}`)
+    }
+
+    const panePidResult = run("tmux", ["display-message", "-p", "-t", routeSessionName, "#{pane_pid}"])
+    if (panePidResult.status === 0) {
+      const parsedPanePid = Number.parseInt(panePidResult.stdout.trim(), 10)
+      routePanePid = Number.isFinite(parsedPanePid) ? parsedPanePid : null
+    }
+
+    capturePaneUntil(routeSessionName, `${route} route manager launch`, "Rebuild idle", 30)
+    sendKeys(routeSessionName, "C-p")
+    const searchPromptPane = capturePaneUntil(routeSessionName, `${route} route search prompt`, "Search Everything", 20)
+    expectPaneContains(searchPromptPane, "Search Everything", `${route} route search prompt`)
+    sendText(routeSessionName, title)
+    const searchResultPane = capturePaneUntil(routeSessionName, `${route} route search result`, title, 30)
+    expectPaneContains(searchResultPane, title, `${route} route search result`)
+    sendKeys(routeSessionName, "Enter")
+    const editorPane = capturePaneUntil(routeSessionName, `${route} route editor open`, "Ctrl+F find", 30)
+    expectPaneContains(editorPane, title, `${route} route editor open`)
+
+    const autosaveToken = `post-autosave-${route}-route-${process.pid}`
+    sendText(routeSessionName, autosaveToken)
+    const typedPane = capturePaneUntil(routeSessionName, `${route} route post-autosave typing`, autosaveToken, 30)
+    expectPaneContains(typedPane, autosaveToken, `${route} route post-autosave typing`)
+    wait(1_250, `${route} route autosave wait`)
+    expectNoteFileContains(summary.notePath, autosaveToken, `${route} route autosave filesystem`)
+
+    sendKeys(routeSessionName, "Escape")
+    const managerPane = capturePaneUntil(routeSessionName, `${route} route return to manager after autosave`, "Rebuild idle", 20)
+    expectLatestScreen(managerPane, "Rebuild idle", autosaveToken, `${route} route return to manager latest screen`)
+    sendKeys(routeSessionName, route)
+    expectTmuxSessionExited(routeSessionName, `${route} route exits from manager after autosave`)
+    routePanePid = null
+  } finally {
+    killRouteTuiProcess()
+    run("tmux", ["kill-session", "-t", routeSessionName], { timeout: 2_000 })
+    killRouteTuiProcess()
+    rmSync(routeRootPath, { recursive: true, force: true })
+  }
+}
+
 function killTuiProcess(): void {
   if (tuiPanePid === null) {
     return
@@ -279,6 +387,9 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 }
 
 try {
+  assertPostAutosaveQuitRoute("q")
+  assertPostAutosaveQuitRoute("C-c")
+
   const initResult = run("bun", ["run", "./bin/bn.ts", "init"], { env: { BLUENOTE_ROOT: rootPath } })
   if (initResult.status !== 0) {
     throw new Error(`Failed to initialize smoke root: ${initResult.stderr || initResult.stdout}`)
