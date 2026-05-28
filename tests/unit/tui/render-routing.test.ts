@@ -6,6 +6,7 @@ import { blurWorkspaceInputs, focusActiveWorkspaceInput, routeWorkspaceKey, star
 import { renderEditorScreen, routeEditorKey } from "../../../src/tui/render-editor"
 import { renderManagerScreen, routeManagerKey } from "../../../src/tui/render-manager"
 import { renderSearchEverythingScreen, routeSearchEverythingKey } from "../../../src/tui/render-search-everything"
+import { tuiTheme } from "../../../src/tui/theme"
 import type { TuiState } from "../../../src/tui/state"
 import { createWorkspaceController, type WorkspaceController } from "../../../src/tui/workspace-controller"
 import type { ManagerBrowserModel } from "../../../src/tui/adapters/note-manager-adapter"
@@ -523,7 +524,10 @@ describe("TUI render keyboard routing", () => {
       assert.deepEqual((wrapStatus as any)?.fg?.toInts?.(), [34, 197, 94, 255])
       assert.equal(saveStatus?.content?.chunks?.[0]?.text ?? saveStatus?.content, "Saved")
       assert.deepEqual((saveStatus as any)?.fg?.toInts?.(), [34, 197, 94, 255])
-      assert.equal(shortcutRow?.content?.chunks?.[0]?.text ?? shortcutRow?.content, "Ctrl+S save  Ctrl+F find  Alt+Z wrap  Ctrl+P search  Esc manager  Ctrl+C quit")
+      const shortcutChunks = shortcutRow?.content?.chunks ?? []
+      const shortcutText = shortcutChunks.map((chunk: { text?: string }) => chunk.text ?? "").join("") || shortcutRow?.content
+      assert.equal(shortcutText, "[Ctrl+S] Save  [Ctrl+F] Find  [Alt+Z] Wrap  [Ctrl+P] Search  [Esc] Manager")
+      assert.deepEqual(shortcutChunks.filter((chunk: { text?: string }) => /^\[[^\]]+\]$/u.test(chunk.text ?? "")).at(0)?.fg?.toInts?.(), [56, 189, 248, 255])
     } finally {
       renderer.destroy()
     }
@@ -830,6 +834,36 @@ describe("TUI render keyboard routing", () => {
       assert.ok(textLines.includes("BlueNote  1 items (filtered) | Indexing..."))
       assert.match(renderedText, /notes\/inbox\/daily-plan\.md/u)
       assert.doesNotMatch(renderedText, /Rebuild idle|Index ready|selected daily-plan|notes\/inbox → notes\/inbox\/daily-plan\.md|filter “daily”/u)
+    } finally {
+      renderer.destroy()
+    }
+  })
+
+  test("manager renderer styles topbar and footer hints with semantic muted/keycap chrome", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const { controller } = createController("manager")
+      controller.getState().manager.items = [{ type: "note", key: "daily", filename: "daily.md", title: "Daily", description: "Today", relativePath: "notes/daily.md" }]
+      const screen = renderManagerScreen({ renderer, controller, width: 100 })
+      renderer.root.add(screen)
+
+      const topbar = findById(screen, "bluenote-manager-topbar") as { fg?: { toInts?: () => number[] }; border?: boolean } | undefined
+      const footer = findById(screen, "bluenote-manager-footer-hints") as { content?: any; fg?: { toInts?: () => number[] }; border?: boolean } | undefined
+      const footerChunks = footer?.content?.chunks ?? []
+      const footerText = footerChunks.map((chunk: { text?: string }) => chunk.text ?? "").join("") || footer?.content || ""
+
+      assert.notEqual(topbar, undefined)
+      assert.notEqual(topbar?.border, true)
+      assert.deepEqual(topbar?.fg?.toInts?.(), [248, 250, 252, 255])
+      assert.notEqual(footer?.border, true)
+      assert.equal(footerText, "[Enter] Open  [n] New  [s] Search")
+      assert.deepEqual(footerChunks.filter((chunk: { text?: string }) => /^\[[^\]]+\]$/u.test(chunk.text ?? "")).map((chunk: any) => chunk.fg?.toInts?.()), [
+        [56, 189, 248, 255],
+        [56, 189, 248, 255],
+        [56, 189, 248, 255],
+      ])
+      assert.deepEqual(footerChunks.filter((chunk: { text?: string }) => !/^\[[^\]]+\]$/u.test(chunk.text ?? "")).at(0)?.fg?.toInts?.(), [148, 163, 184, 255])
+      assert.notEqual(tuiTheme.borderSubtle, tuiTheme.primaryAccent)
     } finally {
       renderer.destroy()
     }

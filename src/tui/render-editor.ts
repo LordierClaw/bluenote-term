@@ -11,6 +11,7 @@ import {
 } from "@opentui/core"
 
 import { editorCursorOffset, editorCursorPosition } from "./adapters/editor-buffer-adapter"
+import { renderShortcutHints, shortcutHintLabel, type ShortcutHint, type ShortcutRenderableHint } from "./render-chrome"
 
 import type { TuiState } from "./state"
 import { tuiTheme, type TuiColorIntent } from "./theme"
@@ -23,10 +24,7 @@ type NoteWithEditorMetadata = NonNullable<TuiState["editor"]>["note"] & {
   modifiedAt?: string
 }
 
-export interface EditorShortcutViewModel {
-  label: string
-  priority: number
-}
+export type EditorShortcutViewModel = ShortcutHint & { order: number }
 
 export interface EditorTopbarViewModel {
   noteName: string
@@ -72,6 +70,7 @@ export interface EditorFindViewModel {
   placeholder: string
   focused: boolean
   styleIntent: TuiColorIntent
+  shortcutHints: ShortcutRenderableHint[]
 }
 
 export interface EditorBottombarViewModel {
@@ -87,6 +86,7 @@ export interface EditorBottombarViewModel {
   row2: {
     shortcuts: string[]
     visibleShortcuts: string[]
+    visibleShortcutHints: ShortcutHint[]
     hiddenShortcutCount: number
   }
 }
@@ -217,41 +217,49 @@ function updatedLabelFor(note: NoteWithEditorMetadata | null | undefined): strin
 
 function editorShortcuts(): EditorShortcutViewModel[] {
   return [
-    { label: "Ctrl+S save", priority: 1 },
-    { label: "Ctrl+F find", priority: 2 },
-    { label: "Alt+Z wrap", priority: 3 },
-    { label: "Ctrl+P search", priority: 4 },
-    { label: "Esc manager", priority: 5 },
-    { label: "Ctrl+C quit", priority: 6 },
+    { key: "Ctrl+S", action: "Save", order: 1 },
+    { key: "Ctrl+F", action: "Find", order: 2 },
+    { key: "Alt+Z", action: "Wrap", order: 3 },
+    { key: "Ctrl+P", action: "Search", order: 4 },
+    { key: "Esc", action: "Manager", order: 5 },
   ]
 }
 
-function visibleShortcutLabels(shortcuts: EditorShortcutViewModel[], width: number): { visibleShortcuts: string[]; hiddenShortcutCount: number } {
-  const sortedShortcuts = [...shortcuts].sort((left, right) => left.priority - right.priority)
+function toShortcutHint(shortcut: EditorShortcutViewModel): ShortcutHint {
+  return shortcut.priority === undefined
+    ? { key: shortcut.key, action: shortcut.action }
+    : { key: shortcut.key, action: shortcut.action, priority: shortcut.priority }
+}
+
+function visibleShortcutLabels(shortcuts: EditorShortcutViewModel[], width: number): { visibleShortcuts: string[]; visibleShortcutHints: ShortcutHint[]; hiddenShortcutCount: number } {
+  const sortedShortcuts = [...shortcuts].sort((left, right) => left.order - right.order)
   if (width <= 0) {
-    return { visibleShortcuts: sortedShortcuts.map((shortcut) => shortcut.label), hiddenShortcutCount: 0 }
+    const visibleShortcutHints = sortedShortcuts.map(toShortcutHint)
+    return { visibleShortcuts: visibleShortcutHints.map(shortcutHintLabel), visibleShortcutHints, hiddenShortcutCount: 0 }
   }
 
   const separatorWidth = 2
   const hiddenIndicatorWidth = 3
-  const visibleShortcuts: string[] = []
+  const visibleShortcutHints: ShortcutHint[] = []
   let usedWidth = 0
 
   for (const shortcut of sortedShortcuts) {
-    const hiddenAfterThis = sortedShortcuts.length - visibleShortcuts.length - 1
-    const nextWidth = shortcut.label.length + (visibleShortcuts.length > 0 ? separatorWidth : 0)
+    const hint = toShortcutHint(shortcut)
+    const label = shortcutHintLabel(hint)
+    const hiddenAfterThis = sortedShortcuts.length - visibleShortcutHints.length - 1
+    const nextWidth = label.length + (visibleShortcutHints.length > 0 ? separatorWidth : 0)
     const reservedWidth = hiddenAfterThis > 0 ? hiddenIndicatorWidth + separatorWidth : 0
-    if (visibleShortcuts.length > 0 && usedWidth + nextWidth + reservedWidth > width) {
+    if (visibleShortcutHints.length > 0 && usedWidth + nextWidth + reservedWidth > width) {
       break
     }
-    if (visibleShortcuts.length === 0 && shortcut.label.length + reservedWidth > width && width < shortcut.label.length) {
+    if (visibleShortcutHints.length === 0 && label.length + reservedWidth > width && width < label.length) {
       break
     }
-    visibleShortcuts.push(shortcut.label)
+    visibleShortcutHints.push(hint)
     usedWidth += nextWidth
   }
 
-  return { visibleShortcuts, hiddenShortcutCount: Math.max(0, sortedShortcuts.length - visibleShortcuts.length) }
+  return { visibleShortcuts: visibleShortcutHints.map(shortcutHintLabel), visibleShortcutHints, hiddenShortcutCount: Math.max(0, sortedShortcuts.length - visibleShortcutHints.length) }
 }
 
 function editorScrollTopFor(lineCount: number, cursorLine: number, bodyViewportLines: number): number {
@@ -297,7 +305,7 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
   const shortcuts = editorShortcuts()
   const lineCount = countLines(body)
   const overflow = editorOverflowFor(lineCount, cursor.line, responsive.bodyViewportLines ?? Number.POSITIVE_INFINITY)
-  const { visibleShortcuts, hiddenShortcutCount } = visibleShortcutLabels(shortcuts, responsive.width ?? 0)
+  const { visibleShortcuts, visibleShortcutHints, hiddenShortcutCount } = visibleShortcutLabels(shortcuts, responsive.width ?? 0)
 
   return {
     topbar: {
@@ -326,6 +334,12 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
           placeholder: "Find in note…",
           focused: true,
           styleIntent: "secondaryAccent",
+          shortcutHints: [
+            { text: findMatchCount > 0 && activeFindIndex !== null ? `${activeFindIndex + 1}/${findMatchCount}` : `0/${findMatchCount}` },
+            { key: "Enter", action: "Next" },
+            { key: "Shift+Enter", action: "Previous" },
+            { key: "Esc", action: "Close" },
+          ],
         }
       : null,
     body: {
@@ -350,8 +364,9 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
         errorLabel,
       },
       row2: {
-        shortcuts: shortcuts.map((shortcut) => shortcut.label),
+        shortcuts: shortcuts.map(toShortcutHint).map(shortcutHintLabel),
         visibleShortcuts,
+        visibleShortcutHints,
         hiddenShortcutCount,
       },
     },
@@ -395,7 +410,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     content: ` ${vm.topbar.noteName} `,
     width: vm.topbar.noteName.length + 2,
     height: 1,
-    fg: tuiTheme.primaryAccent,
+    fg: tuiTheme.textPrimary,
     bg: tuiTheme.panel,
   }))
   topbar.add(new TextRenderable(options.renderer, {
@@ -542,7 +557,8 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
       width: "70%",
     })
     const matchCount = new TextRenderable(options.renderer, {
-      content: ` ${vm.find.countLabel}  Enter next  Shift+Enter previous  Esc close`,
+      id: "bluenote-editor-find-hints",
+      content: renderShortcutHints(vm.find.shortcutHints),
       height: 1,
       fg: tuiTheme.mutedText,
       bg: tuiTheme.panel,
@@ -565,12 +581,12 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   }
   root.add(bodyPanel)
   root.add(bottombarStatus)
-  const shortcutHints = [...vm.bottombar.row2.visibleShortcuts, ...(vm.bottombar.row2.hiddenShortcutCount > 0 ? [`+${vm.bottombar.row2.hiddenShortcutCount}`] : [])]
+  const shortcutHints: ShortcutRenderableHint[] = [...vm.bottombar.row2.visibleShortcutHints, ...(vm.bottombar.row2.hiddenShortcutCount > 0 ? [{ text: `+${vm.bottombar.row2.hiddenShortcutCount}` }] : [])]
   root.add(new TextRenderable(options.renderer, {
     id: "bluenote-editor-bottombar-shortcuts",
-    content: shortcutHints.join("  "),
+    content: renderShortcutHints(shortcutHints),
     height: 1,
-    fg: tuiTheme.secondaryAccent,
+    fg: tuiTheme.textMuted,
     bg: tuiTheme.panel,
   }))
   if (findInput) {

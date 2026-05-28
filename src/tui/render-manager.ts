@@ -1,6 +1,7 @@
 import { BoxRenderable, InputRenderable, InputRenderableEvents, TextRenderable, type CliRenderer } from "@opentui/core"
 
 import type { ManagerBrowserModel, ManagerBrowserRow, ManagerPreviewModel } from "./adapters/note-manager-adapter"
+import { renderShortcutHints, shortcutHintLabels, topbarTextIntent, type ShortcutHint, type ShortcutRenderableHint } from "./render-chrome"
 import type { ManagerItem, TuiState } from "./state"
 import { tuiTheme, type TuiColorIntent } from "./theme"
 import type { WorkspaceController } from "./workspace-controller"
@@ -106,6 +107,7 @@ export interface ManagerViewModel {
   }
   rows: ManagerRowViewModel[]
   status: string
+  shortcutHints: ShortcutHint[]
   shortcuts: string[]
   createPrompt?: {
     visible: true
@@ -150,6 +152,39 @@ function focusedItemLabel(rows: ManagerRowViewModel[], preview: ManagerPreviewVi
 
   const focused = rows.find((row) => row.focused)
   return focused ? focused.filename.replace(/\/+$/u, "") : "No preview"
+}
+
+function managerShortcutHints(state: TuiState, previewHidden: boolean, width?: number): ShortcutHint[] {
+  if (state.mode === "manager.filter") {
+    return [
+      { key: "Enter", action: "Open", priority: "primary" },
+      { key: "Esc", action: "Close", priority: "primary" },
+    ]
+  }
+
+  if (state.mode === "manager.create") {
+    return [
+      { key: "Enter", action: "Create", priority: "primary" },
+      { key: "Esc", action: "Cancel", priority: "primary" },
+    ]
+  }
+
+  if (state.mode === "manager.deleteConfirm") {
+    return [
+      { key: "y", action: "Delete", priority: "primary" },
+      { key: "Esc", action: "Cancel", priority: "primary" },
+    ]
+  }
+
+  const primary: ShortcutHint[] = [
+    { key: "Enter", action: "Open", priority: "primary" },
+    { key: "n", action: "New", priority: "primary" },
+  ]
+  if (typeof width === "number" && width < MANAGER_PREVIEW_NARROW_WIDTH) {
+    return primary
+  }
+
+  return [...primary, { key: "s", action: "Search", priority: "secondary" }]
 }
 
 function columnsFor(row: BrowserishRow): ManagerRowViewModel["columns"] {
@@ -282,6 +317,7 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
     : undefined
 
   const previewHidden = preview.type === "hidden" || state.manager.previewVisible === false
+  const shortcutHints = managerShortcutHints(state, previewHidden, options.width)
 
   return {
     title: "",
@@ -291,7 +327,7 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
       appStatusLabel,
       rightLabel,
       bottomPath,
-      styleIntent: "primaryAccent",
+      styleIntent: topbarTextIntent(),
     },
     panels: {
       layout1: { title: currentPath, styleIntent: "panel" },
@@ -306,10 +342,15 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
     },
     rows,
     status: appStatusLabel,
-    shortcuts: ["↑↓ move", "→/Enter open", "n new", "d delete", "/ filter", "s search", previewHidden ? "p preview show" : "p preview hide", "Esc back", "q quit"],
+    shortcutHints,
+    shortcuts: shortcutHintLabels(shortcutHints),
     createPrompt,
     deletePrompt,
   }
+}
+
+function promptHints(status: string | null | undefined, hints: ShortcutHint[]): ShortcutRenderableHint[] {
+  return status ? [...hints, { text: status }] : hints
 }
 
 export interface RenderManagerScreenOptions {
@@ -374,9 +415,10 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
   })
 
   root.add(new TextRenderable(options.renderer, {
+    id: "bluenote-manager-topbar",
     content: `${vm.topbar.leftTitle}  ${vm.topbar.rightLabel}`,
     height: 1,
-    fg: tuiTheme.primaryAccent,
+    fg: tuiTheme[vm.topbar.styleIntent],
     bg: tuiTheme.panel,
   }))
 
@@ -422,7 +464,7 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
       layout2.add(rowRenderable(options, row))
     }
   } else if (layout2 && preview.type === "note-content") {
-    layout2.add(new TextRenderable(options.renderer, { content: preview.title, height: 1, fg: tuiTheme.primaryAccent, bg: tuiTheme.panel }))
+    layout2.add(new TextRenderable(options.renderer, { content: preview.title, height: 1, fg: tuiTheme.textPrimary, bg: tuiTheme.panel }))
     layout2.add(new TextRenderable(options.renderer, { content: preview.path, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
     for (const line of preview.contentLines.slice(0, 20)) {
       layout2.add(new TextRenderable(options.renderer, { content: line, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
@@ -443,7 +485,7 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
       width: "100%",
       height: 3,
       border: true,
-      borderColor: tuiTheme.secondaryAccent,
+      borderColor: tuiTheme.borderFocus,
       backgroundColor: tuiTheme.panel,
       title: "Filter current folder",
     })
@@ -454,7 +496,8 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
       width: "70%",
     })
     const filterHint = new TextRenderable(options.renderer, {
-      content: "  Esc close  Enter apply",
+      id: "bluenote-manager-filter-hints",
+      content: renderShortcutHints([{ key: "Esc", action: "Close" }, { key: "Enter", action: "Open" }]),
       height: 1,
       fg: tuiTheme.mutedText,
       bg: tuiTheme.panel,
@@ -490,7 +533,8 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
       width: "60%",
     })
     const createHint = new TextRenderable(options.renderer, {
-      content: `  Enter create  Esc cancel${vm.createPrompt.status ? `  ${vm.createPrompt.status}` : ""}`,
+      id: "bluenote-manager-create-hints",
+      content: renderShortcutHints(promptHints(vm.createPrompt.status, [{ key: "Enter", action: "Create" }, { key: "Esc", action: "Cancel" }])),
       height: 1,
       fg: tuiTheme[vm.createPrompt.statusIntent],
       bg: tuiTheme.panel,
@@ -526,7 +570,8 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
       bg: tuiTheme.panel,
     }))
     deleteBar.add(new TextRenderable(options.renderer, {
-      content: `Enter/y confirm  Esc/n cancel${vm.deletePrompt.status ? `  ${vm.deletePrompt.status}` : ""}`,
+      id: "bluenote-manager-delete-hints",
+      content: renderShortcutHints(promptHints(vm.deletePrompt.status, [{ key: "Enter/y", action: "Confirm" }, { key: "Esc/n", action: "Cancel" }])),
       height: 1,
       fg: tuiTheme.mutedText,
       bg: tuiTheme.panel,
@@ -534,7 +579,7 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     root.add(deleteBar)
   }
   root.add(new TextRenderable(options.renderer, { content: vm.topbar.bottomPath, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
-  root.add(new TextRenderable(options.renderer, { content: vm.shortcuts.join("  "), height: 1, fg: tuiTheme.secondaryAccent, bg: tuiTheme.panel }))
+  root.add(new TextRenderable(options.renderer, { id: "bluenote-manager-footer-hints", content: renderShortcutHints(vm.shortcutHints), height: 1, fg: tuiTheme.textMuted, bg: tuiTheme.panel }))
 
   return root
 }

@@ -4,6 +4,7 @@ import { createCliRenderer, InputRenderable, type Renderable } from "@opentui/co
 
 import { buildEditorViewModel, renderEditorScreen } from "../../../src/tui/render-editor"
 import { buildManagerViewModel, renderManagerScreen } from "../../../src/tui/render-manager"
+import { renderShortcutHints } from "../../../src/tui/render-chrome"
 import { buildSearchEverythingViewModel, renderSearchEverythingScreen } from "../../../src/tui/render-search-everything"
 import { tuiTheme } from "../../../src/tui/theme"
 import { buildManagerBrowserModel, type NoteManagerSummary } from "../../../src/tui/adapters/note-manager-adapter"
@@ -52,6 +53,11 @@ const baseState: TuiState = {
 
 function descendants(node: Renderable): Renderable[] {
   return [node, ...node.getChildren().flatMap((child) => descendants(child))]
+}
+
+function colorInts(color: string): number[] {
+  const normalized = color.replace(/^#/u, "")
+  return [0, 2, 4].map((offset) => Number.parseInt(normalized.slice(offset, offset + 2), 16)).concat(255)
 }
 
 describe("TUI render view models", () => {
@@ -118,12 +124,17 @@ describe("TUI render view models", () => {
       appStatusLabel: "Ready",
       rightLabel: "2 items | Ready",
       bottomPath: "notes/inbox/daily-plan.md",
-      styleIntent: "primaryAccent",
+      styleIntent: "textPrimary",
     })
     assert.equal(vm.panels.layout1.title, "notes/")
     assert.equal(vm.panels.layout2.title, "daily-plan.md")
     assert.equal(vm.status, "Ready")
-    assert.deepEqual(vm.shortcuts, ["↑↓ move", "→/Enter open", "n new", "d delete", "/ filter", "s search", "p preview hide", "Esc back", "q quit"])
+    assert.deepEqual(vm.shortcutHints, [
+      { key: "Enter", action: "Open", priority: "primary" },
+      { key: "n", action: "New", priority: "primary" },
+      { key: "s", action: "Search", priority: "secondary" },
+    ])
+    assert.deepEqual(vm.shortcuts, ["[Enter] Open", "[n] New", "[s] Search"])
     const creatingVm = buildManagerViewModel({
       ...baseState,
       mode: "manager.create",
@@ -161,7 +172,7 @@ describe("TUI render view models", () => {
       status: null,
       styleIntent: "danger",
     })
-    const managerChrome = [vm.title, vm.status, ...vm.shortcuts, vm.panels.layout1.title, vm.panels.layout2.title].join(" ")
+    const managerChrome = [vm.title, vm.status, ...vm.shortcutHints.map((hint) => hint.action), vm.panels.layout1.title, vm.panels.layout2.title].join(" ")
     assert.doesNotMatch(managerChrome, /BlueNote(?: TUI| Manager)?/i)
     assert.doesNotMatch(JSON.stringify(vm), /Layout 1: current folder|Layout 2: preview/u)
     assert.deepEqual(
@@ -178,6 +189,28 @@ describe("TUI render view models", () => {
         { key: "daily-plan", type: "note", icon: "📄", styleIntent: "focusedRow", itemStyleIntent: "mutedText", openStyleIntent: null, metadataStyleIntent: "mutedText" },
       ],
     )
+  })
+
+  test("manager shortcut chrome prioritizes key/action pairs and demotes secondary hints on narrow widths", () => {
+    const wideVm = buildManagerViewModel(baseState, undefined, { width: 100 })
+    const narrowVm = buildManagerViewModel(baseState, undefined, { width: 60 })
+    const filteringVm = buildManagerViewModel({ ...baseState, mode: "manager.filter" }, undefined, { width: 100 })
+
+    assert.deepEqual(wideVm.shortcutHints, [
+      { key: "Enter", action: "Open", priority: "primary" },
+      { key: "n", action: "New", priority: "primary" },
+      { key: "s", action: "Search", priority: "secondary" },
+    ])
+    assert.deepEqual(wideVm.shortcuts, ["[Enter] Open", "[n] New", "[s] Search"])
+    assert.ok(wideVm.shortcuts.every((hint) => /^\[[^\]]+\] [A-Z?]/u.test(hint)), wideVm.shortcuts.join(" | "))
+    assert.deepEqual(narrowVm.shortcuts, ["[Enter] Open", "[n] New"])
+    assert.doesNotMatch([...wideVm.shortcuts, ...narrowVm.shortcuts].join(" "), /\[\?\] More/u)
+    assert.doesNotMatch(narrowVm.shortcuts.join(" "), /Delete|Filter|Quit|Preview/u)
+    assert.deepEqual(filteringVm.shortcutHints, [
+      { key: "Enter", action: "Open", priority: "primary" },
+      { key: "Esc", action: "Close", priority: "primary" },
+    ])
+    assert.deepEqual(filteringVm.shortcuts, ["[Enter] Open", "[Esc] Close"])
   })
 
   test("manager topbar uses filtered count, app status, and bottom path without path or selection clutter", () => {
@@ -305,14 +338,14 @@ describe("TUI render view models", () => {
       appStatusLabel: "Ready",
       rightLabel: "2 items | Ready",
       bottomPath: "notes/inbox/daily-plan.md",
-      styleIntent: "primaryAccent",
+      styleIntent: "textPrimary",
     })
     assert.deepEqual(vm.panels, {
       layout1: { title: "notes/", styleIntent: "panel" },
       layout2: { title: "projects", styleIntent: "panel" },
     })
-    assert.match(vm.shortcuts.join(" "), /s search/u)
-    assert.match(vm.shortcuts.join(" "), /p preview hide/u)
+    assert.match(vm.shortcuts.join(" "), /\[s\] Search/u)
+    assert.doesNotMatch(vm.shortcuts.join(" "), /\[\?\] More/u)
     assert.doesNotMatch(JSON.stringify(vm), /Layout 1: current folder|Layout 2: preview/u)
     assert.deepEqual(
       vm.layout1.rows.map((row) => ({ filename: row.filename, columns: row.columns, focused: row.focused, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent })),
@@ -419,7 +452,7 @@ describe("TUI render view models", () => {
     assert.equal(narrowVm.panels.layout2.title, "Preview hidden")
     assert.equal("contentLines" in narrowVm.layout2.preview, false)
     assert.equal(narrowVm.layout1.rows.length, 1)
-    assert.equal(narrowVm.shortcuts.includes("p preview show"), true)
+    assert.equal(narrowVm.shortcuts.includes("[?] More"), false)
   })
 
   test("manager chrome titles current folder and hidden preview states without artificial layout labels", () => {
@@ -448,7 +481,7 @@ describe("TUI render view models", () => {
     assert.equal(vm.panels.layout1.title, "notes/projects")
     assert.equal(vm.panels.layout2.title, "Preview hidden")
     assert.equal(vm.layout2.preview.type, "hidden")
-    assert.match(vm.shortcuts.join(" "), /s search/u)
+    assert.match(vm.shortcuts.join(" "), /\[s\] Search/u)
     const stateOnlyHiddenVm = buildManagerViewModel({
       ...baseState,
       manager: {
@@ -457,7 +490,7 @@ describe("TUI render view models", () => {
       },
     })
     assert.equal(stateOnlyHiddenVm.panels.layout2.title, "Preview hidden")
-    assert.equal(stateOnlyHiddenVm.shortcuts.includes("p preview show"), true)
+    assert.equal(stateOnlyHiddenVm.shortcuts.includes("[?] More"), false)
   })
 
   test("runtime manager controller exposes the browser preview model used by renderer", () => {
@@ -526,8 +559,15 @@ describe("TUI render view models", () => {
       errorLabel: null,
     })
     assert.deepEqual(vm.bottombar.row2, {
-      shortcuts: ["Ctrl+S save", "Ctrl+F find", "Alt+Z wrap", "Ctrl+P search", "Esc manager", "Ctrl+C quit"],
-      visibleShortcuts: ["Ctrl+S save", "Ctrl+F find", "Alt+Z wrap", "Ctrl+P search", "Esc manager", "Ctrl+C quit"],
+      shortcuts: ["[Ctrl+S] Save", "[Ctrl+F] Find", "[Alt+Z] Wrap", "[Ctrl+P] Search", "[Esc] Manager"],
+      visibleShortcuts: ["[Ctrl+S] Save", "[Ctrl+F] Find", "[Alt+Z] Wrap", "[Ctrl+P] Search", "[Esc] Manager"],
+      visibleShortcutHints: [
+        { key: "Ctrl+S", action: "Save" },
+        { key: "Ctrl+F", action: "Find" },
+        { key: "Alt+Z", action: "Wrap" },
+        { key: "Ctrl+P", action: "Search" },
+        { key: "Esc", action: "Manager" },
+      ],
       hiddenShortcutCount: 0,
     })
 
@@ -577,8 +617,13 @@ describe("TUI render view models", () => {
       editor: { ...baseState.editor!, body: longBody, savedBody: longBody, cursorOffset: 0, selectionStart: 0, selectionEnd: 0 },
     }, { width: 34, bodyViewportLines: 8 })
 
-    assert.deepEqual(narrowVm.bottombar.row2.visibleShortcuts, ["Ctrl+S save", "Ctrl+F find"])
-    assert.equal(narrowVm.bottombar.row2.hiddenShortcutCount, 4)
+    assert.deepEqual(narrowVm.bottombar.row2.visibleShortcuts, ["[Ctrl+S] Save", "[Ctrl+F] Find"])
+    assert.deepEqual(narrowVm.bottombar.row2.visibleShortcutHints, [
+      { key: "Ctrl+S", action: "Save" },
+      { key: "Ctrl+F", action: "Find" },
+    ])
+    assert.equal(narrowVm.bottombar.row2.hiddenShortcutCount, 3)
+    assert.doesNotMatch(narrowVm.bottombar.row2.shortcuts.join(" "), /\[\?\] More/u)
     assert.deepEqual(narrowVm.body.overflow, { above: false, below: true, indicator: "↓" })
 
     const bodyLength = Array.from(longBody).length
@@ -667,6 +712,12 @@ describe("TUI render view models", () => {
       placeholder: "Find in note…",
       focused: true,
       styleIntent: "secondaryAccent",
+      shortcutHints: [
+        { text: "1/1" },
+        { key: "Enter", action: "Next" },
+        { key: "Shift+Enter", action: "Previous" },
+        { key: "Esc", action: "Close" },
+      ],
     })
     assert.equal(vm.body.focused, false)
     assert.equal(Number(vm.find.focused) + Number(vm.body.focused), 1)
@@ -724,7 +775,13 @@ describe("TUI render view models", () => {
       selectedResult: "activeItem",
       preview: "panel",
     })
-    assert.deepEqual(vm.shortcuts, ["type search", "↑/↓ select", "Enter open/run", "Alt+P preview hide/show", "Esc editor"])
+    assert.deepEqual(vm.shortcutHints, [
+      { key: "Enter", action: "Open/run", priority: "primary" },
+      { key: "↑/↓", action: "Select", priority: "primary" },
+      { key: "Esc", action: "Editor", priority: "primary" },
+    ])
+    assert.deepEqual(vm.shortcuts, ["[Enter] Open/run", "[↑/↓] Select", "[Esc] Editor"])
+    assert.doesNotMatch(vm.shortcuts.join(" "), /\[\?\] More/u)
     assert.deepEqual(
       vm.results.map((row) => ({
         marker: row.focusMarker,
@@ -741,7 +798,7 @@ describe("TUI render view models", () => {
       ],
     )
     assert.deepEqual(vm.results.map((row) => row.styleIntent), ["panel", "focusedRow"])
-    assert.deepEqual(vm.results.map((row) => row.primaryStyleIntent), ["primaryAccent", "activeItem"])
+    assert.deepEqual(vm.results.map((row) => row.primaryStyleIntent), ["textPrimary", "activeItem"])
     assert.deepEqual(vm.results.map((row) => row.detailStyleIntent), ["mutedText", "activeItem"])
     assert.deepEqual(vm.results.map((row) => row.typeStyleIntent), ["mutedText", "activeItem"])
     assert.deepEqual(vm.preview, {
@@ -772,6 +829,78 @@ describe("TUI render view models", () => {
       assert.deepEqual(contentPreview.lines, ["Ship renderer screens with OpenTUI."])
       assert.deepEqual(contentPreview.sections.map((section) => section.label), ["Match", "Excerpt"])
     }
+  })
+
+  test("Search Everything shortcut chrome omits impossible Enter action when no results exist", () => {
+    const typingVm = buildSearchEverythingViewModel(
+      {
+        ...baseState,
+        screen: "search",
+        search: { query: "daily", selectedIndex: 0, previousScreen: "manager" },
+      },
+      [],
+    )
+    const emptyVm = buildSearchEverythingViewModel(
+      {
+        ...baseState,
+        screen: "search",
+        search: { query: "", selectedIndex: 0, previousScreen: "manager" },
+      },
+      [],
+    )
+
+    for (const vm of [typingVm, emptyVm]) {
+      assert.deepEqual(vm.shortcutHints, [{ key: "Esc", action: "Manager", priority: "primary" }])
+      assert.deepEqual(vm.shortcuts, ["[Esc] Manager"])
+      assert.doesNotMatch(vm.shortcuts.join(" "), /Enter|Open\/run|Preview|Select|type search|\[\?\] More/u)
+    }
+  })
+
+  test("prompt shortcut chrome uses shared keycap formatting for find, filter, create, and delete bars", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    const textFor = (node: any): string => node.content?.chunks?.map?.((chunk: { text?: string }) => chunk.text ?? "").join("") ?? node.content ?? ""
+    const chunkTextsForId = (root: Renderable, id: string): string[] => {
+      const node = descendants(root).find((candidate) => candidate.id === id) as any
+      return node?.content?.chunks?.map?.((chunk: { text?: string }) => chunk.text ?? "") ?? []
+    }
+    try {
+      const controller = createWorkspaceController({
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "alpha beta" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "alpha beta" }),
+        searchNotes: () => [],
+      })
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+      controller.openEditorFind()
+      const editorRoot = renderEditorScreen({ renderer, controller })
+      assert.deepEqual(chunkTextsForId(editorRoot, "bluenote-editor-find-hints"), ["0/0", "  ", "[Enter]", " Next", "  ", "[Shift+Enter]", " Previous", "  ", "[Esc]", " Close"])
+
+      controller.showManager()
+      controller.openManagerFilter()
+      let managerRoot = renderManagerScreen({ renderer, controller })
+      assert.deepEqual(chunkTextsForId(managerRoot, "bluenote-manager-filter-hints"), ["[Esc]", " Close", "  ", "[Enter]", " Open"])
+
+      controller.openManagerCreate()
+      controller.updateManagerCreateTitle("Draft")
+      managerRoot = renderManagerScreen({ renderer, controller })
+      assert.deepEqual(chunkTextsForId(managerRoot, "bluenote-manager-create-hints"), ["[Enter]", " Create", "  ", "[Esc]", " Cancel"])
+
+      controller.cancelManagerCreate()
+      controller.openManagerDeleteConfirmation()
+      managerRoot = renderManagerScreen({ renderer, controller })
+      assert.deepEqual(chunkTextsForId(managerRoot, "bluenote-manager-delete-hints"), ["[Enter/y]", " Confirm", "  ", "[Esc/n]", " Cancel"])
+      assert.doesNotMatch(descendants(managerRoot).map(textFor).join("\n"), /Enter\/y confirm|Esc\/n cancel|Enter create|Esc cancel|Enter apply|Esc close/u)
+    } finally {
+      renderer.destroy()
+    }
+  })
+
+  test("shortcut renderer treats overflow counts as muted text rather than fake keycaps", () => {
+    const content = renderShortcutHints([{ key: "Ctrl+S", action: "Save" }, { key: "Ctrl+F", action: "Find" }, { text: "+3" }])
+    const chunks = content.chunks.map((chunk) => ({ text: chunk.text, color: chunk.fg?.toString() }))
+
+    assert.deepEqual(chunks.map((chunk) => chunk.text), ["[Ctrl+S]", " Save", "  ", "[Ctrl+F]", " Find", "  ", "+3"])
+    assert.equal(chunks.find((chunk) => chunk.text === "+3")?.color, chunks.find((chunk) => chunk.text === " Save")?.color)
+    assert.equal(chunks.some((chunk) => chunk.text === "[+3]"), false)
   })
 
   test("Search Everything view model hides preview manually or at short heights with compact status", () => {
@@ -926,14 +1055,14 @@ describe("TUI render view models", () => {
       const narrowScreen = renderManagerScreen({ renderer, controller, width: 60 })
       renderer.root.add(narrowScreen)
       const narrowIds = descendants(narrowScreen).map((node) => node.id)
-      const narrowText = descendants(narrowScreen).map((node: any) => node.content?.chunks?.[0]?.text ?? node.content ?? "").join("\n")
+      const narrowText = descendants(narrowScreen).map((node: any) => node.content?.chunks?.map((chunk: { text?: string }) => chunk.text ?? "").join("") ?? node.content ?? "").join("\n")
       const narrowLayout1 = descendants(narrowScreen).find((node) => node.id === "bluenote-manager-layout-1") as { width?: unknown } | undefined
 
       assert.equal(narrowIds.includes("bluenote-manager-layout-1"), true)
       assert.equal(narrowIds.includes("bluenote-manager-layout-2"), false)
       assert.equal((narrowLayout1 as any)?._width, "100%")
       assert.match(narrowText, /root-note\.md/u)
-      assert.match(narrowText, /p preview show/u)
+      assert.doesNotMatch(narrowText, /\[\?\] More/u)
       assert.doesNotMatch(narrowText, /Preview hidden/u)
       assert.doesNotMatch(narrowText, /Preview body/u)
     } finally {
@@ -1021,6 +1150,18 @@ describe("TUI render view models", () => {
       const statusRoot = renderSearchEverythingScreen({ renderer, controller })
       const statusText = descendants(statusRoot).map((node: any) => node.content?.chunks?.[0]?.text ?? node.content ?? "").join("\n")
       assert.match(statusText, /Command unavailable: \/archive/u)
+      const textFor = (node: any) => node.content?.chunks?.map?.((chunk: { text?: string }) => chunk.text ?? "").join("") ?? node.content
+      const renderedStatusText = descendants(statusRoot).map((node: any) => textFor(node) ?? "").join("\n")
+      const topbar = descendants(statusRoot).find((node: any) => textFor(node) === "Search Everything" && node.fg) as any
+      const status = descendants(statusRoot).find((node: any) => textFor(node) === "Command unavailable: /archive" && node.fg) as any
+      assert.notEqual(topbar, undefined)
+      assert.match(renderedStatusText, /\[Esc\] Manager/u)
+      assert.doesNotMatch(renderedStatusText, /Search Everything · Esc/u)
+      assert.notEqual(status, undefined)
+      assert.deepEqual(Array.from(topbar.fg.buffer), colorInts(tuiTheme.textPrimary))
+      assert.deepEqual(Array.from(status.fg.buffer), colorInts(tuiTheme.statusInfo))
+      assert.notDeepEqual(Array.from(topbar.fg.buffer), colorInts(tuiTheme.primaryAccent))
+      assert.notDeepEqual(Array.from(status.fg.buffer), colorInts(tuiTheme.secondaryAccent))
       root.destroyRecursively()
       statusRoot.destroyRecursively()
     } finally {
