@@ -406,6 +406,47 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Cached body before failed save"])
   })
 
+  test("failed editor save keeps buffer dirty and retry can save later", async () => {
+    let shouldFail = true
+    const controller = createWorkspaceController({
+      listNotes: () => [
+        { key: "beta", title: "Beta", description: "Beta", relativePath: "notes/inbox/beta.md" },
+      ],
+      showNote: () => ({
+        key: "beta",
+        title: "Beta",
+        description: "Beta",
+        relativePath: "notes/inbox/beta.md",
+        body: "Beta body",
+      }),
+      searchNotes: () => [],
+      persistEditorBody: async (note, body) => {
+        if (shouldFail) {
+          throw new Error("EACCES: permission denied")
+        }
+        return { ...note, body, description: body }
+      },
+    })
+
+    controller.refreshManager()
+    controller.openFocusedManagerItem()
+    controller.openFocusedManagerItem()
+    controller.insertEditorText(" unsaved")
+
+    const failed = await controller.saveEditor()
+    assert.deepEqual(failed, { blocked: true, reason: "dirty-editor" })
+    assert.equal(controller.getState().editor?.body, "Beta body unsaved")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "error")
+
+    shouldFail = false
+    const retried = await controller.saveEditor()
+    assert.deepEqual(retried, { blocked: false })
+    assert.equal(controller.getState().editor?.body, "Beta body unsaved")
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+  })
+
   test("successful editor saves update the hydrated manager preview cache for the saved note", async () => {
     let currentBody = "Cached body before save"
     const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
