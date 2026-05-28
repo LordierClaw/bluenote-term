@@ -31,6 +31,10 @@ Primary product findings from this run:
 
 The user approved proceeding from the manual QA plan into hardening. A fresh `computer-use-linux` screenshot retry against Ubuntu Terminal window `2069271615` still failed with GNOME Shell / XDG portal denial, so screenshot-based visual acceptance remains open. Product code should focus first on confirmed UI contract drift and regression coverage, while visual acceptance is retried after screenshot tooling is unblocked.
 
+### Task 7 continuation note — 2026-05-29
+
+Retried real visual capture for Task 7 before making any UI/code changes. `computer-use-linux doctor` still reported no blockers and `list_windows` found the Ubuntu Terminal window `2069271615` at `/home/hainn/blue/code/bluenote-term`, but a targeted screenshot retry against that window still failed: `GNOME Shell screenshot failed: GNOME Shell Screenshot call failed; XDG portal screenshot was denied or cancelled with response code 2`. Because no real screenshot evidence was available, visual scenarios A/B/D/F/I/K were not re-rated and no speculative color/layout/product-code changes were made.
+
 ## Environment and preflight
 
 ### Desktop/tool readiness
