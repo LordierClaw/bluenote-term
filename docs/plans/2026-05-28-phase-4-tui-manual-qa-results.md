@@ -110,6 +110,67 @@ Task 3 root cause was reproduced and fixed:
   - Disk readback showed `HAS_FRONTMATTER False`, sidecar JSON parsed successfully, sidecar key remained `autosave-fixed-probe-t1a6ev`, and `updatedAt` advanced to `2026-05-28T18:30:24.812Z`.
   - This confirms the live TUI can persist autosave content under a derived-index rebuild failure after the fix. Screenshot/status visual confirmation remains blocked by GNOME/XDG portal denial, so visual status text was not claimed.
 
+## Phase 4G cursor root-cause/fix evidence — 2026-05-29
+
+Task 4 root cause was reproduced at render-code level and verified functionally in live TUI:
+
+- Root cause:
+  - The editor body displayed note text with `TextRenderable`, while `bluenote-editor-body-input` was a focusable `BoxRenderable`, not a native `InputRenderable`/editor view.
+  - Earlier cleanup removed the old cursor glyph and tests explicitly prohibited cursor glyphs, leaving no visible cursor representation in body mode.
+  - This explains the user report that the editor cursor does not show, even though cursor-aware state and arrow-key insertion logic can still work.
+- RED test added:
+  - `tests/unit/tui/render-routing.test.ts`: `editor body renders a visible styled cursor cell without inserting a glyph`.
+  - Initial RED failure: rendered body text was `body` with no styled cursor cell; expected `body ` with an accent-background cursor cell.
+- Fix:
+  - `src/tui/render-editor.ts` now renders the body as OpenTUI `StyledText` with a render-only cursor cell.
+  - The cursor cell uses primary accent background `#38bdf8` and background-colored foreground `#0f172a`, so the cursor is visible as a block/cell without adding `|`, `▌`, or `█` to the note text.
+  - When the cursor is on an existing character, the existing character is highlighted; when the cursor is at end-of-body, a styled trailing space is rendered.
+  - The note body itself remains unchanged; the cursor is a render-only styled cell.
+- Automated verification:
+  - Targeted RED→GREEN tests passed.
+  - `tests/unit/tui/render-routing.test.ts`: `editor body renders a visible styled cursor cell before a newline` covers the reviewer-found edge case where styling `"\n"` produced no visible cursor cell.
+  - `bun test tests/unit/tui/render-routing.test.ts tests/unit/tui/render-view-models.test.ts` passed: 72 pass, 0 fail.
+  - `bun run typecheck` passed.
+- Live verification:
+  - Corrected reproduction navigation: the first Enter opens `inbox`; the second Enter opens the note. Earlier failed cursor probes only reached Manager shortcuts and did not edit the note.
+  - PTY check using the repo TUI command verified cursor-aware insertion: typed `abcdef`, moved left three times, typed `MID`; disk contained `abcMIDdef`, with no cursor glyph artifact and no frontmatter.
+  - Live `computer-use-linux` check used window `BlueNote Phase 4G Cursor Fix QA` id `2069271621`, active process `bun run ./bin/bn.ts tui`, root `/tmp/bluenote-tui-phase4g-cursor-fix-V6Hwpi`.
+  - Live input sequence: `Enter` to open `inbox`, `Enter` to open note, typed `abcdef`, pressed Left three times, typed `MID`.
+  - Disk readback: `BODY='abcMIDdef'`, `HAS_CURSOR_GLYPH_ARTIFACT=False`, `HAS_FRONTMATTER=False`, sidecar description `abcMIDdef`.
+  - Pixel evidence was later unblocked with the focused GNOME Terminal screenshot bridge.
+  - Newline-cursor visual QA root: `/tmp/bluenote-tui-phase4g-cursor-newline-P26FqO`.
+  - Newline-cursor TUI window: `BlueNote Phase 4G Cursor Newline Visual QA`, id `2069271635`, launched with `--geometry=100x30 --zoom=1.5`.
+  - Screenshot evidence: `/tmp/cul-cursor-newline-screenshot.png` (`2560x1600` PNG) captured through focused terminal MCP bridge.
+  - Visual inspection showed editor text `abc` / `def` and a cyan cursor cell immediately after `abc` before the line break; the small capture bridge terminal did not obstruct the important editor area.
+  - Functional and pixel-level cursor verification passed for normal in-line insertion, end-of-body cursor, and newline-position cursor.
+
+## Phase 4G computer-use visual setup evidence — 2026-05-29
+
+The GNOME Wayland visual-capture blocker is now understood and has a repeatable workaround:
+
+- Local readiness:
+  - `computer-use-linux doctor` reports green readiness: `can_query_windows`, `can_focus_windows`, `can_send_development_input`, and AT-SPI support are true; blockers are empty.
+  - Direct MCP screenshots can still fail from the Hermes/background process with `GNOME Shell Screenshot call failed; XDG portal screenshot was denied or cancelled with response code 2`.
+- Root cause of screenshot failure:
+  - Direct GNOME Shell DBus screenshot call fails with `org.freedesktop.DBus.Error.AccessDenied: Screenshot is not allowed`.
+  - XDG portal logs show `Only the focused app is allowed to show a system access dialog` and `Failed to associate portal window with parent window` when screenshot requests originate from a non-focused/background process.
+- Working screenshot workaround:
+  - Launch a small focused GNOME Terminal bridge and run `computer-use-linux mcp` from that terminal.
+  - Call the MCP `screenshot` tool from that focused terminal process, decode the returned PNG payload, and inspect the PNG with vision.
+  - Verified screenshot files:
+    - `/tmp/cul-focused-mcp-screenshot.png` (`2560x1600`, captured desktop successfully).
+    - `/tmp/cul-resize-scale-screenshot.png` (`2560x1600`, captured terminal size/zoom probes successfully).
+    - `/tmp/cul-cursor-newline-screenshot.png` (`2560x1600`, captured BlueNote cursor newline visual QA successfully).
+- Terminal size verification:
+  - `gnome-terminal --geometry=80x24` produced bounds about `814x577`.
+  - `gnome-terminal --geometry=120x40` produced bounds about `1214x929`.
+- Terminal scale/zoom verification:
+  - `gnome-terminal --geometry=100x30 --zoom=1.0` produced terminal grid `30 100` and bounds about `1014x709`.
+  - `gnome-terminal --geometry=100x30 --zoom=1.5` produced terminal grid `30 100` and bounds about `1514x1009`.
+  - This gives a repeatable UI QA matrix for small/medium/large windows and scaled/readability captures.
+- Phase 4G resume decision:
+  - Task 5 and Task 6 may resume because pixel-level visual evidence is no longer blocked, but Task 6 UI polish must still ask the user which style/improvements they want before any polish plan or subjective styling changes.
+
 ## Environment and preflight
 
 ### Desktop/tool readiness

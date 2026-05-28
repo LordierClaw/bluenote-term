@@ -529,6 +529,63 @@ describe("TUI render keyboard routing", () => {
     }
   })
 
+  test("editor body renders a visible styled cursor cell without inserting a glyph", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const controller = createWorkspaceController({
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }),
+        searchNotes: () => [],
+      })
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+      const screen = renderEditorScreen({ renderer, controller })
+      renderer.root.add(screen)
+      focusActiveWorkspaceInput(screen)
+
+      const bodyDisplay = findById(screen, "bluenote-editor-body") as { content?: { chunks?: Array<{ text?: string; bg?: { toInts?: () => number[] }; fg?: { toInts?: () => number[] } }> } | string } | undefined
+      const chunks = typeof bodyDisplay?.content === "string" ? [] : bodyDisplay?.content?.chunks ?? []
+      const plainText = chunks.map((chunk) => chunk.text ?? "").join("")
+      const cursorChunk = chunks.find((chunk) => chunk.bg?.toInts?.().join(",") === "56,189,248,255")
+
+      assert.equal(plainText, "body ")
+      assert.doesNotMatch(plainText, /[|▌█]/u)
+      assert.equal(cursorChunk?.text, " ")
+      assert.deepEqual(cursorChunk?.fg?.toInts?.(), [15, 23, 42, 255])
+    } finally {
+      renderer.destroy()
+    }
+  })
+
+  test("editor body renders a visible styled cursor cell before a newline", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const controller = createWorkspaceController({
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "abc\ndef" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "abc\ndef" }),
+        searchNotes: () => [],
+      })
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+      controller.moveEditorCursor("left")
+      controller.moveEditorCursor("left")
+      controller.moveEditorCursor("left")
+      controller.moveEditorCursor("left")
+      const screen = renderEditorScreen({ renderer, controller })
+      renderer.root.add(screen)
+      focusActiveWorkspaceInput(screen)
+
+      const bodyDisplay = findById(screen, "bluenote-editor-body") as { content?: { chunks?: Array<{ text?: string; bg?: { toInts?: () => number[] }; fg?: { toInts?: () => number[] } }> } | string } | undefined
+      const chunks = typeof bodyDisplay?.content === "string" ? [] : bodyDisplay?.content?.chunks ?? []
+      const plainText = chunks.map((chunk) => chunk.text ?? "").join("")
+      const cursorChunk = chunks.find((chunk) => chunk.bg?.toInts?.().join(",") === "56,189,248,255")
+
+      assert.equal(plainText, "abc \ndef")
+      assert.equal(cursorChunk?.text, " ")
+      assert.doesNotMatch(plainText, /[|▌█]/u)
+    } finally {
+      renderer.destroy()
+    }
+  })
+
   test("editor body renders as a focused controlled input owner", async () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {

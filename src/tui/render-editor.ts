@@ -2,8 +2,12 @@ import {
   BoxRenderable,
   InputRenderable,
   InputRenderableEvents,
+  StyledText,
   TextRenderable,
+  bg,
+  fg,
   type CliRenderer,
+  type TextChunk,
 } from "@opentui/core"
 
 import { editorCursorOffset, editorCursorPosition } from "./adapters/editor-buffer-adapter"
@@ -125,8 +129,34 @@ function countLines(value: string): number {
   return value.split("\n").length
 }
 
-function renderControlledBodyValue(value: string): string {
-  return value.length > 0 ? value : "Write your note…"
+function renderControlledBodyValue(value: string, cursorOffset = Array.from(value).length, focused = true): string | StyledText {
+  const displayValue = value.length > 0 ? value : "Write your note…"
+  if (!focused) {
+    return displayValue
+  }
+
+  const bodyChars = Array.from(value)
+  const displayChars = Array.from(displayValue)
+  const normalizedCursorOffset = Math.max(0, Math.min(Math.trunc(Number.isFinite(cursorOffset) ? cursorOffset : bodyChars.length), bodyChars.length))
+  const cursorDisplayOffset = value.length > 0 ? normalizedCursorOffset : 0
+  const before = displayChars.slice(0, cursorDisplayOffset).join("")
+  const cursorCharacter = value.length > 0 && cursorDisplayOffset < displayChars.length ? displayChars[cursorDisplayOffset]! : " "
+  const cursorIsOnNewline = cursorCharacter === "\n"
+  const cursorText = cursorIsOnNewline ? " " : cursorCharacter
+  const afterStart = value.length > 0 && cursorDisplayOffset < displayChars.length && !cursorIsOnNewline ? cursorDisplayOffset + 1 : cursorDisplayOffset
+  const after = displayChars.slice(afterStart).join("")
+  const cursorChunk = bg(tuiTheme.primaryAccent)(fg(tuiTheme.background)(cursorText)) as TextChunk
+  const chunks: TextChunk[] = []
+
+  if (before.length > 0) {
+    chunks.push(fg(value.length > 0 ? "#ffffff" : tuiTheme.mutedText)(before) as TextChunk)
+  }
+  chunks.push(cursorChunk)
+  if (after.length > 0) {
+    chunks.push(fg(value.length > 0 ? "#ffffff" : tuiTheme.mutedText)(after) as TextChunk)
+  }
+
+  return new StyledText(chunks)
 }
 
 function statusIntentForEditor(editor: EditorBufferWithAutosave | null): TuiColorIntent {
@@ -339,9 +369,11 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   const rendererSize = options.renderer as CliRenderer & { width?: number; height?: number; terminalWidth?: number; terminalHeight?: number }
   const screenWidth = rendererSize.width ?? rendererSize.terminalWidth ?? 80
   const screenHeight = rendererSize.height ?? rendererSize.terminalHeight ?? 24
-  const findBarRows = options.controller.getState().mode === "editor.find" ? 3 : 0
+  const state = options.controller.getState()
+  const findBarRows = state.mode === "editor.find" ? 3 : 0
   const bodyViewportLines = Math.max(1, screenHeight - 1 - findBarRows - 2 - 4)
-  const vm = buildEditorViewModel(options.controller.getState(), { width: Math.max(0, screenWidth - 4), bodyViewportLines })
+  const vm = buildEditorViewModel(state, { width: Math.max(0, screenWidth - 4), bodyViewportLines })
+  const editorState = state.editor
   const root = new BoxRenderable(options.renderer, {
     id: "bluenote-editor-screen",
     flexDirection: "column",
@@ -480,7 +512,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   })
   const bodyDisplay = new TextRenderable(options.renderer, {
     id: "bluenote-editor-body",
-    content: renderControlledBodyValue(vm.body.value),
+    content: renderControlledBodyValue(vm.body.value, editorState ? editorCursorOffset(editorState) : 0, vm.body.focused),
     height: "100%",
     flexGrow: 1,
     flexShrink: 1,
