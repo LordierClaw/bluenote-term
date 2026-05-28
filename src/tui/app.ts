@@ -92,17 +92,7 @@ export function createDefaultWorkspaceController(options: DefaultWorkspaceContro
       deleteNote({ override: rootPath, selector, force: true })
     },
     persistEditorBody: (note, body) => persistTuiEditorBody(rootPath, note, body, clock),
-    commandHandlers: {
-      "/rebuild": () => {},
-      "/migrate": () => {},
-      "/new": () => {},
-      "/archive": () => {},
-      "/delete": () => {},
-      "/find": () => {},
-      "/replace": () => {},
-      "/save": () => {},
-      ...options.commandHandlers,
-    },
+    commandHandlers: options.commandHandlers,
   })
 }
 

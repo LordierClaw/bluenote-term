@@ -280,6 +280,29 @@ describe("TUI workspace workflows", () => {
     assert.equal(controller.getState().screen, "editor")
   })
 
+  test("default Search Everything commands without handlers stay visible as unavailable", () => {
+    createNote({
+      override: rootPath,
+      title: "Default Command Note",
+      body: "Command body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    controller.openSearch("/archive")
+    const commandResult = controller.getSearchResults().find((result) => result.kind === "command" && result.name === "/archive")
+
+    assert.ok(commandResult)
+    assert.equal(controller.selectSearchResult(commandResult).blocked, false)
+    assert.equal(controller.getState().screen, "search")
+    assert.equal(controller.getState().search?.query, "/archive")
+    assert.equal(controller.getState().search?.status, "Command unavailable: /archive")
+    controller.cancelSearch()
+    assert.equal(controller.getState().screen, "manager")
+  })
+
   test("runs a Search Everything slash command with parsed command context", () => {
     createNote({
       override: rootPath,
