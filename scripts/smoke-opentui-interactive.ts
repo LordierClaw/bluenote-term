@@ -585,10 +585,11 @@ try {
   sendKeys(sessionName, "Left")
   wait(250, "editor cursor left")
   sendText(sessionName, cursorMarker)
-  const editorCursorPane = capturePaneUntil(sessionName, "editor cursor insert before final character", `${cursorMarker}▌${typedEditorText.slice(-1)}`, 30)
+  const editorCursorPane = capturePaneUntil(sessionName, "editor cursor insert before final character", `${cursorMarker}${typedEditorText.slice(-1)}`, 30)
   expectPaneContains(editorCursorPane, `${cursorEditedPrefix.slice(0, -6)}`, "editor cursor insert before final character")
   expectPaneContains(editorCursorPane, "probe-", "editor cursor insert before final character")
-  expectPaneContains(editorCursorPane, `▌${typedEditorText.slice(-1)}`, "editor cursor insert before final character")
+  expectPaneContains(editorCursorPane, `${cursorMarker}${typedEditorText.slice(-1)}`, "editor cursor insert before final character")
+  expectPaneExcludes(editorCursorPane, "▌", "editor cursor insert before final character")
 
   const multilineText = "newline-body-probe"
   sendKeys(sessionName, "Enter")
@@ -597,7 +598,8 @@ try {
   const editorNewlinePane = capturePaneUntil(sessionName, "editor newline insertion", multilineText, 30)
   expectPaneContains(editorNewlinePane, "editor-input-regression-toke-cursor-", "editor newline insertion")
   expectPaneContains(editorNewlinePane, "probe-", "editor newline insertion")
-  expectPaneContains(editorNewlinePane, `${multilineText}▌${typedEditorText.slice(-1)}`, "editor newline insertion")
+  expectPaneContains(editorNewlinePane, `${multilineText}${typedEditorText.slice(-1)}`, "editor newline insertion")
+  expectPaneExcludes(editorNewlinePane, "▌", "editor newline insertion")
 
   const pasteFallbackText = "paste-fallback-probe"
   sendText(sessionName, pasteFallbackText)
@@ -651,7 +653,7 @@ try {
   const dirtySearchPane = capturePaneUntil(sessionName, "dirty editor search open", "Search Everything", 20)
   expectPaneContains(dirtySearchPane, "Search Everything", "dirty editor search open")
   sendKeys(sessionName, "Escape")
-  const postAutosaveCursorText = `${multilineText}${pasteFallbackText}${autosavePersistenceToken}${typedEditorText.slice(-1)}▌`
+  const postAutosaveCursorText = `${multilineText}${pasteFallbackText}${autosavePersistenceToken}${typedEditorText.slice(-1)}`
   const dirtySearchCancelPane = capturePaneUntil(sessionName, "editor search cancel restores body focus", postAutosaveCursorText, 30)
   expectPaneContains(dirtySearchCancelPane, postAutosaveCursorText, "editor search cancel restores body focus")
   expectPaneExcludes(dirtySearchCancelPane, "Search Everything", "editor search cancel restores body focus")
@@ -662,7 +664,7 @@ try {
   sendKeys(sessionName, "C-s")
   expectNoteFileContainsWithin(rootEditorSummary.notePath, manualSavePersistenceToken, "editor manual save persistence filesystem", 700)
   const editorSavedPane = capturePaneUntil(sessionName, "editor ctrl-s save", "Saved", 30)
-  const postManualSaveCursorText = `${multilineText}${pasteFallbackText}${autosavePersistenceToken}${typedEditorText.slice(-1)}${manualSavePersistenceToken}▌`
+  const postManualSaveCursorText = `${multilineText}${pasteFallbackText}${autosavePersistenceToken}${typedEditorText.slice(-1)}${manualSavePersistenceToken}`
   expectPaneContains(editorSavedPane, postManualSaveCursorText, "editor ctrl-s save")
   expectNoteFileContains(rootEditorSummary.notePath, manualSavePersistenceToken, "editor manual save persistence filesystem")
 

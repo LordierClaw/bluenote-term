@@ -430,6 +430,36 @@ describe("TUI render keyboard routing", () => {
     }
   })
 
+  test("editor body renders without root/body borders, border title, or custom cursor glyph", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const controller = createWorkspaceController({
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }),
+        searchNotes: () => [],
+      })
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+      const screen = renderEditorScreen({ renderer, controller }) as { border?: boolean; title?: unknown; getChildren: () => any[] }
+      renderer.root.add(screen as any)
+
+      const bodyInput = findById(screen, "bluenote-editor-body-input") as { border?: boolean; title?: unknown } | undefined
+      const bodyDisplay = findById(screen, "bluenote-editor-body") as { content?: { chunks?: Array<{ text?: string }> } | string } | undefined
+      const renderables = [screen, ...descendants(screen)]
+      const renderableText = renderables.map((node) => node.content?.chunks?.[0]?.text ?? node.content ?? "").join("\n")
+      const titleText = renderables.map((node) => node.title ?? "").join("\n")
+      const bodyText = typeof bodyDisplay?.content === "string" ? bodyDisplay.content : bodyDisplay?.content?.chunks?.[0]?.text ?? ""
+
+      assert.equal(screen.border, false)
+      assert.ok(bodyInput && (bodyInput.border === false || bodyInput.title === undefined))
+      assert.doesNotMatch(titleText, /Editor body|Line \d+, Col \d+/u)
+      assert.doesNotMatch(renderableText, /Editor body/u)
+      assert.doesNotMatch(bodyText, /[|▌]/u)
+      assert.match(renderableText, /Line 1, Col 5/u)
+    } finally {
+      renderer.destroy()
+    }
+  })
+
   test("editor body renders as a focused controlled input owner", async () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {

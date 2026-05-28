@@ -118,12 +118,8 @@ function countLines(value: string): number {
   return value.split("\n").length
 }
 
-function renderControlledBodyValue(value: string, cursorOffset: number, focused: boolean): string {
-  const chars = Array.from(value)
-  if (!focused) return value.length > 0 ? value : "Write your note…"
-  chars.splice(Math.max(0, Math.min(cursorOffset, chars.length)), 0, "▌")
-  const rendered = chars.join("")
-  return rendered.length > 0 ? rendered : "▌"
+function renderControlledBodyValue(value: string): string {
+  return value.length > 0 ? value : "Write your note…"
 }
 
 function statusIntentForEditor(editor: EditorBufferWithAutosave | null): TuiColorIntent {
@@ -334,8 +330,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     flexDirection: "column",
     width: "100%",
     height: "100%",
-    border: true,
-    borderColor: tuiTheme.primaryAccent,
+    border: false,
     backgroundColor: tuiTheme.background,
   })
 
@@ -360,16 +355,12 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     flexShrink: 1,
     minHeight: 1,
     overflow: "hidden",
-    border: true,
-    borderColor: vm.body.focused ? tuiTheme.primaryAccent : tuiTheme.mutedText,
+    border: false,
     backgroundColor: tuiTheme.panel,
-    title: `Editor body · Line ${vm.body.cursor.line}, Col ${vm.body.cursor.column}`,
   })
-  const state = options.controller.getState()
-  const editor = state.editor
   const bodyDisplay = new TextRenderable(options.renderer, {
     id: "bluenote-editor-body",
-    content: renderControlledBodyValue(vm.body.value, editor ? editorCursorOffset(editor) : 0, vm.body.focused),
+    content: renderControlledBodyValue(vm.body.value),
     height: "100%",
     flexGrow: 1,
     flexShrink: 1,

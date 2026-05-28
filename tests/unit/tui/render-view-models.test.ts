@@ -507,6 +507,8 @@ describe("TUI render view models", () => {
     const editorChrome = JSON.stringify({ topbar: vm.topbar, bottombar: vm.bottombar })
     assert.doesNotMatch(editorChrome, /BlueNote(?: TUI| Editor)?/i)
     assert.equal("title" in vm.topbar, false)
+    assert.doesNotMatch(JSON.stringify({ topbar: vm.topbar, body: vm.body }), /Editor body|Line \d+, Col \d+/u)
+    assert.match(vm.bottombar.status, /Line 3, Col 23/u)
 
     const dirtyVm = buildEditorViewModel({ ...baseState, screen: "editor", editor: { ...baseState.editor!, dirty: true, body: `${baseState.editor!.body}\nunsaved` } })
     assert.equal(dirtyVm.topbar.saveStatusLabel, "Unsaved")
