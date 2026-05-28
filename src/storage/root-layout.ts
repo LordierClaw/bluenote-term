@@ -51,6 +51,10 @@ export function getStatePath(rootPath: string): string {
   return assertPathInsideRoot(rootPath, path.join(path.resolve(rootPath), STATE_DIRECTORY))
 }
 
+export function getStateTmpPath(rootPath: string): string {
+  return assertPathInsideRoot(rootPath, path.join(path.resolve(rootPath), STATE_TMP_DIRECTORY))
+}
+
 export function getLegacyStatePath(rootPath: string): string {
   return assertPathInsideRoot(rootPath, path.join(path.resolve(rootPath), LEGACY_STATE_DIRECTORY))
 }
