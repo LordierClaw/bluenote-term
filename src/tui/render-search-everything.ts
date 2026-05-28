@@ -172,30 +172,31 @@ export interface RenderSearchEverythingScreenOptions {
   renderer: CliRenderer
   controller: WorkspaceController
   onInvalidate?: () => void
+  height?: number
 }
 
 export function renderSearchEverythingScreen(options: RenderSearchEverythingScreenOptions): BoxRenderable {
-  const vm = buildSearchEverythingViewModel(options.controller.getState(), options.controller.getSearchResults())
+  const vm = buildSearchEverythingViewModel(options.controller.getState(), options.controller.getSearchResults(), { height: options.height })
   const root = new BoxRenderable(options.renderer, {
     id: "bluenote-search-everything-screen",
     flexDirection: "column",
     width: "100%",
     height: "100%",
-    border: true,
-    borderColor: tuiTheme.primaryAccent,
+    border: false,
     backgroundColor: tuiTheme.background,
-    title: "Search Everything",
+    title: "",
   })
+  root.add(new TextRenderable(options.renderer, { content: `Search Everything · Esc ${vm.previousScreen}`, height: 1, fg: tuiTheme.primaryAccent, bg: tuiTheme.background }))
 
   const inputRegion = new BoxRenderable(options.renderer, {
     id: "bluenote-search-input-region",
     flexDirection: "column",
     width: "100%",
-    height: 3,
+    height: 4,
     border: true,
     borderColor: tuiTheme[vm.styleIntents.input],
     backgroundColor: tuiTheme.panel,
-    title: "Input",
+    title: `Search · ${vm.query || "type to begin"}`,
   })
   const resultsRegion = new BoxRenderable(options.renderer, {
     id: "bluenote-search-results-region",
@@ -205,18 +206,20 @@ export function renderSearchEverythingScreen(options: RenderSearchEverythingScre
     border: true,
     borderColor: tuiTheme[vm.styleIntents.result],
     backgroundColor: tuiTheme.panel,
-    title: "Results",
+    title: `Results · ${vm.results.length}`,
   })
-  const previewRegion = new BoxRenderable(options.renderer, {
-    id: "bluenote-search-preview-region",
-    flexDirection: "column",
-    width: "100%",
-    height: "30%",
-    border: true,
-    borderColor: tuiTheme[vm.styleIntents.preview],
-    backgroundColor: tuiTheme.panel,
-    title: "Preview",
-  })
+  const previewRegion = vm.regions.some((region) => region.id === "preview")
+    ? new BoxRenderable(options.renderer, {
+      id: "bluenote-search-preview-region",
+      flexDirection: "column",
+      width: "100%",
+      height: "30%",
+      border: true,
+      borderColor: tuiTheme[vm.styleIntents.preview],
+      backgroundColor: tuiTheme.panel,
+      title: "Preview",
+    })
+    : null
 
   const input = new InputRenderable(options.renderer, {
     id: vm.input.id,
@@ -241,29 +244,40 @@ export function renderSearchEverythingScreen(options: RenderSearchEverythingScre
     options.onInvalidate?.()
   })
 
+  inputRegion.add(new TextRenderable(options.renderer, { content: `Search · ${vm.query || "type to begin"}`, height: 1, fg: tuiTheme.secondaryAccent, bg: tuiTheme.panel }))
   inputRegion.add(input)
+  resultsRegion.add(new TextRenderable(options.renderer, { content: `Results · ${vm.results.length}`, height: 1, fg: tuiTheme.secondaryAccent, bg: tuiTheme.panel }))
   for (const row of vm.results) {
     resultsRegion.add(
       new TextRenderable(options.renderer, {
-        content: `${row.focusMarker} [${row.kind}] ${row.label} — ${row.detail}`,
+        content: `${row.focusMarker} [${row.typeLabel}] ${row.primaryLabel} — ${row.detail}`,
         height: 1,
-        fg: tuiTheme[row.selected ? vm.styleIntents.selectedResult : row.styleIntent],
-        bg: tuiTheme.panel,
+        fg: tuiTheme[row.selected ? row.primaryStyleIntent : "primaryAccent"],
+        bg: tuiTheme[row.selected ? "focusedRow" : "panel"],
       }),
     )
   }
-  if (vm.preview?.visible) {
-    previewRegion.add(new TextRenderable(options.renderer, { content: vm.preview.title, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
+  if (vm.results.length === 0) {
+    resultsRegion.add(new TextRenderable(options.renderer, { content: "No results", height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
+  }
+
+  if (vm.preview?.visible && previewRegion) {
+    previewRegion.add(new TextRenderable(options.renderer, { content: `Preview · ${vm.preview.title}`, height: 1, fg: tuiTheme.secondaryAccent, bg: tuiTheme.panel }))
     previewRegion.add(new TextRenderable(options.renderer, { content: vm.preview.subtitle, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
-    for (const line of vm.preview.lines) {
-      previewRegion.add(new TextRenderable(options.renderer, { content: line, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
+    for (const section of vm.preview.sections) {
+      previewRegion.add(new TextRenderable(options.renderer, { content: section.label, height: 1, fg: tuiTheme.primaryAccent, bg: tuiTheme.panel }))
+      for (const line of section.lines) {
+        previewRegion.add(new TextRenderable(options.renderer, { content: line, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
+      }
     }
-  } else {
-    previewRegion.add(new TextRenderable(options.renderer, { content: "No preview", height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
   }
   root.add(inputRegion)
   root.add(resultsRegion)
-  root.add(previewRegion)
+  if (previewRegion) {
+    root.add(previewRegion)
+  } else if (vm.preview && !vm.preview.visible) {
+    root.add(new TextRenderable(options.renderer, { content: vm.preview.hiddenStatus, height: 1, fg: tuiTheme[vm.preview.styleIntent], bg: tuiTheme.panel }))
+  }
   root.add(new TextRenderable(options.renderer, { content: vm.shortcuts.join("  "), height: 1, fg: tuiTheme.secondaryAccent, bg: tuiTheme.panel }))
   input.focus()
 

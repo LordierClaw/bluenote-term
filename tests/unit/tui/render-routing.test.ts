@@ -5,7 +5,7 @@ import { createCliRenderer } from "@opentui/core"
 import { blurWorkspaceInputs, focusActiveWorkspaceInput, routeWorkspaceKey } from "../../../src/tui/app"
 import { renderEditorScreen, routeEditorKey } from "../../../src/tui/render-editor"
 import { renderManagerScreen, routeManagerKey } from "../../../src/tui/render-manager"
-import { routeSearchEverythingKey } from "../../../src/tui/render-search-everything"
+import { renderSearchEverythingScreen, routeSearchEverythingKey } from "../../../src/tui/render-search-everything"
 import type { TuiState } from "../../../src/tui/state"
 import { createWorkspaceController, type WorkspaceController } from "../../../src/tui/workspace-controller"
 import type { ManagerBrowserModel } from "../../../src/tui/adapters/note-manager-adapter"
@@ -746,5 +746,29 @@ describe("TUI render keyboard routing", () => {
     assert.equal(routeSearchEverythingKey("\u001b", controller), true)
     assert.equal(routeSearchEverythingKey("\u001b[", controller), true)
     assert.deepEqual(calls, ["cancelSearch", "cancelSearch"])
+  })
+
+  test("Search Everything short renderer keeps input and result rows routable while preview is hidden", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const controller = createWorkspaceController({
+        listNotes: () => [{ key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md", body: "Preview body" }),
+        searchNotes: () => [],
+      })
+      controller.openSearch("daily")
+      const screen = renderSearchEverythingScreen({ renderer, controller, height: 12 })
+      renderer.root.add(screen)
+      const text = descendants(screen).map((node) => node.content?.chunks?.[0]?.text ?? node.content ?? "").join("\n")
+      assert.notEqual(findById(screen, "bluenote-search-query"), undefined)
+      assert.notEqual(findById(screen, "bluenote-search-results-region"), undefined)
+      assert.equal(findById(screen, "bluenote-search-preview-region"), undefined)
+      assert.match(text, /\[note\] Daily/u)
+      assert.match(text, /Preview hidden for short terminal/u)
+      assert.doesNotMatch(text, /Preview body/u)
+      assert.equal(routeSearchEverythingKey("\u001b[B", controller), true)
+    } finally {
+      renderer.destroy()
+    }
   })
 })

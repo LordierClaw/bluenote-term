@@ -893,4 +893,79 @@ describe("TUI render view models", () => {
       renderer.destroy()
     }
   })
+
+  test("Search Everything renderer uses readable compact chrome, typed rows, and sectioned preview", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const controller = createWorkspaceController({
+        listNotes: () => [
+          {
+            key: "daily-plan",
+            title: "Daily Plan",
+            description: "Today priorities.",
+            relativePath: "notes/inbox/daily-plan.md",
+            body: "Ship renderer screens.",
+          },
+        ],
+        showNote: () => ({ ...baseState.editor!.note }),
+        searchNotes: () => [],
+      })
+      controller.openSearch("daily")
+
+      const root = renderSearchEverythingScreen({ renderer, controller })
+      const nodes = descendants(root)
+      const text = nodes.map((node: any) => node.content?.chunks?.[0]?.text ?? node.content ?? "").join("\n")
+      const resultsRegion = nodes.find((node) => node.id === "bluenote-search-results-region") as { getChildren: () => Renderable[] } | undefined
+      const previewRegion = nodes.find((node) => node.id === "bluenote-search-preview-region") as { getChildren: () => Renderable[] } | undefined
+      const resultText = resultsRegion?.getChildren().map((node: any) => node.content?.chunks?.[0]?.text ?? node.content ?? "").join("\n") ?? ""
+      const previewLines = previewRegion?.getChildren().map((node: any) => node.content?.chunks?.[0]?.text ?? node.content ?? "") ?? []
+
+      assert.equal((root as any).border, false)
+      assert.equal((root as any).title ?? "", "")
+      assert.notEqual(nodes.find((node) => node.id === "bluenote-search-input-region"), undefined)
+      assert.notEqual(resultsRegion, undefined)
+      assert.notEqual(previewRegion, undefined)
+      assert.match(text, /Search Everything/u)
+      assert.match(text, /Search · daily/u)
+      assert.match(text, /Results · \d+/u)
+      assert.match(resultText, /› \[note\] Daily Plan —/u)
+      assert.doesNotMatch(resultText, /undefined/u)
+      assert.deepEqual(previewLines.slice(0, 5), ["Preview · Daily Plan", "daily-plan.md — notes/inbox/daily-plan.md", "Metadata", "daily-plan.md — notes/inbox/daily-plan.md", "Description"])
+      assert.match(text, /Today priorities\./u)
+    } finally {
+      renderer.destroy()
+    }
+  })
+
+  test("Search Everything renderer omits preview pane when hidden and does not render stale preview content", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const controller = createWorkspaceController({
+        listNotes: () => [
+          {
+            key: "daily-plan",
+            title: "Daily Plan",
+            description: "Stale preview should not show.",
+            relativePath: "notes/inbox/daily-plan.md",
+            body: "Hidden preview body.",
+          },
+        ],
+        showNote: () => ({ ...baseState.editor!.note }),
+        searchNotes: () => [],
+      })
+      controller.openSearch("daily")
+      controller.setSearchPreviewVisible(false)
+
+      const root = renderSearchEverythingScreen({ renderer, controller })
+      const nodes = descendants(root)
+      const text = nodes.map((node: any) => node.content?.chunks?.[0]?.text ?? node.content ?? "").join("\n")
+
+      assert.equal(nodes.some((node) => node.id === "bluenote-search-preview-region"), false)
+      assert.match(text, /Preview hidden · Alt\+P preview show/u)
+      assert.match(text, /\[note\] Daily Plan/u)
+      assert.doesNotMatch(text, /Stale preview should not show|Hidden preview body|Metadata|Description/u)
+    } finally {
+      renderer.destroy()
+    }
+  })
 })
