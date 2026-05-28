@@ -26,6 +26,18 @@ function run(command: string, args: string[], options: { env?: NodeJS.ProcessEnv
   })
 }
 
+function ensureCommandAvailable(command: string, installHint: string): void {
+  const result = spawnSync("bash", ["-lc", `command -v ${command}`], {
+    cwd: process.cwd(),
+    env: process.env,
+    encoding: "utf8",
+    timeout: 2_000,
+  })
+  if (result.status !== 0) {
+    throw new Error(`${command} is required for interactive OpenTUI smoke tests. ${installHint}`)
+  }
+}
+
 function wait(milliseconds: number, context = "wait"): void {
   assertWithinSmokeDeadline(context)
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds)
@@ -232,6 +244,8 @@ function createSmokeNote(rootPath: string, title: string, body: string, moveToFo
     relativePath: nextRelativePath,
   }
 }
+
+ensureCommandAvailable("tmux", "Install tmux or run the non-interactive smoke with `bun run smoke:opentui`.")
 
 const rootPath = mkdtempSync(path.join(tmpdir(), "bluenote-opentui-interactive-"))
 const sessionName = `bluenote-opentui-${process.pid}`

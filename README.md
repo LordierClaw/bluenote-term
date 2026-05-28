@@ -30,6 +30,8 @@ bun run smoke:opentui:interactive
 bun run smoke:cli
 ```
 
+`bun run smoke:opentui:interactive` is a development verification check that requires `tmux` so it can launch `bn tui` in a real TTY. BlueNote runtime usage does not require `tmux`; if it is not installed, use the non-interactive OpenTUI smoke with `bun run smoke:opentui`.
+
 Run the CLI through the package entrypoint during development:
 
 ```bash

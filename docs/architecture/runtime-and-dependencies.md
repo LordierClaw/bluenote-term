@@ -34,4 +34,5 @@ Current TUI bootstrap status is `phase-4f-tui-cleanup-navigation-save-bugs`; the
 - dependency install must succeed with Bun
 - typecheck must pass with `tsc --noEmit`
 - OpenTUI import health must pass through a non-interactive smoke script
+- `bun run smoke:opentui:interactive` is an optional development verification path that requires `tmux` to provide a real TTY for `bn tui`; `tmux` is not a BlueNote runtime dependency
 - CLI smoke must verify the visible help surface includes `tui` without launching an interactive TUI
