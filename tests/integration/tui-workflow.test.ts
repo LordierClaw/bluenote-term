@@ -463,6 +463,7 @@ describe("TUI workspace workflows", () => {
     const noteText = await readFile(path.join(rootPath, created.relativePath), "utf8")
     assert.equal(noteText, "")
     assert.doesNotMatch(noteText, /^---/)
+    await access(path.join(rootPath, ".data", "notes", `${created.key}.json`))
     assert.equal(showNote({ override: rootPath, selector: created.key }).title, "TUI Created Note")
     assert.equal(showNote({ override: rootPath, selector: created.key }).body, "")
   })
@@ -505,6 +506,11 @@ describe("TUI workspace workflows", () => {
     })
     rebuildIndexes({ override: rootPath })
     const controller = createDefaultWorkspaceController({ rootPath })
+    const notePath = path.join(rootPath, created.relativePath)
+    const sidecarPath = path.join(rootPath, ".data", "notes", `${created.key}.json`)
+
+    assert.equal(await readFile(notePath, "utf8"), "Delete me")
+    await access(sidecarPath)
 
     openManagerNoteByKey(controller, created.key)
     controller.showManager()
@@ -517,8 +523,8 @@ describe("TUI workspace workflows", () => {
     assert.equal(controller.getState().screen, "manager")
     assert.equal(controller.getState().editor, null)
     assert.equal(controller.getState().manager.items.some((item) => item.key === created.key), false)
-    await assert.rejects(() => access(path.join(rootPath, created.relativePath)))
-    await assert.rejects(() => access(path.join(rootPath, ".data", "notes", `${created.key}.json`)))
+    await assert.rejects(() => access(notePath))
+    await assert.rejects(() => access(sidecarPath))
   })
 
   test("opens Search Everything from editor, selects a content match, and returns to editor", () => {

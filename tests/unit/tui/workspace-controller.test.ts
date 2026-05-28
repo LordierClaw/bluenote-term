@@ -1212,6 +1212,7 @@ describe("TUI workspace controller", () => {
     const controller = createWorkspaceController(deps)
 
     controller.openManagerCreate()
+    assert.equal(controller.getState().mode, "manager.create")
     const createVm = buildManagerViewModel(controller.getState())
     assert.equal(createVm.createPrompt?.inputId, "bluenote-manager-create-title")
     assert.equal(createVm.createPrompt?.focused, true)
@@ -1225,6 +1226,9 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().screen, "editor")
     assert.equal(controller.getState().mode, "editor.body")
     assert.equal(controller.getState().editor?.note.key, "project-plan")
+    assert.equal(controller.getState().editor?.note.title, "q Project Plan")
+    assert.equal(controller.getState().editor?.body, "")
+    assert.equal(controller.getState().manager.items.some((item) => item.key === "project-plan"), true)
     assert.deepEqual(calls, ["list", "create:q Project Plan:", "rebuild", "list", "show:project-plan"])
   })
 
@@ -1333,6 +1337,7 @@ describe("TUI workspace controller", () => {
     const controller = createWorkspaceController(deps)
 
     controller.openManagerCreate()
+    assert.equal(controller.getState().mode, "manager.create")
     controller.updateManagerCreateTitle("   ")
     const result = await controller.submitManagerCreate()
 
@@ -1400,6 +1405,17 @@ describe("TUI workspace controller", () => {
     controller.showManager()
     controller.openManagerDeleteConfirmation()
 
+    assert.equal(controller.getState().mode, "manager.deleteConfirm")
+    assert.equal(controller.getState().manager.deleteDraft?.key, "daily-plan")
+
+    controller.cancelManagerDelete()
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().manager.deleteDraft, null)
+    assert.equal(controller.getState().editor?.note.key, "daily-plan")
+    assert.equal(controller.getState().manager.items.some((item) => item.key === "daily-plan"), true)
+    assert.equal(calls.some((call) => call.startsWith("delete:")), false)
+
+    controller.openManagerDeleteConfirmation()
     assert.equal(controller.getState().mode, "manager.deleteConfirm")
     assert.equal(controller.getState().manager.deleteDraft?.key, "daily-plan")
 
@@ -1480,7 +1496,8 @@ describe("TUI workspace controller", () => {
 
     controller.openManagerDeleteConfirmation()
     assert.equal(controller.getState().mode, "manager.browse")
-    assert.match(controller.getState().manager.status ?? "", /Folders cannot be deleted here/)
+    assert.equal(controller.getState().manager.status, "Folders cannot be deleted here")
+    assert.equal(controller.getState().manager.deleteDraft, null)
 
     controller.focusManagerItem(1)
     assert.equal(controller.getState().manager.status, null)
