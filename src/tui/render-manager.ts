@@ -597,7 +597,23 @@ export function routeManagerKey(sequence: string, controller: WorkspaceControlle
 
   if (controller.getState().mode === "manager.filter") {
     const currentQuery = controller.getState().manager.filterQuery ?? ""
-    if (sequence === "\u001b" || sequence === "\u001b[" || sequence === "\r" || sequence === "\n") {
+    if (sequence === "\u001b[A") {
+      controller.moveManagerSelection("up")
+      return true
+    }
+    if (sequence === "\u001b[B") {
+      controller.moveManagerSelection("down")
+      return true
+    }
+    if (sequence === "\r" || sequence === "\n" || sequence === "\u001b[C") {
+      controller.openFocusedManagerItem()
+      return true
+    }
+    if (sequence === "\u001b[D") {
+      controller.clearManagerFilter()
+      return true
+    }
+    if (sequence === "\u001b" || sequence === "\u001b[") {
       controller.goBack()
       return true
     }

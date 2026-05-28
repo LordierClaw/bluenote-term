@@ -1408,6 +1408,57 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(controller.getState().manager.items.map((item) => item.key), ["notes/archive", "notes/inbox"])
   })
 
+  test("manager filter routing moves filtered focus, opens the focused note, and clears on Arrow Left", () => {
+    const { deps } = createDeps({
+      listNotes: () => [
+        {
+          key: "daily-plan",
+          title: "Daily Plan",
+          description: "Today priorities.",
+          relativePath: "notes/inbox/daily-plan.md",
+          body: "Original daily body",
+        },
+        {
+          key: "daily-retro",
+          title: "Daily Retro",
+          description: "Today retrospective.",
+          relativePath: "notes/inbox/daily-retro.md",
+          body: "Retro body",
+        },
+      ],
+      showNote: (selector) => ({
+        key: selector,
+        title: selector,
+        description: "",
+        relativePath: `notes/inbox/${selector}.md`,
+        body: `${selector} body`,
+      }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    controller.focusManagerItem(0)
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    controller.openManagerFilter()
+    assert.equal(routeManagerKey("d", controller), true)
+    assert.equal(routeManagerKey("a", controller), true)
+    assert.deepEqual(controller.getState().manager.items.map((item) => item.key), ["daily-plan", "daily-retro"])
+
+    assert.equal(routeManagerKey("\u001b[B", controller), true)
+    assert.equal(controller.getState().manager.focusedIndex, 1)
+    assert.equal(controller.getState().manager.filterQuery, "da")
+
+    assert.equal(routeManagerKey("\r", controller), true)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, "daily-retro")
+
+    assert.equal(controller.showManager().blocked, false)
+    controller.openManagerFilter()
+    controller.updateManagerFilter("retro")
+    assert.equal(routeManagerKey("\u001b[D", controller), true)
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().manager.filterQuery, "")
+  })
+
   test("toggleSearch records previous mode and toggles back when search is already active", () => {
     const { deps } = createDeps()
     const controller = createWorkspaceController(deps)

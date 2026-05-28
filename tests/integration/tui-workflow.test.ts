@@ -48,6 +48,26 @@ async function waitForAutosave(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 900))
 }
 
+function openManagerFolderPath(controller: DefaultWorkspaceController, folderPath: string): void {
+  const directFolderIndex = controller.getState().manager.items.findIndex((item) => item.type === "folder" && item.relativePath === folderPath)
+  if (directFolderIndex !== -1) {
+    controller.focusManagerItem(directFolderIndex)
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    return
+  }
+
+  const parts = folderPath.split("/").filter(Boolean)
+  let prefix = ""
+
+  for (const part of parts) {
+    prefix = prefix ? `${prefix}/${part}` : part
+    const folderIndex = controller.getState().manager.items.findIndex((item) => item.type === "folder" && item.relativePath === prefix)
+    assert.notEqual(folderIndex, -1, `missing manager folder ${prefix}`)
+    controller.focusManagerItem(folderIndex)
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+  }
+}
+
 describe("TUI workspace workflows", () => {
   let rootPath: string
 
@@ -73,6 +93,46 @@ describe("TUI workspace workflows", () => {
     } finally {
       await rm(freshRootPath, { recursive: true, force: true })
     }
+  })
+
+  test("manager filter navigation routes to filtered rows and opens the focused note", () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Alpha Filter Target",
+      body: "alpha body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    const second = createNote({
+      override: rootPath,
+      title: "Beta Filter Target",
+      body: "beta body",
+      clock: fixedClock("2026-05-26T10:01:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createDefaultWorkspaceController({ rootPath })
+    openManagerFolderPath(controller, path.dirname(first.relativePath))
+    assert.equal(path.dirname(second.relativePath), path.dirname(first.relativePath))
+
+    controller.openManagerFilter()
+    for (const key of "Filter Target") {
+      assert.equal(routeManagerKey(key, controller), true)
+    }
+    assert.deepEqual(controller.getState().manager.items.map((item) => item.key), [first.key, second.key])
+
+    assert.equal(routeManagerKey("\u001b[B", controller), true)
+    assert.equal(controller.getState().manager.focusedIndex, 1)
+    assert.equal(routeManagerKey("\u001b[C", controller), true)
+
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, second.key)
+
+    assert.equal(controller.showManager().blocked, false)
+    controller.openManagerFilter()
+    controller.updateManagerFilter("Beta")
+    assert.equal(routeManagerKey("\u001b[D", controller), true)
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().manager.filterQuery, "")
   })
 
   test("TUI controller bootstrap removes only stale BlueNote atomic writer temps", async () => {

@@ -609,6 +609,32 @@ describe("TUI render keyboard routing", () => {
     }
   })
 
+  test("manager filter route edits printable query while routing navigation, open, and close keys", () => {
+    const { controller, calls } = createController("manager")
+    controller.getState().mode = "manager.filter"
+    controller.getState().manager.filterQuery = "da"
+
+    assert.equal(routeManagerKey("i", controller), true)
+    assert.equal(routeManagerKey("\u001b[A", controller), true)
+    assert.equal(routeManagerKey("\u001b[B", controller), true)
+    assert.equal(routeManagerKey("\r", controller), true)
+    assert.equal(routeManagerKey("\u001b[C", controller), true)
+    assert.equal(routeManagerKey("\u001b[D", controller), true)
+    assert.equal(routeManagerKey("\u001b", controller), true)
+    assert.equal(routeManagerKey("\u001b[", controller), true)
+
+    assert.deepEqual(calls, [
+      "updateManagerFilter:dai",
+      "moveManagerSelection:up",
+      "moveManagerSelection:down",
+      "openFocusedManagerItem",
+      "openFocusedManagerItem",
+      "clearManagerFilter",
+      "goBack",
+      "goBack",
+    ])
+  })
+
   test("manager route maps p to preview toggle while s and Ctrl+P still open Search Everything", () => {
     const { controller, calls } = createController("manager")
 
