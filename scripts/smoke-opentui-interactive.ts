@@ -235,8 +235,17 @@ function createSmokeNote(rootPath: string, title: string, body: string, moveToFo
 
 const rootPath = mkdtempSync(path.join(tmpdir(), "bluenote-opentui-interactive-"))
 const sessionName = `bluenote-opentui-${process.pid}`
-let tuiPanePid: number | null = null
 let cleanedUp = false
+
+interface TrackedSmokeResource {
+  rootPath: string
+  sessionName: string
+  panePid: number | null
+}
+
+const trackedSmokeResources = new Set<TrackedSmokeResource>()
+const mainSmokeResource: TrackedSmokeResource = { rootPath, sessionName, panePid: null }
+trackedSmokeResources.add(mainSmokeResource)
 
 function tmuxSessionExists(targetSessionName: string): boolean {
   const result = run("tmux", ["has-session", "-t", targetSessionName], { timeout: 2_000 })
@@ -258,28 +267,8 @@ function expectTmuxSessionExited(targetSessionName: string, context: string, tim
 function assertPostAutosaveQuitRoute(route: "q" | "C-c"): void {
   const routeRootPath = mkdtempSync(path.join(tmpdir(), `bluenote-opentui-${route}-route-`))
   const routeSessionName = `bluenote-opentui-${route}-route-${process.pid}`
-  let routePanePid: number | null = null
-
-  const killRouteTuiProcess = (): void => {
-    if (routePanePid === null) {
-      return
-    }
-    for (const signal of ["SIGTERM", "SIGKILL"] as const) {
-      try {
-        process.kill(-routePanePid, signal)
-      } catch {
-        // The pane process may not be its own process group leader in all tmux builds.
-      }
-      try {
-        process.kill(routePanePid, signal)
-      } catch {
-        // Already exited.
-      }
-      if (signal === "SIGTERM") {
-        waitWithoutSmokeDeadline(100)
-      }
-    }
-  }
+  const routeSmokeResource: TrackedSmokeResource = { rootPath: routeRootPath, sessionName: routeSessionName, panePid: null }
+  trackedSmokeResources.add(routeSmokeResource)
 
   try {
     const initResult = run("bun", ["run", "./bin/bn.ts", "init"], { env: { BLUENOTE_ROOT: routeRootPath } })
@@ -311,7 +300,7 @@ function assertPostAutosaveQuitRoute(route: "q" | "C-c"): void {
     const panePidResult = run("tmux", ["display-message", "-p", "-t", routeSessionName, "#{pane_pid}"])
     if (panePidResult.status === 0) {
       const parsedPanePid = Number.parseInt(panePidResult.stdout.trim(), 10)
-      routePanePid = Number.isFinite(parsedPanePid) ? parsedPanePid : null
+      routeSmokeResource.panePid = Number.isFinite(parsedPanePid) ? parsedPanePid : null
     }
 
     capturePaneUntil(routeSessionName, `${route} route manager launch`, "Rebuild idle", 30)
@@ -337,28 +326,26 @@ function assertPostAutosaveQuitRoute(route: "q" | "C-c"): void {
     expectLatestScreen(managerPane, "Rebuild idle", autosaveToken, `${route} route return to manager latest screen`)
     sendKeys(routeSessionName, route)
     expectTmuxSessionExited(routeSessionName, `${route} route exits from manager after autosave`)
-    routePanePid = null
+    routeSmokeResource.panePid = null
   } finally {
-    killRouteTuiProcess()
-    run("tmux", ["kill-session", "-t", routeSessionName], { timeout: 2_000 })
-    killRouteTuiProcess()
-    rmSync(routeRootPath, { recursive: true, force: true })
+    cleanupTrackedSmokeResource(routeSmokeResource)
+    trackedSmokeResources.delete(routeSmokeResource)
   }
 }
 
-function killTuiProcess(): void {
-  if (tuiPanePid === null) {
+function killTrackedTuiProcess(resource: TrackedSmokeResource): void {
+  if (resource.panePid === null) {
     return
   }
 
   for (const signal of ["SIGTERM", "SIGKILL"] as const) {
     try {
-      process.kill(-tuiPanePid, signal)
+      process.kill(-resource.panePid, signal)
     } catch {
       // The pane process may not be its own process group leader in all tmux builds.
     }
     try {
-      process.kill(tuiPanePid, signal)
+      process.kill(resource.panePid, signal)
     } catch {
       // Already exited.
     }
@@ -368,15 +355,22 @@ function killTuiProcess(): void {
   }
 }
 
+function cleanupTrackedSmokeResource(resource: TrackedSmokeResource): void {
+  killTrackedTuiProcess(resource)
+  run("tmux", ["kill-session", "-t", resource.sessionName], { timeout: 2_000 })
+  killTrackedTuiProcess(resource)
+  rmSync(resource.rootPath, { recursive: true, force: true })
+}
+
 function cleanup(): void {
   if (cleanedUp) {
     return
   }
   cleanedUp = true
-  killTuiProcess()
-  run("tmux", ["kill-session", "-t", sessionName], { timeout: 2_000 })
-  killTuiProcess()
-  rmSync(rootPath, { recursive: true, force: true })
+  for (const resource of [...trackedSmokeResources].reverse()) {
+    cleanupTrackedSmokeResource(resource)
+    trackedSmokeResources.delete(resource)
+  }
 }
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
@@ -437,7 +431,7 @@ try {
   const panePidResult = run("tmux", ["display-message", "-p", "-t", sessionName, "#{pane_pid}"])
   if (panePidResult.status === 0) {
     const parsedPanePid = Number.parseInt(panePidResult.stdout.trim(), 10)
-    tuiPanePid = Number.isFinite(parsedPanePid) ? parsedPanePid : null
+    mainSmokeResource.panePid = Number.isFinite(parsedPanePid) ? parsedPanePid : null
   }
 
   wait(1_500, "launch")
