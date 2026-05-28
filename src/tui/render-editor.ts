@@ -28,19 +28,23 @@ export type EditorShortcutViewModel = ShortcutHint & { order: number }
 
 export interface EditorTopbarViewModel {
   noteName: string
+  titleIntent: TuiColorIntent
   directoryPath: string
   filename: string
   fullPath: string
   pathSeparator: "|"
   updatedSeparator: "|"
+  metadataIntent: TuiColorIntent
   fullPathIntent: TuiColorIntent
   relativePath: string
   key: string
   dirty: boolean
   saveStatusLabel: string
+  statusLabel: string
   statusIntent: TuiColorIntent
   updatedLabel: string
   updatedIntent: TuiColorIntent
+  cursorLabel: string
 }
 
 export interface EditorBodyViewModel {
@@ -53,6 +57,10 @@ export interface EditorBodyViewModel {
   cursor: { line: number; column: number }
   wrapMode: "word" | "none"
   overflow: EditorOverflowViewModel
+  margin: { top: number; x: number }
+  textIntent: TuiColorIntent
+  placeholderIntent: TuiColorIntent
+  cursorIntent: TuiColorIntent
 }
 
 export interface EditorOverflowViewModel {
@@ -184,7 +192,7 @@ function editorSaveStatusLabel(editor: EditorBufferWithAutosave | null, dirty: b
     case "pending":
       return "Unsaved"
     case "saving":
-      return "Saving"
+      return "Saving…"
     case "saved":
       return "Saved"
     case "error":
@@ -217,7 +225,22 @@ function updatedLabelFor(note: NoteWithEditorMetadata | null | undefined): strin
     return candidateTime > currentTime ? candidate : currentLatest
   })
 
-  return `${latest.label} ${latest.value}`
+  return `${latest.label} ${humanizeTimestamp(latest.value)}`
+}
+
+function humanizeTimestamp(value: string): string {
+  const time = Date.parse(value)
+  if (Number.isNaN(time)) {
+    return value
+  }
+
+  const date = new Date(time)
+  const month = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" }).format(date)
+  const day = date.getUTCDate()
+  const year = date.getUTCFullYear()
+  const hour = date.getUTCHours().toString().padStart(2, "0")
+  const minute = date.getUTCMinutes().toString().padStart(2, "0")
+  return `${month} ${day}, ${year}, ${hour}:${minute} UTC`
 }
 
 function editorShortcuts(): EditorShortcutViewModel[] {
@@ -305,6 +328,7 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
 
   const cursor = editor ? editorCursorPosition(editor, editorCursorOffset(editor)) : { line: 1, column: 1 }
   const cursorLabel = `Line ${cursor.line}, Col ${cursor.column}`
+  const compactCursorLabel = `Ln ${cursor.line}, Col ${cursor.column}`
   const wrapStatusLabel = (editor?.wrapMode ?? "word") === "word" ? "Enabled" : "Disabled"
   const wrapStatusIntent: TuiColorIntent = wrapStatusLabel === "Enabled" ? "success" : "danger"
   const wrapPrefixLabel = "Wrap word: "
@@ -316,19 +340,23 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
   return {
     topbar: {
       noteName: note?.title ?? "No note open",
+      titleIntent: "textPrimary",
       directoryPath: directoryPathFor(relativePath),
       filename: filenameFor(relativePath),
       fullPath: relativePath,
       pathSeparator: "|",
       updatedSeparator: "|",
+      metadataIntent: "mutedText",
       fullPathIntent: "mutedText",
       relativePath,
       key: note?.key ?? "",
       dirty,
       saveStatusLabel,
+      statusLabel: errorLabel ?? saveStatusLabel,
       statusIntent,
       updatedLabel,
       updatedIntent: "mutedText",
+      cursorLabel: compactCursorLabel,
     },
     find: findMode
       ? {
@@ -363,6 +391,10 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
       cursor,
       wrapMode: editor?.wrapMode ?? "word",
       overflow,
+      margin: { top: 1, x: 2 },
+      textIntent: "textPrimary",
+      placeholderIntent: "mutedText",
+      cursorIntent: "borderFocus",
     },
     bottombar: {
       row1: {
@@ -397,7 +429,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   const screenHeight = rendererSize.height ?? rendererSize.terminalHeight ?? 24
   const state = options.controller.getState()
   const findBarRows = state.mode === "editor.find" ? 5 : 0
-  const bodyViewportLines = Math.max(1, screenHeight - 1 - findBarRows - 2 - 4)
+  const bodyViewportLines = Math.max(1, screenHeight - 1 - findBarRows - 2 - 4 - 1)
   const vm = buildEditorViewModel(state, { width: Math.max(0, screenWidth - 4), bodyViewportLines })
   const editorState = state.editor
   const root = new BoxRenderable(options.renderer, {
@@ -421,7 +453,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     content: ` ${vm.topbar.noteName} `,
     width: vm.topbar.noteName.length + 2,
     height: 1,
-    fg: tuiTheme.textPrimary,
+    fg: tuiTheme[vm.topbar.titleIntent],
     bg: tuiTheme.panel,
   }))
   topbar.add(new TextRenderable(options.renderer, {
@@ -429,7 +461,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     content: `${vm.topbar.pathSeparator} `,
     width: 2,
     height: 1,
-    fg: tuiTheme.mutedText,
+    fg: tuiTheme[vm.topbar.metadataIntent],
     bg: tuiTheme.panel,
   }))
   topbar.add(new TextRenderable(options.renderer, {
@@ -451,7 +483,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     content: ` ${vm.topbar.updatedSeparator} `,
     width: 3,
     height: 1,
-    fg: tuiTheme.mutedText,
+    fg: tuiTheme[vm.topbar.metadataIntent],
     bg: tuiTheme.panel,
   }))
   topbar.add(new TextRenderable(options.renderer, {
@@ -460,6 +492,38 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     width: Math.max(1, vm.topbar.updatedLabel.length),
     height: 1,
     fg: tuiTheme[vm.topbar.updatedIntent],
+    bg: tuiTheme.panel,
+  }))
+  topbar.add(new TextRenderable(options.renderer, {
+    id: "bluenote-editor-topbar-separator-status",
+    content: " | ",
+    width: 3,
+    height: 1,
+    fg: tuiTheme[vm.topbar.metadataIntent],
+    bg: tuiTheme.panel,
+  }))
+  topbar.add(new TextRenderable(options.renderer, {
+    id: "bluenote-editor-topbar-cursor",
+    content: vm.topbar.cursorLabel,
+    width: Math.max(1, vm.topbar.cursorLabel.length),
+    height: 1,
+    fg: tuiTheme[vm.topbar.metadataIntent],
+    bg: tuiTheme.panel,
+  }))
+  topbar.add(new TextRenderable(options.renderer, {
+    id: "bluenote-editor-topbar-separator-save",
+    content: " | ",
+    width: 3,
+    height: 1,
+    fg: tuiTheme[vm.topbar.metadataIntent],
+    bg: tuiTheme.panel,
+  }))
+  topbar.add(new TextRenderable(options.renderer, {
+    id: "bluenote-editor-topbar-save-status",
+    content: vm.topbar.statusLabel,
+    width: Math.max(1, vm.topbar.statusLabel.length),
+    height: 1,
+    fg: tuiTheme[vm.topbar.statusIntent],
     bg: tuiTheme.panel,
   }))
 
@@ -475,7 +539,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     content: ` ${vm.bottombar.row1.leftLabel}`,
     width: vm.bottombar.row1.leftLabel.length + 1,
     height: 1,
-    fg: tuiTheme.mutedText,
+    fg: tuiTheme[vm.topbar.metadataIntent],
     bg: tuiTheme.panel,
   }))
   bottombarStatus.add(new BoxRenderable(options.renderer, {
@@ -489,7 +553,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     content: vm.bottombar.row1.centerPrefixLabel,
     width: vm.bottombar.row1.centerPrefixLabel.length,
     height: 1,
-    fg: tuiTheme.mutedText,
+    fg: tuiTheme[vm.topbar.metadataIntent],
     bg: tuiTheme.panel,
   }))
   bottombarStatus.add(new TextRenderable(options.renderer, {
@@ -527,6 +591,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   let findInput: InputRenderable | null = null
   const bodyPanel = new BoxRenderable(options.renderer, {
     id: vm.body.inputId,
+    flexDirection: "column",
     width: "100%",
     height: "100%",
     flexGrow: 1,
@@ -534,7 +599,32 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     minHeight: 1,
     overflow: "hidden",
     border: false,
-    backgroundColor: tuiTheme.panel,
+    backgroundColor: tuiTheme.background,
+  })
+  const bodyTopMargin = new BoxRenderable(options.renderer, {
+    id: "bluenote-editor-body-margin-top",
+    width: "100%",
+    height: vm.body.margin.top,
+    backgroundColor: tuiTheme.background,
+  })
+  const bodyContentRow = new BoxRenderable(options.renderer, {
+    id: "bluenote-editor-body-content-row",
+    flexDirection: "row",
+    width: "100%",
+    height: "100%",
+    flexGrow: 1,
+    flexShrink: 1,
+    minHeight: 1,
+    overflow: "hidden",
+    backgroundColor: tuiTheme.background,
+  })
+  const bodyLeftMargin = new TextRenderable(options.renderer, {
+    id: "bluenote-editor-body-margin-left",
+    content: " ".repeat(vm.body.margin.x),
+    width: vm.body.margin.x,
+    height: "100%",
+    fg: tuiTheme[vm.body.placeholderIntent],
+    bg: tuiTheme.background,
   })
   const bodyDisplay = new TextRenderable(options.renderer, {
     id: "bluenote-editor-body",
@@ -543,10 +633,13 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     flexGrow: 1,
     flexShrink: 1,
     wrapMode: vm.body.wrapMode,
-    fg: vm.body.value.length > 0 ? undefined : tuiTheme.mutedText,
-    bg: tuiTheme.panel,
+    fg: vm.body.value.length > 0 ? undefined : tuiTheme[vm.body.placeholderIntent],
+    bg: tuiTheme.background,
   })
-  bodyPanel.add(bodyDisplay)
+  bodyContentRow.add(bodyLeftMargin)
+  bodyContentRow.add(bodyDisplay)
+  bodyPanel.add(bodyTopMargin)
+  bodyPanel.add(bodyContentRow)
   bodyDisplay.scrollY = editorScrollTopFor(vm.body.lineCount, vm.body.cursor.line, bodyViewportLines)
 
   root.add(topbar)

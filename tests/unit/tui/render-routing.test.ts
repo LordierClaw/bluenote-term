@@ -505,6 +505,8 @@ describe("TUI render keyboard routing", () => {
       const shortcutRow = findById(screen, "bluenote-editor-bottombar-shortcuts") as { content?: any } | undefined
       const wrapStatus = findById(screen, "bluenote-editor-bottombar-wrap-status") as { content?: any; fg?: string } | undefined
       const saveStatus = findById(screen, "bluenote-editor-bottombar-save-status") as { content?: any; fg?: string } | undefined
+      const topbarCursor = findById(screen, "bluenote-editor-topbar-cursor") as { content?: any; fg?: string } | undefined
+      const topbarSaveStatus = findById(screen, "bluenote-editor-topbar-save-status") as { content?: any; fg?: string } | undefined
 
       assert.deepEqual(topbarChildren.map((child: any) => child.id), [
         "bluenote-editor-topbar-title",
@@ -513,12 +515,20 @@ describe("TUI render keyboard routing", () => {
         "bluenote-editor-topbar-spacer",
         "bluenote-editor-topbar-separator-updated",
         "bluenote-editor-topbar-updated",
+        "bluenote-editor-topbar-separator-status",
+        "bluenote-editor-topbar-cursor",
+        "bluenote-editor-topbar-separator-save",
+        "bluenote-editor-topbar-save-status",
       ])
       assert.equal(path?.content?.chunks?.[0]?.text ?? path?.content, "notes/inbox/daily.md")
       assert.deepEqual((path as any)?.fg?.toInts?.(), [148, 163, 184, 255])
       assert.equal(topbarSpacer?.yogaNode?.getFlexGrow?.(), 1)
-      assert.equal(updated?.content?.chunks?.[0]?.text ?? updated?.content, "Updated 2026-05-28T10:30:00.000Z")
+      assert.equal(updated?.content?.chunks?.[0]?.text ?? updated?.content, "Updated May 28, 2026, 10:30 UTC")
       assert.deepEqual((updated as any)?.fg?.toInts?.(), [148, 163, 184, 255])
+      assert.equal(topbarCursor?.content?.chunks?.[0]?.text ?? topbarCursor?.content, "Ln 1, Col 5")
+      assert.deepEqual((topbarCursor as any)?.fg?.toInts?.(), [148, 163, 184, 255])
+      assert.equal(topbarSaveStatus?.content?.chunks?.[0]?.text ?? topbarSaveStatus?.content, "Saved")
+      assert.deepEqual((topbarSaveStatus as any)?.fg?.toInts?.(), [34, 197, 94, 255])
       assert.ok(statusRow)
       assert.equal(wrapStatus?.content?.chunks?.[0]?.text ?? wrapStatus?.content, "Enabled")
       assert.deepEqual((wrapStatus as any)?.fg?.toInts?.(), [34, 197, 94, 255])

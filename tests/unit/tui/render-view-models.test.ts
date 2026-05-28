@@ -608,6 +608,10 @@ describe("TUI render view models", () => {
       statusIntent: "success",
       updatedLabel: "Updated unknown",
       updatedIntent: "mutedText",
+      titleIntent: "textPrimary",
+      metadataIntent: "mutedText",
+      statusLabel: "Saved",
+      cursorLabel: "Ln 3, Col 23",
     })
     assert.deepEqual(vm.body, {
       inputId: "bluenote-editor-body-input",
@@ -619,6 +623,10 @@ describe("TUI render view models", () => {
       cursor: { line: 3, column: 23 },
       wrapMode: "word",
       overflow: { above: false, below: false, indicator: "" },
+      margin: { top: 1, x: 2 },
+      textIntent: "textPrimary",
+      placeholderIntent: "mutedText",
+      cursorIntent: "borderFocus",
     })
     assert.equal(vm.find, null)
     assert.deepEqual(vm.bottombar.row1, {
@@ -656,8 +664,8 @@ describe("TUI render view models", () => {
     assert.equal(dirtyVm.bottombar.row1.rightIntent, "warning")
 
     const autosaveVm = buildEditorViewModel({ ...baseState, screen: "editor", editor: { ...baseState.editor!, autosaveStatus: "saving" } as TuiState["editor"] })
-    assert.equal(autosaveVm.topbar.saveStatusLabel, "Saving")
-    assert.equal(autosaveVm.bottombar.row1.rightLabel, "Saving")
+    assert.equal(autosaveVm.topbar.saveStatusLabel, "Saving…")
+    assert.equal(autosaveVm.bottombar.row1.rightLabel, "Saving…")
     assert.equal(autosaveVm.topbar.statusIntent, "warning")
     assert.equal(autosaveVm.bottombar.row1.rightIntent, "warning")
   })
@@ -676,9 +684,40 @@ describe("TUI render view models", () => {
       },
     })
 
-    assert.equal(vm.topbar.updatedLabel, "Updated 2026-05-28T10:30:00.000Z")
+    assert.equal(vm.topbar.updatedLabel, "Updated May 28, 2026, 10:30 UTC")
     assert.equal(vm.topbar.updatedIntent, "mutedText")
     assert.notEqual(vm.topbar.updatedLabel, "Updated unknown")
+  })
+
+  test("editor writing polish keeps metadata calm, margins intentional, and shortcuts compressed while typing", () => {
+    const vm = buildEditorViewModel({ ...baseState, screen: "editor", mode: "editor.body" }, { width: 48 })
+
+    assert.deepEqual(
+      {
+        titleIntent: vm.topbar.titleIntent,
+        metadataIntent: vm.topbar.metadataIntent,
+        fullPathIntent: vm.topbar.fullPathIntent,
+        updatedIntent: vm.topbar.updatedIntent,
+        statusIntent: vm.topbar.statusIntent,
+        bodyTextIntent: vm.body.textIntent,
+        cursorIntent: vm.body.cursorIntent,
+        margin: vm.body.margin,
+      },
+      {
+        titleIntent: "textPrimary",
+        metadataIntent: "mutedText",
+        fullPathIntent: "mutedText",
+        updatedIntent: "mutedText",
+        statusIntent: "success",
+        bodyTextIntent: "textPrimary",
+        cursorIntent: "borderFocus",
+        margin: { top: 1, x: 2 },
+      },
+    )
+    assert.equal(vm.topbar.statusLabel, "Saved")
+    assert.equal(vm.topbar.cursorLabel, "Ln 3, Col 23")
+    assert.deepEqual(vm.bottombar.row2.visibleShortcuts, ["[Ctrl+S] Save", "[Ctrl+F] Find", "[Alt+Z] Wrap"])
+    assert.equal(vm.bottombar.row2.hiddenShortcutCount, 2)
   })
 
   test("editor find prompt is a quiet task sheet with query, match count, and find-specific actions", () => {
@@ -771,7 +810,7 @@ describe("TUI render view models", () => {
 
     assert.equal(vm.topbar.directoryPath, "notes/projects/client")
     assert.equal(vm.topbar.filename, "client-brief.md")
-    assert.equal(vm.topbar.updatedLabel, "Modified 2026-05-28T11:45:00.000Z")
+    assert.equal(vm.topbar.updatedLabel, "Modified May 28, 2026, 11:45 UTC")
   })
 
   test("editor bottom bar displays autosave status labels", () => {
@@ -794,7 +833,7 @@ describe("TUI render view models", () => {
       })),
       [
         { saveStatusLabel: "Unsaved", saveStatusIntent: "warning", errorLabel: null },
-        { saveStatusLabel: "Saving", saveStatusIntent: "warning", errorLabel: null },
+        { saveStatusLabel: "Saving…", saveStatusIntent: "warning", errorLabel: null },
         { saveStatusLabel: "Saved", saveStatusIntent: "success", errorLabel: null },
         { saveStatusLabel: "Unsaved", saveStatusIntent: "danger", errorLabel: "Autosave failed" },
       ],
