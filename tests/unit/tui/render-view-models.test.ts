@@ -95,7 +95,7 @@ describe("TUI render view models", () => {
     })
     assert.equal(vm.panels.layout1.title, "notes/")
     assert.equal(vm.panels.layout2.title, "daily-plan.md")
-    assert.equal(vm.status, "notes/inbox/daily-plan.md")
+    assert.equal(vm.status, "Ready")
     assert.deepEqual(vm.shortcuts, ["↑↓ move", "→/Enter open", "n new", "d delete", "/ filter", "s search", "p preview hide", "Esc back", "q quit"])
     const creatingVm = buildManagerViewModel({
       ...baseState,
@@ -180,7 +180,7 @@ describe("TUI render view models", () => {
       manager: { ...baseState.manager, status: "Latest Updated: unknown" },
     })
     assert.equal(noOpenNoteVm.topbar.bottomPath, "")
-    assert.equal(noOpenNoteVm.status, "")
+    assert.equal(noOpenNoteVm.status, "Latest Updated: unknown")
   })
 
   test("manager focused note and open editor note use separate style intents", () => {

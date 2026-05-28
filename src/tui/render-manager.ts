@@ -307,7 +307,7 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
       preview,
     },
     rows,
-    status: bottomPath,
+    status: appStatusLabel,
     shortcuts: ["↑↓ move", "→/Enter open", "n new", "d delete", "/ filter", "s search", previewHidden ? "p preview show" : "p preview hide", "Esc back", "q quit"],
     createPrompt,
     deletePrompt,
