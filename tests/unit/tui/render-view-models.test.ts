@@ -86,17 +86,16 @@ describe("TUI render view models", () => {
 
     assert.equal(vm.title, "")
     assert.deepEqual(vm.topbar, {
-      brand: "BlueNote",
-      rebuildLabel: "Rebuild idle",
-      indexingLabel: "Index ready",
-      statusText: "2 items · selected daily-plan",
-      currentPath: "notes/",
-      hoveredPath: null,
+      leftTitle: "BlueNote",
+      itemCountLabel: "2 items",
+      appStatusLabel: "Ready",
+      rightLabel: "2 items | Ready",
+      bottomPath: "notes/inbox/daily-plan.md",
       styleIntent: "primaryAccent",
     })
     assert.equal(vm.panels.layout1.title, "notes/")
     assert.equal(vm.panels.layout2.title, "daily-plan.md")
-    assert.equal(vm.status, "2 items · selected daily-plan")
+    assert.equal(vm.status, "notes/inbox/daily-plan.md")
     assert.deepEqual(vm.shortcuts, ["↑↓ move", "→/Enter open", "n new", "d delete", "/ filter", "s search", "p preview hide", "Esc back", "q quit"])
     const creatingVm = buildManagerViewModel({
       ...baseState,
@@ -152,6 +151,36 @@ describe("TUI render view models", () => {
         { key: "daily-plan", type: "note", icon: "📄", styleIntent: "focusedRow", itemStyleIntent: "mutedText", openStyleIntent: "activeItem", metadataStyleIntent: "mutedText" },
       ],
     )
+  })
+
+  test("manager topbar uses filtered count, app status, and bottom path without path or selection clutter", () => {
+    const vm = buildManagerViewModel({
+      ...baseState,
+      manager: {
+        ...baseState.manager,
+        items: [baseState.manager.items[1]!],
+        filterQuery: "daily",
+        status: "Indexing...",
+        currentFolderPath: "notes/inbox",
+        hoveredPath: "notes/inbox/daily-plan.md",
+        selectedNoteKey: "daily-plan",
+      },
+    })
+
+    assert.equal(vm.topbar.leftTitle, "BlueNote")
+    assert.equal(vm.topbar.itemCountLabel, "1 item (filtered)")
+    assert.equal(vm.topbar.appStatusLabel, "Indexing...")
+    assert.equal(vm.topbar.rightLabel, "1 item (filtered) | Indexing...")
+    assert.equal(vm.topbar.bottomPath, "notes/inbox/daily-plan.md")
+    assert.doesNotMatch(vm.topbar.rightLabel, /notes\/|daily-plan|Rebuild idle|Index ready/u)
+
+    const noOpenNoteVm = buildManagerViewModel({
+      ...baseState,
+      editor: null,
+      manager: { ...baseState.manager, status: "Latest Updated: unknown" },
+    })
+    assert.equal(noOpenNoteVm.topbar.bottomPath, "")
+    assert.equal(noOpenNoteVm.status, "")
   })
 
   test("manager focused note and open editor note use separate style intents", () => {
@@ -244,12 +273,11 @@ describe("TUI render view models", () => {
     } as TuiState, browser)
 
     assert.deepEqual(vm.topbar, {
-      brand: "BlueNote",
-      rebuildLabel: "Rebuild idle",
-      indexingLabel: "Index ready",
-      statusText: "2 items · selected daily-plan",
-      currentPath: "notes/",
-      hoveredPath: "notes/projects",
+      leftTitle: "BlueNote",
+      itemCountLabel: "2 items",
+      appStatusLabel: "Ready",
+      rightLabel: "2 items | Ready",
+      bottomPath: "notes/inbox/daily-plan.md",
       styleIntent: "primaryAccent",
     })
     assert.deepEqual(vm.panels, {

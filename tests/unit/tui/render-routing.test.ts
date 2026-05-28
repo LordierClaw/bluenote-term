@@ -645,6 +645,40 @@ describe("TUI render keyboard routing", () => {
     assert.deepEqual(calls, ["toggleManagerPreview", "openSearch:", "toggleSearch:"])
   })
 
+  test("manager renderer prints simplified topbar and open-note bottom path", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const { controller } = createController("manager")
+      const state = controller.getState()
+      state.manager = {
+        items: [{ type: "note", key: "daily-plan", filename: "daily-plan.md", title: "Daily Plan", description: "Today", relativePath: "notes/inbox/daily-plan.md" }],
+        focusedIndex: 0,
+        selectedNoteKey: "daily-plan",
+        currentFolderPath: "notes/inbox",
+        hoveredPath: "notes/inbox/daily-plan.md",
+        filterQuery: "daily",
+        status: "Indexing...",
+      }
+      state.editor = {
+        note: { key: "daily-plan", title: "Daily Plan", description: "Today", relativePath: "notes/inbox/daily-plan.md", body: "Body" },
+        body: "Body",
+        savedBody: "Body",
+        dirty: false,
+      }
+
+      const screen = renderManagerScreen({ renderer, controller, width: 60 })
+      renderer.root.add(screen)
+      const textLines = descendants(screen).map((node) => node.content?.chunks?.[0]?.text ?? node.content ?? "")
+      const renderedText = textLines.join("\n")
+
+      assert.ok(textLines.includes("BlueNote  1 item (filtered) | Indexing..."))
+      assert.match(renderedText, /notes\/inbox\/daily-plan\.md/u)
+      assert.doesNotMatch(renderedText, /Rebuild idle|Index ready|selected daily-plan|notes\/inbox → notes\/inbox\/daily-plan\.md|filter “daily”/u)
+    } finally {
+      renderer.destroy()
+    }
+  })
+
   test("manager renderer removes preview pane at narrow widths and keeps browser rows routable", async () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {

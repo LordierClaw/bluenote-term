@@ -28,12 +28,11 @@ export interface ManagerRowViewModel {
 }
 
 export interface ManagerTopbarViewModel {
-  brand: "BlueNote"
-  rebuildLabel: string
-  indexingLabel: string
-  statusText: string
-  currentPath: string
-  hoveredPath: string | null
+  leftTitle: "BlueNote"
+  itemCountLabel: string
+  appStatusLabel: string
+  rightLabel: string
+  bottomPath: string
   styleIntent: TuiColorIntent
 }
 
@@ -153,14 +152,6 @@ function focusedItemLabel(rows: ManagerRowViewModel[], preview: ManagerPreviewVi
   return focused ? focused.filename.replace(/\/+$/u, "") : "No preview"
 }
 
-function rebuildStatusLabel(): string {
-  return "Rebuild idle"
-}
-
-function indexingStatusLabel(): string {
-  return "Index ready"
-}
-
 function columnsFor(row: BrowserishRow): ManagerRowViewModel["columns"] {
   if ("columns" in row) {
     return { ...row.columns }
@@ -263,16 +254,10 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
       : state.manager.previewVisible === false
         ? hiddenPreview(hoveredPath, "manual")
         : previewViewModelFor(undefined, openNoteKey)
-  const statusParts = [`${rows.length} ${rows.length === 1 ? "item" : "items"}`]
-  if (state.manager.filterQuery) {
-    statusParts.push(`filter “${state.manager.filterQuery}”`)
-  }
-  if (openNoteKey) {
-    statusParts.push(`selected ${openNoteKey}`)
-  }
-  if (state.manager.status) {
-    statusParts.push(state.manager.status)
-  }
+  const itemCountLabel = `${rows.length} ${rows.length === 1 ? "item" : "items"}${state.manager.filterQuery ? " (filtered)" : ""}`
+  const appStatusLabel = state.manager.status?.trim() || "Ready"
+  const rightLabel = `${itemCountLabel} | ${appStatusLabel}`
+  const bottomPath = state.editor?.note.relativePath ?? ""
 
   const currentPath = currentPathLabel(currentFolderPath)
   const createPrompt = state.mode === "manager.create"
@@ -298,18 +283,16 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
       }
     : undefined
 
-  const status = statusParts.join(" · ")
   const previewHidden = preview.type === "hidden" || state.manager.previewVisible === false
 
   return {
     title: "",
     topbar: {
-      brand: "BlueNote",
-      rebuildLabel: rebuildStatusLabel(),
-      indexingLabel: indexingStatusLabel(),
-      statusText: status,
-      currentPath,
-      hoveredPath,
+      leftTitle: "BlueNote",
+      itemCountLabel,
+      appStatusLabel,
+      rightLabel,
+      bottomPath,
       styleIntent: "primaryAccent",
     },
     panels: {
@@ -324,7 +307,7 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
       preview,
     },
     rows,
-    status,
+    status: bottomPath,
     shortcuts: ["↑↓ move", "→/Enter open", "n new", "d delete", "/ filter", "s search", previewHidden ? "p preview show" : "p preview hide", "Esc back", "q quit"],
     createPrompt,
     deletePrompt,
@@ -394,9 +377,8 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     title: vm.title,
   })
 
-  const topbarPath = vm.topbar.hoveredPath ? `${vm.topbar.currentPath} → ${vm.topbar.hoveredPath}` : vm.topbar.currentPath
   root.add(new TextRenderable(options.renderer, {
-    content: `${vm.topbar.brand}  ${vm.topbar.rebuildLabel} | ${vm.topbar.indexingLabel}  ${topbarPath}  ${vm.topbar.statusText}`,
+    content: `${vm.topbar.leftTitle}  ${vm.topbar.rightLabel}`,
     height: 1,
     fg: tuiTheme.primaryAccent,
     bg: tuiTheme.panel,
@@ -556,7 +538,8 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     root.add(deleteBar)
   }
   const previewHiddenHint = preview.type === "hidden" ? `Preview hidden (${preview.reason === "responsive" ? "narrow width" : "manual"}) · p preview show` : null
-  root.add(new TextRenderable(options.renderer, { content: previewHiddenHint ? `${vm.status} · ${previewHiddenHint}` : vm.status, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
+  const bottomStatus = [vm.topbar.bottomPath, previewHiddenHint].filter(Boolean).join(" · ")
+  root.add(new TextRenderable(options.renderer, { content: bottomStatus, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
   root.add(new TextRenderable(options.renderer, { content: vm.shortcuts.join("  "), height: 1, fg: tuiTheme.secondaryAccent, bg: tuiTheme.panel }))
 
   return root
