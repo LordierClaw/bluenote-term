@@ -665,9 +665,9 @@ describe("TUI render view models", () => {
       ],
     )
     assert.deepEqual(vm.results.map((row) => row.styleIntent), ["panel", "focusedRow"])
-    assert.deepEqual(vm.results.map((row) => row.primaryStyleIntent), ["panel", "activeItem"])
-    assert.deepEqual(vm.results.map((row) => row.detailStyleIntent), ["panel", "panel"])
-    assert.deepEqual(vm.results.map((row) => row.typeStyleIntent), ["panel", "panel"])
+    assert.deepEqual(vm.results.map((row) => row.primaryStyleIntent), ["primaryAccent", "activeItem"])
+    assert.deepEqual(vm.results.map((row) => row.detailStyleIntent), ["mutedText", "activeItem"])
+    assert.deepEqual(vm.results.map((row) => row.typeStyleIntent), ["mutedText", "activeItem"])
     assert.deepEqual(vm.preview, {
       visible: true,
       hiddenReason: null,

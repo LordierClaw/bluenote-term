@@ -151,9 +151,9 @@ export function buildSearchEverythingViewModel(
         focusMarker: selected ? "›" : " ",
         selectedMarker: selected ? "›" : " ",
         styleIntent: selected ? "focusedRow" : styleIntents.result,
-        typeStyleIntent: styleIntents.result,
-        primaryStyleIntent: selected ? styleIntents.selectedResult : styleIntents.result,
-        detailStyleIntent: styleIntents.result,
+        typeStyleIntent: selected ? styleIntents.selectedResult : "mutedText",
+        primaryStyleIntent: selected ? styleIntents.selectedResult : "primaryAccent",
+        detailStyleIntent: selected ? styleIntents.selectedResult : "mutedText",
       }
     }),
     preview: previewVisible
@@ -171,12 +171,11 @@ export function buildSearchEverythingViewModel(
 export interface RenderSearchEverythingScreenOptions {
   renderer: CliRenderer
   controller: WorkspaceController
-  height?: number
   onInvalidate?: () => void
 }
 
 export function renderSearchEverythingScreen(options: RenderSearchEverythingScreenOptions): BoxRenderable {
-  const vm = buildSearchEverythingViewModel(options.controller.getState(), options.controller.getSearchResults(), { height: options.height })
+  const vm = buildSearchEverythingViewModel(options.controller.getState(), options.controller.getSearchResults())
   const root = new BoxRenderable(options.renderer, {
     id: "bluenote-search-everything-screen",
     flexDirection: "column",
@@ -246,9 +245,9 @@ export function renderSearchEverythingScreen(options: RenderSearchEverythingScre
   for (const row of vm.results) {
     resultsRegion.add(
       new TextRenderable(options.renderer, {
-        content: `${row.focusMarker} [${row.typeLabel}] ${row.primaryLabel} — ${row.detail}`,
+        content: `${row.focusMarker} [${row.kind}] ${row.label} — ${row.detail}`,
         height: 1,
-        fg: tuiTheme[row.primaryStyleIntent],
+        fg: tuiTheme[row.selected ? vm.styleIntents.selectedResult : row.styleIntent],
         bg: tuiTheme.panel,
       }),
     )
@@ -259,16 +258,12 @@ export function renderSearchEverythingScreen(options: RenderSearchEverythingScre
     for (const line of vm.preview.lines) {
       previewRegion.add(new TextRenderable(options.renderer, { content: line, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
     }
-  } else if (vm.preview && !vm.preview.visible) {
-    previewRegion.add(new TextRenderable(options.renderer, { content: vm.preview.hiddenStatus, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
   } else {
     previewRegion.add(new TextRenderable(options.renderer, { content: "No preview", height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
   }
   root.add(inputRegion)
   root.add(resultsRegion)
-  if (vm.regions.some((region) => region.id === "preview")) {
-    root.add(previewRegion)
-  }
+  root.add(previewRegion)
   root.add(new TextRenderable(options.renderer, { content: vm.shortcuts.join("  "), height: 1, fg: tuiTheme.secondaryAccent, bg: tuiTheme.panel }))
   input.focus()
 
