@@ -49,7 +49,8 @@ function assertMinimalManagerChrome(content: string): void {
 
 function assertDeliveredPhase4BEditorBehavior(content: string): void {
   assert.match(content, /real editor body input|inline body editing|live typing/i)
-  assert.match(content, /visible cursor|cursor marker|cursor/i)
+  assert.match(content, /cursor-aware|cursor position|cursor/i)
+  assert.doesNotMatch(content, /visible cursor marker|custom cursor glyph/i)
   assert.match(content, /Ctrl\+S save|explicit save|save status/i)
   assert.match(content, /autosave status|autosave/i)
   assert.match(content, /Alt\+Z wrap|wrap toggle|wrap mode/i)

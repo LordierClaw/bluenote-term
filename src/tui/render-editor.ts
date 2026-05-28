@@ -485,7 +485,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     flexGrow: 1,
     flexShrink: 1,
     wrapMode: vm.body.wrapMode,
-    fg: vm.body.value.length > 0 ? tuiTheme.primaryAccent : tuiTheme.mutedText,
+    fg: vm.body.value.length > 0 ? undefined : tuiTheme.mutedText,
     bg: tuiTheme.panel,
   })
   bodyPanel.add(bodyDisplay)

@@ -460,6 +460,26 @@ describe("TUI render keyboard routing", () => {
     }
   })
 
+  test("editor body content uses neutral foreground instead of accent coloring", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const controller = createWorkspaceController({
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }),
+        searchNotes: () => [],
+      })
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+      const screen = renderEditorScreen({ renderer, controller })
+      renderer.root.add(screen)
+
+      const bodyDisplay = findById(screen, "bluenote-editor-body") as { fg?: { toInts?: () => number[] } } | undefined
+
+      assert.deepEqual(bodyDisplay?.fg?.toInts?.(), [255, 255, 255, 255])
+    } finally {
+      renderer.destroy()
+    }
+  })
+
   test("editor renderer lays out topbar updated time right and status row with colored labels above shortcuts", async () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
