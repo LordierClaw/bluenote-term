@@ -2,7 +2,7 @@ import { describe, test } from "bun:test"
 import assert from "node:assert/strict"
 import { createCliRenderer } from "@opentui/core"
 
-import { blurWorkspaceInputs, focusActiveWorkspaceInput, routeWorkspaceKey } from "../../../src/tui/app"
+import { blurWorkspaceInputs, focusActiveWorkspaceInput, routeWorkspaceKey, startTuiWorkspace } from "../../../src/tui/app"
 import { renderEditorScreen, routeEditorKey } from "../../../src/tui/render-editor"
 import { renderManagerScreen, routeManagerKey } from "../../../src/tui/render-manager"
 import { renderSearchEverythingScreen, routeSearchEverythingKey } from "../../../src/tui/render-search-everything"
@@ -515,6 +515,27 @@ describe("TUI render keyboard routing", () => {
     assert.deepEqual(calls, ["toggleSearch:"])
   })
 
+  test("Search Everything route toggles preview with Alt+P without stealing printable p input", () => {
+    const { controller, calls } = createController("search")
+
+    assert.equal(routeSearchEverythingKey("\u001bp", controller), true)
+    assert.equal(routeSearchEverythingKey("p", controller), true)
+    controller.getState().search!.query = "p"
+    assert.equal(routeSearchEverythingKey("x", controller), true)
+
+    assert.deepEqual(calls, ["toggleSearchPreview", "updateSearchQuery:p", "updateSearchQuery:px"])
+  })
+
+  test("workspace route keeps Ctrl+P as the global Search Everything overlay toggle", () => {
+    const editor = createController("editor")
+    assert.deepEqual(routeWorkspaceKey("\u0010", editor.controller, () => {}), { handled: true })
+    assert.deepEqual(editor.calls, ["openSearch:"])
+
+    const search = createController("search")
+    assert.deepEqual(routeWorkspaceKey("\u0010", search.controller, () => {}), { handled: true })
+    assert.deepEqual(search.calls, ["toggleSearch:"])
+  })
+
   test("workspace route reports exit without asking caller to rerender", () => {
     const { controller } = createController("manager")
     let exitCount = 0
@@ -769,6 +790,31 @@ describe("TUI render keyboard routing", () => {
       assert.equal(routeSearchEverythingKey("\u001b[B", controller), true)
     } finally {
       renderer.destroy()
+    }
+  })
+
+  test("Search Everything runtime render passes the effective terminal height to the renderer", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      ;(renderer as typeof renderer & { height?: number }).height = 12
+      const controller = createWorkspaceController({
+        listNotes: () => [{ key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md", body: "Preview body" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md", body: "Preview body" }),
+        searchNotes: () => [],
+      })
+      controller.openSearch("daily")
+
+      const running = await startTuiWorkspace({ renderer, controller })
+      const text = descendants(renderer.root).map((node) => node.content?.chunks?.[0]?.text ?? node.content ?? "").join("\n")
+
+      assert.equal(findById(renderer.root, "bluenote-search-preview-region"), undefined)
+      assert.match(text, /Preview hidden for short terminal/u)
+      assert.doesNotMatch(text, /Preview body/u)
+      running.destroy()
+    } finally {
+      if (!renderer.isDestroyed) {
+        renderer.destroy()
+      }
     }
   })
 })

@@ -304,6 +304,9 @@ export function routeSearchEverythingKey(sequence: string, controller: Workspace
     case "\u001b[B":
       controller.focusSearchResult(selectedIndex + 1)
       return true
+    case "\u001bp":
+      controller.toggleSearchPreview()
+      return true
     case "\r":
     case "\n":
       controller.selectSearchResult()

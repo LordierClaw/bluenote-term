@@ -162,10 +162,15 @@ function effectiveWorkspaceWidth(renderer: CliRenderer): number | undefined {
   return (process.stdout.isTTY ? process.stdout.columns : undefined) ?? rendererSize.width ?? rendererSize.terminalWidth
 }
 
+function effectiveWorkspaceHeight(renderer: CliRenderer): number | undefined {
+  const rendererSize = renderer as CliRenderer & { height?: number; terminalHeight?: number }
+  return (process.stdout.isTTY ? process.stdout.rows : undefined) ?? rendererSize.height ?? rendererSize.terminalHeight
+}
+
 function renderWorkspace(renderer: CliRenderer, controller: WorkspaceController, onExit: () => void, onInvalidate: () => void): BoxRenderable {
   const state = controller.getState()
   if (state.screen === "search") {
-    return renderSearchEverythingScreen({ renderer, controller, onInvalidate })
+    return renderSearchEverythingScreen({ renderer, controller, onInvalidate, height: effectiveWorkspaceHeight(renderer) })
   }
 
   if (state.screen === "editor") {
