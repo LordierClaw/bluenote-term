@@ -202,6 +202,61 @@ describe("TUI workspace workflows", () => {
     assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), changedBody)
   })
 
+  test("edit-save-switch-quit workflow persists both edited files", async () => {
+    const alphaSummary = createNote({
+      override: rootPath,
+      title: "Alpha Summary",
+      body: "summary",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    const alphaSource = createNote({
+      override: rootPath,
+      title: "Alpha Source",
+      body: "source",
+      clock: fixedClock("2026-05-26T10:01:00.000Z"),
+    })
+    const beta = createNote({
+      override: rootPath,
+      title: "Beta",
+      body: "beta",
+      clock: fixedClock("2026-05-26T10:02:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerFolderPath(controller, path.dirname(alphaSummary.relativePath))
+    controller.openManagerFilter()
+    controller.updateManagerFilter("Alpha Summary")
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "note" && item.key === alphaSummary.key), true)
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    assert.equal(controller.getState().editor?.note.key, alphaSummary.key)
+    controller.insertEditorText(" saved")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+
+    assert.equal(controller.goBack().blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    controller.openManagerFilter()
+    controller.updateManagerFilter("Alpha Source")
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    assert.equal(controller.getState().editor?.note.key, alphaSource.key)
+    assert.equal(controller.getState().editor?.body, "source")
+
+    assert.equal(controller.goBack().blocked, false)
+    controller.openManagerFilter()
+    controller.updateManagerFilter("Beta")
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    assert.equal(controller.getState().editor?.note.key, beta.key)
+    controller.insertEditorText(" saved")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+
+    assert.equal(controller.requestQuit().blocked, false)
+    assert.equal(await readFile(path.join(rootPath, alphaSummary.relativePath), "utf8"), "summary saved")
+    assert.equal(await readFile(path.join(rootPath, alphaSource.relativePath), "utf8"), "source")
+    assert.equal(await readFile(path.join(rootPath, beta.relativePath), "utf8"), "beta saved")
+    assert.equal(showNote({ override: rootPath, selector: alphaSummary.key }).body, "summary saved")
+    assert.equal(showNote({ override: rootPath, selector: beta.key }).body, "beta saved")
+  })
+
   test("autosave after editor input persists and manager can switch notes without blocking", async () => {
     const first = createNote({
       override: rootPath,

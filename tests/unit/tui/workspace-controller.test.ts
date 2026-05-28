@@ -528,6 +528,94 @@ describe("TUI workspace controller", () => {
     assert.notEqual(controller.getState().editor?.note.key, "daily-plan")
   })
 
+  test("saved editor can switch to other notes and still quit", async () => {
+    const notes = new Map<string, TuiNote>([
+      [
+        "alpha-summary",
+        {
+          key: "alpha-summary",
+          title: "Alpha Summary",
+          description: "Summary",
+          relativePath: "notes/similar/alpha-summary.md",
+          body: "summary",
+        },
+      ],
+      [
+        "alpha-source",
+        {
+          key: "alpha-source",
+          title: "Alpha Source",
+          description: "Source",
+          relativePath: "notes/similar/alpha-source.md",
+          body: "source",
+        },
+      ],
+      [
+        "beta",
+        {
+          key: "beta",
+          title: "Beta",
+          description: "Beta",
+          relativePath: "notes/inbox/beta.md",
+          body: "beta",
+        },
+      ],
+    ])
+    const persisted: string[] = []
+    const controller = createWorkspaceController({
+      listNotes: () => [...notes.values()].map(({ body: _body, ...summary }) => summary),
+      showNote: (selector) => notes.get(selector)!,
+      searchNotes: () => [],
+      persistEditorBody: async (note, body) => {
+        persisted.push(`${note.key}:${body}`)
+        const next = { ...note, body, description: body.split("\n")[0] ?? "" }
+        notes.set(note.key, next)
+        return next
+      },
+      autosaveScheduler: {
+        setTimeout: () => 0,
+        clearTimeout: () => undefined,
+      },
+    })
+
+    controller.refreshManager()
+    const openFolder = (relativePath: string) => {
+      const folderIndex = controller.getState().manager.items.findIndex(
+        (item) => item.type === "folder" && item.relativePath === relativePath,
+      )
+      assert.notEqual(folderIndex, -1)
+      controller.focusManagerItem(folderIndex)
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+    }
+
+    openFolder("notes/similar")
+    controller.openManagerFilter()
+    controller.updateManagerFilter("alpha-summary")
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    controller.insertEditorText(" saved")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+    assert.equal(controller.showManager().blocked, false)
+
+    controller.openManagerFilter()
+    controller.updateManagerFilter("alpha-source")
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    assert.equal(controller.getState().editor?.note.key, "alpha-source")
+
+    assert.equal(controller.showManager().blocked, false)
+    controller.clearManagerFilter()
+    assert.equal(controller.goBack().blocked, false)
+    openFolder("notes/inbox")
+    controller.openManagerFilter()
+    controller.updateManagerFilter("beta")
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    assert.equal(controller.getState().editor?.note.key, "beta")
+    controller.insertEditorText(" saved")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+
+    assert.equal(controller.requestQuit().blocked, false)
+    assert.deepEqual(persisted, ["alpha-summary:summary saved", "beta:beta saved"])
+  })
+
   test("dirty manager note switch is blocked with visible manager status until confirmed", () => {
     const { deps } = createDeps()
     const controller = createWorkspaceController(deps)
