@@ -76,8 +76,26 @@ function assertPhase4CNotAdvertisedUpcoming(content: string): void {
   assert.doesNotMatch(content, /roadmap continues with Phase 4C|continues with Phase 4C/i)
 }
 
-function assertPhase4DNextAfter4C(content: string): void {
-  assert.match(content, /4D[^\n.]*next after 4C|after 4C[^\n.]*4D|next[^\n.]*Phase 4D/i)
+function assertDeliveredPhase4DSearchEverythingBehavior(content: string): void {
+  assert.match(content, /Phase 4D[^\n.]*Search Everything[^\n.]*readability|Phase 4D[^\n.]*Search Everything[^\n.]*responsive/i)
+  assert.match(content, /accepted|delivered|complete/i)
+  assert.match(content, /contains-style|contains style/i)
+  assert.match(content, /readable[^\n.]*typed[^\n.]*results|typed[^\n.]*results[^\n.]*readable/i)
+  assert.match(content, /separated?[^\n.]*preview[^\n.]*sections|preview[^\n.]*sections[^\n.]*separated?/i)
+  assert.match(content, /responsive[^\n.]*preview[^\n.]*auto-hide|preview[^\n.]*auto-hide[^\n.]*responsive|hide preview automatically/i)
+  assert.match(content, /Alt\+P[^\n.]*preview[^\n.]*toggle|preview[^\n.]*toggle[^\n.]*Alt\+P/i)
+  assert.match(content, /safe[^\n.]*unavailable[^\n.]*command[^\n.]*status|command[^\n.]*safe[^\n.]*unavailable[^\n.]*status/i)
+}
+
+function assertPhase4DNotAdvertisedUpcoming(content: string): void {
+  assert.doesNotMatch(content, /Phase 4D[^\n.]*upcoming|upcoming[^\n.]*Phase 4D/i)
+  assert.doesNotMatch(content, /Phase 4D[^\n.]*next after 4C|after 4C[^\n.]*Phase 4D|next[^\n.]*Phase 4D/i)
+  assert.doesNotMatch(content, /does not promise[^\n.]*Phase 4D[^\n.]*implemented/i)
+}
+
+function assertNeutralNextPhaseMarker(content: string): void {
+  assert.match(content, /phase-4-next-hardening-subplan/i)
+  assert.match(content, /4E[^\n.]*not yet planned|not yet planned[^\n.]*4E|scratch[^\n.]*autosave[^\n.]*archive[^\n.]*not yet planned/i)
 }
 
 function assertDataStorageAndContainsSearchContract(content: string): void {
@@ -111,7 +129,9 @@ test("README documents the refined Phase 3 TUI workspace behavior", async () => 
   assertPhase4BNotAdvertisedIncomplete(readme)
   assertDeliveredPhase4CManagerBehavior(readme)
   assertPhase4CNotAdvertisedUpcoming(readme)
-  assertPhase4DNextAfter4C(readme)
+  assertDeliveredPhase4DSearchEverythingBehavior(readme)
+  assertPhase4DNotAdvertisedUpcoming(readme)
+  assertNeutralNextPhaseMarker(readme)
 })
 
 test("product and phase docs describe refined Manager, Editor, and Search Everything Phase 3 scope", async () => {
@@ -136,17 +156,20 @@ test("product and phase docs describe refined Manager, Editor, and Search Everyt
   assertPhase4BNotAdvertisedIncomplete(phase)
   assertDeliveredPhase4CManagerBehavior(phase)
   assertPhase4CNotAdvertisedUpcoming(phase)
-  assertPhase4DNextAfter4C(phase)
+  assertDeliveredPhase4DSearchEverythingBehavior(phase)
+  assertPhase4DNotAdvertisedUpcoming(phase)
+  assertNeutralNextPhaseMarker(phase)
 })
 
-test("smoke contracts cover delivered Phase 4C manager regressions and status metadata", async () => {
+test("smoke contracts cover delivered Phase 4D Search Everything regressions and status metadata", async () => {
   const smoke = await readRepoFile("scripts/smoke-opentui.ts")
   const interactiveSmoke = await readRepoFile("scripts/smoke-opentui-interactive.ts")
 
-  assert.match(smoke, /phase-4c-manager-performance-responsive-layout-style/i)
   assert.match(smoke, /phase-4d-search-everything-readability-responsive-preview/i)
+  assert.match(smoke, /phase-4-next-hardening-subplan/i)
   assertPhase4BNotAdvertisedIncomplete(smoke)
   assertPhase4CNotAdvertisedUpcoming(smoke)
+  assertPhase4DNotAdvertisedUpcoming(smoke)
 
   assert.match(interactiveSmoke, /editor-input-regression-token/)
   assert.match(interactiveSmoke, /cursor-probe/)
@@ -155,7 +178,7 @@ test("smoke contracts cover delivered Phase 4C manager regressions and status me
   assert.match(interactiveSmoke, /Saved/)
 })
 
-test("Phase 4 docs mark 4C delivered and identify Phase 4D as next", async () => {
+test("Phase 4 docs mark 4D delivered and identify neutral hardening follow-up", async () => {
   const docs = await Promise.all([
     readRepoFile("docs/phases/phase-4-search-editing-and-recovery.md"),
     readRepoFile("docs/plans/2026-05-27-phase-4-search-editing-recovery-design.md"),
@@ -164,8 +187,9 @@ test("Phase 4 docs mark 4C delivered and identify Phase 4D as next", async () =>
   for (const content of docs) {
     assertDeliveredPhase4CManagerBehavior(content)
     assertPhase4CNotAdvertisedUpcoming(content)
-    assertPhase4DNextAfter4C(content)
-    assert.match(content, /Phase 4D[^\n.]*Search Everything/i)
+    assertDeliveredPhase4DSearchEverythingBehavior(content)
+    assertPhase4DNotAdvertisedUpcoming(content)
+    assertNeutralNextPhaseMarker(content)
   }
 })
 
@@ -179,6 +203,7 @@ test("runtime docs identify OpenTUI as the refined Phase 3 workspace runtime", a
   assert.match(runtime, /Editor/i)
   assert.match(runtime, /Search Everything/i)
   assertRefinedTuiBehavior(runtime)
+  assertDeliveredPhase4DSearchEverythingBehavior(runtime)
 })
 
 test("active docs describe canonical data storage and contains search contracts", async () => {

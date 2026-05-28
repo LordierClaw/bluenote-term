@@ -34,7 +34,8 @@ Phase 4 has one umbrella design and smaller sequential implementation plans:
 1. **4A — `.data` migration + search correctness/performance foundation**
 2. **4B — Editor input/cursor/responsive chrome**
 3. **4C — Manager performance/responsive layout/style** — accepted and delivered
-4. **4D — Search Everything correctness/readability/responsive preview** — next after 4C
+4. **4D — Search Everything correctness/readability/responsive preview** — accepted and delivered
+5. **phase-4-next-hardening-subplan** — neutral follow-up marker until an approved 4E/scratch/autosave/archive hardening subplan exists
 
 ### 4A — `.data` migration + search correctness/performance foundation
 
@@ -62,7 +63,7 @@ Primary outcomes:
 
 ### 4C — Manager performance/responsive layout/style
 
-Implementation note (2026-05-28): Phase 4C Manager performance/responsive layout/style is accepted and delivered. The delivered Manager keeps minimal Manager chrome, uses current path and focused item context plus compact action hints instead of banner framing, caches/avoids preview work where possible, hides preview automatically on narrow terminal widths, and exposes a manual preview toggle. Phase 4D is next after 4C and remains scoped to Search Everything readability/responsiveness and responsive preview behavior.
+Implementation note (2026-05-28): Phase 4C Manager performance/responsive layout/style is accepted and delivered. The delivered Manager keeps minimal Manager chrome, uses current path and focused item context plus compact action hints instead of banner framing, caches/avoids preview work where possible, hides preview automatically on narrow terminal widths, and exposes a manual preview toggle.
 
 Primary outcomes:
 
@@ -77,6 +78,8 @@ Primary outcomes:
 - Remove unnecessary Layout 2 preview padding.
 
 ### 4D — Search Everything correctness/readability/responsive preview
+
+Implementation note (2026-05-28): Phase 4D Search Everything readability/responsive preview is accepted and delivered. The delivered Search Everything surface uses contains-style matching, readable typed results for note/content/folder/command rows, visually separated preview sections, responsive preview auto-hide when terminal height is constrained, a manual `Alt+P` preview toggle, and safe unavailable command status for command results without wired handlers. The current neutral follow-up marker is `phase-4-next-hardening-subplan`; 4E/scratch/autosave/archive hardening is not yet planned in an approved subplan.
 
 Primary outcomes:
 

@@ -11,7 +11,7 @@ BlueNote is a terminal-native note tool optimized for fast local capture, search
 
 ## Current delivered scope
 
-Delivered by the distinct Phase 2 CLI storage/UX pivot, Phase 3 TUI workspace, and Phase 4A `.data`/contains-search foundation:
+Delivered by the distinct Phase 2 CLI storage/UX pivot, Phase 3 TUI workspace, Phase 4A `.data`/contains-search foundation, Phase 4B editor input/cursor/responsive chrome, Phase 4C Manager performance/responsive layout/style, and Phase 4D Search Everything readability/responsive preview work:
 
 - managed root initialization
 - plain Markdown note storage plus `.data/notes/` sidecars
@@ -28,9 +28,11 @@ Delivered by the distinct Phase 2 CLI storage/UX pivot, Phase 3 TUI workspace, a
 
 The TUI workspace launches with `bn tui` and is intentionally split into separate screens. It uses a restrained blue palette for focus, active items, muted secondary text, and consistent top/bottom chrome rather than broad state-by-color presentation rules:
 
-- **Manager:** a minimal Manager screen with a two-column browser/preview model over CLI-compatible note summaries, paths, keys, titles, and descriptions. Its chrome stays contextual: current folder path, focused item/hovered path, and short action hints for move, open, filter, back, and quit. Right/open navigates into folders or opens notes; left/back returns to the previous folder or screen; `n` creates a new note; `d` deletes the focused note only after confirmation.
+- **Manager:** a minimal Manager screen with a responsive two-column browser/preview model over CLI-compatible note summaries, paths, keys, titles, and descriptions. Phase 4C Manager performance/responsive layout/style is accepted and delivered: chrome stays contextual around the current folder path, focused item/hovered path, rebuild/index status, short action hints, cached/avoidable preview work, preview auto-hide, and a manual preview toggle. Right/open navigates into folders or opens notes; left/back returns to the previous folder or screen; `n` creates a new note; `d` deletes the focused note only after confirmation.
 - **Editor:** focused inline editing of the selected plain Markdown note body. Current wired Phase 3 behavior includes live typing/input regression coverage, Unicode-safe buffer updates, save, dirty-state handling, `Ctrl+F` find mode, and 750ms autosave with stale-completion guards. Select-all and cut/copy/paste remain adapter/controller groundwork for follow-on runtime wiring. The Editor does not add metadata frontmatter to note files.
-- **Search Everything:** global note/content/folder search plus slash-prefixed command entries for workspace/action discovery, presented as a single input, result list, and preview. `/save` is wired as a built-in runtime action; the other command entries are discoverable adapter outputs until command handlers are connected.
+- **Search Everything:** global note/content/folder search plus slash-prefixed command entries for workspace/action discovery, presented as a single input, result list, and preview. Phase 4D Search Everything readability/responsive preview is accepted and delivered: it keeps contains-style semantics, readable typed results, separated preview sections, responsive preview auto-hide, a manual `Alt+P` preview toggle, and safe unavailable command status for commands without wired handlers. `/save` is wired as a built-in runtime action; the other command entries are discoverable adapter outputs until command handlers are connected.
+
+The current neutral follow-up marker is `phase-4-next-hardening-subplan`; 4E/scratch/autosave/archive hardening is not yet planned in an approved subplan and is not delivered.
 
 Across screens, `Escape` and `Ctrl+[` apply the same back rule: close the active mode or overlay first, then return to the prior screen/folder toward the root manager. Quitting remains an explicit `q` or `Ctrl+C` action.
 

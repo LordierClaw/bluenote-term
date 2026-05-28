@@ -12,7 +12,7 @@ The workspace is launched with `bn tui` and remains a presentation/input layer o
 - beautiful, elegant full-screen layout with a restrained blue palette and command/status chrome
 - separate **Manager**, **Editor**, and **Search Everything** screens instead of one overloaded pane
 - Manager screen backed by the same note list/selectors as the CLI, with accepted Phase 4C Manager performance/responsive layout/style refinements
-- Search Everything screen backed by the same indexed search service as `bn search`, including notes, content excerpts, folders/paths, and slash-prefixed command entries
+- Search Everything screen backed by the same indexed search service as `bn search`, including notes, content excerpts, folders/paths, and slash-prefixed command entries, with accepted Phase 4D readability/responsive preview refinements
 - focused inline Editor screen for everyday writing, saving, visible cursor movement, Unicode text, wrap mode, responsive status chrome, and dirty-state handling, with tested adapter/controller groundwork for selection, cut/copy/paste, and find/replace
 - command discovery for available CLI-shaped workflows, with only `/save` wired as a built-in TUI action until the remaining command handlers are connected
 - graceful startup, no-root, no-TTY, unsupported-terminal, and shutdown behavior
@@ -29,7 +29,7 @@ The Editor is a focused note-body surface with only the TUI topbar, editor body,
 
 ### Search Everything
 
-Search Everything is a global screen/overlay that can be opened from the Manager or Editor and cancelled back to the invoking screen. It uses a single input, result list, and preview to search notes by title/key/filename/path/description, content matches from the existing search index, folder/path results, and slash-prefixed command entries such as `/new`, `/archive`, `/delete`, `/rebuild`, `/migrate`, `/find`, `/replace`, and `/save`. These entries support command discovery; in the current runtime, only `/save` is wired as a built-in action and the others need explicit command handlers before they mutate notes.
+Search Everything is a global screen/overlay that can be opened from the Manager or Editor and cancelled back to the invoking screen. It uses a single input, result list, and preview to search notes by title/key/filename/path/description, content matches from the existing search index, folder/path results, and slash-prefixed command entries such as `/new`, `/archive`, `/delete`, `/rebuild`, `/migrate`, `/find`, `/replace`, and `/save`. Phase 4D Search Everything readability/responsive preview is accepted and delivered: matching uses the contains-style contract, typed results remain readable, preview content is arranged into separated preview sections, responsive preview auto-hide engages when height is constrained, and the manual `Alt+P` preview toggle hides or restores the preview when space allows. These entries support command discovery; in the current runtime, only `/save` is wired as a built-in action and the others need explicit command handlers before they mutate notes, showing a safe unavailable command status when selected without a handler.
 
 ## Back and visual rules
 
@@ -47,4 +47,4 @@ CLI completion remains shell setup, not a TUI action. Users install completions 
 
 ## Phase 4 follow-up status
 
-Phase 4A, 4B, and 4C are accepted follow-up refinements on top of this Phase 3 workspace. After 4C, Phase 4D is next for Search Everything readability/responsiveness and responsive preview behavior; this Phase 3 document does not promise that Phase 4D work is implemented yet.
+Phase 4A, 4B, 4C, and 4D are accepted follow-up refinements on top of this Phase 3 workspace. The current neutral follow-up marker is `phase-4-next-hardening-subplan`; 4E/scratch/autosave/archive hardening is not yet planned in an approved subplan and is not delivered by this Phase 3 document.
