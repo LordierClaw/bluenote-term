@@ -149,13 +149,19 @@ describe("TUI render view models", () => {
     })
     assert.deepEqual(creatingVm.createPrompt, {
       visible: true,
+      sheetTitle: "New note",
+      description: "Create a Markdown note in this workspace.",
+      destinationLabel: "Create in: notes/",
+      inputLabel: "Title:",
       title: "Project Plan",
       status: "Title required",
       inputId: "bluenote-manager-create-title",
       placeholder: "Note title…",
       focused: true,
-      styleIntent: "secondaryAccent",
-      statusIntent: "mutedText",
+      styleIntent: "borderFocus",
+      surfaceIntent: "surfacePanelRaised",
+      statusIntent: "warning",
+      actions: ["[Enter] Create", "[Esc] Cancel"],
     })
     assert.equal(Number(creatingVm.createPrompt?.focused), 1)
     const deletingVm = buildManagerViewModel({
@@ -174,10 +180,18 @@ describe("TUI render view models", () => {
     assert.deepEqual(deletingVm.deletePrompt, {
       visible: true,
       key: "daily-plan",
+      sheetTitle: "Delete note?",
       title: "Daily Plan",
       relativePath: "notes/inbox/daily-plan.md",
+      consequenceLines: [
+        "Deletes the Markdown file and BlueNote sidecar metadata.",
+        "This cannot be undone.",
+      ],
       status: null,
       styleIntent: "danger",
+      surfaceIntent: "surfacePanelRaised",
+      statusIntent: "danger",
+      actions: ["[y] Delete", "[Esc] Cancel"],
     })
     const managerChrome = [vm.title, vm.status, ...vm.shortcutHints.map((hint) => hint.action), vm.panels.layout1.title, vm.panels.layout2.title].join(" ")
     assert.doesNotMatch(managerChrome, /BlueNote(?: TUI| Manager)?/i)
@@ -667,6 +681,45 @@ describe("TUI render view models", () => {
     assert.notEqual(vm.topbar.updatedLabel, "Updated unknown")
   })
 
+  test("editor find prompt is a quiet task sheet with query, match count, and find-specific actions", () => {
+    const vm = buildEditorViewModel({
+      ...baseState,
+      screen: "editor",
+      mode: "editor.find",
+      editor: {
+        ...baseState.editor!,
+        findQuery: "Plan",
+        findMatchCount: 2,
+        activeFindIndex: 0,
+      },
+    })
+
+    assert.deepEqual(vm.find, {
+      visible: true,
+      sheetTitle: "Find in note",
+      description: "Search within Daily Plan.",
+      inputLabel: "Query:",
+      query: "Plan",
+      matchCount: 2,
+      activeIndex: 0,
+      countLabel: "1/2 matches",
+      placeholder: "Find in note…",
+      focused: true,
+      styleIntent: "borderFocus",
+      surfaceIntent: "surfacePanelRaised",
+      statusIntent: "info",
+      shortcutHints: [
+        { text: "1/2 matches" },
+        { key: "Enter", action: "Next" },
+        { key: "Shift+Enter", action: "Previous" },
+        { key: "Esc", action: "Close" },
+      ],
+    })
+    assert.deepEqual(vm.bottombar.row2.visibleShortcutHints, [])
+    assert.deepEqual(vm.bottombar.row2.visibleShortcuts, [])
+    assert.equal(vm.bottombar.row2.hiddenShortcutCount, 0)
+  })
+
   test("editor responsive view model hides low-priority shortcuts first and reports body overflow", () => {
     const longBody = Array.from({ length: 30 }, (_, index) => `line ${index + 1}`).join("\n")
     const narrowVm = buildEditorViewModel({
@@ -763,15 +816,20 @@ describe("TUI render view models", () => {
 
     assert.deepEqual(vm.find, {
       visible: true,
+      sheetTitle: "Find in note",
+      description: "Search within Daily Plan.",
+      inputLabel: "Query:",
       query: "Ship",
       matchCount: 1,
       activeIndex: 0,
-      countLabel: "1/1",
+      countLabel: "1/1 matches",
       placeholder: "Find in note…",
       focused: true,
-      styleIntent: "secondaryAccent",
+      styleIntent: "borderFocus",
+      surfaceIntent: "surfacePanelRaised",
+      statusIntent: "info",
       shortcutHints: [
-        { text: "1/1" },
+        { text: "1/1 matches" },
         { key: "Enter", action: "Next" },
         { key: "Shift+Enter", action: "Previous" },
         { key: "Esc", action: "Close" },
@@ -930,11 +988,15 @@ describe("TUI render view models", () => {
       assert.equal(controller.openFocusedManagerItem().blocked, false)
       controller.openEditorFind()
       const editorRoot = renderEditorScreen({ renderer, controller })
-      assert.deepEqual(chunkTextsForId(editorRoot, "bluenote-editor-find-hints"), ["0/0", "  ", "[Enter]", " Next", "  ", "[Shift+Enter]", " Previous", "  ", "[Esc]", " Close"])
+      assert.deepEqual(chunkTextsForId(editorRoot, "bluenote-editor-find-hints"), ["0/0 matches", "  ", "[Enter]", " Next", "  ", "[Shift+Enter]", " Previous", "  ", "[Esc]", " Close"])
 
       controller.showManager()
       controller.openManagerFilter()
       let managerRoot = renderManagerScreen({ renderer, controller })
+      const filterText = descendants(managerRoot).map(textFor).join("\n")
+      assert.match(filterText, /Narrow the current folder without leaving the dashboard\./u)
+      assert.match(filterText, /Scope: notes\//u)
+      assert.match(filterText, /Filter:/u)
       assert.deepEqual(chunkTextsForId(managerRoot, "bluenote-manager-filter-hints"), ["[Esc]", " Close", "  ", "[Enter]", " Open"])
 
       controller.openManagerCreate()
@@ -945,7 +1007,7 @@ describe("TUI render view models", () => {
       controller.cancelManagerCreate()
       controller.openManagerDeleteConfirmation()
       managerRoot = renderManagerScreen({ renderer, controller })
-      assert.deepEqual(chunkTextsForId(managerRoot, "bluenote-manager-delete-hints"), ["[Enter/y]", " Confirm", "  ", "[Esc/n]", " Cancel"])
+      assert.deepEqual(chunkTextsForId(managerRoot, "bluenote-manager-delete-hints"), ["[y]", " Delete", "  ", "[Esc]", " Cancel"])
       assert.doesNotMatch(descendants(managerRoot).map(textFor).join("\n"), /Enter\/y confirm|Esc\/n cancel|Enter create|Esc cancel|Enter apply|Esc close/u)
     } finally {
       renderer.destroy()

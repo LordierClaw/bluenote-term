@@ -5,12 +5,12 @@ import { tuiTheme, type TuiColorIntent } from "./theme"
 export interface ShortcutHint {
   key: string
   action: string
-  priority?: "primary" | "secondary"
+  priority?: "primary" | "secondary" | "danger"
 }
 
 export interface ShortcutTextHint {
   text: string
-  priority?: "primary" | "secondary"
+  priority?: "primary" | "secondary" | "danger"
 }
 
 export type ShortcutRenderableHint = ShortcutHint | ShortcutTextHint
@@ -35,8 +35,10 @@ export function renderShortcutHints(hints: readonly string[] | readonly Shortcut
       chunks.push(fg(tuiTheme.textMuted)(hint.text) as TextChunk)
       return
     }
-    chunks.push(fg(tuiTheme.borderFocus)(`[${hint.key}]`) as TextChunk)
-    chunks.push(fg(tuiTheme.textMuted)(` ${hint.action}`) as TextChunk)
+    const keyColor = hint.priority === "danger" ? tuiTheme.danger : tuiTheme.borderFocus
+    const actionColor = hint.priority === "danger" ? tuiTheme.danger : tuiTheme.textMuted
+    chunks.push(fg(keyColor)(`[${hint.key}]`) as TextChunk)
+    chunks.push(fg(actionColor)(` ${hint.action}`) as TextChunk)
   })
 
   return new StyledText(chunks)

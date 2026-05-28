@@ -63,6 +63,9 @@ export interface EditorOverflowViewModel {
 
 export interface EditorFindViewModel {
   visible: true
+  sheetTitle: string
+  description: string
+  inputLabel: string
   query: string
   matchCount: number
   activeIndex: number | null
@@ -70,6 +73,8 @@ export interface EditorFindViewModel {
   placeholder: string
   focused: boolean
   styleIntent: TuiColorIntent
+  surfaceIntent: TuiColorIntent
+  statusIntent: TuiColorIntent
   shortcutHints: ShortcutRenderableHint[]
 }
 
@@ -296,6 +301,7 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
   const findMode = state.mode === "editor.find"
   const findMatchCount = editor?.findMatchCount ?? 0
   const activeFindIndex = editor?.activeFindIndex ?? null
+  const findCountLabel = findMatchCount > 0 && activeFindIndex !== null ? `${activeFindIndex + 1}/${findMatchCount} matches` : `0/${findMatchCount} matches`
 
   const cursor = editor ? editorCursorPosition(editor, editorCursorOffset(editor)) : { line: 1, column: 1 }
   const cursorLabel = `Line ${cursor.line}, Col ${cursor.column}`
@@ -327,15 +333,20 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
     find: findMode
       ? {
           visible: true,
+          sheetTitle: "Find in note",
+          description: `Search within ${note?.title ?? "current note"}.`,
+          inputLabel: "Query:",
           query: editor?.findQuery ?? "",
           matchCount: findMatchCount,
           activeIndex: activeFindIndex,
-          countLabel: findMatchCount > 0 && activeFindIndex !== null ? `${activeFindIndex + 1}/${findMatchCount}` : `0/${findMatchCount}`,
+          countLabel: findCountLabel,
           placeholder: "Find in note…",
           focused: true,
-          styleIntent: "secondaryAccent",
+          styleIntent: "borderFocus",
+          surfaceIntent: "surfacePanelRaised",
+          statusIntent: "info",
           shortcutHints: [
-            { text: findMatchCount > 0 && activeFindIndex !== null ? `${activeFindIndex + 1}/${findMatchCount}` : `0/${findMatchCount}` },
+            { text: findCountLabel },
             { key: "Enter", action: "Next" },
             { key: "Shift+Enter", action: "Previous" },
             { key: "Esc", action: "Close" },
@@ -365,9 +376,9 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
       },
       row2: {
         shortcuts: shortcuts.map(toShortcutHint).map(shortcutHintLabel),
-        visibleShortcuts,
-        visibleShortcutHints,
-        hiddenShortcutCount,
+        visibleShortcuts: findMode ? [] : visibleShortcuts,
+        visibleShortcutHints: findMode ? [] : visibleShortcutHints,
+        hiddenShortcutCount: findMode ? 0 : hiddenShortcutCount,
       },
     },
   }
@@ -385,7 +396,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   const screenWidth = rendererSize.width ?? rendererSize.terminalWidth ?? 80
   const screenHeight = rendererSize.height ?? rendererSize.terminalHeight ?? 24
   const state = options.controller.getState()
-  const findBarRows = state.mode === "editor.find" ? 3 : 0
+  const findBarRows = state.mode === "editor.find" ? 5 : 0
   const bodyViewportLines = Math.max(1, screenHeight - 1 - findBarRows - 2 - 4)
   const vm = buildEditorViewModel(state, { width: Math.max(0, screenWidth - 4), bodyViewportLines })
   const editorState = state.editor
@@ -542,14 +553,28 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   if (vm.find) {
     const findBar = new BoxRenderable(options.renderer, {
       id: "bluenote-editor-find-bar",
-      flexDirection: "row",
+      flexDirection: "column",
       width: "100%",
-      height: 3,
+      height: 5,
       border: true,
       borderColor: tuiTheme[vm.find.styleIntent],
-      backgroundColor: tuiTheme.panel,
-      title: "Find in note",
+      backgroundColor: tuiTheme[vm.find.surfaceIntent],
+      title: vm.find.sheetTitle,
     })
+    findBar.add(new TextRenderable(options.renderer, {
+      id: "bluenote-editor-find-copy",
+      content: vm.find.description,
+      height: 1,
+      fg: tuiTheme.textSecondary,
+      bg: tuiTheme[vm.find.surfaceIntent],
+    }))
+    findBar.add(new TextRenderable(options.renderer, {
+      id: "bluenote-editor-find-input-label",
+      content: vm.find.inputLabel,
+      height: 1,
+      fg: tuiTheme.textPrimary,
+      bg: tuiTheme[vm.find.surfaceIntent],
+    }))
     findInput = new InputRenderable(options.renderer, {
       id: "bluenote-editor-find-query",
       value: vm.find.query,
@@ -560,8 +585,8 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
       id: "bluenote-editor-find-hints",
       content: renderShortcutHints(vm.find.shortcutHints),
       height: 1,
-      fg: tuiTheme.mutedText,
-      bg: tuiTheme.panel,
+      fg: tuiTheme[vm.find.statusIntent],
+      bg: tuiTheme[vm.find.surfaceIntent],
     })
     findInput.on(InputRenderableEvents.INPUT, () => {
       options.controller.updateEditorFindQuery(findInput?.value ?? "")

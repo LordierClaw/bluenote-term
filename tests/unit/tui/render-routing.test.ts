@@ -1012,7 +1012,6 @@ describe("TUI render keyboard routing", () => {
 
     assert.deepEqual(calls, [
       "confirmManagerDelete",
-      "confirmManagerDelete",
       "cancelManagerDelete",
       "cancelManagerDelete",
       "cancelManagerDelete",

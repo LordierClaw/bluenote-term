@@ -146,20 +146,31 @@ export interface ManagerViewModel {
   createPrompt?: {
     visible: true
     inputId: string
+    sheetTitle: string
+    description: string
+    destinationLabel: string
+    inputLabel: string
     title: string
     placeholder: string
     status: string | null
     focused: true
     styleIntent: TuiColorIntent
+    surfaceIntent: TuiColorIntent
     statusIntent: TuiColorIntent
+    actions: string[]
   }
   deletePrompt?: {
     visible: true
     key: string
+    sheetTitle: string
     title: string
     relativePath: string
+    consequenceLines: string[]
     status: string | null
     styleIntent: TuiColorIntent
+    surfaceIntent: TuiColorIntent
+    statusIntent: TuiColorIntent
+    actions: string[]
   }
 }
 
@@ -379,22 +390,36 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
     ? {
         visible: true as const,
         inputId: "bluenote-manager-create-title",
+        sheetTitle: "New note",
+        description: "Create a Markdown note in this workspace.",
+        destinationLabel: `Create in: ${currentPath}`,
+        inputLabel: "Title:",
         title: state.manager.createDraft?.title ?? "",
         placeholder: "Note title…",
         status: state.manager.createDraft?.status ?? null,
         focused: true as const,
-        styleIntent: "secondaryAccent" as const,
-        statusIntent: "mutedText" as const,
+        styleIntent: "borderFocus" as const,
+        surfaceIntent: "surfacePanelRaised" as const,
+        statusIntent: (state.manager.createDraft?.status ? "warning" : "mutedText") as TuiColorIntent,
+        actions: ["[Enter] Create", "[Esc] Cancel"],
       }
     : undefined
   const deletePrompt = state.mode === "manager.deleteConfirm" && state.manager.deleteDraft
     ? {
         visible: true as const,
         key: state.manager.deleteDraft.key,
+        sheetTitle: "Delete note?",
         title: state.manager.deleteDraft.title,
         relativePath: state.manager.deleteDraft.relativePath,
+        consequenceLines: [
+          "Deletes the Markdown file and BlueNote sidecar metadata.",
+          "This cannot be undone.",
+        ],
         status: state.manager.deleteDraft.status,
         styleIntent: "danger" as const,
+        surfaceIntent: "surfacePanelRaised" as const,
+        statusIntent: "danger" as const,
+        actions: ["[y] Delete", "[Esc] Cancel"],
       }
     : undefined
 
@@ -582,14 +607,35 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
   if (options.controller.getState().mode === "manager.filter") {
     const filterBar = new BoxRenderable(options.renderer, {
       id: "bluenote-manager-filter-bar",
-      flexDirection: "row",
+      flexDirection: "column",
       width: "100%",
-      height: 3,
+      height: 6,
       border: true,
       borderColor: tuiTheme.borderFocus,
-      backgroundColor: tuiTheme.panel,
+      backgroundColor: tuiTheme.surfacePanelRaised,
       title: "Filter current folder",
     })
+    filterBar.add(new TextRenderable(options.renderer, {
+      id: "bluenote-manager-filter-copy",
+      content: "Narrow the current folder without leaving the dashboard.",
+      height: 1,
+      fg: tuiTheme.textSecondary,
+      bg: tuiTheme.surfacePanelRaised,
+    }))
+    filterBar.add(new TextRenderable(options.renderer, {
+      id: "bluenote-manager-filter-scope",
+      content: `Scope: ${vm.panels.layout1.title}`,
+      height: 1,
+      fg: tuiTheme.mutedText,
+      bg: tuiTheme.surfacePanelRaised,
+    }))
+    filterBar.add(new TextRenderable(options.renderer, {
+      id: "bluenote-manager-filter-input-label",
+      content: "Filter:",
+      height: 1,
+      fg: tuiTheme.textPrimary,
+      bg: tuiTheme.surfacePanelRaised,
+    }))
     const filterInput = new InputRenderable(options.renderer, {
       id: "bluenote-manager-filter-query",
       value: options.controller.getState().manager.filterQuery ?? "",
@@ -601,7 +647,7 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
       content: renderShortcutHints([{ key: "Esc", action: "Close" }, { key: "Enter", action: "Open" }]),
       height: 1,
       fg: tuiTheme.mutedText,
-      bg: tuiTheme.panel,
+      bg: tuiTheme.surfacePanelRaised,
     })
     filterInput.on(InputRenderableEvents.INPUT, () => {
       options.controller.updateManagerFilter(filterInput.value)
@@ -619,26 +665,54 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
   if (vm.createPrompt) {
     const createBar = new BoxRenderable(options.renderer, {
       id: "bluenote-manager-create-bar",
-      flexDirection: "row",
+      flexDirection: "column",
       width: "100%",
-      height: 3,
+      height: 6,
       border: true,
       borderColor: tuiTheme[vm.createPrompt.styleIntent],
-      backgroundColor: tuiTheme.panel,
-      title: "New note",
+      backgroundColor: tuiTheme[vm.createPrompt.surfaceIntent],
+      title: vm.createPrompt.sheetTitle,
     })
+    createBar.add(new TextRenderable(options.renderer, {
+      id: "bluenote-manager-create-copy",
+      content: vm.createPrompt.description,
+      height: 1,
+      fg: tuiTheme.textSecondary,
+      bg: tuiTheme[vm.createPrompt.surfaceIntent],
+    }))
+    createBar.add(new TextRenderable(options.renderer, {
+      id: "bluenote-manager-create-destination",
+      content: vm.createPrompt.destinationLabel,
+      height: 1,
+      fg: tuiTheme.mutedText,
+      bg: tuiTheme[vm.createPrompt.surfaceIntent],
+    }))
+    createBar.add(new TextRenderable(options.renderer, {
+      id: "bluenote-manager-create-input-label",
+      content: vm.createPrompt.inputLabel,
+      height: 1,
+      fg: tuiTheme.textPrimary,
+      bg: tuiTheme[vm.createPrompt.surfaceIntent],
+    }))
     const createInput = new InputRenderable(options.renderer, {
       id: vm.createPrompt.inputId,
       value: vm.createPrompt.title,
       placeholder: vm.createPrompt.placeholder,
-      width: "60%",
+      width: "70%",
+    })
+    const createStatus = new TextRenderable(options.renderer, {
+      id: "bluenote-manager-create-status",
+      content: vm.createPrompt.status ?? " ",
+      height: 1,
+      fg: tuiTheme[vm.createPrompt.statusIntent],
+      bg: tuiTheme[vm.createPrompt.surfaceIntent],
     })
     const createHint = new TextRenderable(options.renderer, {
       id: "bluenote-manager-create-hints",
-      content: renderShortcutHints(promptHints(vm.createPrompt.status, [{ key: "Enter", action: "Create" }, { key: "Esc", action: "Cancel" }])),
+      content: renderShortcutHints([{ key: "Enter", action: "Create" }, { key: "Esc", action: "Cancel" }]),
       height: 1,
-      fg: tuiTheme[vm.createPrompt.statusIntent],
-      bg: tuiTheme.panel,
+      fg: tuiTheme.mutedText,
+      bg: tuiTheme[vm.createPrompt.surfaceIntent],
     })
     createInput.on(InputRenderableEvents.INPUT, () => {
       options.controller.updateManagerCreateTitle(createInput.value)
@@ -649,6 +723,7 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
       options.onInvalidate?.()
     })
     createBar.add(createInput)
+    createBar.add(createStatus)
     createBar.add(createHint)
     root.add(createBar)
     createInput.focus()
@@ -658,24 +733,41 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
       id: "bluenote-manager-delete-confirm",
       flexDirection: "column",
       width: "100%",
-      height: 4,
+      height: 7,
       border: true,
       borderColor: tuiTheme[vm.deletePrompt.styleIntent],
-      backgroundColor: tuiTheme.panel,
-      title: "Confirm delete",
+      backgroundColor: tuiTheme[vm.deletePrompt.surfaceIntent],
+      title: vm.deletePrompt.sheetTitle,
     })
     deleteBar.add(new TextRenderable(options.renderer, {
-      content: `Delete ${vm.deletePrompt.title} — ${vm.deletePrompt.relativePath} (${vm.deletePrompt.key})?`,
+      id: "bluenote-manager-delete-target-title",
+      content: vm.deletePrompt.title,
       height: 1,
-      fg: tuiTheme.danger,
-      bg: tuiTheme.panel,
+      fg: tuiTheme.textPrimary,
+      bg: tuiTheme[vm.deletePrompt.surfaceIntent],
     }))
     deleteBar.add(new TextRenderable(options.renderer, {
-      id: "bluenote-manager-delete-hints",
-      content: renderShortcutHints(promptHints(vm.deletePrompt.status, [{ key: "Enter/y", action: "Confirm" }, { key: "Esc/n", action: "Cancel" }])),
+      id: "bluenote-manager-delete-target-path",
+      content: vm.deletePrompt.relativePath,
       height: 1,
       fg: tuiTheme.mutedText,
-      bg: tuiTheme.panel,
+      bg: tuiTheme[vm.deletePrompt.surfaceIntent],
+    }))
+    for (const [index, line] of vm.deletePrompt.consequenceLines.entries()) {
+      deleteBar.add(new TextRenderable(options.renderer, {
+        id: `bluenote-manager-delete-consequence-${index + 1}`,
+        content: line,
+        height: 1,
+        fg: index === vm.deletePrompt.consequenceLines.length - 1 ? tuiTheme.danger : tuiTheme.textSecondary,
+        bg: tuiTheme[vm.deletePrompt.surfaceIntent],
+      }))
+    }
+    deleteBar.add(new TextRenderable(options.renderer, {
+      id: "bluenote-manager-delete-hints",
+      content: renderShortcutHints(promptHints(vm.deletePrompt.status, [{ key: "y", action: "Delete", priority: "danger" }, { key: "Esc", action: "Cancel" }])),
+      height: 1,
+      fg: tuiTheme.mutedText,
+      bg: tuiTheme[vm.deletePrompt.surfaceIntent],
     }))
     root.add(deleteBar)
   }
@@ -691,8 +783,11 @@ export function routeManagerKey(sequence: string, controller: WorkspaceControlle
       controller.cancelManagerDelete()
       return true
     }
-    if (sequence === "y" || sequence === "\r" || sequence === "\n") {
+    if (sequence === "y") {
       void controller.confirmManagerDelete()
+      return true
+    }
+    if (sequence === "\r" || sequence === "\n") {
       return true
     }
     return true
