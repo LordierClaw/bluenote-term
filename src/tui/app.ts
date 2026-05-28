@@ -157,6 +157,11 @@ export function routeWorkspaceKey(
   return { handled: routeManagerKey(sequence, controller, onExit) }
 }
 
+function effectiveWorkspaceWidth(renderer: CliRenderer): number | undefined {
+  const rendererSize = renderer as CliRenderer & { width?: number; terminalWidth?: number }
+  return (process.stdout.isTTY ? process.stdout.columns : undefined) ?? rendererSize.width ?? rendererSize.terminalWidth
+}
+
 function renderWorkspace(renderer: CliRenderer, controller: WorkspaceController, onExit: () => void, onInvalidate: () => void): BoxRenderable {
   const state = controller.getState()
   if (state.screen === "search") {
@@ -167,7 +172,7 @@ function renderWorkspace(renderer: CliRenderer, controller: WorkspaceController,
     return renderEditorScreen({ renderer, controller, onExit, onInvalidate })
   }
 
-  return renderManagerScreen({ renderer, controller, onExit, onInvalidate })
+  return renderManagerScreen({ renderer, controller, onExit, onInvalidate, width: effectiveWorkspaceWidth(renderer) })
 }
 
 function renderableDescendants(node: Renderable): Renderable[] {
@@ -291,6 +296,7 @@ export async function startTuiWorkspace(options: StartTuiWorkspaceOptions = {}):
   let currentScreen: BoxRenderable | null = null
   let destroyed = false
   let rerenderScheduled = false
+  let cleanupTerminalResize = (): void => {}
 
   const destroy = (): void => {
     if (destroyed) {
@@ -301,6 +307,7 @@ export async function startTuiWorkspace(options: StartTuiWorkspaceOptions = {}):
       blurWorkspaceInputs(currentScreen)
       currentScreen.destroyRecursively()
     }
+    cleanupTerminalResize()
     currentScreen = null
     controller.dispose()
     renderer.destroy()
@@ -334,6 +341,18 @@ export async function startTuiWorkspace(options: StartTuiWorkspaceOptions = {}):
       rerenderScheduled = false
       rerender()
     }, 0)
+  }
+
+  if (process.stdout.isTTY) {
+    const handleTerminalResize = (): void => {
+      scheduleRerender()
+    }
+    process.stdout.on("resize", handleTerminalResize)
+    process.on("SIGWINCH", handleTerminalResize)
+    cleanupTerminalResize = () => {
+      process.stdout.off("resize", handleTerminalResize)
+      process.off("SIGWINCH", handleTerminalResize)
+    }
   }
 
   controller.setAutosaveStateChangeHandler(rerender)

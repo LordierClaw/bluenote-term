@@ -618,6 +618,76 @@ describe("TUI render keyboard routing", () => {
     }
   })
 
+  test("manager renderer derives responsive preview visibility from the live renderer width", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      ;(renderer as typeof renderer & { width?: number }).width = 60
+      let showCalls = 0
+      const controller = createWorkspaceController({
+        listNotes: () => [{ key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md" }],
+        showNote: () => {
+          showCalls += 1
+          return { key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md", body: "Preview body" }
+        },
+        searchNotes: () => [],
+      })
+      controller.refreshManager()
+
+      const narrowScreen = renderManagerScreen({ renderer, controller })
+      renderer.root.add(narrowScreen)
+      const narrowText = descendants(narrowScreen).map((node) => node.content?.chunks?.[0]?.text ?? node.content ?? "").join("\n")
+
+      assert.equal(showCalls, 0)
+      assert.notEqual(findById(narrowScreen, "bluenote-manager-layout-1"), undefined)
+      assert.equal(findById(narrowScreen, "bluenote-manager-layout-2"), undefined)
+      assert.match(narrowText, /daily\.md/u)
+      assert.match(narrowText, /Preview hidden \(narrow width\)/u)
+      assert.doesNotMatch(narrowText, /Preview body/u)
+    } finally {
+      renderer.destroy()
+    }
+  })
+
+  test("manager responsive hide is temporary and preserves a manual preview toggle on return to wide width", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      let showCalls = 0
+      const controller = createWorkspaceController({
+        listNotes: () => [{ key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md" }],
+        showNote: () => {
+          showCalls += 1
+          return { key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md", body: "Preview body" }
+        },
+        searchNotes: () => [],
+      })
+      controller.refreshManager()
+
+      let screen = renderManagerScreen({ renderer, controller, width: 60 })
+      renderer.root.add(screen)
+      assert.equal(findById(screen, "bluenote-manager-layout-2"), undefined)
+      assert.equal(controller.getState().manager.previewVisible, true)
+      renderer.root.remove(screen.id)
+      screen.destroyRecursively()
+
+      screen = renderManagerScreen({ renderer, controller, width: 100 })
+      renderer.root.add(screen)
+      assert.notEqual(findById(screen, "bluenote-manager-layout-2"), undefined)
+      renderer.root.remove(screen.id)
+      screen.destroyRecursively()
+
+      controller.toggleManagerPreview()
+      showCalls = 0
+      screen = renderManagerScreen({ renderer, controller, width: 100 })
+      renderer.root.add(screen)
+      const manualHiddenText = descendants(screen).map((node) => node.content?.chunks?.[0]?.text ?? node.content ?? "").join("\n")
+      assert.equal(showCalls, 0)
+      assert.equal(findById(screen, "bluenote-manager-layout-2"), undefined)
+      assert.match(manualHiddenText, /Preview hidden \(manual\)/u)
+    } finally {
+      renderer.destroy()
+    }
+  })
+
   test("manager create route edits title, submits on Enter, and cancels on Escape or Ctrl+[", () => {
     const { controller, calls } = createController("manager")
     controller.getState().mode = "manager.create"

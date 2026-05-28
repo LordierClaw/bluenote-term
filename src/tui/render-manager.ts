@@ -339,6 +339,15 @@ export interface RenderManagerScreenOptions {
   width?: number
 }
 
+function effectiveRendererWidth(options: RenderManagerScreenOptions): number | undefined {
+  if (typeof options.width === "number") {
+    return options.width
+  }
+
+  const rendererSize = options.renderer as CliRenderer & { width?: number; terminalWidth?: number }
+  return rendererSize.width ?? rendererSize.terminalWidth
+}
+
 function rowSegment(options: RenderManagerScreenOptions, content: string, fg: string, bg: string, width?: number): TextRenderable {
   return new TextRenderable(options.renderer, {
     content,
@@ -371,9 +380,10 @@ function rowRenderable(options: RenderManagerScreenOptions, row: ManagerRowViewM
 
 export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRenderable {
   const state = options.controller.getState()
-  const responsivePreviewHidden = typeof options.width === "number" && options.width < MANAGER_PREVIEW_NARROW_WIDTH
+  const screenWidth = effectiveRendererWidth(options)
+  const responsivePreviewHidden = typeof screenWidth === "number" && screenWidth < MANAGER_PREVIEW_NARROW_WIDTH
   const browserModel = responsivePreviewHidden ? undefined : options.controller.getManagerBrowserModel()
-  const vm = buildManagerViewModel(state, browserModel, { width: options.width })
+  const vm = buildManagerViewModel(state, browserModel, { width: screenWidth })
   const previewHidden = vm.layout2.preview.type === "hidden"
   const root = new BoxRenderable(options.renderer, {
     id: "bluenote-manager-screen",
