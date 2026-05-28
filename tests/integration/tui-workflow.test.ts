@@ -2,7 +2,7 @@ import { describe, test, beforeEach, afterEach } from "bun:test"
 import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
-import { mkdtemp, rm, readFile, access, readdir } from "node:fs/promises"
+import { mkdtemp, rm, readFile, access, readdir, writeFile } from "node:fs/promises"
 
 import { createNote } from "../../src/core/create-note"
 import { initRoot } from "../../src/core/init-root"
@@ -12,6 +12,8 @@ import { showNote } from "../../src/core/show-note"
 import { buildSearchEverythingPreview } from "../../src/tui/adapters/search-everything-adapter"
 import { createDefaultWorkspaceController } from "../../src/tui/app"
 import { createWorkspaceController, type WorkspaceCommandContext } from "../../src/tui/workspace-controller"
+import { ATOMIC_NOTE_WRITER_TEMP_PREFIX } from "../../src/storage/atomic-note-writer"
+import { getStateTmpPath } from "../../src/storage/root-layout"
 
 function fixedClock(iso: string) {
   return { now: () => new Date(iso) }
@@ -66,6 +68,41 @@ describe("TUI workspace workflows", () => {
     } finally {
       await rm(freshRootPath, { recursive: true, force: true })
     }
+  })
+
+  test("TUI controller bootstrap removes only stale BlueNote atomic writer temps", async () => {
+    const tempPath = getStateTmpPath(rootPath)
+    const staleWriterTemp = path.join(tempPath, `${ATOMIC_NOTE_WRITER_TEMP_PREFIX}tui-stale.tmp`)
+    const unrelatedTemp = path.join(tempPath, "editor-swap.tmp")
+    const normalNote = createNote({
+      override: rootPath,
+      title: "Normal Note",
+      body: "normal note body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+
+    await writeFile(staleWriterTemp, "stale temp", "utf8")
+    await writeFile(unrelatedTemp, "unrelated temp", "utf8")
+
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    assert.equal(controller.getState().screen, "manager")
+    await assert.rejects(() => access(staleWriterTemp))
+    assert.equal(await readFile(unrelatedTemp, "utf8"), "unrelated temp")
+    assert.equal(await readFile(path.join(rootPath, normalNote.relativePath), "utf8"), "normal note body")
+  })
+
+  test("TUI controller bootstrap surfaces atomic temp cleanup failures", () => {
+    assert.throws(
+      () => createDefaultWorkspaceController({
+        rootPath,
+        cleanupStaleAtomicTemps: () => {
+          throw new Error("injected cleanup failure")
+        },
+      }),
+      /injected cleanup failure/,
+    )
   })
 
   test("loads manager rows, opens a note, edits body, saves, and persists the plain note file", async () => {

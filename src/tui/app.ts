@@ -12,6 +12,7 @@ import { showNote } from "../core/show-note"
 import type { CliResult } from "../core/types"
 import { systemClock, type Clock } from "../platform/clock"
 import { createNoteRepository } from "../storage/note-repository"
+import { cleanupStaleAtomicNoteWriterTemps } from "../storage/atomic-note-writer"
 import { renderEditorScreen, routeEditorKey } from "./render-editor"
 import { renderManagerScreen, routeManagerKey } from "./render-manager"
 import { renderSearchEverythingScreen, routeSearchEverythingKey } from "./render-search-everything"
@@ -39,6 +40,7 @@ export interface DefaultWorkspaceControllerOptions {
   rootPath?: string
   clock?: Clock
   commandHandlers?: Partial<Record<string, WorkspaceCommandHandler>>
+  cleanupStaleAtomicTemps?: (rootPath: string) => void
 }
 
 export function getTuiBootstrapInfo(): TuiBootstrapInfo {
@@ -80,7 +82,9 @@ function ensureTuiIndexes(rootPath: string): void {
 export function createDefaultWorkspaceController(options: DefaultWorkspaceControllerOptions = {}): WorkspaceController {
   const rootPath = resolveBlueNoteRoot({ override: options.rootPath })
   const clock = options.clock ?? systemClock
+  const cleanupStaleAtomicTemps = options.cleanupStaleAtomicTemps ?? cleanupStaleAtomicNoteWriterTemps
 
+  cleanupStaleAtomicTemps(rootPath)
   ensureTuiIndexes(rootPath)
 
   return createWorkspaceController({
