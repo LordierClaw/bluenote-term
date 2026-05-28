@@ -394,7 +394,7 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     width: previewHidden ? "100%" : "50%",
     height: "100%",
     border: true,
-    borderColor: tuiTheme.primaryAccent,
+    borderColor: tuiTheme.borderSubtle,
     backgroundColor: tuiTheme.panel,
     title: vm.panels.layout1.title,
   })
@@ -404,7 +404,7 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     width: "50%",
     height: "100%",
     border: true,
-    borderColor: tuiTheme.secondaryAccent,
+    borderColor: tuiTheme.borderSubtle,
     backgroundColor: tuiTheme.panel,
     title: vm.panels.layout2.title,
   })

@@ -55,29 +55,54 @@ function descendants(node: Renderable): Renderable[] {
 }
 
 describe("TUI render view models", () => {
-  test("TUI theme exposes restrained chrome palette plus narrow semantic status tokens", () => {
+  test("TUI theme exposes semantic design tokens for surfaces, borders, text, and statuses", () => {
     assert.deepEqual(Object.keys(tuiTheme).sort(), [
       "activeItem",
       "background",
+      "borderFocus",
+      "borderSubtle",
       "danger",
       "focusedRow",
+      "info",
       "mutedText",
       "panel",
       "primaryAccent",
       "secondaryAccent",
+      "statusDanger",
+      "statusInfo",
+      "statusSuccess",
+      "statusWarning",
       "success",
+      "surfacePanel",
+      "surfacePanelRaised",
+      "textMuted",
+      "textPrimary",
+      "textSecondary",
       "warning",
     ])
     assert.equal(tuiTheme.background, "#0f172a")
-    assert.equal(tuiTheme.panel, "#111827")
+    assert.equal(tuiTheme.surfacePanel, "#111827")
+    assert.equal(tuiTheme.surfacePanelRaised, "#162033")
+    assert.equal(tuiTheme.panel, tuiTheme.surfacePanel)
     assert.equal(tuiTheme.focusedRow, "#1e3a8a")
     assert.equal(tuiTheme.activeItem, "#0e7490")
+    assert.equal(tuiTheme.borderSubtle, "#334155")
+    assert.equal(tuiTheme.borderFocus, "#38bdf8")
     assert.equal(tuiTheme.primaryAccent, "#38bdf8")
     assert.equal(tuiTheme.secondaryAccent, "#22d3ee")
-    assert.equal(tuiTheme.mutedText, "#94a3b8")
-    assert.equal(tuiTheme.danger, "#ef4444")
-    assert.equal(tuiTheme.success, "#22c55e")
-    assert.equal(tuiTheme.warning, "#f97316")
+    assert.notEqual(tuiTheme.borderSubtle, tuiTheme.primaryAccent)
+    assert.equal(tuiTheme.textPrimary, "#f8fafc")
+    assert.equal(tuiTheme.textSecondary, "#cbd5e1")
+    assert.equal(tuiTheme.textMuted, "#94a3b8")
+    assert.equal(tuiTheme.mutedText, tuiTheme.textMuted)
+    assert.equal(tuiTheme.statusSuccess, "#22c55e")
+    assert.equal(tuiTheme.statusWarning, "#f59e0b")
+    assert.equal(tuiTheme.statusDanger, "#ef4444")
+    assert.equal(tuiTheme.statusInfo, "#60a5fa")
+    assert.equal(tuiTheme.success, tuiTheme.statusSuccess)
+    assert.equal(tuiTheme.warning, tuiTheme.statusWarning)
+    assert.equal(tuiTheme.danger, tuiTheme.statusDanger)
+    assert.equal(tuiTheme.info, tuiTheme.statusInfo)
     for (const color of Object.values(tuiTheme)) {
       assert.match(color, /^#[0-9a-f]{6}$/iu)
     }
@@ -515,8 +540,8 @@ describe("TUI render view models", () => {
     const dirtyVm = buildEditorViewModel({ ...baseState, screen: "editor", editor: { ...baseState.editor!, dirty: true, body: `${baseState.editor!.body}\nunsaved` } })
     assert.equal(dirtyVm.topbar.saveStatusLabel, "Unsaved")
     assert.equal(dirtyVm.bottombar.row1.rightLabel, "Unsaved")
-    assert.equal(dirtyVm.topbar.statusIntent, "danger")
-    assert.equal(dirtyVm.bottombar.row1.rightIntent, "danger")
+    assert.equal(dirtyVm.topbar.statusIntent, "warning")
+    assert.equal(dirtyVm.bottombar.row1.rightIntent, "warning")
 
     const autosaveVm = buildEditorViewModel({ ...baseState, screen: "editor", editor: { ...baseState.editor!, autosaveStatus: "saving" } as TuiState["editor"] })
     assert.equal(autosaveVm.topbar.saveStatusLabel, "Saving")
@@ -612,7 +637,7 @@ describe("TUI render view models", () => {
         errorLabel: bar.row1.errorLabel,
       })),
       [
-        { saveStatusLabel: "Unsaved", saveStatusIntent: "danger", errorLabel: null },
+        { saveStatusLabel: "Unsaved", saveStatusIntent: "warning", errorLabel: null },
         { saveStatusLabel: "Saving", saveStatusIntent: "warning", errorLabel: null },
         { saveStatusLabel: "Saved", saveStatusIntent: "success", errorLabel: null },
         { saveStatusLabel: "Unsaved", saveStatusIntent: "danger", errorLabel: "Autosave failed" },

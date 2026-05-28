@@ -162,7 +162,7 @@ function renderControlledBodyValue(value: string, cursorOffset = Array.from(valu
 function statusIntentForEditor(editor: EditorBufferWithAutosave | null): TuiColorIntent {
   switch (editor?.autosaveStatus) {
     case "pending":
-      return "danger"
+      return "warning"
     case "saving":
       return "warning"
     case "saved":
@@ -170,7 +170,7 @@ function statusIntentForEditor(editor: EditorBufferWithAutosave | null): TuiColo
     case "error":
       return "danger"
     default:
-      return editor?.dirty ? "danger" : "success"
+      return editor?.dirty ? "warning" : "success"
   }
 }
 
