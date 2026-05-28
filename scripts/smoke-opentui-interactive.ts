@@ -319,6 +319,8 @@ function assertPostAutosaveQuitRoute(route: "q" | "C-c"): void {
     const typedPane = capturePaneUntil(routeSessionName, `${route} route post-autosave typing`, autosaveToken, 30)
     expectPaneContains(typedPane, autosaveToken, `${route} route post-autosave typing`)
     wait(1_250, `${route} route autosave wait`)
+    const postAutosavePane = capturePane(routeSessionName, `${route} route autosave status`)
+    expectPaneExcludes(postAutosavePane, "Autosave failed", `${route} route autosave status`)
     expectNoteFileContains(summary.notePath, autosaveToken, `${route} route autosave filesystem`)
 
     sendKeys(routeSessionName, "Escape")

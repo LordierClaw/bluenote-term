@@ -1474,8 +1474,76 @@ describe("TUI workspace controller", () => {
 
     assert.deepEqual(persistedBodies, ["daily-plan:Draft two"])
     assert.equal(controller.getState().editor?.body, "Draft two")
+    assert.equal(controller.getState().editor?.savedBody, "Draft two")
     assert.equal(controller.getState().editor?.dirty, false)
     assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+  })
+
+  test("successful autosave after controlled typing saves the submitted snapshot without error", async () => {
+    const scheduler = createFakeScheduler()
+    const persistedSnapshots: Array<{ key: string; relativePath: string; body: string }> = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) => {
+        persistedSnapshots.push({ key: note.key, relativePath: note.relativePath, body })
+        return { ...note, body }
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText(" typed autosave token")
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().mode, "editor.body")
+    assert.equal(controller.getState().editor?.body, "Original daily body typed autosave token")
+    assert.equal(controller.getState().editor?.savedBody, "Original daily body")
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+
+    scheduler.runNext()
+    await Promise.resolve()
+
+    assert.deepEqual(persistedSnapshots, [
+      {
+        key: "daily-plan",
+        relativePath: "notes/inbox/daily-plan.md",
+        body: "Original daily body typed autosave token",
+      },
+    ])
+    assert.equal(controller.getState().editor?.note.key, "daily-plan")
+    assert.equal(controller.getState().editor?.note.relativePath, "notes/inbox/daily-plan.md")
+    assert.equal(controller.getState().editor?.body, "Original daily body typed autosave token")
+    assert.equal(controller.getState().editor?.savedBody, "Original daily body typed autosave token")
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+  })
+
+  test("autosave after controlled typing reports failure only when persistence throws", async () => {
+    const scheduler = createFakeScheduler()
+    const persistenceErrors: string[] = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) => {
+        persistenceErrors.push(`Error: atomic writer temp write failed for ${note.key} ${note.relativePath} ${body}`)
+        throw new Error("atomic writer temp write failed")
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText(" typed failing autosave token")
+    scheduler.runNext()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    assert.deepEqual(persistenceErrors, [
+      "Error: atomic writer temp write failed for daily-plan notes/inbox/daily-plan.md Original daily body typed failing autosave token",
+    ])
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().mode, "editor.body")
+    assert.equal(controller.getState().editor?.body, "Original daily body typed failing autosave token")
+    assert.equal(controller.getState().editor?.savedBody, "Original daily body")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "error")
   })
 
   test("autosave uses the same persistence dependency as manual save", async () => {

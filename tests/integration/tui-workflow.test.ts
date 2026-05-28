@@ -168,8 +168,12 @@ describe("TUI workspace workflows", () => {
     await waitForAutosave()
 
     assert.equal(controller.getState().editor?.note.key, first.key)
+    assert.equal(controller.getState().editor?.note.relativePath, first.relativePath)
+    assert.equal(controller.getState().editor?.body, "Source body + autosaved through controller")
+    assert.equal(controller.getState().editor?.savedBody, "Source body + autosaved through controller")
     assert.equal(controller.getState().editor?.dirty, false)
     assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+    assert.notEqual(controller.getState().editor?.autosaveStatus, "error")
     assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), "Source body + autosaved through controller")
 
     assert.equal(controller.goBack().blocked, false)
