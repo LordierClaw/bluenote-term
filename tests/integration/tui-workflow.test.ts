@@ -2,7 +2,7 @@ import { describe, test, beforeEach, afterEach } from "bun:test"
 import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
-import { mkdtemp, rm, readFile, access } from "node:fs/promises"
+import { mkdtemp, rm, readFile, access, readdir } from "node:fs/promises"
 
 import { createNote } from "../../src/core/create-note"
 import { initRoot } from "../../src/core/init-root"
@@ -33,6 +33,11 @@ function openManagerNoteByKey(controller: DefaultWorkspaceController, key: strin
   assert.notEqual(noteIndex, -1)
   controller.focusManagerItem(noteIndex)
   assert.equal(controller.openFocusedManagerItem().blocked, false)
+}
+
+async function countNoteSidecars(rootPath: string): Promise<number> {
+  const entries = await readdir(path.join(rootPath, ".data", "notes"), { withFileTypes: true })
+  return entries.filter((entry) => entry.isFile() && entry.name.endsWith(".json")).length
 }
 
 describe("TUI workspace workflows", () => {
@@ -142,6 +147,35 @@ describe("TUI workspace workflows", () => {
     assert.doesNotMatch(noteText, /^---/)
     assert.equal(showNote({ override: rootPath, selector: created.key }).title, "TUI Created Note")
     assert.equal(showNote({ override: rootPath, selector: created.key }).body, "")
+  })
+
+  test("manager create prompt stays recoverable and creates no note when hidden preview dirty guard blocks", async () => {
+    const existing = createNote({
+      override: rootPath,
+      title: "Dirty Guard Existing",
+      body: "Original guard body",
+      clock: fixedClock("2026-05-26T10:02:30.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath, clock: fixedClock("2026-05-26T10:02:31.000Z") })
+    const sidecarCountBefore = await countNoteSidecars(rootPath)
+
+    openManagerNoteByKey(controller, existing.key)
+    controller.updateEditorBody("Unsaved guard body")
+    controller.showManager()
+    controller.setManagerPreviewVisible(false)
+    controller.openManagerCreate()
+    controller.updateManagerCreateTitle("Blocked Dirty Create")
+
+    const result = await controller.submitManagerCreate()
+
+    assert.deepEqual(result, { blocked: true, reason: "dirty-editor" })
+    assert.equal(controller.getState().mode, "manager.create")
+    assert.equal(controller.getState().manager.previewVisible, false)
+    assert.equal(controller.getState().manager.createDraft?.title, "Blocked Dirty Create")
+    assert.equal(controller.getState().manager.createDraft?.status, "Save or discard current note first")
+    assert.equal(controller.getState().editor?.body, "Unsaved guard body")
+    assert.equal(await countNoteSidecars(rootPath), sidecarCountBefore)
   })
 
   test("manager delete confirmation removes a real note file and sidecar through core services", async () => {

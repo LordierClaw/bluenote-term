@@ -6,6 +6,7 @@ import {
   editorRequiresDestructiveConfirmation,
   type WorkspaceControllerDependencies,
 } from "../../../src/tui/workspace-controller"
+import { buildManagerViewModel, routeManagerKey } from "../../../src/tui/render-manager"
 import type { NoteManagerSummary } from "../../../src/tui/adapters/note-manager-adapter"
 import type { SearchEverythingResult } from "../../../src/tui/adapters/search-everything-adapter"
 import { createInitialTuiState, type TuiNote } from "../../../src/tui/state"
@@ -304,6 +305,34 @@ describe("TUI workspace controller", () => {
     controller.refreshManager()
     assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Changed body after refresh"])
     assert.deepEqual(calls, ["list", "show:daily-plan", "list", "show:daily-plan"])
+  })
+
+  test("failed manager refresh still drops stale hydrated preview cache before the next successful refresh", () => {
+    let currentBody = "Original cached body"
+    let failNextList = false
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => {
+        if (failNextList) {
+          failNextList = false
+          throw new Error("list failed after storage changed")
+        }
+        return summariesWithoutBodies
+      },
+      showNote: (selector) => ({ ...notesByKey[selector], body: currentBody }),
+    }).deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Original cached body"])
+
+    currentBody = "Changed body after failed refresh"
+    failNextList = true
+    assert.throws(() => controller.refreshManager(), /list failed/)
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Changed body after failed refresh"])
+    controller.refreshManager()
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Changed body after failed refresh"])
   })
 
   test("successful editor saves update the hydrated manager preview cache for the saved note", async () => {
@@ -812,7 +841,7 @@ describe("TUI workspace controller", () => {
     let currentSummaries = noteSummaries
     const createdNote: TuiNote = {
       key: "project-plan",
-      title: "Project Plan",
+      title: "q Project Plan",
       description: "",
       relativePath: "notes/project-plan.md",
       body: "",
@@ -838,20 +867,32 @@ describe("TUI workspace controller", () => {
     const controller = createWorkspaceController(deps)
 
     controller.openManagerCreate()
-    controller.updateManagerCreateTitle("Project Plan")
+    const createVm = buildManagerViewModel(controller.getState())
+    assert.equal(createVm.createPrompt?.inputId, "bluenote-manager-create-title")
+    assert.equal(createVm.createPrompt?.focused, true)
+    assert.equal(createVm.deletePrompt, undefined)
+    assert.equal(routeManagerKey("q", controller), true)
+    assert.equal(controller.getState().manager.createDraft?.title, "q")
+    controller.updateManagerCreateTitle("q Project Plan")
     const result = await controller.submitManagerCreate()
 
     assert.equal(result.blocked, false)
     assert.equal(controller.getState().screen, "editor")
     assert.equal(controller.getState().mode, "editor.body")
     assert.equal(controller.getState().editor?.note.key, "project-plan")
-    assert.deepEqual(calls, ["list", "create:Project Plan:", "rebuild", "list", "show:project-plan"])
+    assert.deepEqual(calls, ["list", "create:q Project Plan:", "rebuild", "list", "show:project-plan"])
   })
 
-  test("manager create blocks before creating when it would replace dirty editor content", async () => {
+  test("manager create blocks before creating when it would replace dirty editor content while preview is hidden", async () => {
+    let currentSummaries = noteSummaries
     const { deps, calls } = createDeps({
+      listNotes: () => {
+        calls.push("list")
+        return currentSummaries
+      },
       createNote: (title, body) => {
         calls.push(`create:${title}:${body}`)
+        currentSummaries = [...currentSummaries, { ...notesByKey["archive-review"], key: "stray-note", title }]
         return { key: "daily-plan" }
       },
     })
@@ -864,6 +905,7 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().screen, "editor")
     controller.updateEditorBody("Unsaved draft")
     controller.showManager()
+    controller.setManagerPreviewVisible(false)
     controller.openManagerCreate()
     controller.updateManagerCreateTitle("New Note")
 
@@ -871,8 +913,13 @@ describe("TUI workspace controller", () => {
 
     assert.deepEqual(result, { blocked: true, reason: "dirty-editor" })
     assert.equal(controller.getState().mode, "manager.create")
+    assert.equal(controller.getState().manager.previewVisible, false)
+    assert.equal(controller.getState().manager.createDraft?.title, "New Note")
+    assert.equal(controller.getState().manager.createDraft?.status, "Save or discard current note first")
+    assert.match(buildManagerViewModel(controller.getState()).createPrompt?.status ?? "", /Save or discard/)
     assert.equal(controller.getState().editor?.body, "Unsaved draft")
     assert.equal(calls.some((call) => call.startsWith("create:")), false)
+    assert.deepEqual(currentSummaries, noteSummaries)
   })
 
   test("manager create keeps prompt recoverable when create or refresh fails", async () => {
@@ -956,11 +1003,16 @@ describe("TUI workspace controller", () => {
   })
 
   test("manager delete confirmation deletes a note, refreshes, and clears an open editor", async () => {
-    let currentSummaries = [...noteSummaries]
+    let currentSummaries = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    let currentDailyBody = "Original daily body"
     const { deps, calls } = createDeps({
       listNotes: () => {
         calls.push("list")
         return currentSummaries
+      },
+      showNote: (selector) => {
+        calls.push(`show:${selector}`)
+        return selector === "daily-plan" ? { ...notesByKey["daily-plan"], body: currentDailyBody } : notesByKey[selector]
       },
       deleteNote: (selector) => {
         calls.push(`delete:${selector}`)
@@ -972,6 +1024,7 @@ describe("TUI workspace controller", () => {
 
     controller.focusManagerItem(1)
     controller.openFocusedManagerItem()
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Original daily body"])
     controller.openFocusedManagerItem()
     controller.showManager()
     controller.openManagerDeleteConfirmation()
@@ -987,7 +1040,17 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().editor, null)
     assert.equal(controller.getState().manager.deleteDraft, null)
     assert.equal(controller.getState().manager.items.some((item) => item.key === "daily-plan"), false)
-    assert.deepEqual(calls, ["list", "show:daily-plan", "delete:daily-plan", "rebuild", "list"])
+    assert.deepEqual(calls, ["list", "show:daily-plan", "show:daily-plan", "delete:daily-plan", "rebuild", "list"])
+
+    currentDailyBody = "Recreated daily body must not use deleted-note preview cache"
+    currentSummaries = [{
+      key: "daily-plan",
+      title: "Daily Plan",
+      description: "Today priorities.",
+      relativePath: "notes/inbox/daily-plan.md",
+    }]
+    controller.refreshManager()
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Recreated daily body must not use deleted-note preview cache"])
   })
 
   test("manager delete confirmation is blocked while the open editor is dirty or autosave failed", async () => {
@@ -1011,11 +1074,15 @@ describe("TUI workspace controller", () => {
     openInboxDaily(controller)
     controller.insertEditorText(" dirty")
     controller.showManager()
+    controller.toggleManagerPreview()
     controller.openManagerDeleteConfirmation()
 
     const dirtyResult = await controller.confirmManagerDelete()
     assert.deepEqual(dirtyResult, { blocked: true, reason: "dirty-editor" })
     assert.equal(controller.getState().mode, "manager.deleteConfirm")
+    assert.equal(controller.getState().manager.previewVisible, false)
+    assert.equal(controller.getState().manager.deleteDraft?.status, "Save or discard current note first")
+    assert.match(buildManagerViewModel(controller.getState()).deletePrompt?.status ?? "", /Save or discard/)
     assert.equal(controller.getState().editor?.body, "Original daily body dirty")
     assert.equal(calls.some((call) => call.startsWith("delete:")), false)
 

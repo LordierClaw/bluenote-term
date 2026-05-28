@@ -466,11 +466,12 @@ try {
   expectPaneContains(managerReturnPane, "Root Editor", "editor return to manager")
   expectLatestScreen(managerReturnPane, "Rebuild idle", "Ctrl+F find", "editor return to manager latest screen")
 
-  const liveManagerTitle = `Live Smoke Manager Note ${process.pid}`
+  const liveManagerTitle = `q Live Smoke Manager Note ${process.pid}`
   sendKeys(sessionName, "n")
   const createPromptPane = capturePaneUntil(sessionName, "manager create prompt", "New note", 20)
   expectPaneContains(createPromptPane, "Note title", "manager create prompt")
-  sendText(sessionName, liveManagerTitle)
+  sendKeys(sessionName, "q")
+  sendText(sessionName, liveManagerTitle.slice(1))
   sendKeys(sessionName, "C-m")
   const createdEditorPane = capturePaneUntil(sessionName, "manager create opens editor", "Ctrl+F find", 30)
   expectPaneContains(createdEditorPane, liveManagerTitle, "manager create opens editor")

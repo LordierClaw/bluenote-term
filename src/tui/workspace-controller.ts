@@ -345,6 +345,25 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     }
   }
 
+  function clearManagerPreviewCache(): void {
+    previewBodyCache.clear()
+  }
+
+  function setManagerDeleteStatus(status: string | null): void {
+    const draft = state.manager.deleteDraft
+    if (!draft) {
+      return
+    }
+
+    state = {
+      ...state,
+      manager: {
+        ...state.manager,
+        deleteDraft: { ...draft, status },
+      },
+    }
+  }
+
   function applyManagerBrowserModel(): void {
     const model = buildManagerBrowserModel(noteSummaries, state.manager)
     const items = model.layout1Rows.map(cloneManagerItem)
@@ -371,8 +390,8 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   }
 
   function refreshManager(): void {
+    clearManagerPreviewCache()
     noteSummaries = deps.listNotes()
-    previewBodyCache.clear()
     applyManagerBrowserModel()
   }
 
@@ -595,6 +614,8 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       }
 
       if (editorRequiresDestructiveConfirmation(state.editor)) {
+        state = setManagerCreateStatus(state, "Save or discard current note first")
+        applyManagerBrowserModel()
         return dirtyBlocked()
       }
 
@@ -606,6 +627,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
           return ok()
         }
 
+        clearManagerPreviewCache()
         deps.rebuildIndexes?.()
         refreshManager()
         setEditorNote(deps.showNote(created.key))
@@ -637,6 +659,8 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         return ok()
       }
       if (editorRequiresDestructiveConfirmation(state.editor)) {
+        setManagerDeleteStatus("Save or discard current note first")
+        applyManagerBrowserModel()
         return dirtyBlocked()
       }
       if (!deps.deleteNote) {
@@ -652,6 +676,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       const deletedOpenNote = state.editor?.note.key === draft.key
       try {
         deps.deleteNote(draft.key)
+        clearManagerPreviewCache()
         deps.rebuildIndexes?.()
         refreshManager()
         state = cancelManagerDeleteConfirmState(state)
