@@ -10,7 +10,8 @@ import { listNotes } from "../../src/core/list-notes"
 import { rebuildIndexes } from "../../src/core/rebuild-indexes"
 import { showNote } from "../../src/core/show-note"
 import { buildSearchEverythingPreview } from "../../src/tui/adapters/search-everything-adapter"
-import { createDefaultWorkspaceController } from "../../src/tui/app"
+import { createDefaultWorkspaceController, routeWorkspaceKey } from "../../src/tui/app"
+import { routeManagerKey } from "../../src/tui/render-manager"
 import { createWorkspaceController, type WorkspaceCommandContext } from "../../src/tui/workspace-controller"
 import { ATOMIC_NOTE_WRITER_TEMP_PREFIX } from "../../src/storage/atomic-note-writer"
 import { getStateTmpPath } from "../../src/storage/root-layout"
@@ -188,6 +189,89 @@ describe("TUI workspace workflows", () => {
     assert.equal(controller.getState().screen, "editor")
     assert.equal(controller.getState().editor?.note.key, second.key)
     assert.equal(controller.getState().editor?.body, "Target body")
+
+    assert.equal(controller.goBack().blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    const firstIndexForArrow = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === first.key)
+    assert.notEqual(firstIndexForArrow, -1)
+    controller.focusManagerItem(firstIndexForArrow)
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    controller.insertEditorText(" again")
+    await waitForAutosave()
+    assert.equal(controller.goBack().blocked, false)
+    const secondIndexForArrow = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === second.key)
+    assert.notEqual(secondIndexForArrow, -1)
+    controller.focusManagerItem(secondIndexForArrow)
+    assert.equal(routeManagerKey("\u001b[C", controller), true)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, second.key)
+  })
+
+  test("dirty editor state still routes Esc, q, and Ctrl+C from manager", () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Dirty Routing Source",
+      body: "Source body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+    openManagerNoteByKey(controller, first.key)
+    controller.insertEditorText(" unsaved")
+
+    assert.deepEqual(routeWorkspaceKey("\u001b", controller, () => assert.fail("Esc must not exit")), { handled: true })
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().editor?.dirty, true)
+
+    let exitCount = 0
+    assert.deepEqual(routeWorkspaceKey("q", controller, () => { exitCount += 1 }), { handled: true, exit: undefined })
+    assert.equal(exitCount, 0)
+    assert.equal(controller.getState().screen, "manager")
+
+    assert.deepEqual(routeWorkspaceKey("\u0003", controller, () => { exitCount += 1 }), { handled: true, exit: undefined })
+    assert.equal(exitCount, 0)
+    assert.equal(controller.getState().screen, "manager")
+  })
+
+  test("dirty manager note switch is blocked with a visible status instead of reopening only the same note", () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Dirty Switch Source",
+      body: "Source body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    const second = createNote({
+      override: rootPath,
+      title: "Dirty Switch Target",
+      body: "Target body",
+      clock: fixedClock("2026-05-26T10:01:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerNoteByKey(controller, first.key)
+    controller.insertEditorText(" unsaved")
+    assert.equal(controller.goBack().blocked, false)
+
+    const sameIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === first.key)
+    assert.notEqual(sameIndex, -1)
+    controller.focusManagerItem(sameIndex)
+    assert.equal(routeManagerKey("\r", controller), true)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, first.key)
+
+    assert.equal(controller.goBack().blocked, false)
+    const secondIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === second.key)
+    assert.notEqual(secondIndex, -1)
+    controller.focusManagerItem(secondIndex)
+    assert.equal(routeManagerKey("\r", controller), true)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().editor?.note.key, first.key)
+    assert.equal(controller.getState().manager.status, "Save or discard current note first")
+
+    assert.equal(controller.openFocusedManagerItem({ confirmed: true }).blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, second.key)
   })
 
   test("manual save after cursor-aware editor input persists through core services", async () => {

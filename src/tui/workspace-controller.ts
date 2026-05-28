@@ -128,6 +128,7 @@ const dirtyBlocked = (): WorkspaceActionResult => ({ blocked: true, reason: "dir
 
 const destructiveCommands = new Set(["/archive", "/delete", "/migrate", "/quit"])
 const searchIndexUnavailableStatus = "Search index unavailable; showing notes, folders, and commands only"
+const dirtyEditorManagerStatus = "Save or discard current note first"
 
 function clampIndex(index: number, length: number): number {
   if (length <= 0) {
@@ -359,6 +360,16 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     previewBodyCache.clear()
   }
 
+  function setManagerStatus(status: string | null): void {
+    state = {
+      ...state,
+      manager: {
+        ...state.manager,
+        status,
+      },
+    }
+  }
+
   function setManagerDeleteStatus(status: string | null): void {
     const draft = state.manager.deleteDraft
     if (!draft) {
@@ -406,7 +417,13 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   }
 
   function setEditorNote(note: TuiNote): void {
-    state = openEditorForNote(state, toTuiNote(note))
+    state = openEditorForNote({
+      ...state,
+      manager: {
+        ...state.manager,
+        status: null,
+      },
+    }, toTuiNote(note))
   }
 
   function openNoteByKey(key: string, options: WorkspaceActionOptions = {}): WorkspaceActionResult {
@@ -421,6 +438,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     }
 
     if (mustConfirmDirtyReplacement(state, key, options)) {
+      setManagerStatus(dirtyEditorManagerStatus)
       return dirtyBlocked()
     }
 
@@ -571,6 +589,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       }
 
       if (mustConfirmDirtyReplacement(state, focused.key, options)) {
+        setManagerStatus(dirtyEditorManagerStatus)
         return dirtyBlocked()
       }
 

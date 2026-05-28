@@ -474,6 +474,55 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(calls, ["list", "show:daily-plan", "show:daily-plan"])
   })
 
+  test("autosaved editor no longer blocks manager switching to a different note", async () => {
+    const scheduler = createFakeScheduler()
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText(" autosaved")
+    scheduler.runNext()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+    assert.equal(editorRequiresDestructiveConfirmation(controller.getState().editor), false)
+
+    controller.showManager()
+    const enterResult = openArchiveReview(controller)
+    assert.equal(enterResult.blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, "archive-review")
+    assert.notEqual(controller.getState().editor?.note.key, "daily-plan")
+  })
+
+  test("dirty manager note switch is blocked with visible manager status until confirmed", () => {
+    const { deps } = createDeps()
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText(" unsaved")
+    controller.showManager()
+
+    const blocked = openArchiveReview(controller)
+    assert.deepEqual(blocked, { blocked: true, reason: "dirty-editor" })
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().editor?.note.key, "daily-plan")
+    assert.equal(controller.getState().manager.status, "Save or discard current note first")
+
+    const vm = buildManagerViewModel(controller.getState(), controller.getManagerBrowserModel())
+    assert.match(vm.status, /Save or discard current note first/u)
+
+    const confirmed = controller.openFocusedManagerItem({ confirmed: true })
+    assert.equal(confirmed.blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, "archive-review")
+  })
+
   test("successful saves update manager preview summaries that already include note bodies", async () => {
     const { deps } = createDeps({ persistEditorBody: (note, body) => ({ ...note, body }) })
     const controller = createWorkspaceController(deps)

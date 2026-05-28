@@ -569,6 +569,25 @@ describe("TUI render keyboard routing", () => {
     assert.deepEqual(calls, ["updateManagerCreateTitle:Quiq"])
   })
 
+  test("workspace route still handles manager Esc, q, and Ctrl+C when an edited note is dirty", () => {
+    const controller = createWorkspaceController({
+      listNotes: () => [
+        { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" },
+      ],
+      showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }),
+      searchNotes: () => [],
+    })
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    controller.insertEditorText(" unsaved")
+
+    let exitCount = 0
+    assert.deepEqual(routeWorkspaceKey("\u001b", controller, () => { exitCount += 1 }), { handled: true })
+    assert.equal(controller.getState().screen, "manager")
+    assert.deepEqual(routeWorkspaceKey("q", controller, () => { exitCount += 1 }), { handled: true, exit: undefined })
+    assert.deepEqual(routeWorkspaceKey("\u0003", controller, () => { exitCount += 1 }), { handled: true, exit: undefined })
+    assert.equal(exitCount, 0)
+  })
+
   test("manager route maps browser navigation and filter keys", () => {
     const { controller, calls } = createController("manager")
 
