@@ -81,7 +81,7 @@ describe("TUI render view models", () => {
     }
   })
 
-  test("manager view model includes rows with filename/key, title, description, focus marker, and minimal shortcut/status hints", () => {
+  test("manager view model includes rows with filename/key, title, description, hover highlight, and minimal shortcut/status hints", () => {
     const vm = buildManagerViewModel(baseState)
 
     assert.equal(vm.title, "")
@@ -138,17 +138,17 @@ describe("TUI render view models", () => {
     assert.doesNotMatch(managerChrome, /BlueNote(?: TUI| Manager)?/i)
     assert.doesNotMatch(JSON.stringify(vm), /Layout 1: current folder|Layout 2: preview/u)
     assert.deepEqual(
-      vm.rows.map((row) => ({ marker: row.focusMarker, key: row.key, filename: row.filename, title: row.title, description: row.description, focused: row.focused })),
+      vm.rows.map((row) => ({ marker: row.focusMarker, openMarker: row.openMarker, key: row.key, filename: row.filename, title: row.title, description: row.description, focused: row.focused })),
       [
-        { marker: " ", key: "notes/inbox", filename: "inbox/", title: "inbox", description: "2 notes", focused: false },
-        { marker: "›", key: "daily-plan", filename: "daily-plan.md", title: "Daily Plan", description: "Today priorities.", focused: true },
+        { marker: "", openMarker: "", key: "notes/inbox", filename: "inbox/", title: "inbox", description: "2 notes", focused: false },
+        { marker: "", openMarker: "", key: "daily-plan", filename: "daily-plan.md", title: "Daily Plan", description: "Today priorities.", focused: true },
       ],
     )
     assert.deepEqual(
       vm.rows.map((row) => ({ key: row.key, type: row.type, icon: row.icon, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent, openStyleIntent: row.openStyleIntent, metadataStyleIntent: row.metadataStyleIntent })),
       [
         { key: "notes/inbox", type: "folder", icon: "📁", styleIntent: "panel", itemStyleIntent: "mutedText", openStyleIntent: null, metadataStyleIntent: "mutedText" },
-        { key: "daily-plan", type: "note", icon: "📄", styleIntent: "focusedRow", itemStyleIntent: "mutedText", openStyleIntent: "activeItem", metadataStyleIntent: "mutedText" },
+        { key: "daily-plan", type: "note", icon: "📄", styleIntent: "focusedRow", itemStyleIntent: "mutedText", openStyleIntent: null, metadataStyleIntent: "mutedText" },
       ],
     )
   })
@@ -183,7 +183,7 @@ describe("TUI render view models", () => {
     assert.equal(noOpenNoteVm.status, "Latest Updated: unknown")
   })
 
-  test("manager focused note and open editor note use separate style intents", () => {
+  test("manager row highlight follows only focused hover state, not open editor note", () => {
     const vm = buildManagerViewModel({
       ...baseState,
       manager: {
@@ -225,7 +225,7 @@ describe("TUI render view models", () => {
       vm.rows.map((row) => ({ key: row.key, styleIntent: row.styleIntent, openStyleIntent: row.openStyleIntent })),
       [
         { key: "note-a", styleIntent: "focusedRow", openStyleIntent: null },
-        { key: "note-b", styleIntent: "panel", openStyleIntent: "activeItem" },
+        { key: "note-b", styleIntent: "panel", openStyleIntent: null },
       ],
     )
   })
@@ -304,7 +304,7 @@ describe("TUI render view models", () => {
     )
   })
 
-  test("manager note preview exposes title, path, content lines, focus background, and separate open marker", () => {
+  test("manager note preview exposes title, path, content lines, and focus background without open marker styling", () => {
     const browser = buildManagerBrowserModel([
       {
         key: "root-note",
@@ -344,9 +344,9 @@ describe("TUI render view models", () => {
       styleIntent: "panel",
     })
     assert.equal(vm.layout1.rows[0]?.styleIntent, "focusedRow")
-    assert.equal(vm.layout1.rows[0]?.openMarker, "●")
-    assert.notEqual(vm.layout1.rows[0]?.openMarker, vm.layout1.rows[0]?.focusMarker)
-    assert.equal(vm.layout1.rows[0]?.openStyleIntent, "activeItem")
+    assert.equal(vm.layout1.rows[0]?.focusMarker, "")
+    assert.equal(vm.layout1.rows[0]?.openMarker, "")
+    assert.equal(vm.layout1.rows[0]?.openStyleIntent, null)
     assert.equal(vm.panels.layout2.title, "root-note.md")
   })
 
@@ -856,14 +856,21 @@ describe("TUI render view models", () => {
       const wideScreen = renderManagerScreen({ renderer, controller, width: 100 })
       renderer.root.add(wideScreen)
       const wideIds = descendants(wideScreen).map((node) => node.id)
+      const wideLayout1 = descendants(wideScreen).find((node) => node.id === "bluenote-manager-layout-1") as { getChildren: () => Renderable[] } | undefined
       const wideLayout2 = descendants(wideScreen).find((node) => node.id === "bluenote-manager-layout-2") as { getChildren: () => Renderable[] } | undefined
       const widePreviewText = wideLayout2?.getChildren().map((node: any) => node.content?.chunks?.[0]?.text ?? node.content ?? "") ?? []
+      const renderedRowSegments = wideLayout1?.getChildren()[0]?.getChildren().map((node: any) => node.content?.chunks?.[0]?.text ?? node.content ?? "") ?? []
+      const renderedRowText = renderedRowSegments.join("")
 
       assert.equal(wideIds.includes("bluenote-manager-layout-1"), true)
       assert.equal(wideIds.includes("bluenote-manager-layout-2"), true)
       assert.equal((wideScreen as any).border, false)
       assert.equal((wideScreen as any).title ?? "", "")
       assert.deepEqual(widePreviewText.slice(0, 4), ["Root Note", "notes/root-note.md", "# Root Note", ""])
+      assert.equal(renderedRowText.startsWith("root-note.md"), true)
+      assert.doesNotMatch(renderedRowText, /^[\s›●📁📄]/u)
+      assert.doesNotMatch(renderedRowText, /[›●]/u)
+      assert.deepEqual(renderedRowSegments.slice(0, 1), ["root-note.md".padEnd(22)])
 
       renderer.root.remove(wideScreen.id)
       wideScreen.destroyRecursively()

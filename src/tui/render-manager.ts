@@ -13,8 +13,8 @@ export interface ManagerRowViewModel {
   relativePath: string
   type: "note" | "folder"
   focused: boolean
-  focusMarker: "›" | " "
-  openMarker: "●" | " "
+  focusMarker: ""
+  openMarker: ""
   icon: "📁" | "📄"
   columns: {
     filename: string
@@ -164,9 +164,7 @@ function columnsFor(row: BrowserishRow): ManagerRowViewModel["columns"] {
   }
 }
 
-function toRowViewModel(row: BrowserishRow, index: number, focused: boolean, openNoteKey: string | null): ManagerRowViewModel {
-  const open = row.type === "note" && row.key === openNoteKey
-
+function toRowViewModel(row: BrowserishRow, _index: number, focused: boolean, _openNoteKey: string | null): ManagerRowViewModel {
   return {
     key: row.key,
     filename: row.filename,
@@ -175,13 +173,13 @@ function toRowViewModel(row: BrowserishRow, index: number, focused: boolean, ope
     relativePath: row.relativePath,
     type: row.type,
     focused,
-    focusMarker: focused ? "›" : " ",
-    openMarker: open ? "●" : " ",
+    focusMarker: "",
+    openMarker: "",
     icon: row.type === "folder" ? "📁" : "📄",
     columns: columnsFor(row),
     styleIntent: focused ? "focusedRow" : "panel",
     itemStyleIntent: "mutedText",
-    openStyleIntent: open ? "activeItem" : null,
+    openStyleIntent: null,
     metadataStyleIntent: "mutedText",
   }
 }
@@ -343,9 +341,8 @@ function rowSegment(options: RenderManagerScreenOptions, content: string, fg: st
 
 function rowRenderable(options: RenderManagerScreenOptions, row: ManagerRowViewModel): BoxRenderable {
   const bg = tuiTheme[row.styleIntent]
-  const itemColor = tuiTheme[row.openStyleIntent ?? row.itemStyleIntent]
+  const itemColor = tuiTheme[row.itemStyleIntent]
   const metadataColor = tuiTheme[row.metadataStyleIntent]
-  const open = row.openMarker === "●" ? `${row.openMarker} ` : "  "
   const box = new BoxRenderable(options.renderer, {
     flexDirection: "row",
     width: "100%",
@@ -353,7 +350,6 @@ function rowRenderable(options: RenderManagerScreenOptions, row: ManagerRowViewM
     backgroundColor: bg,
   })
 
-  box.add(rowSegment(options, `${row.focusMarker} ${open}${row.icon} `, itemColor, bg, 6))
   box.add(rowSegment(options, row.columns.filename.padEnd(22), itemColor, bg, 22))
   box.add(rowSegment(options, ` ${row.columns.title.padEnd(18)}`, metadataColor, bg, 19))
   box.add(rowSegment(options, ` ${row.columns.description}`, metadataColor, bg))
