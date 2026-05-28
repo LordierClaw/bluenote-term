@@ -295,19 +295,19 @@ git add src/tui/render-search-everything.ts tests/unit/tui/render-view-models.te
 - Test: `tests/unit/tui/render-routing.test.ts`
 - Test: `scripts/smoke-opentui-interactive.ts`
 
-**Goal:** Connect real terminal height and the `p` preview toggle through runtime routing and smoke coverage.
+**Goal:** Connect real terminal height and the `Alt+P` preview toggle through runtime routing and smoke coverage.
 
 **Step 1: Write failing tests**
 
 Add tests asserting:
 
-1. `routeSearchEverythingKey("p", controller)` toggles Search Everything preview, while printable search input behavior remains intact for other letters.
+1. `routeSearchEverythingKey("\\u001bp", controller)` toggles Search Everything preview, while printable `p` and other letters remain normal search query input.
 2. `Ctrl+P` still toggles Search Everything overlay globally.
 3. Runtime passes effective terminal height into `renderSearchEverythingScreen`.
 4. Interactive smoke can:
    - open Search Everything,
    - type a query,
-   - toggle preview off/on with `p`,
+   - toggle preview off/on with `Alt+P`,
    - resize tmux to short height and observe responsive preview hidden,
    - restore height and see preview return unless manually hidden,
    - Escape back to the invoking screen.
@@ -319,7 +319,7 @@ bun test tests/unit/tui/render-routing.test.ts --test-name-pattern "Search Every
 bun run smoke:opentui:interactive
 ```
 
-**Expected RED:** `p` is currently printable search input, and runtime currently does not pass height to the Search Everything renderer.
+**Expected RED:** `Alt+P` currently is not routed as a preview toggle, and runtime currently does not pass height to the Search Everything renderer.
 
 **Step 2: Implement minimal runtime/routing changes**
 
