@@ -10,6 +10,7 @@ import type { NoteFrontmatter, ParsedNote } from "./note-schema"
 import { parsePlainNote, serializePlainNote } from "./plain-note"
 import { createSidecarRepository } from "./sidecar-repository"
 import type { NoteSidecar } from "./sidecar-schema"
+import { replaceNoteBodyAtomically } from "./atomic-note-writer"
 import { getArchiveNotePath, getInboxNotePath, getNotesPath } from "./root-layout"
 
 export interface CreateStoredNoteInput {
@@ -346,7 +347,7 @@ export function createNoteRepository(rootPath: string): NoteRepository {
       let wroteUpdatedNote = false
 
       try {
-        writeFileSync(normalizedNotePath, updatedMarkdown, "utf8")
+        replaceNoteBodyAtomically(normalizedRootPath, normalizedNotePath, updatedMarkdown)
         wroteUpdatedNote = true
         sidecars.write(updatedSidecar)
       } catch (error) {
@@ -354,7 +355,7 @@ export function createNoteRepository(rootPath: string): NoteRepository {
 
         if (wroteUpdatedNote) {
           try {
-            writeFileSync(normalizedNotePath, previousMarkdown, "utf8")
+            replaceNoteBodyAtomically(normalizedRootPath, normalizedNotePath, previousMarkdown)
           } catch (rollbackError) {
             rollbackErrors.push(rollbackError)
           }

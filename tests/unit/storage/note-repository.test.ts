@@ -3,11 +3,12 @@ import assert from "node:assert/strict"
 import * as fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
 
 import { UsageError } from "../../../src/core/errors"
 import { parsePlainNote } from "../../../src/storage/plain-note"
 import { createNoteRepository } from "../../../src/storage/note-repository"
+import { getStateNotesPath, getStateTmpPath } from "../../../src/storage/root-layout"
 
 const FIXED_FRONTMATTER = {
   id: "note-123",
@@ -151,6 +152,96 @@ test("repository archive rolls back the destination file when removing the sourc
 
     await access(sourcePath)
     await assert.rejects(() => access(archivedPath))
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("syncEditedNote preserves the previous note body when the atomic body write fails", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-sync-atomic-failure-"))
+
+  try {
+    const repository = createNoteRepository(rootPath)
+    const created = repository.create({
+      frontmatter: FIXED_FRONTMATTER,
+      body: "Original body.\n",
+    })
+    const stateTmpPath = getStateTmpPath(rootPath)
+
+    await symlink(os.tmpdir(), stateTmpPath)
+
+    assert.throws(
+      () =>
+        repository.syncEditedNote(created.notePath, {
+          title: "Updated title",
+          body: "Updated body.\n",
+          updatedAt: "2026-05-21T12:30:00.000Z",
+        }),
+      (error) => {
+        assert.ok(error instanceof UsageError)
+        assert.match(error.message, /Could not update note 'notes[\\/]inbox[\\/]note-123\.md'\./)
+        assert.equal(error.hint, "Ensure the note and its sidecar are writable inside BLUENOTE_ROOT.")
+        assert.ok(error.cause instanceof UsageError)
+        assert.match(error.cause.message, /atomic note writer path .* must not be a symlink/i)
+        return true
+      },
+    )
+
+    assert.equal(await readFile(created.notePath, "utf8"), "Original body.\n")
+    const sidecar = JSON.parse(await readFile(path.join(getStateNotesPath(rootPath), "note-123.json"), "utf8"))
+    assert.equal(sidecar.title, "Example title")
+    assert.equal(sidecar.description, "Original body.")
+    assert.equal(sidecar.updatedAt, "2026-05-21T10:15:00.000Z")
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("syncEditedNote rolls back the body with the atomic writer when sidecar persistence fails", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-sync-sidecar-failure-"))
+
+  try {
+    const repository = createNoteRepository(rootPath)
+    const created = repository.create({
+      frontmatter: FIXED_FRONTMATTER,
+      body: "Original body.\n",
+    })
+    const sidecarPath = path.join(getStateNotesPath(rootPath), "note-123.json")
+    const originalSidecar = await readFile(sidecarPath, "utf8")
+    const originalWriteFileSync = fs.writeFileSync
+    const sidecarFailure = new Error("simulated sidecar write failure")
+    const writeFileMock = spyOn(fs, "writeFileSync").mockImplementation((...args: Parameters<typeof fs.writeFileSync>) => {
+      const [target] = args
+
+      if (path.resolve(String(target)).startsWith(path.resolve(sidecarPath))) {
+        throw sidecarFailure
+      }
+
+      return originalWriteFileSync(...args)
+    })
+
+    try {
+      assert.throws(
+        () =>
+          repository.syncEditedNote(created.notePath, {
+            title: "Updated title",
+            body: "Updated body.\n",
+            updatedAt: "2026-05-21T12:30:00.000Z",
+          }),
+        (error) => {
+          assert.ok(error instanceof UsageError)
+          assert.match(error.message, /Could not update note 'notes[\\/]inbox[\\/]note-123\.md'\./)
+          assert.ok(error.cause instanceof UsageError)
+          assert.equal(error.cause.cause, sidecarFailure)
+          return true
+        },
+      )
+    } finally {
+      writeFileMock.mockRestore()
+    }
+
+    assert.equal(await readFile(created.notePath, "utf8"), "Original body.\n")
+    assert.equal(await readFile(sidecarPath, "utf8"), originalSidecar)
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }

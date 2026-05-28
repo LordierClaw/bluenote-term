@@ -80,6 +80,50 @@ test("creating a note succeeds from a fresh root without pre-created notes direc
   }
 })
 
+test("syncEditedNote updates the plain markdown body and aligned sidecar metadata", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-integration-sync-"))
+
+  try {
+    ensureManagedRoot(rootPath)
+    const repository = createNoteRepository(rootPath)
+    const created = repository.create({
+      frontmatter: FIXED_FRONTMATTER,
+      body: "Original body.\n",
+    })
+
+    const synced = repository.syncEditedNote(created.notePath, {
+      title: "Updated title",
+      body: "Updated body.\nSecond line.\n",
+      updatedAt: "2026-05-21T12:30:00.000Z",
+    })
+
+    assert.deepEqual(synced, created)
+
+    const markdown = await readFile(created.notePath, "utf8")
+    assert.equal(markdown, "Updated body.\nSecond line.\n")
+    assert.doesNotMatch(markdown, /^---/)
+
+    const sidecar = JSON.parse(await readFile(path.join(getStateNotesPath(rootPath), "note-123.json"), "utf8"))
+    assert.deepEqual(sidecar, {
+      key: "note-123",
+      title: "Updated title",
+      description: "Updated body. Second line.",
+      relativePath: path.join("notes", "inbox", "note-123.md"),
+      createdAt: "2026-05-21T10:15:00.000Z",
+      updatedAt: "2026-05-21T12:30:00.000Z",
+      archivedAt: null,
+      namingVersion: 1,
+    })
+
+    const loaded = repository.read(created.notePath)
+    assert.equal(loaded.body, "Updated body.\nSecond line.\n")
+    assert.equal(loaded.frontmatter.title, "Updated title")
+    assert.equal(loaded.frontmatter.updatedAt, "2026-05-21T12:30:00.000Z")
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
 test("reading and listing notes joins plain file bodies with sidecar metadata", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-integration-"))
 
