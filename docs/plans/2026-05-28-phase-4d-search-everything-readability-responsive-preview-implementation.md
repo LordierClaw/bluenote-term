@@ -199,7 +199,7 @@ Add view-model tests asserting:
    - `state.search.previewVisible === false`, reason `manual`, or
    - provided terminal height is below an explicit threshold, reason `short-height`.
 6. Hidden preview emits a compact status/hint and does not require preview sections.
-7. Shortcuts include `p preview hide/show` along with existing type/select/Enter/Esc hints.
+7. Shortcuts include `Alt+P preview hide/show` along with existing type/select/Enter/Esc hints, because plain `p` remains printable search input.
 8. The view model keeps exactly one input region, one result list region, and optionally one preview region.
 
 **Suggested test command:**

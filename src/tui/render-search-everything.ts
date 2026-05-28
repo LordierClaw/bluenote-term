@@ -161,10 +161,10 @@ export function buildSearchEverythingViewModel(
       : {
         visible: false,
         hiddenReason: previewHiddenReason,
-        hiddenStatus: previewHiddenReason === "manual" ? "Preview hidden · p preview show" : "Preview hidden for short terminal · p preview show",
+        hiddenStatus: previewHiddenReason === "manual" ? "Preview hidden · Alt+P preview show" : "Preview hidden for short terminal · Alt+P preview show",
         styleIntent: "mutedText",
       },
-    shortcuts: ["type search", "↑/↓ select", "Enter open/run", "p preview hide/show", `Esc ${previousScreen}`],
+    shortcuts: ["type search", "↑/↓ select", "Enter open/run", "Alt+P preview hide/show", `Esc ${previousScreen}`],
   }
 }
 

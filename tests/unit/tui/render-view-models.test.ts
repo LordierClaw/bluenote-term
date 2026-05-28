@@ -648,7 +648,7 @@ describe("TUI render view models", () => {
       selectedResult: "activeItem",
       preview: "panel",
     })
-    assert.deepEqual(vm.shortcuts, ["type search", "↑/↓ select", "Enter open/run", "p preview hide/show", "Esc editor"])
+    assert.deepEqual(vm.shortcuts, ["type search", "↑/↓ select", "Enter open/run", "Alt+P preview hide/show", "Esc editor"])
     assert.deepEqual(
       vm.results.map((row) => ({
         marker: row.focusMarker,
@@ -733,14 +733,14 @@ describe("TUI render view models", () => {
     assert.deepEqual(manualVm.preview, {
       visible: false,
       hiddenReason: "manual",
-      hiddenStatus: "Preview hidden · p preview show",
+      hiddenStatus: "Preview hidden · Alt+P preview show",
       styleIntent: "mutedText",
     })
     assert.equal("sections" in manualVm.preview!, false)
     assert.deepEqual(shortVm.preview, {
       visible: false,
       hiddenReason: "short-height",
-      hiddenStatus: "Preview hidden for short terminal · p preview show",
+      hiddenStatus: "Preview hidden for short terminal · Alt+P preview show",
       styleIntent: "mutedText",
     })
     assert.equal("sections" in shortVm.preview!, false)
