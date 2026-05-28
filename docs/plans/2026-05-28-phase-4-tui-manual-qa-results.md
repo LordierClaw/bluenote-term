@@ -208,6 +208,19 @@ Task 5 attempted to reproduce the reported quit shortcut failures mode-by-mode b
 - Evidence caveat: the live checks used window presence/title and active process context to verify the target `bun run ./bin/bn.ts tui` process ended. The harness windows often disappeared or changed out of the original title after exit, so reusable shell prompt text was not captured separately for each mode. No lingering target TUI process was observed for the tested windows.
 - No product-code root cause was proven in this session, so no quit-code fix was made.
 
+## Phase 4G final automated regression — 2026-05-29
+
+Task 6 objective automated regression ran after Tasks 3–5:
+
+- `bun run typecheck`: passed (`tsc --noEmit`).
+- `bun test`: passed, 445 pass / 0 fail across 49 files.
+- `bun run smoke:opentui`: passed with marker `phase-4f-tui-cleanup-navigation-save-bugs; next: phase-4-next-hardening-subplan`.
+- `bun run smoke:opentui:interactive`: expected environment failure because `tmux` is not installed. The script now reports the explicit actionable message: `tmux is required for interactive OpenTUI smoke tests. Install tmux or run the non-interactive smoke with bun run smoke:opentui`.
+- `bun run smoke:cli`: passed.
+- `git status --short --branch`: clean at the time of the check, branch `feat/opentui-implement` ahead of origin.
+
+Subjective UI polish/rating remains intentionally paused until the user chooses the desired visual style and improvement direction.
+
 ## Environment and preflight
 
 ### Desktop/tool readiness
