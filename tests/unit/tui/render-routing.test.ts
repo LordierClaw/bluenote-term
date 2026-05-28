@@ -460,6 +460,55 @@ describe("TUI render keyboard routing", () => {
     }
   })
 
+  test("editor renderer lays out topbar updated time right and status row with colored labels above shortcuts", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      ;(renderer as any).width = 120
+      const { controller } = createController("editor")
+      controller.getState().mode = "editor.body"
+      controller.getState().editor = {
+        note: { key: "daily", title: "Daily", description: "", relativePath: "notes/inbox/daily.md", body: "body", updatedAt: "2026-05-28T10:30:00.000Z" } as any,
+        body: "body",
+        savedBody: "body",
+        dirty: false,
+      }
+      const screen = renderEditorScreen({ renderer, controller })
+      renderer.root.add(screen)
+
+      const topbar = findById(screen, "bluenote-editor-topbar")
+      const topbarChildren = topbar?.getChildren?.() ?? []
+      const path = findById(screen, "bluenote-editor-topbar-path") as { content?: any; fg?: string } | undefined
+      const updated = findById(screen, "bluenote-editor-topbar-updated") as { content?: any; fg?: string } | undefined
+      const topbarSpacer = findById(screen, "bluenote-editor-topbar-spacer") as { yogaNode?: { getFlexGrow?: () => number } } | undefined
+      const statusRow = findById(screen, "bluenote-editor-bottombar-status-row")
+      const shortcutRow = findById(screen, "bluenote-editor-bottombar-shortcuts") as { content?: any } | undefined
+      const wrapStatus = findById(screen, "bluenote-editor-bottombar-wrap-status") as { content?: any; fg?: string } | undefined
+      const saveStatus = findById(screen, "bluenote-editor-bottombar-save-status") as { content?: any; fg?: string } | undefined
+
+      assert.deepEqual(topbarChildren.map((child: any) => child.id), [
+        "bluenote-editor-topbar-title",
+        "bluenote-editor-topbar-separator-path",
+        "bluenote-editor-topbar-path",
+        "bluenote-editor-topbar-spacer",
+        "bluenote-editor-topbar-separator-updated",
+        "bluenote-editor-topbar-updated",
+      ])
+      assert.equal(path?.content?.chunks?.[0]?.text ?? path?.content, "notes/inbox/daily.md")
+      assert.deepEqual((path as any)?.fg?.toInts?.(), [148, 163, 184, 255])
+      assert.equal(topbarSpacer?.yogaNode?.getFlexGrow?.(), 1)
+      assert.equal(updated?.content?.chunks?.[0]?.text ?? updated?.content, "Updated 2026-05-28T10:30:00.000Z")
+      assert.deepEqual((updated as any)?.fg?.toInts?.(), [148, 163, 184, 255])
+      assert.ok(statusRow)
+      assert.equal(wrapStatus?.content?.chunks?.[0]?.text ?? wrapStatus?.content, "Enabled")
+      assert.deepEqual((wrapStatus as any)?.fg?.toInts?.(), [34, 197, 94, 255])
+      assert.equal(saveStatus?.content?.chunks?.[0]?.text ?? saveStatus?.content, "Saved")
+      assert.deepEqual((saveStatus as any)?.fg?.toInts?.(), [34, 197, 94, 255])
+      assert.equal(shortcutRow?.content?.chunks?.[0]?.text ?? shortcutRow?.content, "Ctrl+S save  Ctrl+F find  Alt+Z wrap  Ctrl+P search  Esc manager  Ctrl+C quit")
+    } finally {
+      renderer.destroy()
+    }
+  })
+
   test("editor body renders as a focused controlled input owner", async () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {

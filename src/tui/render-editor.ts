@@ -28,6 +28,10 @@ export interface EditorTopbarViewModel {
   noteName: string
   directoryPath: string
   filename: string
+  fullPath: string
+  pathSeparator: "|"
+  updatedSeparator: "|"
+  fullPathIntent: TuiColorIntent
   relativePath: string
   key: string
   dirty: boolean
@@ -72,8 +76,25 @@ export interface EditorBottombarViewModel {
   hints: string[]
   cursorLabel: string
   saveStatusLabel: string
+  saveStatusIntent: TuiColorIntent
   updatedLabel: string
   wrapLabel: string
+  wrapStatusLabel: "Enabled" | "Disabled"
+  wrapStatusIntent: TuiColorIntent
+  row1: {
+    leftLabel: string
+    centerLabel: string
+    centerStatusLabel: "Enabled" | "Disabled"
+    centerStatusIntent: TuiColorIntent
+    rightLabel: string
+    rightIntent: TuiColorIntent
+    errorLabel: string | null
+  }
+  row2: {
+    shortcuts: string[]
+    visibleHints: string[]
+    hiddenShortcutCount: number
+  }
   shortcuts: EditorShortcutViewModel[]
   visibleHints: string[]
   hiddenShortcutCount: number
@@ -125,15 +146,15 @@ function renderControlledBodyValue(value: string): string {
 function statusIntentForEditor(editor: EditorBufferWithAutosave | null): TuiColorIntent {
   switch (editor?.autosaveStatus) {
     case "pending":
-      return "primaryAccent"
+      return "danger"
     case "saving":
-      return "secondaryAccent"
+      return "warning"
     case "saved":
-      return "mutedText"
+      return "success"
     case "error":
       return "danger"
     default:
-      return editor?.dirty ? "primaryAccent" : "mutedText"
+      return editor?.dirty ? "danger" : "success"
   }
 }
 
@@ -142,14 +163,18 @@ function editorSaveStatusLabel(editor: EditorBufferWithAutosave | null, dirty: b
     case "pending":
       return "Unsaved"
     case "saving":
-      return "Autosaving…"
+      return "Saving"
     case "saved":
       return "Saved"
     case "error":
-      return "Autosave failed"
+      return "Unsaved"
     default:
       return dirty ? "Unsaved" : "Saved"
   }
+}
+
+function editorStatusErrorLabel(editor: EditorBufferWithAutosave | null): string | null {
+  return editor?.autosaveStatus === "error" ? "Autosave failed" : null
 }
 
 function noteTimestampCandidates(note: NoteWithEditorMetadata | null | undefined): Array<{ label: "Updated" | "Modified"; value: string; time: number }> {
@@ -244,6 +269,8 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
   const dirty = editor?.dirty ?? false
   const statusIntent = statusIntentForEditor(editor)
   const saveStatusLabel = editorSaveStatusLabel(editor, dirty)
+  const saveStatusIntent = statusIntent
+  const errorLabel = editorStatusErrorLabel(editor)
   const relativePath = normalizeRelativePath(note?.relativePath ?? "")
   const updatedLabel = updatedLabelFor(note as NoteWithEditorMetadata | null | undefined)
   const findMode = state.mode === "editor.find"
@@ -252,7 +279,9 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
 
   const cursor = editor ? editorCursorPosition(editor, editorCursorOffset(editor)) : { line: 1, column: 1 }
   const cursorLabel = `Line ${cursor.line}, Col ${cursor.column}`
-  const wrapLabel = `Wrap ${editor?.wrapMode ?? "word"}`
+  const wrapStatusLabel = (editor?.wrapMode ?? "word") === "word" ? "Enabled" : "Disabled"
+  const wrapStatusIntent: TuiColorIntent = wrapStatusLabel === "Enabled" ? "success" : "danger"
+  const wrapLabel = `Wrap word: ${wrapStatusLabel}`
   const shortcuts = editorShortcuts()
   const lineCount = countLines(body)
   const overflow = editorOverflowFor(lineCount, cursor.line, responsive.bodyViewportLines ?? Number.POSITIVE_INFINITY)
@@ -264,6 +293,10 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
       noteName: note?.title ?? "No note open",
       directoryPath: directoryPathFor(relativePath),
       filename: filenameFor(relativePath),
+      fullPath: relativePath,
+      pathSeparator: "|",
+      updatedSeparator: "|",
+      fullPathIntent: "mutedText",
       relativePath,
       key: note?.key ?? "",
       dirty,
@@ -296,13 +329,30 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
       overflow,
     },
     bottombar: {
-      status: editorStatusLabel([cursorLabel, wrapLabel, saveStatusLabel, updatedLabel], overflowIndicator),
+      status: editorStatusLabel([cursorLabel, wrapLabel, saveStatusLabel, ...(errorLabel ? [errorLabel] : [])], overflowIndicator),
       statusIntent,
       hints: shortcuts.map((shortcut) => shortcut.label),
       cursorLabel,
       saveStatusLabel,
+      saveStatusIntent,
       updatedLabel,
       wrapLabel,
+      wrapStatusLabel,
+      wrapStatusIntent,
+      row1: {
+        leftLabel: cursorLabel,
+        centerLabel: wrapLabel,
+        centerStatusLabel: wrapStatusLabel,
+        centerStatusIntent: wrapStatusIntent,
+        rightLabel: saveStatusLabel,
+        rightIntent: saveStatusIntent,
+        errorLabel,
+      },
+      row2: {
+        shortcuts: shortcuts.map((shortcut) => shortcut.label),
+        visibleHints,
+        hiddenShortcutCount,
+      },
       shortcuts,
       visibleHints,
       hiddenShortcutCount,
@@ -334,18 +384,121 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     backgroundColor: tuiTheme.background,
   })
 
-  const topbar = new TextRenderable(options.renderer, {
-    content: `${vm.topbar.noteName}  ${vm.topbar.directoryPath}  ${vm.topbar.filename}  ${vm.topbar.key}  ${vm.topbar.updatedLabel}  ${vm.topbar.saveStatusLabel}`,
+  const topbar = new BoxRenderable(options.renderer, {
+    id: "bluenote-editor-topbar",
+    flexDirection: "row",
+    width: "100%",
     height: 1,
-    fg: tuiTheme[vm.topbar.statusIntent],
-    bg: tuiTheme.panel,
+    backgroundColor: tuiTheme.panel,
   })
-  const bottombarStatus = new TextRenderable(options.renderer, {
-    content: vm.bottombar.status,
+  topbar.add(new TextRenderable(options.renderer, {
+    id: "bluenote-editor-topbar-title",
+    content: ` ${vm.topbar.noteName} `,
+    width: vm.topbar.noteName.length + 2,
     height: 1,
-    fg: tuiTheme[vm.bottombar.statusIntent],
+    fg: tuiTheme.primaryAccent,
     bg: tuiTheme.panel,
+  }))
+  topbar.add(new TextRenderable(options.renderer, {
+    id: "bluenote-editor-topbar-separator-path",
+    content: `${vm.topbar.pathSeparator} `,
+    width: 2,
+    height: 1,
+    fg: tuiTheme.mutedText,
+    bg: tuiTheme.panel,
+  }))
+  topbar.add(new TextRenderable(options.renderer, {
+    id: "bluenote-editor-topbar-path",
+    content: vm.topbar.fullPath,
+    width: Math.max(1, vm.topbar.fullPath.length),
+    height: 1,
+    fg: tuiTheme[vm.topbar.fullPathIntent],
+    bg: tuiTheme.panel,
+  }))
+  topbar.add(new BoxRenderable(options.renderer, {
+    id: "bluenote-editor-topbar-spacer",
+    flexGrow: 1,
+    height: 1,
+    backgroundColor: tuiTheme.panel,
+  }))
+  topbar.add(new TextRenderable(options.renderer, {
+    id: "bluenote-editor-topbar-separator-updated",
+    content: ` ${vm.topbar.updatedSeparator} `,
+    width: 3,
+    height: 1,
+    fg: tuiTheme.mutedText,
+    bg: tuiTheme.panel,
+  }))
+  topbar.add(new TextRenderable(options.renderer, {
+    id: "bluenote-editor-topbar-updated",
+    content: vm.topbar.updatedLabel,
+    width: Math.max(1, vm.topbar.updatedLabel.length),
+    height: 1,
+    fg: tuiTheme[vm.topbar.updatedIntent],
+    bg: tuiTheme.panel,
+  }))
+
+  const bottombarStatus = new BoxRenderable(options.renderer, {
+    id: "bluenote-editor-bottombar-status-row",
+    flexDirection: "row",
+    width: "100%",
+    height: 1,
+    backgroundColor: tuiTheme.panel,
   })
+  bottombarStatus.add(new TextRenderable(options.renderer, {
+    id: "bluenote-editor-bottombar-cursor",
+    content: ` ${vm.bottombar.row1.leftLabel}`,
+    width: vm.bottombar.row1.leftLabel.length + 1,
+    height: 1,
+    fg: tuiTheme.mutedText,
+    bg: tuiTheme.panel,
+  }))
+  bottombarStatus.add(new BoxRenderable(options.renderer, {
+    id: "bluenote-editor-bottombar-left-spacer",
+    flexGrow: 1,
+    height: 1,
+    backgroundColor: tuiTheme.panel,
+  }))
+  bottombarStatus.add(new TextRenderable(options.renderer, {
+    id: "bluenote-editor-bottombar-wrap-prefix",
+    content: "Wrap word: ",
+    width: "Wrap word: ".length,
+    height: 1,
+    fg: tuiTheme.mutedText,
+    bg: tuiTheme.panel,
+  }))
+  bottombarStatus.add(new TextRenderable(options.renderer, {
+    id: "bluenote-editor-bottombar-wrap-status",
+    content: vm.bottombar.row1.centerStatusLabel,
+    width: vm.bottombar.row1.centerStatusLabel.length,
+    height: 1,
+    fg: tuiTheme[vm.bottombar.row1.centerStatusIntent],
+    bg: tuiTheme.panel,
+  }))
+  bottombarStatus.add(new BoxRenderable(options.renderer, {
+    id: "bluenote-editor-bottombar-right-spacer",
+    flexGrow: 1,
+    height: 1,
+    backgroundColor: tuiTheme.panel,
+  }))
+  if (vm.bottombar.row1.errorLabel) {
+    bottombarStatus.add(new TextRenderable(options.renderer, {
+      id: "bluenote-editor-bottombar-error-status",
+      content: `${vm.bottombar.row1.errorLabel} `,
+      width: vm.bottombar.row1.errorLabel.length + 1,
+      height: 1,
+      fg: tuiTheme.danger,
+      bg: tuiTheme.panel,
+    }))
+  }
+  bottombarStatus.add(new TextRenderable(options.renderer, {
+    id: "bluenote-editor-bottombar-save-status",
+    content: vm.bottombar.row1.rightLabel,
+    width: vm.bottombar.row1.rightLabel.length,
+    height: 1,
+    fg: tuiTheme[vm.bottombar.row1.rightIntent],
+    bg: tuiTheme.panel,
+  }))
   let findInput: InputRenderable | null = null
   const bodyPanel = new BoxRenderable(options.renderer, {
     id: vm.body.inputId,
@@ -413,8 +566,9 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   }
   root.add(bodyPanel)
   root.add(bottombarStatus)
-  const shortcutHints = [...vm.bottombar.visibleHints, ...(vm.bottombar.hiddenShortcutCount > 0 ? [`+${vm.bottombar.hiddenShortcutCount}`] : [])]
+  const shortcutHints = [...vm.bottombar.row2.visibleHints, ...(vm.bottombar.row2.hiddenShortcutCount > 0 ? [`+${vm.bottombar.row2.hiddenShortcutCount}`] : [])]
   root.add(new TextRenderable(options.renderer, {
+    id: "bluenote-editor-bottombar-shortcuts",
     content: shortcutHints.join("  "),
     height: 1,
     fg: tuiTheme.secondaryAccent,
