@@ -40,8 +40,9 @@ function assertRefinedTuiBehavior(content: string): void {
 
 function assertMinimalManagerChrome(content: string): void {
   assert.match(content, /minimal manager|minimal .*Manager|Manager .*minimal/i)
-  assert.match(content, /current folder|current path|folder path/i)
-  assert.match(content, /focused item|selected item|hovered path/i)
+  assert.match(content, /current folder|folder panel|folder path/i)
+  assert.match(content, /preview context|preview/i)
+  assert.doesNotMatch(content, /Manager[^\n.]*topbar[^\n.]*(?:current path|current folder path|focused item|selected item|hovered path)/i)
   assert.match(content, /short action hints|compact .*hints|minimal .*hints/i)
   assert.doesNotMatch(content, /BlueNote Manager|BlueNote TUI|branded title screen|decorative title/i)
 }
@@ -117,7 +118,9 @@ function assertDeliveredPhase4FTuiCleanupBehavior(content: string): void {
   assert.match(content, /Phase 4F[^\n.]*TUI cleanup[^\n.]*navigation[^\n.]*save|Phase 4F[^\n.]*cleanup[^\n.]*navigation[^\n.]*filtering[^\n.]*save/i)
   assert.match(content, /accepted|delivered|complete/i)
   assert.match(content, /Manager[^\n.]*topbar[^\n.]*filtered count|filtered count[^\n.]*Manager[^\n.]*topbar/i)
-  assert.match(content, /bottom path|bottom-path|open-note bottom path/i)
+  assert.match(content, /open(?:ed)?-note[^\n.]*full-path[^\n.]*bottom path|open-note bottom path[^\n.]*currently opened note full path|bottom path[^\n.]*currently opened note full path/i)
+  assert.match(content, /empty\/calm placeholder[^\n.]*no note is open|no note is open[^\n.]*empty\/calm placeholder/i)
+  assert.doesNotMatch(content, /(?:open-note\s+)?bottom path[^\n.]*selected note path|(?:open-note\s+)?bottom path[^\n.]*open\/selected note path|(?:open-note\s+)?bottom path[^\n.]*focused note path|(?:open-note\s+)?bottom path[^\n.]*hovered path/i)
   assert.match(content, /filtered result[^\n.]*navigation|navigation[^\n.]*filtered result|filtered results?[^\n.]*open/i)
   assert.match(content, /editor[^\n.]*border[^\n.]*removed|removed[^\n.]*editor[^\n.]*border|without[^\n.]*editor[^\n.]*border/i)
   assert.match(content, /Editor body[^\n.]*title[^\n.]*removed|removed[^\n.]*Editor body[^\n.]*title|without[^\n.]*Editor body[^\n.]*title/i)
@@ -199,8 +202,11 @@ test("product and phase docs describe refined Manager, Editor, and Search Everyt
   assertDeliveredPhase4ESaveContract(phase)
   assertPhase4ENotAdvertisedUpcoming(overview)
   assertPhase4ENotAdvertisedUpcoming(phase)
+  assertDeliveredPhase4FTuiCleanupBehavior(overview)
   assertDeliveredPhase4FTuiCleanupBehavior(phase)
+  assertPhase4FNotAdvertisedUpcoming(overview)
   assertPhase4FNotAdvertisedUpcoming(phase)
+  assertNeutralNextPhaseMarker(overview)
   assertNeutralNextPhaseMarker(phase)
 })
 
