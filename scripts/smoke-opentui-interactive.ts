@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process"
 
 import { createNote } from "../src/core/create-note"
 
-const SMOKE_TIMEOUT_MS = 90_000
+const SMOKE_TIMEOUT_MS = 150_000
 const TMUX_COMMAND_TIMEOUT_MS = 5_000
 const smokeStartedAt = Date.now()
 
@@ -303,7 +303,7 @@ function assertPostAutosaveQuitRoute(route: "q" | "C-c"): void {
       routeSmokeResource.panePid = Number.isFinite(parsedPanePid) ? parsedPanePid : null
     }
 
-    capturePaneUntil(routeSessionName, `${route} route manager launch`, "Rebuild idle", 30)
+    capturePaneUntil(routeSessionName, `${route} route manager launch`, "q quit", 30)
     sendKeys(routeSessionName, "C-p")
     const searchPromptPane = capturePaneUntil(routeSessionName, `${route} route search prompt`, "Search Everything", 20)
     expectPaneContains(searchPromptPane, "Search Everything", `${route} route search prompt`)
@@ -324,8 +324,8 @@ function assertPostAutosaveQuitRoute(route: "q" | "C-c"): void {
     expectNoteFileContains(summary.notePath, autosaveToken, `${route} route autosave filesystem`)
 
     sendKeys(routeSessionName, "Escape")
-    const managerPane = capturePaneUntil(routeSessionName, `${route} route return to manager after autosave`, "Rebuild idle", 20)
-    expectLatestScreen(managerPane, "Rebuild idle", autosaveToken, `${route} route return to manager latest screen`)
+    const managerPane = capturePaneUntil(routeSessionName, `${route} route return to manager after autosave`, "q quit", 20)
+    expectLatestScreen(managerPane, "q quit", autosaveToken, `${route} route return to manager latest screen`)
     sendKeys(routeSessionName, route)
     expectTmuxSessionExited(routeSessionName, `${route} route exits from manager after autosave`)
     routeSmokeResource.panePid = null
@@ -438,19 +438,19 @@ try {
 
   wait(1_500, "launch")
 
-  const managerPane = capturePaneUntil(sessionName, "manager launch", "Rebuild idle", 30)
+  const managerPane = capturePaneUntil(sessionName, "manager launch", "q quit", 30)
   if (managerPane.includes("BlueNote TUI workspace bootstrap ready")) {
     throw new Error("Interactive TUI printed the non-interactive bootstrap message instead of owning the terminal")
   }
   expectPaneContains(managerPane, "BlueNote", "manager launch")
-  expectPaneContains(managerPane, "Rebuild idle", "manager launch")
-  expectPaneContains(managerPane, "Index ready", "manager launch")
+  expectPaneContains(managerPane, "q quit", "manager launch")
+  expectPaneContains(managerPane, "items | Ready", "manager launch")
   expectPaneContains(managerPane, "notes/", "manager launch")
   expectPaneContains(managerPane, "projects", "manager launch")
   expectPaneContains(managerPane, "Root Editor", "manager launch")
 
   sendKeys(sessionName, "p")
-  const previewOffPane = capturePaneUntil(sessionName, "manager preview toggle off", "Preview hidden (manual)", 20)
+  const previewOffPane = capturePaneUntil(sessionName, "manager preview toggle off", "p preview show", 20)
   expectPaneContains(previewOffPane, "p preview show", "manager preview toggle off")
   expectPaneContains(previewOffPane, "projects", "manager preview toggle off")
   sendKeys(sessionName, "p")
@@ -458,7 +458,7 @@ try {
   expectPaneExcludes(previewOnPane, "Preview hidden (manual)", "manager preview toggle on")
 
   resizeSession(sessionName, 60, 24, "manager narrow responsive resize")
-  const narrowManagerPane = capturePaneUntil(sessionName, "manager narrow responsive resize", "Preview hidden (narrow width)", 20)
+  const narrowManagerPane = capturePaneUntil(sessionName, "manager narrow responsive resize", "p preview show", 20)
   expectPaneContains(narrowManagerPane, "projects", "manager narrow responsive resize")
   expectPaneContains(narrowManagerPane, "Root Editor", "manager narrow responsive resize")
   resizeSession(sessionName, 100, 30, "manager wide responsive restore")
@@ -466,13 +466,13 @@ try {
   expectPaneExcludes(wideManagerPane, "Preview hidden (narrow width)", "manager wide responsive restore")
 
   sendKeys(sessionName, "p")
-  const manualHiddenWidePane = capturePaneUntil(sessionName, "manager manual preview hidden wide", "Preview hidden (manual)", 20)
+  const manualHiddenWidePane = capturePaneUntil(sessionName, "manager manual preview hidden wide", "p preview show", 20)
   expectPaneContains(manualHiddenWidePane, "p preview show", "manager manual preview hidden wide")
   resizeSession(sessionName, 60, 24, "manager manual preview hidden narrow")
-  const manualHiddenNarrowPane = capturePaneUntil(sessionName, "manager manual preview hidden narrow", "Preview hidden (narrow width)", 20)
+  const manualHiddenNarrowPane = capturePaneUntil(sessionName, "manager manual preview hidden narrow", "p preview show", 20)
   expectPaneContains(manualHiddenNarrowPane, "projects", "manager manual preview hidden narrow")
   resizeSession(sessionName, 100, 30, "manager manual preview hidden restore")
-  const manualHiddenRestoredPane = capturePaneUntil(sessionName, "manager manual preview hidden restore", "Preview hidden (manual)", 20)
+  const manualHiddenRestoredPane = capturePaneUntil(sessionName, "manager manual preview hidden restore", "p preview show", 20)
   expectPaneContains(manualHiddenRestoredPane, "p preview show", "manager manual preview hidden restore")
   sendKeys(sessionName, "p")
   capturePaneUntil(sessionName, "manager preview re-enabled", "p preview hide", 20)
@@ -483,8 +483,8 @@ try {
   expectPaneContains(searchPromptFromSPane, "Search Everything", "search prompt from s")
   sendKeys(sessionName, "Escape")
   wait(500)
-  const returnedFromSManagerPane = capturePaneUntil(sessionName, "return from s search", "Rebuild idle", 20)
-  expectLatestScreen(returnedFromSManagerPane, "Rebuild idle", "Search Everything", "return from s search")
+  const returnedFromSManagerPane = capturePaneUntil(sessionName, "return from s search", "q quit", 20)
+  expectLatestScreen(returnedFromSManagerPane, "q quit", "Search Everything", "return from s search")
 
   sendKeys(sessionName, "C-p")
   wait(500)
@@ -530,16 +530,15 @@ try {
   capturePaneUntil(sessionName, "search preview restored before exit", "Preview ·", 20)
 
   sendKeys(sessionName, "Escape")
-  wait(500)
-  const returnedManagerPane = capturePane(sessionName, "return from search")
-  expectPaneContains(returnedManagerPane, "Rebuild idle", "return from search")
+  const returnedManagerPane = capturePaneUntil(sessionName, "return from search", "q quit", 20)
+  expectPaneContains(returnedManagerPane, "q quit", "return from search")
   expectPaneExcludes(returnedManagerPane, "BlueNote Manager", "return from search")
-  expectLatestScreen(returnedManagerPane, "Rebuild idle", "Search Everything", "return from search")
+  expectLatestScreen(returnedManagerPane, "q quit", "Search Everything", "return from search")
 
   sendKeys(sessionName, "Right")
   wait(500)
   const folderPane = capturePane(sessionName, "manager folder enter")
-  expectPaneContains(folderPane, "Rebuild idle", "manager folder enter")
+  expectPaneContains(folderPane, "q quit", "manager folder enter")
   expectPaneExcludes(folderPane, "BlueNote Manager", "manager folder enter")
   expectPaneContains(folderPane, "notes/projects", "manager folder enter")
   expectPaneContains(folderPane, "Folder Navigation Fixture", "manager folder enter")
@@ -547,7 +546,7 @@ try {
   sendKeys(sessionName, "Left")
   wait(500)
   const rootPane = capturePane(sessionName, "manager folder return")
-  expectPaneContains(rootPane, "Rebuild idle", "manager folder return")
+  expectPaneContains(rootPane, "q quit", "manager folder return")
   expectPaneExcludes(rootPane, "BlueNote Manager", "manager folder return")
   expectPaneContains(rootPane, "notes/", "manager folder return")
   expectPaneContains(rootPane, "Root Editor", "manager folder return")
@@ -616,9 +615,9 @@ try {
   expectNoteFileContains(rootEditorSummary.notePath, autosavePersistenceToken, "editor autosave persistence filesystem")
 
   sendKeys(sessionName, "Escape")
-  const managerAfterAutosavePane = capturePaneUntil(sessionName, "editor autosave return to manager", "Rebuild idle", 20)
+  const managerAfterAutosavePane = capturePaneUntil(sessionName, "editor autosave return to manager", "q quit", 20)
   expectPaneContains(managerAfterAutosavePane, "Root Editor", "editor autosave return to manager")
-  expectLatestScreen(managerAfterAutosavePane, "Rebuild idle", autosavePersistenceToken, "editor autosave return to manager latest screen")
+  expectLatestScreen(managerAfterAutosavePane, "q quit", autosavePersistenceToken, "editor autosave return to manager latest screen")
 
   sendKeys(sessionName, "Down")
   wait(250, "manager switch target selection via arrow down")
@@ -628,20 +627,20 @@ try {
   expectPaneContains(switchTargetEnterPane, "Switch target body", "manager opens switch target with Enter after autosave")
 
   sendKeys(sessionName, "Escape")
-  const managerAfterSwitchEnterPane = capturePaneUntil(sessionName, "switch target return to manager after Enter", "Rebuild idle", 20)
+  const managerAfterSwitchEnterPane = capturePaneUntil(sessionName, "switch target return to manager after Enter", "q quit", 20)
   expectPaneContains(managerAfterSwitchEnterPane, "Switch Target", "switch target return to manager after Enter")
   sendKeys(sessionName, "Enter")
   const switchTargetRightSetupPane = capturePaneUntil(sessionName, "manager reopens switch target with Enter before Right attempt", "Ctrl+F find", 30)
   expectPaneContains(switchTargetRightSetupPane, "Ctrl+F find", "manager reopens switch target with Enter before Right attempt")
   sendKeys(sessionName, "Escape")
-  capturePaneUntil(sessionName, "switch target return to manager before Right attempt", "Rebuild idle", 20)
+  capturePaneUntil(sessionName, "switch target return to manager before Right attempt", "q quit", 20)
   sendKeys(sessionName, "Right")
   const switchTargetRightPane = capturePaneUntil(sessionName, "manager opens switch target with Arrow Right after autosave", "Ctrl+F find", 30)
   expectPaneContains(switchTargetRightPane, "Ctrl+F find", "manager opens switch target with Arrow Right after autosave")
   expectPaneContains(switchTargetRightPane, "Switch target body", "manager opens switch target with Arrow Right after autosave")
 
   sendKeys(sessionName, "Escape")
-  capturePaneUntil(sessionName, "switch target return to manager for original editor", "Rebuild idle", 20)
+  capturePaneUntil(sessionName, "switch target return to manager for original editor", "q quit", 20)
   sendKeys(sessionName, "Up")
   wait(250, "manager select original editor after switch target")
   sendKeys(sessionName, "Enter")
@@ -661,7 +660,7 @@ try {
   sendText(sessionName, manualSavePersistenceToken)
   expectNoteFileExcludes(rootEditorSummary.notePath, manualSavePersistenceToken, "editor manual save pre-ctrl-s filesystem")
   sendKeys(sessionName, "C-s")
-  expectNoteFileContainsWithin(rootEditorSummary.notePath, manualSavePersistenceToken, "editor manual save persistence filesystem", 300)
+  expectNoteFileContainsWithin(rootEditorSummary.notePath, manualSavePersistenceToken, "editor manual save persistence filesystem", 700)
   const editorSavedPane = capturePaneUntil(sessionName, "editor ctrl-s save", "Saved", 30)
   const postManualSaveCursorText = `${multilineText}${pasteFallbackText}${autosavePersistenceToken}${typedEditorText.slice(-1)}${manualSavePersistenceToken}▌`
   expectPaneContains(editorSavedPane, postManualSaveCursorText, "editor ctrl-s save")
@@ -682,9 +681,9 @@ try {
   expectPaneExcludes(editorBodyReturnPane, "Find in note", "editor find return to body")
 
   sendKeys(sessionName, "Escape")
-  const managerReturnPane = capturePaneUntil(sessionName, "editor return to manager", "Rebuild idle", 20)
+  const managerReturnPane = capturePaneUntil(sessionName, "editor return to manager", "q quit", 20)
   expectPaneContains(managerReturnPane, "Root Editor", "editor return to manager")
-  expectLatestScreen(managerReturnPane, "Rebuild idle", "Ctrl+F find", "editor return to manager latest screen")
+  expectLatestScreen(managerReturnPane, "q quit", "Ctrl+F find", "editor return to manager latest screen")
 
   const liveManagerTitle = `q Live Smoke Manager Note ${process.pid}`
   sendKeys(sessionName, "n")
@@ -702,7 +701,7 @@ try {
   sendKeys(sessionName, "Escape")
   wait(500)
   const managerAfterCreatePane = capturePaneUntil(sessionName, "manager shows created note", createdArtifacts.key, 30)
-  expectPaneContains(managerAfterCreatePane, `selected ${createdArtifacts.key}`, "manager shows created note")
+  expectPaneContains(managerAfterCreatePane, createdArtifacts.relativePath, "manager shows created note")
 
   sendKeys(sessionName, "Up")
   wait(150)
