@@ -5,6 +5,7 @@ import type { SearchEverythingState, TuiScreen } from "../state"
 
 export type SearchEverythingResultKind = "note" | "content" | "folder" | "command"
 export type SearchEverythingMatchedField = "filename" | "key" | "title" | "description" | "path"
+export type SearchEverythingTypeIcon = SearchEverythingResultKind
 
 export interface TuiCommandDefinition {
   name: `/${string}`
@@ -20,6 +21,8 @@ export interface SearchEverythingDependencies {
 
 export interface SearchEverythingBaseResult {
   kind: SearchEverythingResultKind
+  typeLabel?: SearchEverythingResultKind
+  typeIcon?: SearchEverythingTypeIcon
   id: string
   label: string
   detail: string
@@ -66,6 +69,7 @@ export interface SearchEverythingPreview {
   title: string
   subtitle: string
   lines: string[]
+  sections: Array<{ label: string; lines: string[] }>
 }
 
 export const TUI_COMMANDS: readonly TuiCommandDefinition[] = [
@@ -159,6 +163,8 @@ function collectFolders(noteSummaries: readonly NoteManagerSummary[]): SearchEve
 
     return {
       kind: "folder",
+      typeLabel: "folder",
+      typeIcon: "folder",
       id: `folder:${path}`,
       path,
       name,
@@ -206,6 +212,8 @@ function buildNoteResult(query: string, summary: NoteManagerSummary): SearchEver
 
   return {
     kind: "note",
+    typeLabel: "note",
+    typeIcon: "note",
     id: `note:${summary.key}`,
     key: summary.key,
     filename,
@@ -229,6 +237,8 @@ function buildContentResults(query: string, deps: SearchEverythingDependencies):
     .filter((match) => match.match.source === "content")
     .map((match) => ({
       kind: "content",
+      typeLabel: "content",
+      typeIcon: "content",
       id: `content:${match.key}:${match.match.label}`,
       key: match.key,
       title: match.title,
@@ -264,6 +274,8 @@ function buildCommandResults(query: string): SearchEverythingCommandResult[] {
 
   return TUI_COMMANDS.map<SearchEverythingCommandResult>((command) => ({
     kind: "command",
+    typeLabel: "command",
+    typeIcon: "command",
     id: `command:${command.name}`,
     label: command.name,
     detail: command.description,
@@ -325,10 +337,16 @@ export function buildSearchEverythingPreview(result: SearchEverythingResult | nu
   }
 
   if (result.kind === "command") {
+    const sections = [
+      { label: "Usage", lines: [result.usage] },
+      ...(result.shortcut ? [{ label: "Shortcut", lines: [result.shortcut] }] : []),
+    ]
+
     return {
       title: result.name,
       subtitle: result.description,
       lines: [`Usage: ${result.usage}`, ...(result.shortcut ? [`Shortcut: ${result.shortcut}`] : [])],
+      sections,
     }
   }
 
@@ -337,6 +355,10 @@ export function buildSearchEverythingPreview(result: SearchEverythingResult | nu
       title: result.title,
       subtitle: `${result.matchLabel} — ${result.relativePath}`,
       lines: [result.excerpt],
+      sections: [
+        { label: "Match", lines: [result.matchLabel] },
+        { label: "Excerpt", lines: [result.excerpt] },
+      ],
     }
   }
 
@@ -345,6 +367,10 @@ export function buildSearchEverythingPreview(result: SearchEverythingResult | nu
       title: result.label,
       subtitle: result.path,
       lines: [result.detail],
+      sections: [
+        { label: "Folder", lines: [result.path] },
+        { label: "Contents", lines: [result.detail] },
+      ],
     }
   }
 
@@ -352,6 +378,10 @@ export function buildSearchEverythingPreview(result: SearchEverythingResult | nu
     title: result.title,
     subtitle: `${result.filename} — ${result.relativePath}`,
     lines: [result.description],
+    sections: [
+      { label: "Metadata", lines: [`${result.filename} — ${result.relativePath}`] },
+      { label: "Description", lines: [result.description] },
+    ],
   }
 }
 

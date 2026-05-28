@@ -4,9 +4,11 @@ import assert from "node:assert/strict"
 import {
   TUI_COMMANDS,
   buildHighlightedSearchEverythingPreview,
+  buildSearchEverythingPreview,
   buildSearchEverythingResults,
   createSearchEverythingSession,
   type SearchEverythingDependencies,
+  type SearchEverythingResult,
   type SearchEverythingNoteResult,
 } from "../../../src/tui/adapters/search-everything-adapter"
 
@@ -68,6 +70,62 @@ function createDeps(): SearchEverythingDependencies {
 }
 
 describe("TUI Search Everything adapter", () => {
+  test("exposes display metadata for each result type without relying only on raw kind strings", () => {
+    const results = [
+      buildSearchEverythingResults("daily", createDeps()).find((result) => result.kind === "note"),
+      buildSearchEverythingResults("launch blockers", createDeps()).find((result) => result.kind === "content"),
+      buildSearchEverythingResults("archive", createDeps()).find((result) => result.kind === "folder"),
+      buildSearchEverythingResults("/find", createDeps()).find((result) => result.kind === "command"),
+    ].filter((result): result is SearchEverythingResult => Boolean(result))
+
+    assert.deepEqual(
+      results.map((result) => ({ kind: result.kind, typeLabel: result.typeLabel })),
+      [
+        { kind: "note", typeLabel: "note" },
+        { kind: "content", typeLabel: "content" },
+        { kind: "folder", typeLabel: "folder" },
+        { kind: "command", typeLabel: "command" },
+      ],
+    )
+    assert.deepEqual(
+      results.map((result) => ({ kind: result.kind, typeIcon: result.typeIcon })),
+      [
+        { kind: "note", typeIcon: "note" },
+        { kind: "content", typeIcon: "content" },
+        { kind: "folder", typeIcon: "folder" },
+        { kind: "command", typeIcon: "command" },
+      ],
+    )
+  })
+
+  test("builds typed preview sections while preserving compatibility lines", () => {
+    const note = buildSearchEverythingResults("daily", createDeps()).find((result) => result.kind === "note")
+    const content = buildSearchEverythingResults("launch blockers", createDeps()).find((result) => result.kind === "content")
+    const folder = buildSearchEverythingResults("archive", createDeps()).find((result) => result.kind === "folder")
+    const command = buildSearchEverythingResults("/find", createDeps()).find((result) => result.kind === "command")
+
+    assert.deepEqual(buildSearchEverythingPreview(note)?.sections, [
+      { label: "Metadata", lines: ["daily-plan.md — notes/inbox/daily-plan.md"] },
+      { label: "Description", lines: ["Today priorities and project focus."] },
+    ])
+    assert.deepEqual(buildSearchEverythingPreview(note)?.lines, ["Today priorities and project focus."])
+
+    assert.deepEqual(buildSearchEverythingPreview(content)?.sections, [
+      { label: "Match", lines: ["content line 7"] },
+      { label: "Excerpt", lines: ["...Launch blockers: legal review and design QA..."] },
+    ])
+
+    assert.deepEqual(buildSearchEverythingPreview(folder)?.sections, [
+      { label: "Folder", lines: ["notes/archive"] },
+      { label: "Contents", lines: ["1 note in notes/archive"] },
+    ])
+
+    assert.deepEqual(buildSearchEverythingPreview(command)?.sections, [
+      { label: "Usage", lines: ["/find <query>"] },
+      { label: "Shortcut", lines: ["Ctrl+F"] },
+    ])
+  })
+
   test("returns note results with contains matches by filename/key, title, description, and path/folder", () => {
     const filenameMatch = buildSearchEverythingResults("daily-plan.md", createDeps())
     assert.equal(filenameMatch[0]?.kind, "note")
@@ -116,6 +174,8 @@ describe("TUI Search Everything adapter", () => {
 
     assert.deepEqual(contentResult, {
       kind: "content",
+      typeLabel: "content",
+      typeIcon: "content",
       id: "content:project-brief:content line 7",
       key: "project-brief",
       title: "Client Launch Brief",
@@ -134,6 +194,8 @@ describe("TUI Search Everything adapter", () => {
 
     assert.deepEqual(folder, {
       kind: "folder",
+      typeLabel: "folder",
+      typeIcon: "folder",
       id: "folder:notes/archive",
       path: "notes/archive",
       name: "archive",
@@ -172,6 +234,10 @@ describe("TUI Search Everything adapter", () => {
       title: "/find",
       subtitle: "Find text in the active editor buffer",
       lines: ["Usage: /find <query>", "Shortcut: Ctrl+F"],
+      sections: [
+        { label: "Usage", lines: ["/find <query>"] },
+        { label: "Shortcut", lines: ["Ctrl+F"] },
+      ],
     })
   })
 
@@ -181,6 +247,10 @@ describe("TUI Search Everything adapter", () => {
       title: "Daily Plan",
       subtitle: "daily-plan.md — notes/inbox/daily-plan.md",
       lines: ["Today priorities and project focus."],
+      sections: [
+        { label: "Metadata", lines: ["daily-plan.md — notes/inbox/daily-plan.md"] },
+        { label: "Description", lines: ["Today priorities and project focus."] },
+      ],
     })
 
     const contentPreview = buildHighlightedSearchEverythingPreview(buildSearchEverythingResults("launch blockers", createDeps()), 0)
@@ -188,6 +258,10 @@ describe("TUI Search Everything adapter", () => {
       title: "Client Launch Brief",
       subtitle: "content line 7 — notes/projects/client/brief.md",
       lines: ["...Launch blockers: legal review and design QA..."],
+      sections: [
+        { label: "Match", lines: ["content line 7"] },
+        { label: "Excerpt", lines: ["...Launch blockers: legal review and design QA..."] },
+      ],
     })
   })
 
