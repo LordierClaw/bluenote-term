@@ -4,36 +4,30 @@
 **Plan:** `docs/plans/2026-05-28-phase-4-tui-manual-qa-plan.md`
 **QA root:** `/tmp/bluenote-tui-manual-qa-iWRvsu` (session-local / ephemeral)
 **Evidence directory:** `/tmp/bluenote-qa-evidence/` (session-local / ephemeral)
-**Scope:** Manual/interactive QA only. No product code fixes were made.
+**Scope:** Historical manual/interactive QA results plus subsequent Phase 4G blocker verification/fixes and final visual acceptance evidence. The initial 2026-05-28 manual QA pass made no product-code fixes; later Phase 4G sections below record product-code fixes for autosave/cursor and docs-only verification for quit/final acceptance.
 
-The `/tmp` paths above were not committed and may not survive outside the QA session. This results document therefore keeps the durable record inline: command outcomes, scenario pass/fail ratings, key status text, disk-truth snippets, and the unresolved screenshot retry/visual-acceptance caveat are summarized below for future readers.
+The `/tmp` paths above were not committed and may not survive outside the QA session. This results document therefore keeps the durable record inline: command outcomes, scenario pass/fail ratings, key status text, disk-truth snippets, screenshot status, and final Phase 4G acceptance caveats are summarized below for future readers.
 
 ## Executive summary
 
-Critical save/navigation/quit flows are **functionally better than the reported failure state** in this run: autosave and `Ctrl+S` wrote real Markdown files, `Esc` returned to Manager after saves, switching from edited notes to other notes worked, permission failures were visible and recoverable, and `q`/`Ctrl+C` quit in the tested critical paths.
+Critical save/navigation/quit flows are now **functionally accepted for Phase 4G** in the tested paths: autosave and `Ctrl+S` write real plain Markdown files, cursor-aware edits persist at the intended insertion point, `Esc` returns to Manager after saves, switching from edited notes to other notes works, permission failures are visible and recoverable, and `q`/`Ctrl+C` quit in the tested critical paths.
 
-However, this QA pass should **not be treated as full visual acceptance** yet because the Ubuntu desktop screenshot/accessibility route was partially blocked:
+The initial 2026-05-28 manual QA pass could not be treated as full visual acceptance because screenshot/accessibility capture was blocked. That limitation is now superseded for Phase 4G by the focused-GNOME-Terminal `computer-use-linux` screenshot bridge documented below, which captured pixel evidence across multiple terminal sizes/scales. Remaining visual-risk notes from the initial pass should be read as historical unless explicitly restated in the Phase 4G final multi-size visual acceptance section.
 
-- `computer-use-linux doctor` reports ready and window targeting works.
-- Window focus/input through GNOME Terminal works.
-- Screenshot capture failed with portal denial/cancel response.
-- `get_app_state` against GNOME Terminal failed AT-SPI extraction: `failed to connect to AT-SPI bus`.
-- The fallback PTY harness captured text layouts and raw ANSI, but it is not a trustworthy color/Unicode visual oracle because it does not fully emulate terminal device responses or wide-cell rendering.
-
-Primary product findings from this run:
+Initial 2026-05-28 manual QA findings, updated by later Phase 4G sections where applicable:
 
 1. **Medium:** Editor top bar consistently shows `Updated unknown` even though sidecars have timestamps; this violates the Phase 4F editor metadata contract.
 2. **Medium / test-infra:** The required `bun run smoke:opentui:interactive` preflight fails because `tmux` is not installed in this environment.
-3. **Medium / visual-risk:** Unicode/CJK/emoji UI display could not be conclusively accepted. Disk persistence is correct, but fallback text capture displayed corrupted wide-character layout because of harness limitations; this requires a real screenshot/user-eye pass.
-4. **Low / visual-risk:** Search Everything and prompt captures show occasional fallback-harness artifacts (`[1 q`, replacement chars around box borders). These are likely PTY capture limitations, but they also mean a real terminal visual pass is still required before accepting color/styling/positioning.
+3. **Medium / visual-risk, partially superseded:** Unicode/CJK/emoji UI display could not be conclusively accepted in the initial pass. Disk persistence was correct, but fallback text capture displayed corrupted wide-character layout because of harness limitations. Phase 4G later unblocked general pixel capture, but Unicode/wide-character-specific visual acceptance remains outside the three final screenshots unless covered by a future targeted pass.
+4. **Low / visual-risk, historical:** Search Everything and prompt captures showed occasional fallback-harness artifacts (`[1 q`, replacement chars around box borders). These were likely PTY capture limitations. Phase 4G later captured real Search Everything pixel evidence for the `visual` query path.
 
-### Continuation note — 2026-05-28
+### Historical continuation note — 2026-05-28
 
-The user approved proceeding from the manual QA plan into hardening. A fresh `computer-use-linux` screenshot retry against Ubuntu Terminal window `2069271615` still failed with GNOME Shell / XDG portal denial, so screenshot-based visual acceptance remains open. Product code should focus first on confirmed UI contract drift and regression coverage, while visual acceptance is retried after screenshot tooling is unblocked.
+The user approved proceeding from the manual QA plan into hardening. At that time, a fresh `computer-use-linux` screenshot retry against Ubuntu Terminal window `2069271615` still failed with GNOME Shell / XDG portal denial, so screenshot-based visual acceptance remained open. This historical blocker is superseded for Phase 4G by the focused-terminal screenshot bridge and final multi-size visual acceptance section below.
 
-### Task 7 continuation note — 2026-05-29
+### Historical Task 7 continuation note — 2026-05-29
 
-Retried real visual capture for Task 7 before making any UI/code changes. `computer-use-linux doctor` still reported no blockers and `list_windows` found the Ubuntu Terminal window `2069271615` at `/home/hainn/blue/code/bluenote-term`, but a targeted screenshot retry against that window still failed: `GNOME Shell screenshot failed: GNOME Shell Screenshot call failed; XDG portal screenshot was denied or cancelled with response code 2`. Because no real screenshot evidence was available, visual scenarios A/B/D/F/I/K were not re-rated and no speculative color/layout/product-code changes were made.
+Retried real visual capture for Task 7 before making any UI/code changes. At that time, `computer-use-linux doctor` still reported no blockers and `list_windows` found the Ubuntu Terminal window `2069271615` at `/home/hainn/blue/code/bluenote-term`, but a targeted screenshot retry against that window still failed: `GNOME Shell screenshot failed: GNOME Shell Screenshot call failed; XDG portal screenshot was denied or cancelled with response code 2`. Because no real screenshot evidence was available then, visual scenarios A/B/D/F/I/K were not re-rated and no speculative color/layout/product-code changes were made. This is historical; later Phase 4G sections document the focused-terminal screenshot bridge and the final multi-size visual acceptance pass.
 
 ## User-reported blocker update — 2026-05-29
 
@@ -76,7 +70,7 @@ Task 2 established a fresh live TUI reproduction harness for the Phase 4G blocke
 - Screenshot/accessibility status:
   - Targeted screenshot against window `2069271618` failed with GNOME Shell / XDG portal denial: `XDG portal screenshot was denied or cancelled with response code 2`.
   - `get_app_state` without screenshot resolved the target window but AT-SPI extraction failed with `failed to connect to AT-SPI bus`.
-  - Functional live verification can still use `computer-use-linux` targeted keyboard input plus disk/process readback; do not claim visual screenshot acceptance until screenshot/recording evidence is available.
+  - At Task 2 time, functional live verification could still use `computer-use-linux` targeted keyboard input plus disk/process readback, but visual screenshot acceptance was not claimed until later focused-bridge screenshot evidence became available.
 
 ## Phase 4G autosave root-cause/fix evidence — 2026-05-29
 
@@ -108,7 +102,7 @@ Task 3 root cause was reproduced and fixed:
   - Markdown and sidecar updated after debounce while `bn rebuild` still failed with the intentional `EISDIR` fault.
   - After the editor was stable, typed `full autosave fixed postwrite verification 20260529-013015` via `computer-use-linux`; the full line appeared on disk after debounce.
   - Disk readback showed `HAS_FRONTMATTER False`, sidecar JSON parsed successfully, sidecar key remained `autosave-fixed-probe-t1a6ev`, and `updatedAt` advanced to `2026-05-28T18:30:24.812Z`.
-  - This confirms the live TUI can persist autosave content under a derived-index rebuild failure after the fix. Screenshot/status visual confirmation remains blocked by GNOME/XDG portal denial, so visual status text was not claimed.
+  - This confirms the live TUI can persist autosave content under a derived-index rebuild failure after the fix. At that moment screenshot/status visual confirmation was still blocked by GNOME/XDG portal denial, so visual status text was not claimed until the later focused-bridge capture setup.
 
 ## Phase 4G cursor root-cause/fix evidence — 2026-05-29
 
@@ -219,7 +213,46 @@ Task 6 objective automated regression ran after Tasks 3–5:
 - `bun run smoke:cli`: passed.
 - `git status --short --branch`: clean at the time of the check, branch `feat/opentui-implement` ahead of origin.
 
-Subjective UI polish/rating remains intentionally paused until the user chooses the desired visual style and improvement direction.
+Subjective UI polish/rating was paused until the user chose the desired visual style and improvement direction.
+
+## Phase 4G final multi-size visual acceptance — 2026-05-29
+
+User-selected UI direction: **Modern dashboard** — stronger panels/sections, clearer hierarchy, more accent color, friendlier empty/status states.
+
+Fresh QA root for final visual pass: `/tmp/bluenote-phase4g-final-visual-HgjD2C`.
+
+Visual capture method:
+
+- Real GNOME Terminal TUI windows launched with explicit `--geometry` and `--zoom`.
+- Screenshots captured through focused-terminal `computer-use-linux` MCP bridge and decoded to PNG. These screenshot paths are ephemeral `/tmp` evidence; the durable record is this table and the inline observations.
+- Capture bridge was visible in the screenshots but did not obstruct the important BlueNote content.
+
+Captured evidence:
+
+| State | Terminal setup | Screenshot | Rating vs Modern dashboard | Acceptance notes |
+| --- | --- | --- | --- | --- |
+| Manager, small | `--geometry=80x24 --zoom=1.0` | `/tmp/p4g-small-manager.png` | 6/10 | Functionally readable at small size. Two-pane layout is stable, focus row is obvious, shortcuts are visible. Visual hierarchy is still mostly raw terminal chrome: cyan borders dominate, topbar lacks dashboard-style grouping, right-pane rows truncate keys/titles aggressively, and empty space feels unstructured rather than intentionally dashboard-like. |
+| Editor, scaled | `--geometry=100x30 --zoom=1.5` | `/tmp/p4g-zoom-editor.png` | 7/10 | Body readability is strong, line wrapping works, bottom status/shortcut chrome remains visible, green `Saved` state is clear, and the cyan cursor block is visible. Modern-dashboard gaps: title/path/updated metadata line is long and visually flat, body has little margin/section framing, and status/autosave information could use clearer card-like grouping. |
+| Search Everything, large | `--geometry=120x40 --zoom=1.0` | `/tmp/p4g-large-search.png` | 6.5/10 | Input, result list, focused row, and preview are readable; the query cursor is visible and result count is clear. Dashboard gaps: preview is separated mostly by whitespace rather than a strong panel, selected row contrast is adequate but subdued, large-width layout underuses available space, and result metadata lines can become visually dense/truncated. |
+
+Objective live acceptance status after Phase 4G fixes:
+
+- Autosave: accepted from Task 3 live evidence; typed content persisted after debounce even when derived-index rebuild failed after the note write.
+- Manual save/cursor-aware edit: accepted from Task 4 PTY and live evidence; text inserted at the intended cursor location and persisted without cursor glyph artifacts.
+- Cursor: accepted; visible cyan cursor cell works at normal positions and at newline positions.
+- Manager quit/global quit: accepted from Task 5 live evidence for Manager `q`, Manager `Ctrl+C`, clean Editor `Ctrl+C`, dirty Editor `Ctrl+C`, Search `Ctrl+C`, and Search `Esc` then Manager `q`.
+- Terminal size/scale: accepted; GNOME Terminal `--geometry` and `--zoom` produce deterministic character-grid and pixel-size variations for future UI QA.
+- Storage: accepted; note files remained plain Markdown and metadata remained in `.data/notes` during final visual QA setup.
+
+Recommended future UI polish plan, not implemented in Phase 4G because it needs a new approved plan:
+
+1. Add clearer dashboard-style panel hierarchy: topbar grouping, pane headers, and preview/editor/status sections should read as intentional dashboard regions rather than raw bordered boxes.
+2. Tune color roles: keep cyan as an accent, but reduce border dominance and introduce distinct subdued surfaces, selected-row color, success/warning/error tokens, and secondary metadata color.
+3. Improve truncation and responsive metadata: keys/paths/timestamps should shorten predictably with ellipses or secondary lines, especially in 80-column manager and editor topbar.
+4. Make empty and status states friendlier: large blank panes should show calm hints or contextual summaries rather than empty rectangles.
+5. Use large-width Search Everything space better: consider preview as a stronger side/bottom card with clearer section headers and less dense metadata.
+
+No UI polish code changes were made in this pass; these recommendations should become a separate approved polish plan if pursued.
 
 ## Environment and preflight
 
@@ -253,7 +286,7 @@ Run from `/home/hainn/blue/code/bluenote-term`:
 Preflight cleanup:
 
 - Killed stale `bun run ./bin/bn.ts tui` processes after testing.
-- Final repo status still only shows untracked plan/results docs; no source files were modified by QA.
+- Initial manual-QA repo status showed only untracked plan/results docs and no source files modified by that initial QA pass. Later Phase 4G commits intentionally changed source/tests/docs for autosave and cursor fixes plus verification evidence.
 
 ## QA data set
 
@@ -290,7 +323,7 @@ Validation commands passed after seeding:
 | H. Critical lockup: edit then switch notes | Pass | 4 | Edited `alpha-summary`, switched to `alpha-source`, then `beta`, saved, returned to Manager, `q` exited. Evidence: `scenario-h-*.txt`; `proc after q: 0`. |
 | I. Search Everything | Pass with visual caveat | 3 | `Ctrl+P`, `alpha` search, arrows, `/` command list, `/save` command result, `Esc`, quit route worked. Evidence: `scenario-i-*.txt`. Visual pane border artifacts are likely harness limitations. |
 | J. Create/delete prompts | Pass with caveat | 3 | `n` prompt appears, empty title validates as `Title required`, valid note opens editor, delete prompt cancel/confirm works when a note row is focused. Evidence: `scenario-j-output.txt`, `scenario-j2-output.txt`, `scenario-j3-delete-quit-output.txt`. Root-level `d` on focused folder calmly says folders cannot be deleted. |
-| K. Responsive sizes | Partial pass | 2–3 | 160x48, 90x28, 72x24, 60x20, 40x15 text captures did not crash and `Ctrl+C` exited. Real visual acceptance of clipping/colors remains blocked. Evidence: `scenario-k-*.txt`. |
+| K. Responsive sizes | Partial pass, historically superseded for core size/scale QA | 2–3 initial text-capture rating | Initial 160x48, 90x28, 72x24, 60x20, 40x15 text captures did not crash and `Ctrl+C` exited, but real visual acceptance was blocked. Phase 4G later added pixel evidence for representative 80x24, 100x30 zoomed, and 120x40 windows; see final multi-size visual acceptance above. |
 | L. Permission/save error | Pass | 4 | Read-only parent directory produced visible `Autosave failed Unsaved`; disk remained unchanged; after restoring permissions, `Ctrl+S` saved and status returned to `Saved`; quit worked. Evidence: `scenario-l-*.txt`. |
 | M. Restart/persistence/cleanup | Pass | 4 | CLI list/search/show agree with disk; restart shows persisted Alpha edits; files contain only expected notes and `.data` artifacts. Evidence: `scenario-m-*.txt`, broad output file list. |
 
@@ -327,21 +360,21 @@ Validation commands passed after seeding:
 - Screenshot/pane capture: terminal preflight output in session log
 - Notes: Either document/install `tmux` as a required dev dependency, make the smoke script skip with a clear dependency error, or replace it with a dependency-light PTY harness.
 
-### TUI-MANUAL-003 — Desktop visual QA could not capture real screenshots despite computer-use readiness
+### TUI-MANUAL-003 — Historical initial blocker: desktop visual QA could not capture real screenshots despite computer-use readiness
 
-- Scenario: A, all visual scenarios
+- Scenario: A, all visual scenarios in the initial 2026-05-28 pass
 - Terminal size: Ubuntu Terminal window `814x577` pixels at test time
 - Input sequence: `mcp_computer_use_linux_screenshot`, then `get_app_state(... include_screenshot=true ...)`.
 - Expected: terminal-cropped screenshots and/or AT-SPI state are available for visual review.
-- Actual:
+- Actual at that time:
   - screenshot failed with portal denied/cancel response;
   - AT-SPI extraction failed with `failed to connect to AT-SPI bus`.
 - Severity: Medium (test execution blocker, not BlueNote product bug)
 - UX rating: N/A
-- Reproducibility: Always in this run after login
+- Reproducibility: Always in that run after login
 - Disk evidence: none
 - Screenshot/pane capture: no screenshot available; evidence in MCP tool outputs.
-- Notes: This blocks reliable color/style/positioning acceptance from an AI/user-perspective workflow. Window focus and keyboard input did work.
+- Notes: This initially blocked reliable color/style/positioning acceptance from an AI/user-perspective workflow, even though window focus and keyboard input worked. It is superseded for Phase 4G representative cases by the focused-terminal screenshot bridge and final multi-size visual acceptance section above.
 
 ### TUI-MANUAL-004 — Unicode visual rendering remains unaccepted; disk persistence is correct
 
@@ -409,16 +442,18 @@ notes/**/*.md
 
 No unexpected recovery-copy workflow was observed.
 
-## UX score summary
+## Initial manual-QA UX score summary
+
+These 1–4 scores are historical ratings from the initial text/fallback-capture manual QA pass. The later Phase 4G final visual section uses separate 1–10 ratings for representative Modern-dashboard pixel captures.
 
 | Area | Score | Rationale |
 | --- | ---: | --- |
-| Manager readability | 3 | Text layout is understandable in captures; real color/focus review blocked. |
-| Manager focus clarity | 3 | Keyboard routing works, but focus highlight cannot be judged without color/screenshot. |
-| Editor readability | 3 | Content/status rows readable in text captures; top-bar timestamp says unknown. |
-| Editor save feedback | 4 | `Unsaved`, `Saved`, and `Autosave failed Unsaved` states are visible and match disk truth. |
-| Search Everything readability | 3 | Results/preview structure is clear; fallback capture artifacts prevent final visual approval. |
-| Responsive layout | 2–3 | No crashes at tested sizes; real clipping/color acceptance still needed. |
+| Manager readability | 3 | Text layout was understandable in initial captures; later representative pixel capture rated small Manager 6/10 for Modern-dashboard fit. |
+| Manager focus clarity | 3 | Keyboard routing worked; later pixel capture showed focus row is obvious, while modern-dashboard hierarchy still needs polish. |
+| Editor readability | 3 | Content/status rows were readable in text captures; later zoomed editor pixel capture rated 7/10 and confirmed body readability/cursor visibility. |
+| Editor save feedback | 4 | `Unsaved`, `Saved`, and `Autosave failed Unsaved` states were visible and matched disk truth. |
+| Search Everything readability | 3 | Initial fallback capture showed clear structure but artifacts; later real Search Everything pixel evidence rated 6.5/10 for the `visual` query path. |
+| Responsive layout | 2–3 | Initial text captures showed no crashes; later representative 80x24, 100x30 zoomed, and 120x40 pixel captures accepted core size/scale behavior, with smaller extremes still future targeted QA if needed. |
 | Error clarity | 4 | Permission failure was honest and recoverable. |
 | Keyboard reliability | 4 | Critical navigation/quit paths worked after save, delete, and permission-error recovery. |
 
@@ -435,14 +470,14 @@ None confirmed as product defects. Keep the critical lockup sequence in regressi
 ### Medium fixes / visual-contract mismatches
 
 1. Fix editor timestamp plumbing so the top bar shows the note's latest updated/modified time instead of `Updated unknown` when metadata exists.
-2. Complete a real screenshot-based visual pass once desktop capture is working; specifically verify focus colors, highlight contrast, Unicode/wide-character rendering, Search Everything pane borders, and responsive clipping.
+2. Complete targeted real-screenshot passes for remaining gaps not covered by Phase 4G representative captures: Unicode/wide-character rendering, smaller responsive extremes such as 72x24/60x20/40x15, and any future color/positioning changes.
 3. Make `bun run smoke:opentui:interactive` dependency handling actionable (`tmux` install doc/check) or replace with a portable PTY smoke path.
 
 ### Responsive/readability polish
 
-1. Re-rate 72x24, 60x20, and 40x15 with screenshots; current text captures show no crash but do not prove good UX.
-2. Confirm Search Everything preview border and shortcut row in a real terminal; fallback capture showed artifacts that are likely harness/device-response limitations.
-3. Confirm Manager selected/focused row color and whether root folder preview makes initial focus obvious.
+1. Re-rate 72x24, 60x20, and 40x15 with real screenshots if those extreme sizes become acceptance targets; Phase 4G representative size/scale evidence covers 80x24, 100x30 zoomed, and 120x40.
+2. For future Search Everything polish changes, re-confirm preview border/card treatment and shortcut row in a real terminal screenshot; Phase 4G has representative evidence for the current `visual` query path.
+3. Confirm Manager selected/focused row color and whether root folder preview makes initial focus obvious when a new Modern-dashboard polish plan changes visual hierarchy.
 
 ### Test coverage gaps
 
@@ -471,10 +506,10 @@ Do not implement without approval. Suggested next plan:
 4. **Create/delete prompt regression**
    - RED/GREEN coverage for Scenario J behavior.
    - VERIFY: note file + sidecar deletion on confirm, cancellation leaves both intact.
-5. **Manual screenshot unblock**
-   - Fix or document `computer-use-linux` screenshot/AT-SPI issue separately from product code.
-   - Re-run visual scenarios A/B/D/I/K/F with real terminal screenshots before final UI acceptance.
+5. **Manual screenshot unblock — completed for Phase 4G representative cases**
+   - Historical action: fix or document `computer-use-linux` screenshot/AT-SPI issue separately from product code.
+   - Phase 4G result: focused-terminal screenshot bridge documented above; representative Manager/Editor/Search pixel captures completed across multiple sizes/scales. Unicode/wide-character-specific visual QA remains a targeted future pass if needed.
 
 ## Completion status
 
-Manual QA plan execution is complete enough to produce a prioritized backlog. Visual/color acceptance remains blocked by desktop capture, so Phase 4 UI design should **not** be declared visually accepted yet. Functional critical blockers around save, switching, permission-error recovery, and quit were not reproduced in this run.
+Initial manual QA plan execution produced a prioritized backlog; later Phase 4G work resolved the confirmed autosave/cursor blockers, verified quit behavior did not reproduce in tested paths, unblocked representative pixel capture through the focused-terminal bridge, and completed final automated regression. Phase 4G is visually accepted for the recorded Manager/Editor/Search representative size/scale cases, with future polish recommendations captured above for a separate approved Modern-dashboard plan. Unicode/wide-character-specific visual acceptance and broader style polish remain future targeted work rather than blockers for this Phase 4G closure.
