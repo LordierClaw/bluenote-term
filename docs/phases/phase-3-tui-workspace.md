@@ -11,7 +11,7 @@ The workspace is launched with `bn tui` and remains a presentation/input layer o
 - OpenTUI renderer/bootstrap flow reachable from the BlueNote entrypoint through `bn tui`
 - beautiful, elegant full-screen layout with a restrained blue palette and command/status chrome
 - separate **Manager**, **Editor**, and **Search Everything** screens instead of one overloaded pane
-- Manager screen backed by the same note list/selectors as the CLI
+- Manager screen backed by the same note list/selectors as the CLI, with accepted Phase 4C Manager performance/responsive layout/style refinements
 - Search Everything screen backed by the same indexed search service as `bn search`, including notes, content excerpts, folders/paths, and slash-prefixed command entries
 - focused inline Editor screen for everyday writing, saving, visible cursor movement, Unicode text, wrap mode, responsive status chrome, and dirty-state handling, with tested adapter/controller groundwork for selection, cut/copy/paste, and find/replace
 - command discovery for available CLI-shaped workflows, with only `/save` wired as a built-in TUI action until the remaining command handlers are connected
@@ -21,7 +21,7 @@ The workspace is launched with `bn tui` and remains a presentation/input layer o
 
 ### Manager
 
-The Manager is the workspace home screen. It presents a minimal Manager screen with a two-column browser/preview layout: the browser lists note and folder rows derived from existing note summaries and paths, while the preview shows context for the focused item. Its chrome is not a title screen; it stays on useful context only: the current folder path, focused item/hovered path, and short action hints for move, open, filter, back, and quit. Navigation stays selector-compatible with the CLI by using note keys and relative paths. Right/open enters a folder or opens the selected note into the Editor; left/back returns to the previous folder or screen. `n` creates a new note through the same core service path as `bn new`, and `d` deletes the focused note only after confirmation; folders are not deleted from this screen.
+The Manager is the workspace home screen. It presents a minimal Manager screen with a responsive two-column browser/preview layout: the browser lists note and folder rows derived from existing note summaries and paths, while the preview shows context for the focused item when visible. Phase 4C Manager performance/responsive layout/style is accepted and delivered here: chrome is not a title screen and stays on useful context only, including the current folder path, focused item/hovered path, rebuild/index status, and short action hints for move, open, filter, Search Everything, preview toggle, back, and quit. Preview work is cached and avoidable; preview auto-hide engages on narrow terminal widths, and the manual preview toggle lets users hide or show the preview when space allows. Navigation stays selector-compatible with the CLI by using note keys and relative paths. Right/open enters a folder or opens the selected note into the Editor; left/back returns to the previous folder or screen. `n` creates a new note through the same core service path as `bn new`, and `d` deletes the focused note only after confirmation; folders are not deleted from this screen.
 
 ### Editor
 
@@ -44,3 +44,7 @@ CLI completion remains shell setup, not a TUI action. Users install completions 
 - no network sync, hosted backend, AI features, or cloud-only assumptions
 - no independent TUI storage model; TUI remains a presentation/input layer over core services
 - no hidden frontmatter or embedded BlueNote metadata in note files
+
+## Phase 4 follow-up status
+
+Phase 4A, 4B, and 4C are accepted follow-up refinements on top of this Phase 3 workspace. After 4C, Phase 4D is next for Search Everything readability/responsiveness and responsive preview behavior; this Phase 3 document does not promise that Phase 4D work is implemented yet.

@@ -62,6 +62,24 @@ function assertPhase4BNotAdvertisedIncomplete(content: string): void {
   assert.doesNotMatch(content, /Phase 4B[^\n.]*upcoming|upcoming[^\n.]*Phase 4B/i)
 }
 
+function assertDeliveredPhase4CManagerBehavior(content: string): void {
+  assert.match(content, /Phase 4C[^\n.]*Manager performance\/responsive layout\/style|Phase 4C[^\n.]*Manager performance, responsive layout, and style/i)
+  assert.match(content, /accepted|delivered|complete/i)
+  assert.match(content, /preview[^\n.]*auto-hide|auto-hide[^\n.]*preview|hide preview automatically/i)
+  assert.match(content, /manual[^\n.]*preview[^\n.]*toggle|preview[^\n.]*manual[^\n.]*toggle|toggle preview manually/i)
+  assertMinimalManagerChrome(content)
+}
+
+function assertPhase4CNotAdvertisedUpcoming(content: string): void {
+  assert.doesNotMatch(content, /Phase 4C[^\n.]*upcoming|upcoming[^\n.]*Phase 4C/i)
+  assert.doesNotMatch(content, /Phase 4C[^\n.]*remain[s]? upcoming|remain[s]? upcoming[^\n.]*Phase 4C/i)
+  assert.doesNotMatch(content, /roadmap continues with Phase 4C|continues with Phase 4C/i)
+}
+
+function assertPhase4DNextAfter4C(content: string): void {
+  assert.match(content, /4D[^\n.]*next after 4C|after 4C[^\n.]*4D|next[^\n.]*Phase 4D/i)
+}
+
 function assertDataStorageAndContainsSearchContract(content: string): void {
   assert.match(content, /plain Markdown/i)
   assert.match(content, /\.data\/notes\//)
@@ -91,6 +109,9 @@ test("README documents the refined Phase 3 TUI workspace behavior", async () => 
   assertMinimalManagerChrome(readme)
   assertDeliveredPhase4BEditorBehavior(readme)
   assertPhase4BNotAdvertisedIncomplete(readme)
+  assertDeliveredPhase4CManagerBehavior(readme)
+  assertPhase4CNotAdvertisedUpcoming(readme)
+  assertPhase4DNextAfter4C(readme)
 })
 
 test("product and phase docs describe refined Manager, Editor, and Search Everything Phase 3 scope", async () => {
@@ -113,21 +134,39 @@ test("product and phase docs describe refined Manager, Editor, and Search Everyt
   assert.doesNotMatch(phase, /command\/action layer covering the available CLI workflows/i)
   assertDeliveredPhase4BEditorBehavior(phase)
   assertPhase4BNotAdvertisedIncomplete(phase)
+  assertDeliveredPhase4CManagerBehavior(phase)
+  assertPhase4CNotAdvertisedUpcoming(phase)
+  assertPhase4DNextAfter4C(phase)
 })
 
-test("smoke contracts cover delivered Phase 4B editor regressions and status metadata", async () => {
+test("smoke contracts cover delivered Phase 4C manager regressions and status metadata", async () => {
   const smoke = await readRepoFile("scripts/smoke-opentui.ts")
   const interactiveSmoke = await readRepoFile("scripts/smoke-opentui-interactive.ts")
 
-  assert.match(smoke, /phase-4b-editor-input-cursor-responsive-chrome/i)
   assert.match(smoke, /phase-4c-manager-performance-responsive-layout-style/i)
+  assert.match(smoke, /phase-4d-search-everything-readability-responsive-preview/i)
   assertPhase4BNotAdvertisedIncomplete(smoke)
+  assertPhase4CNotAdvertisedUpcoming(smoke)
 
   assert.match(interactiveSmoke, /editor-input-regression-token/)
   assert.match(interactiveSmoke, /cursor-probe/)
   assert.match(interactiveSmoke, /Alt\+Z wrap|wrap/i)
   assert.match(interactiveSmoke, /responsive resize|responsive bottom/i)
   assert.match(interactiveSmoke, /Saved/)
+})
+
+test("Phase 4 docs mark 4C delivered and identify Phase 4D as next", async () => {
+  const docs = await Promise.all([
+    readRepoFile("docs/phases/phase-4-search-editing-and-recovery.md"),
+    readRepoFile("docs/plans/2026-05-27-phase-4-search-editing-recovery-design.md"),
+  ])
+
+  for (const content of docs) {
+    assertDeliveredPhase4CManagerBehavior(content)
+    assertPhase4CNotAdvertisedUpcoming(content)
+    assertPhase4DNextAfter4C(content)
+    assert.match(content, /Phase 4D[^\n.]*Search Everything/i)
+  }
 })
 
 test("runtime docs identify OpenTUI as the refined Phase 3 workspace runtime", async () => {
@@ -156,5 +195,6 @@ test("active docs describe canonical data storage and contains search contracts"
     assertDataStorageAndContainsSearchContract(content)
     assertNoCanonicalStateSidecars(content)
     assertPhase4BNotAdvertisedIncomplete(content)
+    assertPhase4CNotAdvertisedUpcoming(content)
   }
 })

@@ -33,8 +33,8 @@ Phase 4 has one umbrella design and smaller sequential implementation plans:
 
 1. **4A — `.data` migration + search correctness/performance foundation**
 2. **4B — Editor input/cursor/responsive chrome**
-3. **4C — Manager performance/responsive layout/style**
-4. **4D — Search Everything correctness/readability/responsive preview**
+3. **4C — Manager performance/responsive layout/style** — accepted and delivered
+4. **4D — Search Everything correctness/readability/responsive preview** — next after 4C
 
 ### 4A — `.data` migration + search correctness/performance foundation
 
@@ -61,6 +61,8 @@ Primary outcomes:
 - Merge/redesign bottom/status bar to show save/autosave state, latest updated time, shortcuts, and wrap mode.
 
 ### 4C — Manager performance/responsive layout/style
+
+Implementation note (2026-05-28): Phase 4C Manager performance/responsive layout/style is accepted and delivered. The delivered Manager keeps minimal Manager chrome, uses current path and focused item context plus compact action hints instead of banner framing, caches/avoids preview work where possible, hides preview automatically on narrow terminal widths, and exposes a manual preview toggle. Phase 4D is next after 4C and remains scoped to Search Everything readability/responsiveness and responsive preview behavior.
 
 Primary outcomes:
 

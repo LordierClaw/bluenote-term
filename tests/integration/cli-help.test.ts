@@ -43,7 +43,8 @@ test("project verification commands cover CLI plus import-only and interactive O
 test("interactive OpenTUI smoke covers live manager create and delete flows", async () => {
   const smokeScript = await readFile(interactiveSmokePath, "utf8")
 
-  assert.match(smokeScript, /expectPaneExcludes\(managerPane, "BlueNote"/)
+  assert.match(smokeScript, /expectPaneContains\(managerPane, "BlueNote"/)
+  assert.match(smokeScript, /expectPaneExcludes\(returnedManagerPane, "BlueNote Manager"/)
   assert.match(smokeScript, /Live Smoke Manager Note/)
   assert.match(smokeScript, /manager create opens editor/)
   assert.match(smokeScript, /manager delete confirmation/)
