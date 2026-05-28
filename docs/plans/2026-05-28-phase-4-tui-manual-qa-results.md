@@ -78,6 +78,38 @@ Task 2 established a fresh live TUI reproduction harness for the Phase 4G blocke
   - `get_app_state` without screenshot resolved the target window but AT-SPI extraction failed with `failed to connect to AT-SPI bus`.
   - Functional live verification can still use `computer-use-linux` targeted keyboard input plus disk/process readback; do not claim visual screenshot acceptance until screenshot/recording evidence is available.
 
+## Phase 4G autosave root-cause/fix evidence — 2026-05-29
+
+Task 3 root cause was reproduced and fixed:
+
+- Basic live autosave against the initial Phase 4G root did **not** reproduce a persistence failure:
+  - Targeted `computer-use-linux` input opened `autosave-blocker-probe-9p4w87` in window `2069271618`.
+  - Typing `autosave phase4g probe 20260529-012020` persisted after debounce, but the first four characters were lost by fast post-open targeted input, leaving `save phase4g probe 20260529-012020` on disk.
+  - A second line `second autosave phase4g probe 20260529-012100` persisted fully after debounce.
+- Controlled fault reproduction:
+  - Replaced `.data/metadata.sqlite` with a directory in `/tmp/bluenote-tui-phase4g-MhIDFt`.
+  - Typed `faulted rebuild autosave phase4g probe 20260529-012459` via `computer-use-linux`.
+  - Markdown and sidecar updated, but `bn rebuild` failed with `EISDIR: illegal operation on a directory, open '/tmp/bluenote-tui-phase4g-MhIDFt/.data/metadata.sqlite'`.
+  - Root cause: `persistTuiEditorBody()` treated `syncEditedNote + rebuildIndexes + showTuiNote` as one persistence operation. A post-write derived-index rebuild failure caused the controller to mark autosave as failed even after note content/sidecar had already been saved.
+- RED test added:
+  - `tests/integration/tui-workflow.test.ts`: `autosave keeps saved state when derived-index rebuild fails after note persistence`.
+  - Initial RED failure showed the file had the new body but controller `savedBody` remained stale (`Original body`).
+- Fix:
+  - `src/tui/app.ts` now reads back the saved note after `syncEditedNote` even if `rebuildIndexes` fails, so editor save state reflects the durable note write instead of a derived-index failure.
+- Automated verification:
+  - Targeted RED→GREEN test passed.
+  - `bun test tests/unit/tui/workspace-controller.test.ts tests/unit/tui/render-routing.test.ts tests/integration/tui-workflow.test.ts` passed: 136 pass, 0 fail.
+  - `bun run typecheck` passed.
+- Live fix verification:
+  - Fresh QA root: `/tmp/bluenote-tui-phase4g-autosave-fix-Oa1UyA`.
+  - Window: `BlueNote Phase 4G Autosave Fix QA`, id `2069271619`, active process `bun run ./bin/bn.ts tui`, PID `138406`.
+  - Replaced `.data/metadata.sqlite` with a directory after opening the note.
+  - Typed `autosave fixed postwrite failure 20260529-012734` via `computer-use-linux`; due the same fast-input/opening issue, disk received `save fixed postwrite failure 20260529-012734`.
+  - Markdown and sidecar updated after debounce while `bn rebuild` still failed with the intentional `EISDIR` fault.
+  - After the editor was stable, typed `full autosave fixed postwrite verification 20260529-013015` via `computer-use-linux`; the full line appeared on disk after debounce.
+  - Disk readback showed `HAS_FRONTMATTER False`, sidecar JSON parsed successfully, sidecar key remained `autosave-fixed-probe-t1a6ev`, and `updatedAt` advanced to `2026-05-28T18:30:24.812Z`.
+  - This confirms the live TUI can persist autosave content under a derived-index rebuild failure after the fix. Screenshot/status visual confirmation remains blocked by GNOME/XDG portal denial, so visual status text was not claimed.
+
 ## Environment and preflight
 
 ### Desktop/tool readiness

@@ -64,7 +64,12 @@ function persistTuiEditorBody(rootPath: string, note: TuiNote, body: string, clo
     body,
     updatedAt: clock.now().toISOString(),
   })
-  rebuildIndexes({ override: rootPath })
+
+  try {
+    rebuildIndexes({ override: rootPath })
+  } catch {
+    return showTuiNote(rootPath, note.key)
+  }
 
   return showTuiNote(rootPath, note.key)
 }

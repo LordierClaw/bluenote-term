@@ -2,7 +2,7 @@ import { describe, test, beforeEach, afterEach } from "bun:test"
 import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
-import { mkdtemp, rm, readFile, access, readdir, writeFile } from "node:fs/promises"
+import { mkdtemp, rm, readFile, access, readdir, writeFile, mkdir } from "node:fs/promises"
 
 import { createNote } from "../../src/core/create-note"
 import { initRoot } from "../../src/core/init-root"
@@ -320,6 +320,32 @@ describe("TUI workspace workflows", () => {
     assert.equal(routeManagerKey("\u001b[C", controller), true)
     assert.equal(controller.getState().screen, "editor")
     assert.equal(controller.getState().editor?.note.key, second.key)
+  })
+
+  test("autosave keeps saved state when derived-index rebuild fails after note persistence", async () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Post Write Rebuild Failure",
+      body: "Original body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+    openManagerNoteByKey(controller, first.key)
+
+    await rm(path.join(rootPath, ".data", "metadata.sqlite"), { force: true })
+    await mkdir(path.join(rootPath, ".data", "metadata.sqlite"))
+
+    controller.insertEditorText(" autosaved despite rebuild failure")
+    await waitForAutosave()
+
+    const expectedBody = "Original body autosaved despite rebuild failure"
+    assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), expectedBody)
+    assert.equal(showNote({ override: rootPath, selector: first.key }).body, expectedBody)
+    assert.equal(controller.getState().editor?.body, expectedBody)
+    assert.equal(controller.getState().editor?.savedBody, expectedBody)
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
   })
 
   test("dirty editor state still routes Esc, q, and Ctrl+C from manager", () => {
