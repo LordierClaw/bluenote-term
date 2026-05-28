@@ -491,25 +491,9 @@ describe("TUI render view models", () => {
       overflow: { above: false, below: false, indicator: "" },
     })
     assert.equal(vm.find, null)
-    assert.deepEqual(vm.bottombar.shortcuts, [
-      { label: "Ctrl+S save", priority: 1 },
-      { label: "Ctrl+F find", priority: 2 },
-      { label: "Alt+Z wrap", priority: 3 },
-      { label: "Ctrl+P search", priority: 4 },
-      { label: "Esc manager", priority: 5 },
-      { label: "Ctrl+C quit", priority: 6 },
-    ])
-    assert.deepEqual(vm.bottombar.hints, ["Ctrl+S save", "Ctrl+F find", "Alt+Z wrap", "Ctrl+P search", "Esc manager", "Ctrl+C quit"])
-    assert.equal(vm.bottombar.cursorLabel, "Line 3, Col 23")
-    assert.equal(vm.bottombar.saveStatusLabel, "Saved")
-    assert.equal(vm.bottombar.saveStatusIntent, "success")
-    assert.equal(vm.bottombar.updatedLabel, "Updated unknown")
-    assert.equal(vm.bottombar.wrapLabel, "Wrap word: Enabled")
-    assert.equal(vm.bottombar.wrapStatusLabel, "Enabled")
-    assert.equal(vm.bottombar.wrapStatusIntent, "success")
     assert.deepEqual(vm.bottombar.row1, {
       leftLabel: "Line 3, Col 23",
-      centerLabel: "Wrap word: Enabled",
+      centerPrefixLabel: "Wrap word: ",
       centerStatusLabel: "Enabled",
       centerStatusIntent: "success",
       rightLabel: "Saved",
@@ -518,34 +502,27 @@ describe("TUI render view models", () => {
     })
     assert.deepEqual(vm.bottombar.row2, {
       shortcuts: ["Ctrl+S save", "Ctrl+F find", "Alt+Z wrap", "Ctrl+P search", "Esc manager", "Ctrl+C quit"],
-      visibleHints: ["Ctrl+S save", "Ctrl+F find", "Alt+Z wrap", "Ctrl+P search", "Esc manager", "Ctrl+C quit"],
+      visibleShortcuts: ["Ctrl+S save", "Ctrl+F find", "Alt+Z wrap", "Ctrl+P search", "Esc manager", "Ctrl+C quit"],
       hiddenShortcutCount: 0,
     })
-    assert.equal(vm.bottombar.overflowIndicator, "")
-    assert.deepEqual(vm.bottombar.visibleHints, ["Ctrl+S save", "Ctrl+F find", "Alt+Z wrap", "Ctrl+P search", "Esc manager", "Ctrl+C quit"])
-    assert.equal(vm.bottombar.hiddenShortcutCount, 0)
-    assert.equal(vm.bottombar.status, "Line 3, Col 23 · Wrap word: Enabled · Saved")
-    assert.equal(vm.bottombar.statusIntent, "success")
 
     const editorChrome = JSON.stringify({ topbar: vm.topbar, bottombar: vm.bottombar })
     assert.doesNotMatch(editorChrome, /BlueNote(?: TUI| Editor)?/i)
     assert.equal("title" in vm.topbar, false)
     assert.doesNotMatch(JSON.stringify({ topbar: vm.topbar, body: vm.body }), /Editor body|Line \d+, Col \d+/u)
-    assert.match(vm.bottombar.status, /Line 3, Col 23/u)
+    assert.equal(vm.bottombar.row1.leftLabel, "Line 3, Col 23")
 
     const dirtyVm = buildEditorViewModel({ ...baseState, screen: "editor", editor: { ...baseState.editor!, dirty: true, body: `${baseState.editor!.body}\nunsaved` } })
     assert.equal(dirtyVm.topbar.saveStatusLabel, "Unsaved")
-    assert.equal(dirtyVm.bottombar.saveStatusLabel, "Unsaved")
+    assert.equal(dirtyVm.bottombar.row1.rightLabel, "Unsaved")
     assert.equal(dirtyVm.topbar.statusIntent, "danger")
-    assert.equal(dirtyVm.bottombar.statusIntent, "danger")
-    assert.equal(dirtyVm.bottombar.saveStatusIntent, "danger")
+    assert.equal(dirtyVm.bottombar.row1.rightIntent, "danger")
 
     const autosaveVm = buildEditorViewModel({ ...baseState, screen: "editor", editor: { ...baseState.editor!, autosaveStatus: "saving" } as TuiState["editor"] })
     assert.equal(autosaveVm.topbar.saveStatusLabel, "Saving")
-    assert.equal(autosaveVm.bottombar.saveStatusLabel, "Saving")
+    assert.equal(autosaveVm.bottombar.row1.rightLabel, "Saving")
     assert.equal(autosaveVm.topbar.statusIntent, "warning")
-    assert.equal(autosaveVm.bottombar.statusIntent, "warning")
-    assert.equal(autosaveVm.bottombar.saveStatusIntent, "warning")
+    assert.equal(autosaveVm.bottombar.row1.rightIntent, "warning")
   })
 
   test("editor responsive view model hides low-priority shortcuts first and reports body overflow", () => {
@@ -556,11 +533,9 @@ describe("TUI render view models", () => {
       editor: { ...baseState.editor!, body: longBody, savedBody: longBody, cursorOffset: 0, selectionStart: 0, selectionEnd: 0 },
     }, { width: 34, bodyViewportLines: 8 })
 
-    assert.deepEqual(narrowVm.bottombar.visibleHints, ["Ctrl+S save", "Ctrl+F find"])
-    assert.equal(narrowVm.bottombar.hiddenShortcutCount, 4)
+    assert.deepEqual(narrowVm.bottombar.row2.visibleShortcuts, ["Ctrl+S save", "Ctrl+F find"])
+    assert.equal(narrowVm.bottombar.row2.hiddenShortcutCount, 4)
     assert.deepEqual(narrowVm.body.overflow, { above: false, below: true, indicator: "↓" })
-    assert.equal(narrowVm.bottombar.overflowIndicator, "More ↓")
-    assert.match(narrowVm.bottombar.status, /More ↓/u)
 
     const bodyLength = Array.from(longBody).length
     const bottomCursorVm = buildEditorViewModel({
@@ -577,7 +552,6 @@ describe("TUI render view models", () => {
     }, { width: 80, bodyViewportLines: 8 })
 
     assert.deepEqual(bottomCursorVm.body.overflow, { above: true, below: false, indicator: "↑" })
-    assert.equal(bottomCursorVm.bottombar.overflowIndicator, "More ↑")
   })
 
   test("editor chrome extracts note directory and latest updated or modified labels from metadata", () => {
@@ -598,7 +572,6 @@ describe("TUI render view models", () => {
     assert.equal(vm.topbar.directoryPath, "notes/projects/client")
     assert.equal(vm.topbar.filename, "client-brief.md")
     assert.equal(vm.topbar.updatedLabel, "Modified 2026-05-28T11:45:00.000Z")
-    assert.equal(vm.bottombar.updatedLabel, "Modified 2026-05-28T11:45:00.000Z")
   })
 
   test("editor bottom bar displays autosave status labels", () => {
@@ -615,17 +588,15 @@ describe("TUI render view models", () => {
 
     assert.deepEqual(
       [statusFor("pending"), statusFor("saving"), statusFor("saved", false), statusFor("error")].map((bar) => ({
-        status: bar.status,
-        intent: bar.statusIntent,
-        saveStatusLabel: bar.saveStatusLabel,
-        saveStatusIntent: bar.saveStatusIntent,
+        saveStatusLabel: bar.row1.rightLabel,
+        saveStatusIntent: bar.row1.rightIntent,
         errorLabel: bar.row1.errorLabel,
       })),
       [
-        { status: "Line 3, Col 23 · Wrap word: Enabled · Unsaved", intent: "danger", saveStatusLabel: "Unsaved", saveStatusIntent: "danger", errorLabel: null },
-        { status: "Line 3, Col 23 · Wrap word: Enabled · Saving", intent: "warning", saveStatusLabel: "Saving", saveStatusIntent: "warning", errorLabel: null },
-        { status: "Line 3, Col 23 · Wrap word: Enabled · Saved", intent: "success", saveStatusLabel: "Saved", saveStatusIntent: "success", errorLabel: null },
-        { status: "Line 3, Col 23 · Wrap word: Enabled · Unsaved · Autosave failed", intent: "danger", saveStatusLabel: "Unsaved", saveStatusIntent: "danger", errorLabel: "Autosave failed" },
+        { saveStatusLabel: "Unsaved", saveStatusIntent: "danger", errorLabel: null },
+        { saveStatusLabel: "Saving", saveStatusIntent: "warning", errorLabel: null },
+        { saveStatusLabel: "Saved", saveStatusIntent: "success", errorLabel: null },
+        { saveStatusLabel: "Unsaved", saveStatusIntent: "danger", errorLabel: "Autosave failed" },
       ],
     )
   })
