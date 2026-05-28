@@ -254,7 +254,7 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
       : state.manager.previewVisible === false
         ? hiddenPreview(hoveredPath, "manual")
         : previewViewModelFor(undefined, openNoteKey)
-  const itemCountLabel = `${rows.length} ${rows.length === 1 ? "item" : "items"}${state.manager.filterQuery ? " (filtered)" : ""}`
+  const itemCountLabel = `${rows.length} items${state.manager.filterQuery ? " (filtered)" : ""}`
   const appStatusLabel = state.manager.status?.trim() || "Ready"
   const rightLabel = `${itemCountLabel} | ${appStatusLabel}`
   const bottomPath = state.editor?.note.relativePath ?? ""
@@ -537,9 +537,7 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     }))
     root.add(deleteBar)
   }
-  const previewHiddenHint = preview.type === "hidden" ? `Preview hidden (${preview.reason === "responsive" ? "narrow width" : "manual"}) · p preview show` : null
-  const bottomStatus = [vm.topbar.bottomPath, previewHiddenHint].filter(Boolean).join(" · ")
-  root.add(new TextRenderable(options.renderer, { content: bottomStatus, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
+  root.add(new TextRenderable(options.renderer, { content: vm.topbar.bottomPath, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
   root.add(new TextRenderable(options.renderer, { content: vm.shortcuts.join("  "), height: 1, fg: tuiTheme.secondaryAccent, bg: tuiTheme.panel }))
 
   return root

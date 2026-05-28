@@ -671,7 +671,7 @@ describe("TUI render keyboard routing", () => {
       const textLines = descendants(screen).map((node) => node.content?.chunks?.[0]?.text ?? node.content ?? "")
       const renderedText = textLines.join("\n")
 
-      assert.ok(textLines.includes("BlueNote  1 item (filtered) | Indexing..."))
+      assert.ok(textLines.includes("BlueNote  1 items (filtered) | Indexing..."))
       assert.match(renderedText, /notes\/inbox\/daily-plan\.md/u)
       assert.doesNotMatch(renderedText, /Rebuild idle|Index ready|selected daily-plan|notes\/inbox → notes\/inbox\/daily-plan\.md|filter “daily”/u)
     } finally {
@@ -711,7 +711,7 @@ describe("TUI render keyboard routing", () => {
       assert.notEqual(narrowLayout1, undefined)
       assert.equal(narrowLayout2, undefined)
       assert.match(narrowText, /daily\.md/u)
-      assert.match(narrowText, /Preview hidden/u)
+      assert.doesNotMatch(narrowText, /Preview hidden/u)
       assert.doesNotMatch(narrowText, /Preview body/u)
 
       assert.equal(routeManagerKey("\u001b[B", controller), true)
@@ -743,7 +743,7 @@ describe("TUI render keyboard routing", () => {
       assert.notEqual(findById(narrowScreen, "bluenote-manager-layout-1"), undefined)
       assert.equal(findById(narrowScreen, "bluenote-manager-layout-2"), undefined)
       assert.match(narrowText, /daily\.md/u)
-      assert.match(narrowText, /Preview hidden \(narrow width\)/u)
+      assert.doesNotMatch(narrowText, /Preview hidden \(narrow width\)/u)
       assert.doesNotMatch(narrowText, /Preview body/u)
     } finally {
       renderer.destroy()
@@ -784,7 +784,7 @@ describe("TUI render keyboard routing", () => {
       const manualHiddenText = descendants(screen).map((node) => node.content?.chunks?.[0]?.text ?? node.content ?? "").join("\n")
       assert.equal(showCalls, 0)
       assert.equal(findById(screen, "bluenote-manager-layout-2"), undefined)
-      assert.match(manualHiddenText, /Preview hidden \(manual\)/u)
+      assert.doesNotMatch(manualHiddenText, /Preview hidden \(manual\)/u)
     } finally {
       renderer.destroy()
     }

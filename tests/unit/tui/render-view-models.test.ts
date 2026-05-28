@@ -168,9 +168,9 @@ describe("TUI render view models", () => {
     })
 
     assert.equal(vm.topbar.leftTitle, "BlueNote")
-    assert.equal(vm.topbar.itemCountLabel, "1 item (filtered)")
+    assert.equal(vm.topbar.itemCountLabel, "1 items (filtered)")
     assert.equal(vm.topbar.appStatusLabel, "Indexing...")
-    assert.equal(vm.topbar.rightLabel, "1 item (filtered) | Indexing...")
+    assert.equal(vm.topbar.rightLabel, "1 items (filtered) | Indexing...")
     assert.equal(vm.topbar.bottomPath, "notes/inbox/daily-plan.md")
     assert.doesNotMatch(vm.topbar.rightLabel, /notes\/|daily-plan|Rebuild idle|Index ready/u)
 
@@ -843,7 +843,7 @@ describe("TUI render view models", () => {
     }
   })
 
-  test("manager renderer uses responsive panes, compact hidden preview hint, and minimal root chrome", async () => {
+  test("manager renderer uses responsive panes, bottom-path-only hidden preview state, and minimal root chrome", async () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const controller = createWorkspaceController({
@@ -878,7 +878,8 @@ describe("TUI render view models", () => {
       assert.equal(narrowIds.includes("bluenote-manager-layout-2"), false)
       assert.equal((narrowLayout1 as any)?._width, "100%")
       assert.match(narrowText, /root-note\.md/u)
-      assert.match(narrowText, /Preview hidden.*p preview show/u)
+      assert.match(narrowText, /p preview show/u)
+      assert.doesNotMatch(narrowText, /Preview hidden/u)
       assert.doesNotMatch(narrowText, /Preview body/u)
     } finally {
       renderer.destroy()
