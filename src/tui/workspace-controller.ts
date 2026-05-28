@@ -277,6 +277,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         notifyAutosaveStateChange()
       }
     } catch {
+      clearManagerPreviewCache()
       const previousState = state
       state = applyAutosaveFailure(state, noteToPersist.key, submittedBody)
       if (state !== previousState) {
@@ -633,6 +634,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         setEditorNote(deps.showNote(created.key))
         return ok()
       } catch {
+        clearManagerPreviewCache()
         state = setManagerCreateStatus(state, "Create failed")
         applyManagerBrowserModel()
         return ok()
@@ -692,6 +694,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         applyManagerBrowserModel()
         return ok()
       } catch {
+        clearManagerPreviewCache()
         state = {
           ...state,
           manager: {
@@ -916,6 +919,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         applySavedEditorAndPreviewCache(persistedNote, submittedBody)
         return ok()
       } catch {
+        clearManagerPreviewCache()
         state = markAutosaveError(state)
         notifyAutosaveStateChange()
         return dirtyBlocked()

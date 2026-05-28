@@ -335,6 +335,32 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Changed body after failed refresh"])
   })
 
+  test("failed editor saves clear stale hydrated manager preview cache after partial persistence", async () => {
+    let currentBody = "Cached body before failed save"
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => summariesWithoutBodies,
+      showNote: (selector) => ({ ...notesByKey[selector], body: currentBody }),
+      persistEditorBody: (_note, body) => {
+        currentBody = body
+        throw new Error("disk failed after partial write")
+      },
+    }).deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Cached body before failed save"])
+
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    controller.updateEditorBody("Partially persisted body after failed save")
+    const result = await controller.saveEditor()
+
+    assert.deepEqual(result, { blocked: true, reason: "dirty-editor" })
+    controller.showManager()
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Partially persisted body after failed save"])
+  })
+
   test("successful editor saves update the hydrated manager preview cache for the saved note", async () => {
     let currentBody = "Cached body before save"
     const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
@@ -365,6 +391,36 @@ describe("TUI workspace controller", () => {
     controller.showManager()
     assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Saved body should replace cached preview"])
     assert.deepEqual(calls, ["list", "show:daily-plan", "show:daily-plan"])
+  })
+
+  test("failed autosaves clear stale hydrated manager preview cache after partial persistence", async () => {
+    const scheduler = createFakeScheduler()
+    let currentBody = "Cached body before failed autosave"
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const controller = createWorkspaceController(createDeps({
+      autosaveScheduler: scheduler,
+      listNotes: () => summariesWithoutBodies,
+      showNote: (selector) => ({ ...notesByKey[selector], body: currentBody }),
+      persistEditorBody: (_note, body) => {
+        currentBody = body
+        throw new Error("disk failed after partial autosave")
+      },
+    }).deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Cached body before failed autosave"])
+
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    controller.updateEditorBody("Partially persisted body after failed autosave")
+    scheduler.runNext()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    assert.equal(controller.getState().editor?.autosaveStatus, "error")
+    controller.showManager()
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Partially persisted body after failed autosave"])
   })
 
   test("successful autosaves update the hydrated manager preview cache for the saved note", async () => {
@@ -951,6 +1007,32 @@ describe("TUI workspace controller", () => {
     assert.equal(failingRefreshController.getState().manager.createDraft?.status, "Create failed")
   })
 
+  test("manager create clears stale preview cache when a partial mutation fails", async () => {
+    let currentBody = "Cached body before failed create"
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => summariesWithoutBodies,
+      showNote: (selector) => ({ ...notesByKey[selector], body: currentBody }),
+      createNote: () => {
+        currentBody = "Body changed by partial create mutation"
+        throw new Error("create failed after partial mutation")
+      },
+    }).deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Cached body before failed create"])
+
+    controller.openManagerCreate()
+    controller.updateManagerCreateTitle("Broken Partial Create")
+    await controller.submitManagerCreate()
+
+    assert.equal(controller.getState().mode, "manager.create")
+    assert.equal(controller.getState().manager.createDraft?.status, "Create failed")
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Body changed by partial create mutation"])
+  })
+
   test("empty manager create title stays in the prompt with calm validation and does not create", async () => {
     const { deps, calls } = createDeps({
       createNote: (title, body) => {
@@ -1147,6 +1229,31 @@ describe("TUI workspace controller", () => {
 
     assert.equal(failingController.getState().mode, "manager.deleteConfirm")
     assert.equal(failingController.getState().manager.deleteDraft?.status, "Delete failed")
+  })
+
+  test("manager delete clears stale preview cache when a partial mutation fails", async () => {
+    let currentBody = "Cached body before failed delete"
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => summariesWithoutBodies,
+      showNote: (selector) => ({ ...notesByKey[selector], body: currentBody }),
+      deleteNote: () => {
+        currentBody = "Body changed by partial delete mutation"
+        throw new Error("delete failed after partial mutation")
+      },
+    }).deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Cached body before failed delete"])
+
+    controller.openManagerDeleteConfirmation()
+    await controller.confirmManagerDelete()
+
+    assert.equal(controller.getState().mode, "manager.deleteConfirm")
+    assert.equal(controller.getState().manager.deleteDraft?.status, "Delete failed")
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Body changed by partial delete mutation"])
   })
 
   test("manager filter updates visible manager state and preview, and clear restores browsing", () => {
