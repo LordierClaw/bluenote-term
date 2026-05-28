@@ -1,4 +1,5 @@
 import path from "node:path"
+import { existsSync } from "node:fs"
 import { createCliRenderer, BoxRenderable, type CliRenderer, type Renderable } from "@opentui/core"
 
 import { resolveBlueNoteRoot } from "../config/root"
@@ -72,15 +73,15 @@ function showTuiNote(rootPath: string, selector: string): TuiNote {
   const note = showNote({ override: rootPath, selector })
   const sidecars = createSidecarRepository(rootPath)
 
-  try {
-    const sidecar = sidecars.read(note.key)
-    return {
-      ...note,
-      createdAt: sidecar.createdAt,
-      updatedAt: sidecar.updatedAt,
-    }
-  } catch {
+  if (!existsSync(sidecars.getSidecarPath(note.key))) {
     return note
+  }
+
+  const sidecar = sidecars.read(note.key)
+  return {
+    ...note,
+    createdAt: sidecar.createdAt,
+    updatedAt: sidecar.updatedAt,
   }
 }
 

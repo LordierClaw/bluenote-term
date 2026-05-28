@@ -306,6 +306,7 @@ describe("TUI note manager adapter", () => {
           description: "Today priorities.",
           relativePath: "notes/inbox/daily-plan.md",
           body: "- Write tests\n- Ship adapter\n",
+          updatedAt: "2026-05-28T10:30:00.000Z",
         }
       },
     })
@@ -317,6 +318,7 @@ describe("TUI note manager adapter", () => {
       description: "Today priorities.",
       relativePath: "notes/inbox/daily-plan.md",
       body: "- Write tests\n- Ship adapter\n",
+      updatedAt: "2026-05-28T10:30:00.000Z",
     })
   })
 
@@ -517,6 +519,7 @@ describe("TUI note manager adapter", () => {
           description: "Ship API work.",
           relativePath: "notes/projects/api-roadmap.md",
           body: "# API Roadmap\n\nShip it.\n",
+          updatedAt: "2026-05-28T10:30:00.000Z",
         }
       },
     })
@@ -529,6 +532,7 @@ describe("TUI note manager adapter", () => {
         description: "Ship API work.",
         relativePath: "notes/projects/api-roadmap.md",
         body: "# API Roadmap\n\nShip it.\n",
+        updatedAt: "2026-05-28T10:30:00.000Z",
       },
     })
   })

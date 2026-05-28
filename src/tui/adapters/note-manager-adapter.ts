@@ -405,13 +405,7 @@ export function openManagerBrowserItem(
 
   return {
     type: "note",
-    note: {
-      key: note.key,
-      title: note.title,
-      description: note.description,
-      relativePath: note.relativePath,
-      body: note.body,
-    },
+    note: { ...note },
   }
 }
 
@@ -533,13 +527,7 @@ export function openManagerSelection(
 
   const note = deps.showNote(focused.key)
 
-  return {
-    key: note.key,
-    title: note.title,
-    description: note.description,
-    relativePath: note.relativePath,
-    body: note.body,
-  }
+  return { ...note }
 }
 
 export function buildManagerViewModel(state: ManagerState): ManagerViewModel {
