@@ -353,15 +353,14 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Changed body after failed refresh"])
   })
 
-  test("failed editor saves clear stale hydrated manager preview cache after partial persistence", async () => {
-    let currentBody = "Cached body before failed save"
+  test("failed editor saves clear stale hydrated manager preview cache after pre-write failure", async () => {
+    const currentBody = "Cached body before failed save"
     const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
     const controller = createWorkspaceController(createDeps({
       listNotes: () => summariesWithoutBodies,
       showNote: (selector) => ({ ...notesByKey[selector], body: currentBody }),
-      persistEditorBody: (_note, body) => {
-        currentBody = body
-        throw new Error("disk failed after partial write")
+      persistEditorBody: () => {
+        throw new Error("atomic writer temp write failed")
       },
     }).deps)
 
@@ -371,12 +370,12 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Cached body before failed save"])
 
     assert.equal(controller.openFocusedManagerItem().blocked, false)
-    controller.updateEditorBody("Partially persisted body after failed save")
+    controller.updateEditorBody("Unpersisted body after failed save")
     const result = await controller.saveEditor()
 
     assert.deepEqual(result, { blocked: true, reason: "dirty-editor" })
     controller.showManager()
-    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Partially persisted body after failed save"])
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Cached body before failed save"])
   })
 
   test("successful editor saves update the hydrated manager preview cache for the saved note", async () => {
@@ -411,17 +410,16 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(calls, ["list", "show:daily-plan", "show:daily-plan"])
   })
 
-  test("failed autosaves clear stale hydrated manager preview cache after partial persistence", async () => {
+  test("failed autosaves clear stale hydrated manager preview cache after pre-write failure", async () => {
     const scheduler = createFakeScheduler()
-    let currentBody = "Cached body before failed autosave"
+    const currentBody = "Cached body before failed autosave"
     const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
     const controller = createWorkspaceController(createDeps({
       autosaveScheduler: scheduler,
       listNotes: () => summariesWithoutBodies,
       showNote: (selector) => ({ ...notesByKey[selector], body: currentBody }),
-      persistEditorBody: (_note, body) => {
-        currentBody = body
-        throw new Error("disk failed after partial autosave")
+      persistEditorBody: () => {
+        throw new Error("atomic writer temp write failed")
       },
     }).deps)
 
@@ -431,14 +429,14 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Cached body before failed autosave"])
 
     assert.equal(controller.openFocusedManagerItem().blocked, false)
-    controller.updateEditorBody("Partially persisted body after failed autosave")
+    controller.updateEditorBody("Unpersisted body after failed autosave")
     scheduler.runNext()
     await Promise.resolve()
     await Promise.resolve()
 
     assert.equal(controller.getState().editor?.autosaveStatus, "error")
     controller.showManager()
-    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Partially persisted body after failed autosave"])
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Cached body before failed autosave"])
   })
 
   test("successful autosaves update the hydrated manager preview cache for the saved note", async () => {
@@ -1662,11 +1660,35 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().editor?.autosaveStatus, "saved")
   })
 
-  test("autosave failure changes status to error and preserves dirty body", async () => {
+  test("manual save pre-write failure keeps editor dirty, marks visible failure status, and leaves saved source unchanged", async () => {
+    const storedBody = "Original daily body"
+    const { deps } = createDeps({
+      showNote: (selector) => ({ ...notesByKey[selector], body: storedBody }),
+      persistEditorBody: () => {
+        throw new Error("atomic writer temp write failed")
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Dirty body after manual failure")
+    const result = await controller.saveEditor()
+
+    assert.deepEqual(result, { blocked: true, reason: "dirty-editor" })
+    assert.equal(storedBody, "Original daily body")
+    assert.equal(controller.getState().editor?.body, "Dirty body after manual failure")
+    assert.equal(controller.getState().editor?.savedBody, "Original daily body")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "error")
+  })
+
+  test("autosave pre-write failure changes status to error, preserves dirty body, and leaves saved source unchanged", async () => {
     const scheduler = createFakeScheduler()
+    const storedBody = "Original daily body"
     const { deps } = createDeps({
       autosaveScheduler: scheduler,
-      persistEditorBody: () => Promise.reject(new Error("disk full")),
+      showNote: (selector) => ({ ...notesByKey[selector], body: storedBody }),
+      persistEditorBody: () => Promise.reject(new Error("atomic writer temp write failed")),
     })
     const controller = createWorkspaceController(deps)
 
@@ -1676,8 +1698,48 @@ describe("TUI workspace controller", () => {
     await Promise.resolve()
     await Promise.resolve()
 
+    assert.equal(storedBody, "Original daily body")
     assert.equal(controller.getState().editor?.body, "Dirty body after failure")
+    assert.equal(controller.getState().editor?.savedBody, "Original daily body")
     assert.equal(controller.getState().editor?.dirty, true)
     assert.equal(controller.getState().editor?.autosaveStatus, "error")
+  })
+
+  test("successful retry after autosave failure marks the current buffer clean", async () => {
+    const scheduler = createFakeScheduler()
+    let storedBody = "Original daily body"
+    let failNextPersist = true
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      showNote: (selector) => ({ ...notesByKey[selector], body: storedBody }),
+      persistEditorBody: (note, body) => {
+        if (failNextPersist) {
+          failNextPersist = false
+          return Promise.reject(new Error("atomic writer temp write failed"))
+        }
+        storedBody = body
+        return Promise.resolve({ ...note, body })
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Body that initially fails")
+    scheduler.runNext()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "error")
+    assert.equal(storedBody, "Original daily body")
+
+    const retryResult = await controller.saveEditor()
+
+    assert.deepEqual(retryResult, { blocked: false })
+    assert.equal(storedBody, "Body that initially fails")
+    assert.equal(controller.getState().editor?.body, "Body that initially fails")
+    assert.equal(controller.getState().editor?.savedBody, "Body that initially fails")
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
   })
 })

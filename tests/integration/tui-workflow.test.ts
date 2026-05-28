@@ -167,6 +167,34 @@ describe("TUI workspace workflows", () => {
     assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), changedBody)
   })
 
+  test("manual save atomic pre-write failure keeps TUI editor dirty and leaves note file unchanged", async () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Atomic Failure Save",
+      body: "Original body before writer failure",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerNoteByKey(controller, first.key)
+    controller.updateEditorBody("Unsaved body after atomic failure")
+
+    const tempPath = getStateTmpPath(rootPath)
+    await rm(tempPath, { recursive: true, force: true })
+    await writeFile(tempPath, "not a temp directory", "utf8")
+
+    const saveResult = await controller.saveEditor()
+
+    assert.deepEqual(saveResult, { blocked: true, reason: "dirty-editor" })
+    assert.equal(controller.getState().editor?.body, "Unsaved body after atomic failure")
+    assert.equal(controller.getState().editor?.savedBody, "Original body before writer failure")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "error")
+    assert.equal(showNote({ override: rootPath, selector: first.key }).body, "Original body before writer failure")
+    assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), "Original body before writer failure")
+  })
+
   test("manager create prompt creates a real plain Markdown note through core services", async () => {
     const controller = createDefaultWorkspaceController({ rootPath, clock: fixedClock("2026-05-26T10:02:00.000Z") })
 
