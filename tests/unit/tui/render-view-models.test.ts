@@ -600,10 +600,12 @@ describe("TUI render view models", () => {
     assert.equal(bodyVm.body.focused, true)
   })
 
-  test("Search Everything view model includes query, result list, selected preview/excerpt/command usage, and previous-screen context", () => {
+  test("Search Everything view model includes readable result fields, preview sections, and previous-screen context", () => {
     const results: SearchEverythingResult[] = [
       {
         kind: "content",
+        typeLabel: "content",
+        typeIcon: "content",
         id: "content:daily-plan:body",
         key: "daily-plan",
         title: "Daily Plan",
@@ -616,6 +618,8 @@ describe("TUI render view models", () => {
       },
       {
         kind: "command",
+        typeLabel: "command",
+        typeIcon: "command",
         id: "command:/replace",
         label: "/replace",
         detail: "Find and replace text in the active editor buffer",
@@ -644,19 +648,37 @@ describe("TUI render view models", () => {
       selectedResult: "activeItem",
       preview: "panel",
     })
-    assert.deepEqual(vm.shortcuts, ["type search", "↑/↓ select", "Enter open/run", "Esc editor"])
+    assert.deepEqual(vm.shortcuts, ["type search", "↑/↓ select", "Enter open/run", "p preview hide/show", "Esc editor"])
     assert.deepEqual(
-      vm.results.map((row) => ({ marker: row.focusMarker, kind: row.kind, label: row.label, detail: row.detail, selected: row.selected })),
+      vm.results.map((row) => ({
+        marker: row.focusMarker,
+        typeLabel: row.typeLabel,
+        typeIcon: row.typeIcon,
+        primaryLabel: row.primaryLabel,
+        detail: row.detail,
+        selected: row.selected,
+        selectedMarker: row.selectedMarker,
+      })),
       [
-        { marker: " ", kind: "content", label: "Daily Plan", detail: "body — notes/inbox/daily-plan.md", selected: false },
-        { marker: "›", kind: "command", label: "/replace", detail: "Find and replace text in the active editor buffer", selected: true },
+        { marker: " ", typeLabel: "content", typeIcon: "content", primaryLabel: "Daily Plan", detail: "body — notes/inbox/daily-plan.md", selected: false, selectedMarker: " " },
+        { marker: "›", typeLabel: "command", typeIcon: "command", primaryLabel: "/replace", detail: "Find and replace text in the active editor buffer", selected: true, selectedMarker: "›" },
       ],
     )
-    assert.deepEqual(vm.results.map((row) => row.styleIntent), ["panel", "activeItem"])
+    assert.deepEqual(vm.results.map((row) => row.styleIntent), ["panel", "focusedRow"])
+    assert.deepEqual(vm.results.map((row) => row.primaryStyleIntent), ["panel", "activeItem"])
+    assert.deepEqual(vm.results.map((row) => row.detailStyleIntent), ["panel", "panel"])
+    assert.deepEqual(vm.results.map((row) => row.typeStyleIntent), ["panel", "panel"])
     assert.deepEqual(vm.preview, {
+      visible: true,
+      hiddenReason: null,
+      hiddenStatus: null,
       title: "/replace",
       subtitle: "Find and replace text in the active editor buffer",
       lines: ["Usage: /replace <query> <replacement>", "Shortcut: Ctrl+H"],
+      sections: [
+        { label: "Usage", lines: ["/replace <query> <replacement>"] },
+        { label: "Shortcut", lines: ["Ctrl+H"] },
+      ],
       styleIntent: "panel",
     })
 
@@ -668,7 +690,67 @@ describe("TUI render view models", () => {
       },
       results,
     )
-    assert.deepEqual(contentVm.preview?.lines, ["Ship renderer screens with OpenTUI."])
+    const contentPreview = contentVm.preview
+    assert.equal(contentPreview?.visible, true)
+    if (contentPreview?.visible) {
+      assert.deepEqual(contentPreview.lines, ["Ship renderer screens with OpenTUI."])
+      assert.deepEqual(contentPreview.sections.map((section) => section.label), ["Match", "Excerpt"])
+    }
+  })
+
+  test("Search Everything view model hides preview manually or at short heights with compact status", () => {
+    const results: SearchEverythingResult[] = [
+      {
+        kind: "note",
+        typeLabel: "note",
+        typeIcon: "note",
+        id: "note:daily-plan",
+        key: "daily-plan",
+        title: "Daily Plan",
+        relativePath: "notes/inbox/daily-plan.md",
+        filename: "daily-plan.md",
+        description: "Today priorities.",
+        matchedFields: ["title"],
+        label: "Daily Plan",
+        detail: "notes/inbox/daily-plan.md",
+        score: 10,
+      },
+    ]
+    const visibleState: TuiState = {
+      ...baseState,
+      screen: "search",
+      search: { query: "daily", selectedIndex: 0, previousScreen: "manager", previewVisible: true },
+    }
+
+    const manualVm = buildSearchEverythingViewModel(
+      { ...visibleState, search: { ...visibleState.search!, previewVisible: false } },
+      results,
+      { height: 40 },
+    )
+    const shortVm = buildSearchEverythingViewModel(visibleState, results, { height: 19 })
+    const thresholdVm = buildSearchEverythingViewModel(visibleState, results, { height: 20 })
+
+    assert.deepEqual(manualVm.preview, {
+      visible: false,
+      hiddenReason: "manual",
+      hiddenStatus: "Preview hidden · p preview show",
+      styleIntent: "mutedText",
+    })
+    assert.equal("sections" in manualVm.preview!, false)
+    assert.deepEqual(shortVm.preview, {
+      visible: false,
+      hiddenReason: "short-height",
+      hiddenStatus: "Preview hidden for short terminal · p preview show",
+      styleIntent: "mutedText",
+    })
+    assert.equal("sections" in shortVm.preview!, false)
+    const thresholdPreview = thresholdVm.preview
+    assert.equal(thresholdPreview?.visible, true)
+    if (thresholdPreview?.visible) {
+      assert.deepEqual(thresholdPreview.sections.map((section) => section.label), ["Metadata", "Description"])
+    }
+    assert.deepEqual(manualVm.regions.map((region) => region.id), ["input", "result-list"])
+    assert.deepEqual(shortVm.regions.map((region) => region.id), ["input", "result-list"])
   })
 
   test("Search Everything view model describes one input, result list, and preview regions in order", () => {
@@ -706,6 +788,8 @@ describe("TUI render view models", () => {
     assert.deepEqual(vm.regions.map((region) => region.id), ["input", "result-list", "preview"])
     assert.equal(vm.regions.findIndex((region) => region.id === "preview") > vm.regions.findIndex((region) => region.id === "result-list"), true)
     assert.equal(vm.regions.filter((region) => region.kind === "input").length, 1)
+    assert.equal(vm.regions.filter((region) => region.kind === "results").length, 1)
+    assert.equal(vm.regions.filter((region) => region.kind === "preview").length, 1)
   })
 
   test("manager create renderer builds one stable focused title input", async () => {

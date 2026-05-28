@@ -17,18 +17,41 @@ export interface SearchEverythingStyleIntents {
   preview: TuiColorIntent
 }
 
-export interface SearchEverythingPreviewViewModel extends SearchEverythingPreview {
+export const SEARCH_PREVIEW_MIN_HEIGHT = 20
+
+export type SearchEverythingPreviewHiddenReason = "manual" | "short-height"
+
+export interface SearchEverythingVisiblePreviewViewModel extends SearchEverythingPreview {
+  visible: true
+  hiddenReason: null
+  hiddenStatus: null
   styleIntent: TuiColorIntent
 }
+
+export interface SearchEverythingHiddenPreviewViewModel {
+  visible: false
+  hiddenReason: SearchEverythingPreviewHiddenReason
+  hiddenStatus: string
+  styleIntent: TuiColorIntent
+}
+
+export type SearchEverythingPreviewViewModel = SearchEverythingVisiblePreviewViewModel | SearchEverythingHiddenPreviewViewModel
 
 export interface SearchEverythingResultRowViewModel {
   id: string
   kind: SearchEverythingResult["kind"]
+  typeLabel: string
+  typeIcon: string
   label: string
+  primaryLabel: string
   detail: string
   selected: boolean
   focusMarker: "›" | " "
+  selectedMarker: "›" | " "
   styleIntent: TuiColorIntent
+  typeStyleIntent: TuiColorIntent
+  primaryStyleIntent: TuiColorIntent
+  detailStyleIntent: TuiColorIntent
 }
 
 export interface SearchEverythingInputViewModel {
@@ -57,6 +80,10 @@ export interface SearchEverythingViewModel {
   shortcuts: string[]
 }
 
+export interface SearchEverythingViewModelOptions {
+  height?: number
+}
+
 function clampIndex(index: number, length: number): number {
   if (length <= 0) {
     return 0
@@ -68,6 +95,7 @@ function clampIndex(index: number, length: number): number {
 export function buildSearchEverythingViewModel(
   state: TuiState,
   results: readonly SearchEverythingResult[],
+  options: SearchEverythingViewModelOptions = {},
 ): SearchEverythingViewModel {
   const query = state.search?.query ?? ""
   const previousScreen = state.search?.previousScreen ?? "manager"
@@ -79,7 +107,19 @@ export function buildSearchEverythingViewModel(
     selectedResult: "activeItem",
     preview: "panel",
   }
-  const preview = buildHighlightedSearchEverythingPreview(results, selectedIndex)
+  const previewHiddenReason: SearchEverythingPreviewHiddenReason | null = state.search?.previewVisible === false
+    ? "manual"
+    : typeof options.height === "number" && options.height < SEARCH_PREVIEW_MIN_HEIGHT
+      ? "short-height"
+      : null
+  const previewVisible = previewHiddenReason === null
+  const preview = previewVisible ? buildHighlightedSearchEverythingPreview(results, selectedIndex) : null
+  const previewRegion: SearchEverythingRegionViewModel = {
+    id: "preview",
+    renderableId: "bluenote-search-preview-region",
+    kind: "preview",
+    styleIntent: styleIntents.preview,
+  }
 
   return {
     query,
@@ -95,33 +135,48 @@ export function buildSearchEverythingViewModel(
     regions: [
       { id: "input", renderableId: "bluenote-search-input-region", kind: "input", styleIntent: styleIntents.input },
       { id: "result-list", renderableId: "bluenote-search-results-region", kind: "results", styleIntent: styleIntents.result },
-      { id: "preview", renderableId: "bluenote-search-preview-region", kind: "preview", styleIntent: styleIntents.preview },
+      ...(previewVisible ? [previewRegion] : []),
     ],
     results: results.map((result, index) => {
       const selected = index === selectedIndex
       return {
         id: result.id,
         kind: result.kind,
+        typeLabel: result.typeLabel ?? result.kind,
+        typeIcon: result.typeIcon ?? result.kind,
         label: result.label,
+        primaryLabel: result.label,
         detail: result.detail,
         selected,
         focusMarker: selected ? "›" : " ",
-        styleIntent: selected ? styleIntents.selectedResult : styleIntents.result,
+        selectedMarker: selected ? "›" : " ",
+        styleIntent: selected ? "focusedRow" : styleIntents.result,
+        typeStyleIntent: styleIntents.result,
+        primaryStyleIntent: selected ? styleIntents.selectedResult : styleIntents.result,
+        detailStyleIntent: styleIntents.result,
       }
     }),
-    preview: preview ? { ...preview, styleIntent: styleIntents.preview } : null,
-    shortcuts: ["type search", "↑/↓ select", "Enter open/run", `Esc ${previousScreen}`],
+    preview: previewVisible
+      ? (preview ? { ...preview, visible: true, hiddenReason: null, hiddenStatus: null, styleIntent: styleIntents.preview } : null)
+      : {
+        visible: false,
+        hiddenReason: previewHiddenReason,
+        hiddenStatus: previewHiddenReason === "manual" ? "Preview hidden · p preview show" : "Preview hidden for short terminal · p preview show",
+        styleIntent: "mutedText",
+      },
+    shortcuts: ["type search", "↑/↓ select", "Enter open/run", "p preview hide/show", `Esc ${previousScreen}`],
   }
 }
 
 export interface RenderSearchEverythingScreenOptions {
   renderer: CliRenderer
   controller: WorkspaceController
+  height?: number
   onInvalidate?: () => void
 }
 
 export function renderSearchEverythingScreen(options: RenderSearchEverythingScreenOptions): BoxRenderable {
-  const vm = buildSearchEverythingViewModel(options.controller.getState(), options.controller.getSearchResults())
+  const vm = buildSearchEverythingViewModel(options.controller.getState(), options.controller.getSearchResults(), { height: options.height })
   const root = new BoxRenderable(options.renderer, {
     id: "bluenote-search-everything-screen",
     flexDirection: "column",
@@ -191,25 +246,29 @@ export function renderSearchEverythingScreen(options: RenderSearchEverythingScre
   for (const row of vm.results) {
     resultsRegion.add(
       new TextRenderable(options.renderer, {
-        content: `${row.focusMarker} [${row.kind}] ${row.label} — ${row.detail}`,
+        content: `${row.focusMarker} [${row.typeLabel}] ${row.primaryLabel} — ${row.detail}`,
         height: 1,
-        fg: tuiTheme[row.selected ? vm.styleIntents.selectedResult : row.styleIntent],
+        fg: tuiTheme[row.primaryStyleIntent],
         bg: tuiTheme.panel,
       }),
     )
   }
-  if (vm.preview) {
+  if (vm.preview?.visible) {
     previewRegion.add(new TextRenderable(options.renderer, { content: vm.preview.title, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
     previewRegion.add(new TextRenderable(options.renderer, { content: vm.preview.subtitle, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
     for (const line of vm.preview.lines) {
       previewRegion.add(new TextRenderable(options.renderer, { content: line, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
     }
+  } else if (vm.preview && !vm.preview.visible) {
+    previewRegion.add(new TextRenderable(options.renderer, { content: vm.preview.hiddenStatus, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
   } else {
     previewRegion.add(new TextRenderable(options.renderer, { content: "No preview", height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
   }
   root.add(inputRegion)
   root.add(resultsRegion)
-  root.add(previewRegion)
+  if (vm.regions.some((region) => region.id === "preview")) {
+    root.add(previewRegion)
+  }
   root.add(new TextRenderable(options.renderer, { content: vm.shortcuts.join("  "), height: 1, fg: tuiTheme.secondaryAccent, bg: tuiTheme.panel }))
   input.focus()
 
