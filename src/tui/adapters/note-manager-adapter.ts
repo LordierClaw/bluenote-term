@@ -33,10 +33,26 @@ export interface ManagerBrowserRow extends ManagerItem {
   rowStyleIntent: "folder" | "note"
 }
 
+export interface BuildManagerBrowserModelOptions {
+  previewVisible?: boolean
+  hiddenReason?: "manual" | "responsive"
+  getPreviewBody?: (item: ManagerItem) => string | undefined
+}
+
 export type ManagerPreviewModel =
   | {
       type: "empty"
       path: null
+      rows?: undefined
+      noteKey?: undefined
+      title?: undefined
+      description?: undefined
+      contentLines?: undefined
+    }
+  | {
+      type: "hidden"
+      path: string | null
+      reason: "manual" | "responsive"
       rows?: undefined
       noteKey?: undefined
       title?: undefined
@@ -255,9 +271,14 @@ function browserRowsFor(items: readonly ManagerItem[], focusedPath: string | nul
   return items.map((item, index) => browserRowFor(item, index, item.relativePath === focusedPath, selectedNoteKey))
 }
 
-function noteContentPreview(item: ManagerItem, noteSummaries: readonly NoteManagerSummary[]): ManagerPreviewModel {
+function noteContentPreview(
+  item: ManagerItem,
+  noteSummaries: readonly NoteManagerSummary[],
+  options: BuildManagerBrowserModelOptions,
+): ManagerPreviewModel {
   const summary = noteSummaries.find((candidate) => normalizeRelativePath(candidate.relativePath) === item.relativePath)
-  const bodyLines = summary?.body?.split(/\r?\n/u) ?? []
+  const body = summary?.body ?? options.getPreviewBody?.(item) ?? ""
+  const bodyLines = body.split(/\r?\n/u)
   if (bodyLines.at(-1) === "") {
     bodyLines.pop()
   }
@@ -294,6 +315,7 @@ function clampIndex(index: number, max: number): number {
 export function buildManagerBrowserModel(
   noteSummaries: readonly NoteManagerSummary[],
   state: ManagerState,
+  options: BuildManagerBrowserModelOptions = {},
 ): ManagerBrowserModel {
   const items = allBrowserItems(noteSummaries)
   const currentFolderPath = normalizeManagerFolderPath(state.currentFolderPath)
@@ -305,11 +327,13 @@ export function buildManagerBrowserModel(
   const hoveredPath = hoveredItem?.relativePath ?? null
   const layout1Rows = browserRowsFor(visibleItems, hoveredPath, state.selectedNoteKey)
 
-  const preview: ManagerPreviewModel = !hoveredItem
-    ? { type: "empty", path: null }
-    : hoveredItem.type === "folder"
-      ? folderPreview(items, hoveredItem.relativePath, state.selectedNoteKey)
-      : noteContentPreview(hoveredItem, noteSummaries)
+  const preview: ManagerPreviewModel = options.previewVisible === false
+    ? { type: "hidden", path: hoveredPath, reason: options.hiddenReason ?? "manual" }
+    : !hoveredItem
+      ? { type: "empty", path: null }
+      : hoveredItem.type === "folder"
+        ? folderPreview(items, hoveredItem.relativePath, state.selectedNoteKey)
+        : noteContentPreview(hoveredItem, noteSummaries, options)
 
   return {
     layout1Rows,

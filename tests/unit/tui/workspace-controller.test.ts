@@ -204,6 +204,192 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(calls, ["list", "show:daily-plan"])
   })
 
+  test("hidden manager previews do not hydrate the focused note body", () => {
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const calls: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => {
+        calls.push("list")
+        return summariesWithoutBodies
+      },
+      showNote: (selector) => {
+        calls.push(`show:${selector}`)
+        return notesByKey[selector]
+      },
+    }).deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    controller.setManagerPreviewVisible(false)
+    const model = controller.getManagerBrowserModel()
+
+    assert.deepEqual(calls, ["list"])
+    assert.deepEqual(model.preview, { type: "hidden", path: "notes/inbox/daily-plan.md", reason: "manual" })
+  })
+
+  test("manager preview hydrates a focused note at most once per note during a session", () => {
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const calls: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => {
+        calls.push("list")
+        return summariesWithoutBodies
+      },
+      showNote: (selector) => {
+        calls.push(`show:${selector}`)
+        return notesByKey[selector]
+      },
+    }).deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    const first = controller.getManagerBrowserModel().preview
+    const second = controller.getManagerBrowserModel().preview
+    const third = controller.getManagerBrowserModel().preview
+
+    assert.equal(first.type, "note-content")
+    assert.deepEqual(first, second)
+    assert.deepEqual(second, third)
+    assert.deepEqual(calls, ["list", "show:daily-plan"])
+  })
+
+  test("moving between folder rows never hydrates manager preview note bodies", () => {
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const calls: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => {
+        calls.push("list")
+        return summariesWithoutBodies
+      },
+      showNote: (selector) => {
+        calls.push(`show:${selector}`)
+        return notesByKey[selector]
+      },
+    }).deps)
+
+    controller.focusManagerItem(0)
+    controller.getManagerBrowserModel()
+    controller.focusManagerItem(1)
+    controller.getManagerBrowserModel()
+    controller.moveManagerSelection("up")
+    controller.getManagerBrowserModel()
+
+    assert.deepEqual(calls, ["list"])
+  })
+
+  test("refreshing manager invalidates cached hydrated previews", () => {
+    let currentBody = "Original cached body"
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const calls: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => {
+        calls.push("list")
+        return summariesWithoutBodies
+      },
+      showNote: (selector) => {
+        calls.push(`show:${selector}`)
+        return { ...notesByKey[selector], body: currentBody }
+      },
+    }).deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Original cached body"])
+
+    currentBody = "Changed body after refresh"
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Original cached body"])
+    controller.refreshManager()
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Changed body after refresh"])
+    assert.deepEqual(calls, ["list", "show:daily-plan", "list", "show:daily-plan"])
+  })
+
+  test("successful editor saves update the hydrated manager preview cache for the saved note", async () => {
+    let currentBody = "Cached body before save"
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const calls: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => {
+        calls.push("list")
+        return summariesWithoutBodies
+      },
+      showNote: (selector) => {
+        calls.push(`show:${selector}`)
+        return { ...notesByKey[selector], body: currentBody }
+      },
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    }).deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Cached body before save"])
+
+    const openResult = controller.openFocusedManagerItem()
+    assert.equal(openResult.blocked, false)
+    controller.updateEditorBody("Saved body should replace cached preview")
+    await controller.saveEditor()
+
+    currentBody = "Stale body from showNote should not be needed"
+    controller.showManager()
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Saved body should replace cached preview"])
+    assert.deepEqual(calls, ["list", "show:daily-plan", "show:daily-plan"])
+  })
+
+  test("successful autosaves update the hydrated manager preview cache for the saved note", async () => {
+    const scheduler = createFakeScheduler()
+    let currentBody = "Cached body before autosave"
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const calls: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      autosaveScheduler: scheduler,
+      listNotes: () => {
+        calls.push("list")
+        return summariesWithoutBodies
+      },
+      showNote: (selector) => {
+        calls.push(`show:${selector}`)
+        return { ...notesByKey[selector], body: currentBody }
+      },
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    }).deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Cached body before autosave"])
+
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    controller.updateEditorBody("Autosaved body should replace cached preview")
+    scheduler.runNext()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    currentBody = "Stale body from showNote should not be needed"
+    controller.showManager()
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Autosaved body should replace cached preview"])
+    assert.deepEqual(calls, ["list", "show:daily-plan", "show:daily-plan"])
+  })
+
+  test("successful saves update manager preview summaries that already include note bodies", async () => {
+    const { deps } = createDeps({ persistEditorBody: (note, body) => ({ ...note, body }) })
+    const controller = createWorkspaceController(deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Original daily body"])
+
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    controller.updateEditorBody("Saved body should replace summary body")
+    await controller.saveEditor()
+
+    controller.showManager()
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Saved body should replace summary body"])
+  })
+
   test("switches manager to editor by opening the selected note", () => {
     const { deps, calls } = createDeps()
     const controller = createWorkspaceController(deps)

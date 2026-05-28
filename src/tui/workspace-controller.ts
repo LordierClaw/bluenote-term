@@ -239,6 +239,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   let searchResults: SearchEverythingResult[] = []
   let autosaveTimer: unknown = null
   let autosaveStateChangeHandler: (() => void) | null = deps.onAutosaveStateChange ?? null
+  const previewBodyCache = new Map<string, string>()
   const autosaveScheduler: WorkspaceDebounceScheduler = deps.autosaveScheduler ?? {
     setTimeout: (callback, delay) => globalThis.setTimeout(callback, delay),
     clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
@@ -271,7 +272,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       const persistedNote = persistEditorSnapshot(noteToPersist, submittedBody)
       const savedNote = isPromiseLike(persistedNote) ? await persistedNote : persistedNote
       const previousState = state
-      state = applySavedEditor(state, savedNote, submittedBody)
+      applySavedEditorAndPreviewCache(savedNote, submittedBody)
       if (state !== previousState) {
         notifyAutosaveStateChange()
       }
@@ -298,19 +299,50 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     }, 750)
   }
 
-  function noteSummariesForManagerPreview(): readonly NoteManagerSummary[] {
-    const focusedItem = state.manager.items[state.manager.focusedIndex]
-    if (focusedItem?.type !== "note") {
-      return noteSummaries
+  function cachePreviewBodyFor(note: TuiNote): void {
+    previewBodyCache.set(note.key, note.body)
+    previewBodyCache.set(note.relativePath, note.body)
+  }
+
+  function updatePreviewSourcesForSavedNote(note: TuiNote): void {
+    cachePreviewBodyFor(note)
+    noteSummaries = noteSummaries.map((summary) => {
+      if (summary.key !== note.key && summary.relativePath !== note.relativePath) {
+        return summary
+      }
+
+      return {
+        ...summary,
+        title: note.title,
+        description: note.description,
+        relativePath: note.relativePath,
+        body: note.body,
+      }
+    })
+  }
+
+  function hydrateManagerPreviewBody(item: ManagerItem): string | undefined {
+    if (item.type !== "note") {
+      return undefined
     }
 
-    const focusedSummary = noteSummaries.find((summary) => summary.key === focusedItem.key || summary.relativePath === focusedItem.relativePath)
-    if (!focusedSummary || focusedSummary.body !== undefined) {
-      return noteSummaries
+    const cacheKey = item.key || item.relativePath
+    const cachedBody = previewBodyCache.get(cacheKey)
+    if (cachedBody !== undefined) {
+      return cachedBody
     }
 
-    const hydratedNote = deps.showNote(focusedItem.key)
-    return noteSummaries.map((summary) => (summary.key === focusedSummary.key ? { ...summary, body: hydratedNote.body } : summary))
+    const hydratedNote = deps.showNote(item.key)
+    cachePreviewBodyFor(hydratedNote)
+    return hydratedNote.body
+  }
+
+  function applySavedEditorAndPreviewCache(persistedNote: TuiNote, submittedBody: string): void {
+    const previousState = state
+    state = applySavedEditor(state, persistedNote, submittedBody)
+    if (state !== previousState) {
+      updatePreviewSourcesForSavedNote(persistedNote)
+    }
   }
 
   function applyManagerBrowserModel(): void {
@@ -340,6 +372,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
   function refreshManager(): void {
     noteSummaries = deps.listNotes()
+    previewBodyCache.clear()
     applyManagerBrowserModel()
   }
 
@@ -416,7 +449,11 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   const controller: WorkspaceController = {
     getState: () => cloneStateSnapshot(state),
 
-    getManagerBrowserModel: () => buildManagerBrowserModel(noteSummariesForManagerPreview(), state.manager),
+    getManagerBrowserModel: () => buildManagerBrowserModel(noteSummaries, state.manager, {
+      previewVisible: state.manager.previewVisible ?? true,
+      hiddenReason: "manual",
+      getPreviewBody: hydrateManagerPreviewBody,
+    }),
 
     getSearchResults: () => searchResults.map(cloneSearchResult),
 
@@ -847,11 +884,11 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
         if (isPromiseLike(persistedNote)) {
           const savedNote = await persistedNote
-          state = applySavedEditor(state, savedNote, submittedBody)
+          applySavedEditorAndPreviewCache(savedNote, submittedBody)
           return ok()
         }
 
-        state = applySavedEditor(state, persistedNote, submittedBody)
+        applySavedEditorAndPreviewCache(persistedNote, submittedBody)
         return ok()
       } catch {
         state = markAutosaveError(state)

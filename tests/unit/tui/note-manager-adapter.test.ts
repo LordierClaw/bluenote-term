@@ -432,6 +432,57 @@ describe("TUI note manager adapter", () => {
     })
   })
 
+  test("returns an explicit hidden preview without resolving note content when preview is hidden", () => {
+    let bodyLookups = 0
+    const model = buildManagerBrowserModel(
+      browserSummaries,
+      {
+        items: [],
+        focusedIndex: 2,
+        selectedNoteKey: null,
+        currentFolderPath: "",
+        hoveredPath: "notes/root-note.md",
+        filterQuery: "",
+      },
+      {
+        previewVisible: false,
+        hiddenReason: "manual",
+        getPreviewBody: () => {
+          bodyLookups += 1
+          throw new Error("hidden previews must not hydrate note bodies")
+        },
+      },
+    )
+
+    assert.equal(bodyLookups, 0)
+    assert.deepEqual(model.preview, { type: "hidden", path: "notes/root-note.md", reason: "manual" })
+    assert.equal(model.layout1Rows.some((row) => row.relativePath === "notes/root-note.md"), true)
+  })
+
+  test("does not resolve preview note content for folder previews", () => {
+    let bodyLookups = 0
+    const model = buildManagerBrowserModel(
+      browserSummaries,
+      {
+        items: [],
+        focusedIndex: 0,
+        selectedNoteKey: null,
+        currentFolderPath: "",
+        hoveredPath: "notes/projects",
+        filterQuery: "",
+      },
+      {
+        getPreviewBody: () => {
+          bodyLookups += 1
+          throw new Error("folder previews must not hydrate note bodies")
+        },
+      },
+    )
+
+    assert.equal(model.preview.type, "folder")
+    assert.equal(bodyLookups, 0)
+  })
+
   test("opens folders by updating current folder and opens notes as editor-ready data", () => {
     const rootModel = buildManagerBrowserModel(browserSummaries, {
       items: [],

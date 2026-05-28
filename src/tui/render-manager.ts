@@ -51,6 +51,17 @@ export type ManagerPreviewViewModel =
       styleIntent: TuiColorIntent
     }
   | {
+      type: "hidden"
+      path: string | null
+      reason: "manual" | "responsive"
+      rows?: undefined
+      noteKey?: undefined
+      title?: undefined
+      description?: undefined
+      contentLines?: undefined
+      styleIntent: TuiColorIntent
+    }
+  | {
       type: "folder"
       path: string
       rows: ManagerRowViewModel[]
@@ -160,6 +171,15 @@ function emptyPreview(): ManagerPreviewViewModel {
 function previewViewModelFor(preview: ManagerPreviewModel | null | undefined, openNoteKey: string | null): ManagerPreviewViewModel {
   if (!preview || preview.type === "empty") {
     return emptyPreview()
+  }
+
+  if (preview.type === "hidden") {
+    return {
+      type: "hidden",
+      path: preview.path,
+      reason: preview.reason,
+      styleIntent: "panel",
+    }
   }
 
   if (preview.type === "folder") {
