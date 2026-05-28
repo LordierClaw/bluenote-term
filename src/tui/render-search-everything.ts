@@ -1,4 +1,4 @@
-import { BoxRenderable, InputRenderable, InputRenderableEvents, TextRenderable, type CliRenderer } from "@opentui/core"
+import { BoxRenderable, InputRenderable, InputRenderableEvents, StyledText, TextRenderable, fg, type CliRenderer, type TextChunk } from "@opentui/core"
 
 import {
   buildHighlightedSearchEverythingPreview,
@@ -43,9 +43,12 @@ export interface SearchEverythingResultRowViewModel {
   kind: SearchEverythingResult["kind"]
   typeLabel: string
   typeIcon: string
+  tagLabel: string
   label: string
   primaryLabel: string
   detail: string
+  riskLabel: "destructive" | "maintenance" | null
+  availabilityLabel: "available" | "unavailable" | null
   selected: boolean
   focusMarker: "›" | " "
   selectedMarker: "›" | " "
@@ -53,6 +56,16 @@ export interface SearchEverythingResultRowViewModel {
   typeStyleIntent: TuiColorIntent
   primaryStyleIntent: TuiColorIntent
   detailStyleIntent: TuiColorIntent
+  riskStyleIntent: TuiColorIntent | null
+  availabilityStyleIntent: TuiColorIntent | null
+}
+
+export interface SearchEverythingEmptyStateViewModel {
+  title: string
+  examples: string[]
+  recentActions: string[]
+  commandSuggestions: string[]
+  styleIntent: TuiColorIntent
 }
 
 export interface SearchEverythingInputViewModel {
@@ -77,6 +90,7 @@ export interface SearchEverythingViewModel {
   input: SearchEverythingInputViewModel
   regions: SearchEverythingRegionViewModel[]
   results: SearchEverythingResultRowViewModel[]
+  emptyState: SearchEverythingEmptyStateViewModel | null
   preview: SearchEverythingPreviewViewModel | null
   shortcutHints: ShortcutHint[]
   shortcuts: string[]
@@ -108,6 +122,94 @@ function searchShortcutHints(_query: string, previousScreen: Exclude<TuiScreen, 
   ]
 }
 
+function commandRiskLabel(result: SearchEverythingResult): SearchEverythingResultRowViewModel["riskLabel"] {
+  if (result.kind !== "command") {
+    return null
+  }
+  if (result.name === "/delete") {
+    return "destructive"
+  }
+  if (result.name === "/migrate" || result.name === "/rebuild") {
+    return "maintenance"
+  }
+  return null
+}
+
+function commandAvailabilityLabel(result: SearchEverythingResult): SearchEverythingResultRowViewModel["availabilityLabel"] {
+  if (result.kind !== "command") {
+    return null
+  }
+  return result.name === "/save" ? "available" : "unavailable"
+}
+
+function resultTagLabel(result: SearchEverythingResult, riskLabel: SearchEverythingResultRowViewModel["riskLabel"]): string {
+  if (result.kind === "command") {
+    if (riskLabel === "destructive") {
+      return "danger"
+    }
+    if (riskLabel === "maintenance") {
+      return "maint"
+    }
+    return "cmd"
+  }
+  if (result.kind === "content") {
+    return "note"
+  }
+  return result.kind
+}
+
+function tagStyleIntent(result: SearchEverythingResult, riskLabel: SearchEverythingResultRowViewModel["riskLabel"], availabilityLabel: SearchEverythingResultRowViewModel["availabilityLabel"]): TuiColorIntent {
+  if (riskLabel === "destructive") {
+    return "danger"
+  }
+  if (riskLabel === "maintenance") {
+    return "warning"
+  }
+  if (result.kind === "command" && availabilityLabel === "unavailable") {
+    return "mutedText"
+  }
+  if (result.kind === "folder") {
+    return "statusInfo"
+  }
+  return "info"
+}
+
+function buildSearchEverythingEmptyState(query: string, resultCount: number): SearchEverythingEmptyStateViewModel | null {
+  if (resultCount > 0) {
+    return null
+  }
+  return {
+    title: query.trim().length === 0 ? "Search your local workspace" : "No matches yet",
+    examples: ["daily plan", "notes/inbox", "/save"],
+    recentActions: ["Open recent notes", "Jump to folders", "Run available commands"],
+    commandSuggestions: ["/new", "/find", "/save", "/delete", "/rebuild"],
+    styleIntent: "mutedText",
+  }
+}
+
+function renderSearchResultRowText(row: SearchEverythingResultRowViewModel): StyledText {
+  const tagChunks: TextChunk[] = [
+    fg(tuiTheme[row.typeStyleIntent])(row.tagLabel) as TextChunk,
+  ]
+  if (row.riskLabel && row.riskStyleIntent) {
+    tagChunks.push(fg(tuiTheme.mutedText)(" · ") as TextChunk)
+    tagChunks.push(fg(tuiTheme[row.riskStyleIntent])(row.riskLabel) as TextChunk)
+  }
+  if (row.availabilityLabel && row.availabilityStyleIntent) {
+    tagChunks.push(fg(tuiTheme.mutedText)(" · ") as TextChunk)
+    tagChunks.push(fg(tuiTheme[row.availabilityStyleIntent])(row.availabilityLabel) as TextChunk)
+  }
+
+  return new StyledText([
+    fg(tuiTheme.mutedText)(`${row.focusMarker} [`) as TextChunk,
+    ...tagChunks,
+    fg(tuiTheme.mutedText)("] ") as TextChunk,
+    fg(tuiTheme[row.primaryStyleIntent])(row.primaryLabel) as TextChunk,
+    fg(tuiTheme.mutedText)(" — ") as TextChunk,
+    fg(tuiTheme[row.detailStyleIntent])(row.detail) as TextChunk,
+  ])
+}
+
 export function buildSearchEverythingViewModel(
   state: TuiState,
   results: readonly SearchEverythingResult[],
@@ -117,11 +219,11 @@ export function buildSearchEverythingViewModel(
   const previousScreen = state.search?.previousScreen ?? "manager"
   const selectedIndex = clampIndex(state.search?.selectedIndex ?? 0, results.length)
   const styleIntents: SearchEverythingStyleIntents = {
-    panel: "panel",
-    input: "primaryAccent",
-    result: "panel",
+    panel: "borderSubtle",
+    input: "borderFocus",
+    result: "borderSubtle",
     selectedResult: "activeItem",
-    preview: "panel",
+    preview: "borderSubtle",
   }
   const previewHiddenReason: SearchEverythingPreviewHiddenReason | null = state.search?.previewVisible === false
     ? "manual"
@@ -156,23 +258,33 @@ export function buildSearchEverythingViewModel(
     ],
     results: results.map((result, index) => {
       const selected = index === selectedIndex
+      const riskLabel = commandRiskLabel(result)
+      const availabilityLabel = commandAvailabilityLabel(result)
+      const riskStyleIntent = riskLabel === "destructive" ? "danger" : riskLabel === "maintenance" ? "warning" : null
+      const availabilityStyleIntent = availabilityLabel === "available" ? "success" : availabilityLabel === "unavailable" ? "mutedText" : null
       return {
         id: result.id,
         kind: result.kind,
         typeLabel: result.typeLabel ?? result.kind,
         typeIcon: result.typeIcon ?? result.kind,
+        tagLabel: resultTagLabel(result, riskLabel),
         label: result.label,
         primaryLabel: result.label,
         detail: result.detail,
+        riskLabel,
+        availabilityLabel,
         selected,
         focusMarker: selected ? "›" : " ",
         selectedMarker: selected ? "›" : " ",
-        styleIntent: selected ? "focusedRow" : styleIntents.result,
-        typeStyleIntent: selected ? styleIntents.selectedResult : "mutedText",
+        styleIntent: selected ? "focusedRow" : "panel",
+        typeStyleIntent: tagStyleIntent(result, riskLabel, availabilityLabel),
         primaryStyleIntent: selected ? styleIntents.selectedResult : "textPrimary",
         detailStyleIntent: selected ? styleIntents.selectedResult : "mutedText",
+        riskStyleIntent,
+        availabilityStyleIntent,
       }
     }),
+    emptyState: buildSearchEverythingEmptyState(query, results.length),
     preview: previewVisible
       ? (preview ? { ...preview, visible: true, hiddenReason: null, hiddenStatus: null, styleIntent: styleIntents.preview } : null)
       : {
@@ -217,7 +329,7 @@ export function renderSearchEverythingScreen(options: RenderSearchEverythingScre
     height: 4,
     border: true,
     borderColor: tuiTheme[vm.styleIntents.input],
-    backgroundColor: tuiTheme.panel,
+    backgroundColor: tuiTheme.surfacePanelRaised,
     title: `Search · ${vm.query || "type to begin"}`,
   })
   const resultsRegion = new BoxRenderable(options.renderer, {
@@ -247,10 +359,10 @@ export function renderSearchEverythingScreen(options: RenderSearchEverythingScre
     id: vm.input.id,
     value: vm.input.value,
     placeholder: vm.input.placeholder,
-    backgroundColor: tuiTheme.panel,
-    focusedBackgroundColor: tuiTheme.focusedRow,
-    textColor: tuiTheme.primaryAccent,
-    focusedTextColor: tuiTheme.primaryAccent,
+    backgroundColor: tuiTheme.surfacePanelRaised,
+    focusedBackgroundColor: tuiTheme.surfacePanelRaised,
+    textColor: tuiTheme.textPrimary,
+    focusedTextColor: tuiTheme.textPrimary,
     placeholderColor: tuiTheme.mutedText,
   })
   input.on(InputRenderableEvents.INPUT, () => {
@@ -266,21 +378,24 @@ export function renderSearchEverythingScreen(options: RenderSearchEverythingScre
     options.onInvalidate?.()
   })
 
-  inputRegion.add(new TextRenderable(options.renderer, { content: `Search · ${vm.query || "type to begin"}`, height: 1, fg: tuiTheme.textSecondary, bg: tuiTheme.panel }))
+  inputRegion.add(new TextRenderable(options.renderer, { content: `Search · ${vm.query || "type to begin"}`, height: 1, fg: tuiTheme.textSecondary, bg: tuiTheme.surfacePanelRaised }))
   inputRegion.add(input)
   resultsRegion.add(new TextRenderable(options.renderer, { content: `Results · ${vm.results.length}`, height: 1, fg: tuiTheme.textSecondary, bg: tuiTheme.panel }))
-  for (const row of vm.results) {
+  for (const [index, row] of vm.results.entries()) {
     resultsRegion.add(
       new TextRenderable(options.renderer, {
-        content: `${row.focusMarker} [${row.typeLabel}] ${row.primaryLabel} — ${row.detail}`,
+        id: `bluenote-search-result-row-${index}`,
+        content: renderSearchResultRowText(row),
         height: 1,
-        fg: tuiTheme[row.primaryStyleIntent],
         bg: tuiTheme[row.selected ? "focusedRow" : "panel"],
       }),
     )
   }
-  if (vm.results.length === 0) {
-    resultsRegion.add(new TextRenderable(options.renderer, { content: "No results", height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
+  if (vm.emptyState) {
+    resultsRegion.add(new TextRenderable(options.renderer, { content: vm.emptyState.title, height: 1, fg: tuiTheme.textSecondary, bg: tuiTheme.panel }))
+    resultsRegion.add(new TextRenderable(options.renderer, { content: `Examples: ${vm.emptyState.examples.join(" · ")}`, height: 1, fg: tuiTheme[vm.emptyState.styleIntent], bg: tuiTheme.panel }))
+    resultsRegion.add(new TextRenderable(options.renderer, { content: `Recent actions: ${vm.emptyState.recentActions.join(" · ")}`, height: 1, fg: tuiTheme[vm.emptyState.styleIntent], bg: tuiTheme.panel }))
+    resultsRegion.add(new TextRenderable(options.renderer, { content: `Commands: ${vm.emptyState.commandSuggestions.join("  ")}`, height: 1, fg: tuiTheme[vm.emptyState.styleIntent], bg: tuiTheme.panel }))
   }
 
   if (vm.preview?.visible && previewRegion) {
@@ -326,7 +441,9 @@ export function routeSearchEverythingKey(sequence: string, controller: Workspace
       return true
     case "\r":
     case "\n":
-      controller.selectSearchResult()
+      if (controller.getSearchResults().length > 0) {
+        controller.selectSearchResult()
+      }
       return true
     case "\u007f":
     case "\b":

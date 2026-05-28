@@ -337,15 +337,19 @@ export function buildSearchEverythingPreview(result: SearchEverythingResult | nu
   }
 
   if (result.kind === "command") {
+    const risk = result.name === "/delete" ? "destructive" : result.name === "/migrate" || result.name === "/rebuild" ? "maintenance" : null
+    const availability = result.name === "/save" ? "available" : "unavailable"
     const sections = [
       { label: "Usage", lines: [result.usage] },
       ...(result.shortcut ? [{ label: "Shortcut", lines: [result.shortcut] }] : []),
+      ...(risk ? [{ label: "Risk", lines: [risk] }] : []),
+      { label: "Availability", lines: [availability] },
     ]
 
     return {
       title: result.name,
       subtitle: result.description,
-      lines: [`Usage: ${result.usage}`, ...(result.shortcut ? [`Shortcut: ${result.shortcut}`] : [])],
+      lines: [`Usage: ${result.usage}`, ...(result.shortcut ? [`Shortcut: ${result.shortcut}`] : []), ...(risk ? [`Risk: ${risk}`] : []), `Availability: ${availability}`],
       sections,
     }
   }

@@ -1039,6 +1039,13 @@ describe("TUI render keyboard routing", () => {
     assert.deepEqual(calls, ["updateSearchQuery:a", "updateSearchQuery:a/", "updateSearchQuery:a"])
   })
 
+  test("search route ignores Enter when no results exist", () => {
+    const { controller, calls } = createController("search")
+
+    assert.equal(routeSearchEverythingKey("\r", controller), true)
+    assert.deepEqual(calls, [])
+  })
+
   test("search route maps Escape and Ctrl+[ to previous screen navigation", () => {
     const { controller, calls } = createController("search")
 
@@ -1058,7 +1065,8 @@ describe("TUI render keyboard routing", () => {
       controller.openSearch("daily")
       const screen = renderSearchEverythingScreen({ renderer, controller, height: 12 })
       renderer.root.add(screen)
-      const text = descendants(screen).map((node) => node.content?.chunks?.[0]?.text ?? node.content ?? "").join("\n")
+      const textFor = (node: any): string => node.content?.chunks?.map?.((chunk: { text?: string }) => chunk.text ?? "").join("") ?? node.content ?? ""
+      const text = descendants(screen).map(textFor).join("\n")
       assert.notEqual(findById(screen, "bluenote-search-query"), undefined)
       assert.notEqual(findById(screen, "bluenote-search-results-region"), undefined)
       assert.equal(findById(screen, "bluenote-search-preview-region"), undefined)

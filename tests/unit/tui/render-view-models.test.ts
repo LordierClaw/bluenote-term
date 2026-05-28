@@ -924,11 +924,11 @@ describe("TUI render view models", () => {
     assert.equal(vm.query, "/rep")
     assert.equal(vm.previousScreen, "editor")
     assert.deepEqual(vm.styleIntents, {
-      panel: "panel",
-      input: "primaryAccent",
-      result: "panel",
+      panel: "borderSubtle",
+      input: "borderFocus",
+      result: "borderSubtle",
       selectedResult: "activeItem",
-      preview: "panel",
+      preview: "borderSubtle",
     })
     assert.deepEqual(vm.shortcutHints, [
       { key: "Enter", action: "Open/run", priority: "primary" },
@@ -941,6 +941,9 @@ describe("TUI render view models", () => {
       vm.results.map((row) => ({
         marker: row.focusMarker,
         typeLabel: row.typeLabel,
+        tagLabel: row.tagLabel,
+        riskLabel: row.riskLabel,
+        availabilityLabel: row.availabilityLabel,
         typeIcon: row.typeIcon,
         primaryLabel: row.primaryLabel,
         detail: row.detail,
@@ -948,26 +951,28 @@ describe("TUI render view models", () => {
         selectedMarker: row.selectedMarker,
       })),
       [
-        { marker: " ", typeLabel: "content", typeIcon: "content", primaryLabel: "Daily Plan", detail: "body — notes/inbox/daily-plan.md", selected: false, selectedMarker: " " },
-        { marker: "›", typeLabel: "command", typeIcon: "command", primaryLabel: "/replace", detail: "Find and replace text in the active editor buffer", selected: true, selectedMarker: "›" },
+        { marker: " ", typeLabel: "content", tagLabel: "note", riskLabel: null, availabilityLabel: null, typeIcon: "content", primaryLabel: "Daily Plan", detail: "body — notes/inbox/daily-plan.md", selected: false, selectedMarker: " " },
+        { marker: "›", typeLabel: "command", tagLabel: "cmd", riskLabel: null, availabilityLabel: "unavailable", typeIcon: "command", primaryLabel: "/replace", detail: "Find and replace text in the active editor buffer", selected: true, selectedMarker: "›" },
       ],
     )
     assert.deepEqual(vm.results.map((row) => row.styleIntent), ["panel", "focusedRow"])
     assert.deepEqual(vm.results.map((row) => row.primaryStyleIntent), ["textPrimary", "activeItem"])
     assert.deepEqual(vm.results.map((row) => row.detailStyleIntent), ["mutedText", "activeItem"])
-    assert.deepEqual(vm.results.map((row) => row.typeStyleIntent), ["mutedText", "activeItem"])
+    assert.deepEqual(vm.results.map((row) => row.typeStyleIntent), ["info", "mutedText"])
+    assert.deepEqual(vm.results.map((row) => row.availabilityStyleIntent), [null, "mutedText"])
     assert.deepEqual(vm.preview, {
       visible: true,
       hiddenReason: null,
       hiddenStatus: null,
       title: "/replace",
       subtitle: "Find and replace text in the active editor buffer",
-      lines: ["Usage: /replace <query> <replacement>", "Shortcut: Ctrl+H"],
+      lines: ["Usage: /replace <query> <replacement>", "Shortcut: Ctrl+H", "Availability: unavailable"],
       sections: [
         { label: "Usage", lines: ["/replace <query> <replacement>"] },
         { label: "Shortcut", lines: ["Ctrl+H"] },
+        { label: "Availability", lines: ["unavailable"] },
       ],
-      styleIntent: "panel",
+      styleIntent: "borderSubtle",
     })
 
     const contentVm = buildSearchEverythingViewModel(
@@ -986,7 +991,7 @@ describe("TUI render view models", () => {
     }
   })
 
-  test("Search Everything shortcut chrome omits impossible Enter action when no results exist", () => {
+  test("Search Everything empty state teaches examples, recents, and command suggestions without impossible Enter action", () => {
     const typingVm = buildSearchEverythingViewModel(
       {
         ...baseState,
@@ -1008,6 +1013,43 @@ describe("TUI render view models", () => {
       assert.deepEqual(vm.shortcutHints, [{ key: "Esc", action: "Manager", priority: "primary" }])
       assert.deepEqual(vm.shortcuts, ["[Esc] Manager"])
       assert.doesNotMatch(vm.shortcuts.join(" "), /Enter|Open\/run|Preview|Select|type search|\[\?\] More/u)
+    }
+    assert.deepEqual(emptyVm.emptyState, {
+      title: "Search your local workspace",
+      examples: ["daily plan", "notes/inbox", "/save"],
+      recentActions: ["Open recent notes", "Jump to folders", "Run available commands"],
+      commandSuggestions: ["/new", "/find", "/save", "/delete", "/rebuild"],
+      styleIntent: "mutedText",
+    })
+    assert.equal(typingVm.emptyState?.title, "No matches yet")
+  })
+
+  test("Search Everything slash commands expose compact semantic risk and availability tags", () => {
+    const commands: SearchEverythingResult[] = [
+      { kind: "command", id: "command:/save", typeLabel: "command", typeIcon: "command", label: "/save", detail: "Save the active editor buffer", score: 100, name: "/save", description: "Save the active editor buffer", usage: "/save", shortcut: "Ctrl+S" },
+      { kind: "command", id: "command:/delete", typeLabel: "command", typeIcon: "command", label: "/delete", detail: "Delete the selected or active note after confirmation", score: 90, name: "/delete", description: "Delete the selected or active note after confirmation", usage: "/delete [note-key]", shortcut: "D" },
+      { kind: "command", id: "command:/migrate", typeLabel: "command", typeIcon: "command", label: "/migrate", detail: "Migrate legacy BlueNote storage into the current layout", score: 80, name: "/migrate", description: "Migrate legacy BlueNote storage into the current layout", usage: "/migrate" },
+      { kind: "command", id: "command:/rebuild", typeLabel: "command", typeIcon: "command", label: "/rebuild", detail: "Rebuild BlueNote search indexes", score: 70, name: "/rebuild", description: "Rebuild BlueNote search indexes", usage: "/rebuild", shortcut: "R" },
+      { kind: "command", id: "command:/archive", typeLabel: "command", typeIcon: "command", label: "/archive", detail: "Archive the selected or active note", score: 60, name: "/archive", description: "Archive the selected or active note", usage: "/archive [note-key]", shortcut: "A" },
+    ]
+    const vm = buildSearchEverythingViewModel({ ...baseState, screen: "search", search: { query: "/", selectedIndex: 1, previousScreen: "manager" } }, commands)
+
+    assert.deepEqual(vm.results.map((row) => ({ label: row.primaryLabel, tag: row.tagLabel, risk: row.riskLabel, available: row.availabilityLabel, riskIntent: row.riskStyleIntent, availabilityIntent: row.availabilityStyleIntent })), [
+      { label: "/save", tag: "cmd", risk: null, available: "available", riskIntent: null, availabilityIntent: "success" },
+      { label: "/delete", tag: "danger", risk: "destructive", available: "unavailable", riskIntent: "danger", availabilityIntent: "mutedText" },
+      { label: "/migrate", tag: "maint", risk: "maintenance", available: "unavailable", riskIntent: "warning", availabilityIntent: "mutedText" },
+      { label: "/rebuild", tag: "maint", risk: "maintenance", available: "unavailable", riskIntent: "warning", availabilityIntent: "mutedText" },
+      { label: "/archive", tag: "cmd", risk: null, available: "unavailable", riskIntent: null, availabilityIntent: "mutedText" },
+    ])
+    assert.equal(vm.results.find((row) => row.primaryLabel === "/delete")?.typeStyleIntent, "danger")
+    assert.equal(vm.results.find((row) => row.primaryLabel === "/migrate")?.typeStyleIntent, "warning")
+    assert.equal(vm.results.find((row) => row.primaryLabel === "/archive")?.typeStyleIntent, "mutedText")
+    const preview = vm.preview
+    assert.equal(preview?.visible, true)
+    if (preview?.visible) {
+      assert.deepEqual(preview.sections.map((section) => section.label), ["Usage", "Shortcut", "Risk", "Availability"])
+      assert.deepEqual(preview.sections.find((section) => section.label === "Risk")?.lines, ["destructive"])
+      assert.deepEqual(preview.sections.find((section) => section.label === "Availability")?.lines, ["unavailable"])
     }
   })
 
@@ -1147,7 +1189,7 @@ describe("TUI render view models", () => {
       value: "ship",
       placeholder: "Search notes, content, folders, or /commands",
       focused: true,
-      styleIntent: "primaryAccent",
+      styleIntent: "borderFocus",
     })
     assert.deepEqual(vm.regions.map((region) => region.id), ["input", "result-list", "preview"])
     assert.equal(vm.regions.findIndex((region) => region.id === "preview") > vm.regions.findIndex((region) => region.id === "result-list"), true)
@@ -1286,11 +1328,12 @@ describe("TUI render view models", () => {
 
       const root = renderSearchEverythingScreen({ renderer, controller })
       const nodes = descendants(root)
-      const text = nodes.map((node: any) => node.content?.chunks?.[0]?.text ?? node.content ?? "").join("\n")
+      const textForNode = (node: any): string => node.content?.chunks?.map?.((chunk: { text?: string }) => chunk.text ?? "").join("") ?? node.content ?? ""
+      const text = nodes.map(textForNode).join("\n")
       const resultsRegion = nodes.find((node) => node.id === "bluenote-search-results-region") as { getChildren: () => Renderable[] } | undefined
       const previewRegion = nodes.find((node) => node.id === "bluenote-search-preview-region") as { getChildren: () => Renderable[] } | undefined
-      const resultText = resultsRegion?.getChildren().map((node: any) => node.content?.chunks?.[0]?.text ?? node.content ?? "").join("\n") ?? ""
-      const previewLines = previewRegion?.getChildren().map((node: any) => node.content?.chunks?.[0]?.text ?? node.content ?? "") ?? []
+      const resultText = resultsRegion?.getChildren().map(textForNode).join("\n") ?? ""
+      const previewLines = previewRegion?.getChildren().map(textForNode) ?? []
 
       assert.equal((root as any).border, false)
       assert.equal((root as any).title ?? "", "")
@@ -1321,6 +1364,27 @@ describe("TUI render view models", () => {
       assert.deepEqual(Array.from(status.fg.buffer), colorInts(tuiTheme.statusInfo))
       assert.notDeepEqual(Array.from(topbar.fg.buffer), colorInts(tuiTheme.primaryAccent))
       assert.notDeepEqual(Array.from(status.fg.buffer), colorInts(tuiTheme.secondaryAccent))
+
+      controller.openSearch("/delete")
+      const dangerRoot = renderSearchEverythingScreen({ renderer, controller })
+      const dangerRow = descendants(dangerRoot).find((node) => node.id === "bluenote-search-result-row-0") as any
+      const dangerChunks = dangerRow?.content?.chunks ?? []
+      assert.deepEqual(dangerChunks.map((chunk: { text?: string }) => chunk.text), [
+        "› [",
+        "danger",
+        " · ",
+        "destructive",
+        " · ",
+        "unavailable",
+        "] ",
+        "/delete",
+        " — ",
+        "Delete the selected or active note after confirmation",
+      ])
+      assert.deepEqual(Array.from(dangerChunks[1].fg.buffer), colorInts(tuiTheme.danger))
+      assert.deepEqual(Array.from(dangerChunks[3].fg.buffer), colorInts(tuiTheme.danger))
+      assert.deepEqual(Array.from(dangerChunks[5].fg.buffer), colorInts(tuiTheme.mutedText))
+      dangerRoot.destroyRecursively()
       root.destroyRecursively()
       statusRoot.destroyRecursively()
     } finally {
@@ -1349,7 +1413,8 @@ describe("TUI render view models", () => {
 
       const root = renderSearchEverythingScreen({ renderer, controller })
       const nodes = descendants(root)
-      const text = nodes.map((node: any) => node.content?.chunks?.[0]?.text ?? node.content ?? "").join("\n")
+      const textForNode = (node: any): string => node.content?.chunks?.map?.((chunk: { text?: string }) => chunk.text ?? "").join("") ?? node.content ?? ""
+      const text = nodes.map(textForNode).join("\n")
 
       assert.equal(nodes.some((node) => node.id === "bluenote-search-preview-region"), false)
       assert.match(text, /Preview hidden · Alt\+P preview show/u)

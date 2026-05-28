@@ -123,6 +123,7 @@ describe("TUI Search Everything adapter", () => {
     assert.deepEqual(buildSearchEverythingPreview(command)?.sections, [
       { label: "Usage", lines: ["/find <query>"] },
       { label: "Shortcut", lines: ["Ctrl+F"] },
+      { label: "Availability", lines: ["unavailable"] },
     ])
   })
 
@@ -233,10 +234,11 @@ describe("TUI Search Everything adapter", () => {
     assert.deepEqual(preview, {
       title: "/find",
       subtitle: "Find text in the active editor buffer",
-      lines: ["Usage: /find <query>", "Shortcut: Ctrl+F"],
+      lines: ["Usage: /find <query>", "Shortcut: Ctrl+F", "Availability: unavailable"],
       sections: [
         { label: "Usage", lines: ["/find <query>"] },
         { label: "Shortcut", lines: ["Ctrl+F"] },
+        { label: "Availability", lines: ["unavailable"] },
       ],
     })
   })
