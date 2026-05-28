@@ -46,7 +46,7 @@ export interface DefaultWorkspaceControllerOptions {
 export function getTuiBootstrapInfo(): TuiBootstrapInfo {
   return {
     appName: "BlueNote",
-    status: "phase-4d-search-everything-readability-responsive-preview",
+    status: "phase-4e-autosave-atomicity-safe-note-body-writes",
     nextPhase: "phase-4-next-hardening-subplan",
   }
 }

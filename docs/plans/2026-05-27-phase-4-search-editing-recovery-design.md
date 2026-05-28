@@ -35,7 +35,8 @@ Phase 4 has one umbrella design and smaller sequential implementation plans:
 2. **4B — Editor input/cursor/responsive chrome**
 3. **4C — Manager performance/responsive layout/style** — accepted and delivered
 4. **4D — Search Everything correctness/readability/responsive preview** — accepted and delivered
-5. **phase-4-next-hardening-subplan** — neutral follow-up marker until an approved 4E/scratch/autosave/archive hardening subplan exists
+5. **4E — Autosave atomicity / safe note-body writes** — accepted and delivered
+6. **phase-4-next-hardening-subplan** — neutral follow-up marker for future scratch/archive hardening
 
 ### 4A — `.data` migration + search correctness/performance foundation
 
@@ -79,7 +80,7 @@ Primary outcomes:
 
 ### 4D — Search Everything correctness/readability/responsive preview
 
-Implementation note (2026-05-28): Phase 4D Search Everything readability/responsive preview is accepted and delivered. The delivered Search Everything surface uses contains-style matching, readable typed results for note/content/folder/command rows, visually separated preview sections, responsive preview auto-hide when terminal height is constrained, a manual `Alt+P` preview toggle, and safe unavailable command status for command results without wired handlers. The current neutral follow-up marker is `phase-4-next-hardening-subplan`; 4E/scratch/autosave/archive hardening is not yet planned in an approved subplan.
+Implementation note (2026-05-28): Phase 4D Search Everything readability/responsive preview is accepted and delivered. The delivered Search Everything surface uses contains-style matching, readable typed results for note/content/folder/command rows, visually separated preview sections, responsive preview auto-hide when terminal height is constrained, a manual `Alt+P` preview toggle, and safe unavailable command status for command results without wired handlers.
 
 Primary outcomes:
 
@@ -90,6 +91,12 @@ Primary outcomes:
 - Dispatch Enter by result type: note/content opens editor, folder opens manager, command runs a wired handler or shows a safe unavailable status.
 - Hide preview automatically when terminal height is too small.
 - Add preview toggle shortcut.
+
+### 4E — Autosave atomicity / safe note-body writes
+
+Implementation note (2026-05-28): Phase 4E autosave atomicity is accepted and delivered. Autosave and manual `Ctrl+S` use the same safe note-body write path, failed saves keep the buffer dirty and retry later, no recovery-copy workflow is created, and stale temp files are a BlueNote-owned internal implementation detail.
+
+The current neutral follow-up marker is `phase-4-next-hardening-subplan`; scratch/archive hardening remains future hardening and is not yet planned in an approved subplan.
 
 ## Components and responsibilities
 

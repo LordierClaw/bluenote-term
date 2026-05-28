@@ -7,8 +7,8 @@ if (typeof moduleRef.createCliRenderer !== "function") {
 }
 
 const info = getTuiBootstrapInfo()
-if (info.status !== "phase-4d-search-everything-readability-responsive-preview") {
-  throw new Error(`Expected delivered Phase 4D Search Everything readability/responsive preview status, received ${info.status}`)
+if (info.status !== "phase-4e-autosave-atomicity-safe-note-body-writes") {
+  throw new Error(`Expected delivered Phase 4E autosave atomicity / safe note-body write status, received ${info.status}`)
 }
 
 if (info.nextPhase !== "phase-4-next-hardening-subplan") {

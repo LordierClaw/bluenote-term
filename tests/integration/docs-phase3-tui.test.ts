@@ -95,7 +95,22 @@ function assertPhase4DNotAdvertisedUpcoming(content: string): void {
 
 function assertNeutralNextPhaseMarker(content: string): void {
   assert.match(content, /phase-4-next-hardening-subplan/i)
-  assert.match(content, /4E[^\n.]*not yet planned|not yet planned[^\n.]*4E|scratch[^\n.]*autosave[^\n.]*archive[^\n.]*not yet planned/i)
+  assert.match(content, /scratch[^\n.]*archive[^\n.]*future hardening|scratch[^\n.]*archive[^\n.]*not yet planned/i)
+}
+
+function assertDeliveredPhase4ESaveContract(content: string): void {
+  assert.match(content, /Phase 4E[^\n.]*autosave[^\n.]*atomicity|Phase 4E[^\n.]*save[^\n.]*atomicity|Phase 4E[^\n.]*safe note-body/i)
+  assert.match(content, /accepted|delivered|complete/i)
+  assert.match(content, /autosave[^\n.]*manual[^\n.]*Ctrl\+S[^\n.]*same[^\n.]*safe note-body write path|manual[^\n.]*Ctrl\+S[^\n.]*autosave[^\n.]*same[^\n.]*safe note-body write path/i)
+  assert.match(content, /failed saves?[^\n.]*keep[^\n.]*buffer dirty|buffer dirty[^\n.]*retry later/i)
+  assert.match(content, /retry later|retry on the next autosave or manual save/i)
+  assert.match(content, /no recovery-copy workflow|does not create recovery copies|no recovery copies/i)
+  assert.match(content, /stale temp files?[^\n.]*BlueNote-owned[^\n.]*internal implementation detail|BlueNote-owned[^\n.]*stale temp files?[^\n.]*internal/i)
+}
+
+function assertPhase4ENotAdvertisedUpcoming(content: string): void {
+  assert.doesNotMatch(content, /4E[^\n.]*not yet planned|not yet planned[^\n.]*4E/i)
+  assert.doesNotMatch(content, /Phase 4E[^\n.]*upcoming|upcoming[^\n.]*Phase 4E/i)
 }
 
 function assertDataStorageAndContainsSearchContract(content: string): void {
@@ -131,6 +146,8 @@ test("README documents the refined Phase 3 TUI workspace behavior", async () => 
   assertPhase4CNotAdvertisedUpcoming(readme)
   assertDeliveredPhase4DSearchEverythingBehavior(readme)
   assertPhase4DNotAdvertisedUpcoming(readme)
+  assertDeliveredPhase4ESaveContract(readme)
+  assertPhase4ENotAdvertisedUpcoming(readme)
   assertNeutralNextPhaseMarker(readme)
 })
 
@@ -158,27 +175,35 @@ test("product and phase docs describe refined Manager, Editor, and Search Everyt
   assertPhase4CNotAdvertisedUpcoming(phase)
   assertDeliveredPhase4DSearchEverythingBehavior(phase)
   assertPhase4DNotAdvertisedUpcoming(phase)
+  assertDeliveredPhase4ESaveContract(overview)
+  assertDeliveredPhase4ESaveContract(phase)
+  assertPhase4ENotAdvertisedUpcoming(overview)
+  assertPhase4ENotAdvertisedUpcoming(phase)
   assertNeutralNextPhaseMarker(phase)
 })
 
-test("smoke contracts cover delivered Phase 4D Search Everything regressions and status metadata", async () => {
+test("smoke contracts cover delivered Phase 4E save persistence regressions and status metadata", async () => {
   const smoke = await readRepoFile("scripts/smoke-opentui.ts")
   const interactiveSmoke = await readRepoFile("scripts/smoke-opentui-interactive.ts")
 
-  assert.match(smoke, /phase-4d-search-everything-readability-responsive-preview/i)
+  assert.match(smoke, /phase-4e-autosave-atomicity-safe-note-body-writes/i)
   assert.match(smoke, /phase-4-next-hardening-subplan/i)
   assertPhase4BNotAdvertisedIncomplete(smoke)
   assertPhase4CNotAdvertisedUpcoming(smoke)
   assertPhase4DNotAdvertisedUpcoming(smoke)
+  assertPhase4ENotAdvertisedUpcoming(smoke)
 
   assert.match(interactiveSmoke, /editor-input-regression-token/)
   assert.match(interactiveSmoke, /cursor-probe/)
   assert.match(interactiveSmoke, /Alt\+Z wrap|wrap/i)
   assert.match(interactiveSmoke, /responsive resize|responsive bottom/i)
+  assert.match(interactiveSmoke, /autosave-persist/)
+  assert.match(interactiveSmoke, /manual-save-persist/)
+  assert.match(interactiveSmoke, /actual note file/i)
   assert.match(interactiveSmoke, /Saved/)
 })
 
-test("Phase 4 docs mark 4D delivered and identify neutral hardening follow-up", async () => {
+test("Phase 4 docs mark 4E delivered and identify neutral hardening follow-up", async () => {
   const docs = await Promise.all([
     readRepoFile("docs/phases/phase-4-search-editing-and-recovery.md"),
     readRepoFile("docs/plans/2026-05-27-phase-4-search-editing-recovery-design.md"),
@@ -189,6 +214,8 @@ test("Phase 4 docs mark 4D delivered and identify neutral hardening follow-up", 
     assertPhase4CNotAdvertisedUpcoming(content)
     assertDeliveredPhase4DSearchEverythingBehavior(content)
     assertPhase4DNotAdvertisedUpcoming(content)
+    assertDeliveredPhase4ESaveContract(content)
+    assertPhase4ENotAdvertisedUpcoming(content)
     assertNeutralNextPhaseMarker(content)
   }
 })
@@ -204,6 +231,8 @@ test("runtime docs identify OpenTUI as the refined Phase 3 workspace runtime", a
   assert.match(runtime, /Search Everything/i)
   assertRefinedTuiBehavior(runtime)
   assertDeliveredPhase4DSearchEverythingBehavior(runtime)
+  assertDeliveredPhase4ESaveContract(runtime)
+  assertPhase4ENotAdvertisedUpcoming(runtime)
 })
 
 test("active docs describe canonical data storage and contains search contracts", async () => {
@@ -221,5 +250,6 @@ test("active docs describe canonical data storage and contains search contracts"
     assertNoCanonicalStateSidecars(content)
     assertPhase4BNotAdvertisedIncomplete(content)
     assertPhase4CNotAdvertisedUpcoming(content)
+    assertPhase4ENotAdvertisedUpcoming(content)
   }
 })
