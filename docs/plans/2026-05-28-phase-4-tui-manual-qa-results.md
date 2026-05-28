@@ -45,6 +45,39 @@ The previous finish-branch attempt is invalidated by live user reports:
 
 Treat these as Blocker severity until disproven by reproducible evidence. Phase 4G now owns reproducing, root-causing, fixing, and live-verifying these issues before any visual-polish-only work resumes.
 
+## Phase 4G live harness evidence — 2026-05-29
+
+Task 2 established a fresh live TUI reproduction harness for the Phase 4G blockers:
+
+- Repo working directory: `/home/hainn/blue/code/bluenote-term`
+- Repo-local TUI command inside the launched terminal: `BLUENOTE_ROOT="$QA_ROOT" bun run ./bin/bn.ts tui`
+- Exact terminal launch command:
+  ```bash
+  ROOT="$(cat /tmp/bluenote-phase4g-root.txt)"
+  gnome-terminal --title='BlueNote Phase 4G Live Blocker QA' -- bash -lc "cd /home/hainn/blue/code/bluenote-term; export BLUENOTE_ROOT='$ROOT'; printf 'BLUENOTE_ROOT=%s\n' '$ROOT'; bun run ./bin/bn.ts tui; printf '\nTUI exited. Press Enter to close...'; read"
+  ```
+- Disposable QA root: `/tmp/bluenote-tui-phase4g-MhIDFt`
+- Probe notes created:
+  - `autosave-blocker-probe-9p4w87` → `notes/inbox/autosave-blocker-probe-9p4w87.md`
+  - `cursor-blocker-probe-fxht7x` → `notes/inbox/cursor-blocker-probe-fxht7x.md`
+  - `quit-blocker-probe-nr70yv` → `notes/inbox/quit-blocker-probe-nr70yv.md`
+- Tool checks:
+  - `tmux`: not installed / not on `PATH`.
+  - `gnome-terminal`: `/usr/bin/gnome-terminal`.
+  - Bun: `1.3.14`.
+  - `computer-use-linux doctor`: ready with `can_query_windows`, `can_focus_windows`, and `can_send_development_input` true; blockers empty.
+- Live terminal window:
+  - Title: `BlueNote Phase 4G Live Blocker QA`
+  - Window id: `2069271618`
+  - Bounds: `814x577` at `(209, 62)`
+  - TTY: `/dev/pts/2`
+  - Active process: `bun run ./bin/bn.ts tui`, PID `130155`
+  - Root shell command includes `BLUENOTE_ROOT=/tmp/bluenote-tui-phase4g-MhIDFt` and cwd `/home/hainn/blue/code/bluenote-term`.
+- Screenshot/accessibility status:
+  - Targeted screenshot against window `2069271618` failed with GNOME Shell / XDG portal denial: `XDG portal screenshot was denied or cancelled with response code 2`.
+  - `get_app_state` without screenshot resolved the target window but AT-SPI extraction failed with `failed to connect to AT-SPI bus`.
+  - Functional live verification can still use `computer-use-linux` targeted keyboard input plus disk/process readback; do not claim visual screenshot acceptance until screenshot/recording evidence is available.
+
 ## Environment and preflight
 
 ### Desktop/tool readiness
