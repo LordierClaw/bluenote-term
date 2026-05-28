@@ -12,7 +12,9 @@
 
 - Plan: `docs/plans/2026-05-28-phase-4-tui-manual-qa-plan.md`
 - Results: `docs/plans/2026-05-28-phase-4-tui-manual-qa-results.md`
-- Evidence: `/tmp/bluenote-qa-evidence/`
+- Evidence: `/tmp/bluenote-qa-evidence/` (session-local / ephemeral; not committed)
+
+The `/tmp` evidence path is intentionally treated as transient session output. Durable evidence for planning is the inline summary in the results doc: preflight command outcomes, scenario ratings, notable status text, disk-truth snippets, and the continuation note that the screenshot retry still leaves screenshot-based visual acceptance open.
 
 **Known QA constraints:**
 
@@ -23,6 +25,8 @@
 ---
 
 ## Task 1: Make the manual QA docs accurately reflect approval and the latest screenshot retry
+
+**Task 1 status:** Completed by the prior docs follow-up commit. The checks below are historical pre-edit expectations from that cleanup step, retained here as implementation traceability rather than current repository state.
 
 **Files:**
 
@@ -35,7 +39,7 @@ Run:
 
 ```bash
 grep -n "Status:" docs/plans/2026-05-28-phase-4-tui-manual-qa-plan.md
-grep -n "Screenshot capture remains blocked" docs/plans/2026-05-28-phase-4-tui-manual-qa-results.md
+grep -n "screenshot retry" docs/plans/2026-05-28-phase-4-tui-manual-qa-results.md
 ```
 
 Expected before edit:
@@ -65,7 +69,7 @@ Run:
 
 ```bash
 grep -n "Approved and executed" docs/plans/2026-05-28-phase-4-tui-manual-qa-plan.md
-grep -n "Screenshot capture remains blocked\|screenshot retry" docs/plans/2026-05-28-phase-4-tui-manual-qa-results.md
+grep -n "screenshot retry\|screenshot-based visual acceptance remains open" docs/plans/2026-05-28-phase-4-tui-manual-qa-results.md
 ```
 
 Expected: both commands find the new text.

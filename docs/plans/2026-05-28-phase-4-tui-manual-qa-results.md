@@ -2,9 +2,11 @@
 
 **Date:** 2026-05-28  
 **Plan:** `docs/plans/2026-05-28-phase-4-tui-manual-qa-plan.md`  
-**QA root:** `/tmp/bluenote-tui-manual-qa-iWRvsu`  
-**Evidence directory:** `/tmp/bluenote-qa-evidence/`  
+**QA root:** `/tmp/bluenote-tui-manual-qa-iWRvsu` (session-local / ephemeral)
+**Evidence directory:** `/tmp/bluenote-qa-evidence/` (session-local / ephemeral)
 **Scope:** Manual/interactive QA only. No product code fixes were made.
+
+The `/tmp` paths above were not committed and may not survive outside the QA session. This results document therefore keeps the durable record inline: command outcomes, scenario pass/fail ratings, key status text, disk-truth snippets, and the unresolved screenshot retry/visual-acceptance caveat are summarized below for future readers.
 
 ## Executive summary
 
