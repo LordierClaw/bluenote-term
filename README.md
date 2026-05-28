@@ -73,6 +73,7 @@ The TUI reads and writes the same plain Markdown note files and `.data/notes/` s
 
 - `AGENTS.md` — project-local agent guidance
 - `docs/product/overview.md` — product scope and goals
+- `docs/product/design-language.md` — canonical Quiet Blue Dashboard design language for TUI/UI work
 - `docs/architecture/` — runtime, storage, and indexing references
 - `docs/phases/` — staged implementation roadmap
 - `docs/workflow/` — developer + Hermes workflow conventions

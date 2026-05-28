@@ -5,7 +5,7 @@
 BlueNote is a terminal-native, local-first note tool. This repository is currently in **preparation / scaffold mode**.
 
 - Phase 1 scope is local/offline only.
-- Markdown files with frontmatter are the future source of truth.
+- Notes remain plain Markdown files without frontmatter; BlueNote-managed metadata lives in sidecars under `.data/notes/`.
 - Do not introduce AI features, network sync, hosted backends, or cloud-only assumptions during initial implementation.
 
 ## Runtime and architecture rules
@@ -14,6 +14,7 @@ BlueNote is a terminal-native, local-first note tool. This repository is current
 - Preserve **Node.js 20+ compatibility** for shared core code where practical, but treat the repo-entry scripts/bin as Bun-first until a dedicated Node-compatible build path exists.
 - Avoid native SQLite bindings; planned metadata cache uses `sql.js`.
 - Treat the TUI as a presentation/input layer only; storage, indexing, config, and note rules belong in core services.
+- TUI/UI work must follow `docs/product/design-language.md` (Quiet Blue Dashboard) unless the user approves a later design-language change.
 
 ## Workflow rules
 

@@ -8,6 +8,7 @@ BlueNote is a terminal-native note tool optimized for fast local capture, search
 - **Local-first:** user files remain the source of truth inside a managed notes root.
 - **Offline-first:** the local CLI and storage/TUI workflow must work fully offline.
 - **AI-optional:** AI, sync, backend, cloud, and mobile are future concerns, not current CLI/storage/TUI requirements.
+- **Quiet Blue Dashboard UI:** TUI/UI work follows the canonical design language in `docs/product/design-language.md` unless a later approved design changes it.
 
 ## Current delivered scope
 
