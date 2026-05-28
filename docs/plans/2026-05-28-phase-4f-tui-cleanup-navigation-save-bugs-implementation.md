@@ -2,7 +2,7 @@
 
 > **For implementer:** Use TDD throughout. Write failing tests first. Watch them fail. Then implement the smallest root-cause fix. Commit after each green task.
 
-**Status:** Draft for approval.
+**Status:** Approved for implementation.
 
 **Goal:** Fix the current BlueNote TUI manual-testing regressions around Manager chrome/filtering/navigation and Editor chrome/autosave while keeping the local-first/plain-note storage contract unchanged.
 
