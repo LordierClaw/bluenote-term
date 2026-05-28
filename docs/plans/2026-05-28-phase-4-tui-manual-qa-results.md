@@ -171,6 +171,43 @@ The GNOME Wayland visual-capture blocker is now understood and has a repeatable 
 - Phase 4G resume decision:
   - Task 5 and Task 6 may resume because pixel-level visual evidence is no longer blocked, but Task 6 UI polish must still ask the user which style/improvements they want before any polish plan or subjective styling changes.
 
+## Phase 4G quit shortcut live verification — 2026-05-29
+
+Task 5 attempted to reproduce the reported quit shortcut failures mode-by-mode before making any fix. The blocker did **not** reproduce in the tested live TUI paths:
+
+- QA root: `/tmp/bluenote-tui-phase4g-quit-Jb5LMF`.
+- Seed note: `Quit Probe` under `notes/inbox/quit-probe-2x7m9f.md`.
+- Manager browse `q`:
+  - Window: `BlueNote Phase 4G Quit QA q-manager`, id `2069271637`, active TUI PID `181204`.
+  - Input: `q` via `computer-use-linux` targeted keypress.
+  - Result: target window disappeared and the TUI process for that window ended.
+- Manager browse `Ctrl+C`:
+  - Window: `BlueNote Phase 4G Quit QA ctrlc-manager`, id `2069271638`, active TUI PID `182714`.
+  - Input: `Ctrl+C` via targeted keypress.
+  - Result: target window disappeared and the TUI process for that window ended.
+- Clean editor `Ctrl+C`:
+  - Window: `BlueNote Phase 4G Quit QA ctrlc-clean-editor`, id `2069271639`, active TUI PID `184059`.
+  - Input: `Enter`, `Enter` to open note, then `Ctrl+C`.
+  - Result: target window disappeared and the TUI process for that window ended.
+- Dirty editor `Ctrl+C`:
+  - Window: `BlueNote Phase 4G Quit QA ctrlc-dirty-editor`, id `2069271640`, active TUI PID `185631`.
+  - Input: `Enter`, `Enter`, typed `dirty quit probe 20260529`, then `Ctrl+C`.
+  - Result: target window disappeared and the TUI process for that window ended; disk readback showed the note body persisted as `dirty quit probe 20260529`.
+- Search Everything `Ctrl+C`:
+  - Window: `BlueNote Phase 4G Quit QA ctrlc-search`, id `2069271641`, active TUI PID `187332`.
+  - Input: `Ctrl+P`, then `Ctrl+C`.
+  - Result: target window disappeared and the TUI process for that window ended.
+- Search Everything `Esc` then Manager `q`:
+  - Window: `BlueNote Phase 4G Quit QA esc-search-then-q`, id `2069271642`, active TUI PID `188618`.
+  - Input: `Ctrl+P`, `Esc`, then `q`.
+  - Result: target window disappeared and the TUI process for that window ended.
+- Automated coverage already exercises the routing contract for dirty manager quit, manager filter/create prompt `q`, Search `Esc`, and `Ctrl+C`/exit routing.
+- Automated verification for Task 5 passed:
+  - `bun test tests/unit/tui/render-routing.test.ts tests/unit/tui/workspace-controller.test.ts tests/integration/tui-workflow.test.ts`: 138 pass, 0 fail.
+  - `bun run typecheck`: passed.
+- Evidence caveat: the live checks used window presence/title and active process context to verify the target `bun run ./bin/bn.ts tui` process ended. The harness windows often disappeared or changed out of the original title after exit, so reusable shell prompt text was not captured separately for each mode. No lingering target TUI process was observed for the tested windows.
+- No product-code root cause was proven in this session, so no quit-code fix was made.
+
 ## Environment and preflight
 
 ### Desktop/tool readiness
