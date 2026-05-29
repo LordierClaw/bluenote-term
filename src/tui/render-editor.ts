@@ -426,7 +426,6 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     flexDirection: "row",
     width: "100%",
     height: 1,
-    backgroundColor: tuiTheme.panel,
   })
   topbar.add(new TextRenderable(options.renderer, {
     id: "bluenote-editor-topbar-title",
@@ -434,7 +433,6 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     width: vm.topbar.noteName.length + 2,
     height: 1,
     fg: tuiTheme[vm.topbar.titleIntent],
-    bg: tuiTheme.panel,
   }))
   topbar.add(new TextRenderable(options.renderer, {
     id: "bluenote-editor-topbar-separator-path",
@@ -442,7 +440,6 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     width: 2,
     height: 1,
     fg: tuiTheme[vm.topbar.metadataIntent],
-    bg: tuiTheme.panel,
   }))
   topbar.add(new TextRenderable(options.renderer, {
     id: "bluenote-editor-topbar-path",
@@ -450,13 +447,11 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     width: Math.max(1, vm.topbar.fullPath.length),
     height: 1,
     fg: tuiTheme[vm.topbar.fullPathIntent],
-    bg: tuiTheme.panel,
   }))
   topbar.add(new BoxRenderable(options.renderer, {
     id: "bluenote-editor-topbar-spacer",
     flexGrow: 1,
     height: 1,
-    backgroundColor: tuiTheme.panel,
   }))
   topbar.add(new TextRenderable(options.renderer, {
     id: "bluenote-editor-topbar-separator-updated",
@@ -464,7 +459,6 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     width: 3,
     height: 1,
     fg: tuiTheme[vm.topbar.metadataIntent],
-    bg: tuiTheme.panel,
   }))
   topbar.add(new TextRenderable(options.renderer, {
     id: "bluenote-editor-topbar-updated",
@@ -472,7 +466,6 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     width: Math.max(1, vm.topbar.updatedLabel.length),
     height: 1,
     fg: tuiTheme[vm.topbar.updatedIntent],
-    bg: tuiTheme.panel,
   }))
   topbar.add(new TextRenderable(options.renderer, {
     id: "bluenote-editor-topbar-separator-status",
@@ -480,7 +473,6 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     width: 3,
     height: 1,
     fg: tuiTheme[vm.topbar.metadataIntent],
-    bg: tuiTheme.panel,
   }))
   topbar.add(new TextRenderable(options.renderer, {
     id: "bluenote-editor-topbar-wrap",
@@ -488,7 +480,6 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     width: Math.max(1, vm.topbar.wrapLabel.length),
     height: 1,
     fg: tuiTheme[vm.topbar.metadataIntent],
-    bg: tuiTheme.panel,
   }))
   topbar.add(new TextRenderable(options.renderer, {
     id: "bluenote-editor-topbar-separator-save",
@@ -496,7 +487,6 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     width: 3,
     height: 1,
     fg: tuiTheme[vm.topbar.metadataIntent],
-    bg: tuiTheme.panel,
   }))
   topbar.add(new TextRenderable(options.renderer, {
     id: "bluenote-editor-topbar-save-status",
@@ -504,7 +494,6 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     width: Math.max(1, vm.topbar.statusLabel.length),
     height: 1,
     fg: tuiTheme[vm.topbar.statusIntent],
-    bg: tuiTheme.panel,
   }))
 
   let findInput: InputRenderable | null = null
@@ -565,7 +554,6 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
       height: 5,
       border: true,
       borderColor: tuiTheme[vm.find.styleIntent],
-      backgroundColor: tuiTheme[vm.find.surfaceIntent],
       title: vm.find.sheetTitle,
     })
     findBar.add(new TextRenderable(options.renderer, {
@@ -573,14 +561,12 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
       content: vm.find.description,
       height: 1,
       fg: tuiTheme.textSecondary,
-      bg: tuiTheme[vm.find.surfaceIntent],
     }))
     findBar.add(new TextRenderable(options.renderer, {
       id: "bluenote-editor-find-input-label",
       content: vm.find.inputLabel,
       height: 1,
       fg: tuiTheme.textPrimary,
-      bg: tuiTheme[vm.find.surfaceIntent],
     }))
     findInput = new InputRenderable(options.renderer, {
       id: "bluenote-editor-find-query",
@@ -593,7 +579,6 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
       content: renderShortcutHints(vm.find.shortcutHints),
       height: 1,
       fg: tuiTheme[vm.find.statusIntent],
-      bg: tuiTheme[vm.find.surfaceIntent],
     })
     findInput.on(InputRenderableEvents.INPUT, () => {
       options.controller.updateEditorFindQuery(findInput?.value ?? "")
@@ -618,7 +603,6 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     content: renderShortcutHints(shortcutHints),
     height: 1,
     fg: tuiTheme.textMuted,
-    bg: tuiTheme.panel,
   }))
   if (findInput) {
     findInput.focus()

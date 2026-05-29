@@ -477,25 +477,25 @@ function effectiveRendererWidth(options: RenderManagerScreenOptions): number | u
   return rendererSize.width ?? rendererSize.terminalWidth
 }
 
-function rowSegment(options: RenderManagerScreenOptions, content: string, fg: string, bg: string, width?: number): TextRenderable {
+function rowSegment(options: RenderManagerScreenOptions, content: string, fg: string, bg: string | undefined, width?: number): TextRenderable {
   return new TextRenderable(options.renderer, {
     content,
     height: 1,
     width,
     fg,
-    bg,
+    ...(bg ? { bg } : {}),
   })
 }
 
 function rowRenderable(options: RenderManagerScreenOptions, row: ManagerRowViewModel): BoxRenderable {
-  const bg = tuiTheme[row.styleIntent]
+  const bg = row.styleIntent === "focusedRow" ? tuiTheme.focusedRow : undefined
   const itemColor = tuiTheme[row.itemStyleIntent]
   const metadataColor = tuiTheme[row.metadataStyleIntent]
   const box = new BoxRenderable(options.renderer, {
     flexDirection: "row",
     width: "100%",
     height: 1,
-    backgroundColor: bg,
+    ...(bg ? { backgroundColor: bg } : {}),
   })
 
   box.add(rowSegment(options, row.displaySegments.primary.padEnd(24), itemColor, bg, 24))
@@ -525,7 +525,6 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     content: `${vm.dashboard.productLabel}  ${vm.dashboard.workspaceLabel}  ${vm.dashboard.summaryLabel}`,
     height: 1,
     fg: tuiTheme[vm.topbar.styleIntent],
-    bg: tuiTheme.panel,
   }))
 
   const panels = new BoxRenderable(options.renderer, {
@@ -542,7 +541,6 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     height: "100%",
     border: true,
     borderColor: tuiTheme[vm.panels.layout1.styleIntent],
-    backgroundColor: tuiTheme.panel,
     title: vm.panels.layout1.title,
   })
   const layout2 = previewHidden ? null : new BoxRenderable(options.renderer, {
@@ -552,7 +550,6 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     height: "100%",
     border: true,
     borderColor: tuiTheme[vm.panels.layout2.styleIntent],
-    backgroundColor: tuiTheme.panel,
     title: vm.panels.layout2.title,
   })
 
@@ -560,33 +557,33 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     layout1.add(rowRenderable(options, row))
   }
   if (vm.layout1.empty && vm.layout1.emptyState) {
-    layout1.add(new TextRenderable(options.renderer, { content: vm.layout1.emptyState.title, height: 1, fg: tuiTheme.textSecondary, bg: tuiTheme.panel }))
-    layout1.add(new TextRenderable(options.renderer, { content: vm.layout1.emptyState.body, height: 1, fg: tuiTheme[vm.layout1.emptyState.styleIntent], bg: tuiTheme.panel }))
-    layout1.add(new TextRenderable(options.renderer, { content: vm.layout1.emptyState.actions.join("  "), height: 1, fg: tuiTheme[vm.layout1.emptyState.styleIntent], bg: tuiTheme.panel }))
+    layout1.add(new TextRenderable(options.renderer, { content: vm.layout1.emptyState.title, height: 1, fg: tuiTheme.textSecondary }))
+    layout1.add(new TextRenderable(options.renderer, { content: vm.layout1.emptyState.body, height: 1, fg: tuiTheme[vm.layout1.emptyState.styleIntent] }))
+    layout1.add(new TextRenderable(options.renderer, { content: vm.layout1.emptyState.actions.join("  "), height: 1, fg: tuiTheme[vm.layout1.emptyState.styleIntent] }))
   }
   if (vm.layout2.preview.type === "hidden") {
-    layout1.add(new TextRenderable(options.renderer, { content: vm.layout2.preview.message, height: 1, fg: tuiTheme[vm.layout2.preview.styleIntent], bg: tuiTheme.panel }))
+    layout1.add(new TextRenderable(options.renderer, { content: vm.layout2.preview.message, height: 1, fg: tuiTheme[vm.layout2.preview.styleIntent] }))
   }
 
   const preview = vm.layout2.preview
   if (layout2 && preview.type === "folder") {
-    layout2.add(new TextRenderable(options.renderer, { content: `${preview.title} · ${preview.message}`, height: 1, fg: tuiTheme.textPrimary, bg: tuiTheme.surfacePanelRaised }))
-    layout2.add(new TextRenderable(options.renderer, { content: preview.path, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
+    layout2.add(new TextRenderable(options.renderer, { content: `${preview.title} · ${preview.message}`, height: 1, fg: tuiTheme.textPrimary }))
+    layout2.add(new TextRenderable(options.renderer, { content: preview.path, height: 1, fg: tuiTheme.mutedText }))
     for (const row of preview.rows) {
       layout2.add(rowRenderable(options, row))
     }
   } else if (layout2 && preview.type === "note-content") {
     for (const section of preview.sections) {
-      layout2.add(new TextRenderable(options.renderer, { content: section.label, height: 1, fg: tuiTheme.textSecondary, bg: section.label === "Title" ? tuiTheme.surfacePanelRaised : tuiTheme.panel }))
+      layout2.add(new TextRenderable(options.renderer, { content: section.label, height: 1, fg: tuiTheme.textSecondary }))
       for (const line of section.lines.slice(0, section.label === "Body" ? 20 : 2)) {
-        layout2.add(new TextRenderable(options.renderer, { content: line, height: 1, fg: section.label === "Body" ? tuiTheme.textPrimary : tuiTheme.mutedText, bg: tuiTheme.panel }))
+        layout2.add(new TextRenderable(options.renderer, { content: line, height: 1, fg: section.label === "Body" ? tuiTheme.textPrimary : tuiTheme.mutedText }))
       }
     }
   } else if (layout2 && preview.type === "empty") {
-    layout2.add(new TextRenderable(options.renderer, { content: preview.title, height: 1, fg: tuiTheme.textSecondary, bg: tuiTheme.panel }))
-    layout2.add(new TextRenderable(options.renderer, { content: preview.message, height: 1, fg: tuiTheme[preview.styleIntent], bg: tuiTheme.panel }))
+    layout2.add(new TextRenderable(options.renderer, { content: preview.title, height: 1, fg: tuiTheme.textSecondary }))
+    layout2.add(new TextRenderable(options.renderer, { content: preview.message, height: 1, fg: tuiTheme[preview.styleIntent] }))
   } else if (layout2) {
-    layout2.add(new TextRenderable(options.renderer, { content: "Preview hidden", height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
+    layout2.add(new TextRenderable(options.renderer, { content: "Preview hidden", height: 1, fg: tuiTheme.mutedText }))
   }
 
   panels.add(layout1)
@@ -602,7 +599,6 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
       height: 6,
       border: true,
       borderColor: tuiTheme.borderFocus,
-      backgroundColor: tuiTheme.surfacePanelRaised,
       title: "Filter current folder",
     })
     filterBar.add(new TextRenderable(options.renderer, {
@@ -610,21 +606,18 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
       content: "Narrow the current folder without leaving the dashboard.",
       height: 1,
       fg: tuiTheme.textSecondary,
-      bg: tuiTheme.surfacePanelRaised,
     }))
     filterBar.add(new TextRenderable(options.renderer, {
       id: "bluenote-manager-filter-scope",
       content: `Scope: ${vm.panels.layout1.title}`,
       height: 1,
       fg: tuiTheme.mutedText,
-      bg: tuiTheme.surfacePanelRaised,
     }))
     filterBar.add(new TextRenderable(options.renderer, {
       id: "bluenote-manager-filter-input-label",
       content: "Filter:",
       height: 1,
       fg: tuiTheme.textPrimary,
-      bg: tuiTheme.surfacePanelRaised,
     }))
     const filterInput = new InputRenderable(options.renderer, {
       id: "bluenote-manager-filter-query",
@@ -637,7 +630,6 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
       content: renderShortcutHints([{ key: "Esc", action: "Close" }, { key: "Enter", action: "Open" }]),
       height: 1,
       fg: tuiTheme.mutedText,
-      bg: tuiTheme.surfacePanelRaised,
     })
     filterInput.on(InputRenderableEvents.INPUT, () => {
       options.controller.updateManagerFilter(filterInput.value)
@@ -660,7 +652,6 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
       height: 6,
       border: true,
       borderColor: tuiTheme[vm.createPrompt.styleIntent],
-      backgroundColor: tuiTheme[vm.createPrompt.surfaceIntent],
       title: vm.createPrompt.sheetTitle,
     })
     createBar.add(new TextRenderable(options.renderer, {
@@ -668,21 +659,18 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
       content: vm.createPrompt.description,
       height: 1,
       fg: tuiTheme.textSecondary,
-      bg: tuiTheme[vm.createPrompt.surfaceIntent],
     }))
     createBar.add(new TextRenderable(options.renderer, {
       id: "bluenote-manager-create-destination",
       content: vm.createPrompt.destinationLabel,
       height: 1,
       fg: tuiTheme.mutedText,
-      bg: tuiTheme[vm.createPrompt.surfaceIntent],
     }))
     createBar.add(new TextRenderable(options.renderer, {
       id: "bluenote-manager-create-input-label",
       content: vm.createPrompt.inputLabel,
       height: 1,
       fg: tuiTheme.textPrimary,
-      bg: tuiTheme[vm.createPrompt.surfaceIntent],
     }))
     const createInput = new InputRenderable(options.renderer, {
       id: vm.createPrompt.inputId,
@@ -695,14 +683,12 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
       content: vm.createPrompt.status ?? " ",
       height: 1,
       fg: tuiTheme[vm.createPrompt.statusIntent],
-      bg: tuiTheme[vm.createPrompt.surfaceIntent],
     })
     const createHint = new TextRenderable(options.renderer, {
       id: "bluenote-manager-create-hints",
       content: renderShortcutHints([{ key: "Enter", action: "Create" }, { key: "Esc", action: "Cancel" }]),
       height: 1,
       fg: tuiTheme.mutedText,
-      bg: tuiTheme[vm.createPrompt.surfaceIntent],
     })
     createInput.on(InputRenderableEvents.INPUT, () => {
       options.controller.updateManagerCreateTitle(createInput.value)
@@ -726,7 +712,6 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
       height: 7,
       border: true,
       borderColor: tuiTheme[vm.deletePrompt.styleIntent],
-      backgroundColor: tuiTheme[vm.deletePrompt.surfaceIntent],
       title: vm.deletePrompt.sheetTitle,
     })
     deleteBar.add(new TextRenderable(options.renderer, {
@@ -734,14 +719,12 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
       content: vm.deletePrompt.title,
       height: 1,
       fg: tuiTheme.textPrimary,
-      bg: tuiTheme[vm.deletePrompt.surfaceIntent],
     }))
     deleteBar.add(new TextRenderable(options.renderer, {
       id: "bluenote-manager-delete-target-path",
       content: vm.deletePrompt.relativePath,
       height: 1,
       fg: tuiTheme.mutedText,
-      bg: tuiTheme[vm.deletePrompt.surfaceIntent],
     }))
     for (const [index, line] of vm.deletePrompt.consequenceLines.entries()) {
       deleteBar.add(new TextRenderable(options.renderer, {
@@ -749,7 +732,6 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
         content: line,
         height: 1,
         fg: index === vm.deletePrompt.consequenceLines.length - 1 ? tuiTheme.danger : tuiTheme.textSecondary,
-        bg: tuiTheme[vm.deletePrompt.surfaceIntent],
       }))
     }
     deleteBar.add(new TextRenderable(options.renderer, {
@@ -757,12 +739,11 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
       content: renderShortcutHints(promptHints(vm.deletePrompt.status, [{ key: "y", action: "Delete", priority: "danger" }, { key: "Esc", action: "Cancel" }])),
       height: 1,
       fg: tuiTheme.mutedText,
-      bg: tuiTheme[vm.deletePrompt.surfaceIntent],
     }))
     root.add(deleteBar)
   }
-  root.add(new TextRenderable(options.renderer, { content: vm.topbar.bottomPath, height: 1, fg: tuiTheme.mutedText, bg: tuiTheme.panel }))
-  root.add(new TextRenderable(options.renderer, { id: "bluenote-manager-footer-hints", content: renderShortcutHints(vm.shortcutHints), height: 1, fg: tuiTheme.textMuted, bg: tuiTheme.panel }))
+  root.add(new TextRenderable(options.renderer, { content: vm.topbar.bottomPath, height: 1, fg: tuiTheme.mutedText }))
+  root.add(new TextRenderable(options.renderer, { id: "bluenote-manager-footer-hints", content: renderShortcutHints(vm.shortcutHints), height: 1, fg: tuiTheme.textMuted }))
 
   return root
 }

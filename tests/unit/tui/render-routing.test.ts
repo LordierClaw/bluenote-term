@@ -28,6 +28,30 @@ function assertNoOpaqueBlackBackground(value: { toInts?: () => number[] } | unde
   assert.notDeepEqual(value?.toInts?.(), [0, 0, 0, 255], label)
 }
 
+const darkPanelBackgrounds = new Set([
+  "17,24,39,255", // tuiTheme.panel / surfacePanel
+  "22,32,51,255", // tuiTheme.surfacePanelRaised
+])
+
+function colorTuple(value: { toInts?: () => number[] } | undefined): string | undefined {
+  return value?.toInts?.().join(",")
+}
+
+function assertNoDarkPanelBackgrounds(nodes: any[], label: string): void {
+  for (const node of nodes) {
+    const nodeLabel = node.id ?? node.title ?? node.constructor?.name ?? "renderable"
+    for (const [prop, value] of [["backgroundColor", node.backgroundColor], ["bg", node.bg]] as const) {
+      const tuple = colorTuple(value)
+      assert.equal(darkPanelBackgrounds.has(tuple ?? ""), false, `${label}: ${nodeLabel}.${prop} paints ${tuple}`)
+    }
+    const chunks = node.content?.chunks ?? []
+    for (const [index, chunk] of chunks.entries()) {
+      const tuple = colorTuple(chunk.bg)
+      assert.equal(darkPanelBackgrounds.has(tuple ?? ""), false, `${label}: ${nodeLabel}.chunk[${index}].bg paints ${tuple}`)
+    }
+  }
+}
+
 function createController(screen: TuiState["screen"]): { controller: WorkspaceController; calls: string[] } {
   const calls: string[] = []
   const state: TuiState = {
@@ -480,6 +504,7 @@ describe("TUI render keyboard routing", () => {
       const bodyContentRow = findById(screen, "bluenote-editor-body-content-row") as { backgroundColor?: { toInts?: () => number[] } } | undefined
       const bodyDisplay = findById(screen, "bluenote-editor-body") as { bg?: { toInts?: () => number[] }; content?: { chunks?: Array<{ text?: string }> } | string } | undefined
       const renderables = [screen, ...descendants(screen)]
+      assertNoDarkPanelBackgrounds(renderables, "editor chrome keeps terminal-default backgrounds")
       const renderableText = renderables.map((node) => node.content?.chunks?.[0]?.text ?? node.content ?? "").join("\n")
       const titleText = renderables.map((node) => node.title ?? "").join("\n")
       const bodyText = typeof bodyDisplay?.content === "string" ? bodyDisplay.content : bodyDisplay?.content?.chunks?.[0]?.text ?? ""
@@ -496,6 +521,25 @@ describe("TUI render keyboard routing", () => {
       assert.doesNotMatch(bodyText, /[|▌]/u)
       assert.doesNotMatch(renderableText, /Line \d+, Col \d+|Ln \d+, Col \d+/u)
       assert.match(renderableText, /\[Ctrl\+S\]/u)
+    } finally {
+      renderer.destroy()
+    }
+  })
+
+  test("editor find and topbar chrome keep terminal-default backgrounds", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const controller = createWorkspaceController({
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "alpha beta alpha" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "alpha beta alpha" }),
+        searchNotes: () => [],
+      })
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+      controller.openEditorFind("alpha")
+      const screen = renderEditorScreen({ renderer, controller })
+      renderer.root.add(screen)
+      assert.notEqual(findById(screen, "bluenote-editor-find-bar"), undefined)
+      assertNoDarkPanelBackgrounds([screen, ...descendants(screen)], "editor find/topbar/shortcut chrome keeps terminal-default backgrounds")
     } finally {
       renderer.destroy()
     }
@@ -919,6 +963,7 @@ describe("TUI render keyboard routing", () => {
       const footerChunks = footer?.content?.chunks ?? []
       const footerText = footerChunks.map((chunk: { text?: string }) => chunk.text ?? "").join("") || footer?.content || ""
 
+      assertNoDarkPanelBackgrounds([screen, ...descendants(screen)], "manager panes and chrome keep terminal-default backgrounds")
       assertTransparentBackground((screen as any).backgroundColor, "manager root keeps terminal-default transparent background")
       assert.notEqual(topbar, undefined)
       assert.notEqual(topbar?.border, true)
@@ -1050,6 +1095,34 @@ describe("TUI render keyboard routing", () => {
     }
   })
 
+  test("manager prompt bars keep terminal-default backgrounds", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      for (const mode of ["manager.filter", "manager.create", "manager.deleteConfirm"] as const) {
+        const { controller } = createController("manager")
+        const state = controller.getState()
+        state.mode = mode
+        state.manager.items = [{ type: "note", key: "daily", filename: "daily.md", title: "Daily", description: "Today", relativePath: "notes/daily.md" }]
+        if (mode === "manager.filter") {
+          state.manager.filterQuery = "da"
+        }
+        if (mode === "manager.create") {
+          state.manager.createDraft = { title: "New", status: null }
+        }
+        if (mode === "manager.deleteConfirm") {
+          state.manager.deleteDraft = { key: "daily", title: "Daily", relativePath: "notes/daily.md", status: null }
+        }
+        const screen = renderManagerScreen({ renderer, controller, width: 100 })
+        renderer.root.add(screen)
+        assertNoDarkPanelBackgrounds([screen, ...descendants(screen)], `${mode} prompt keeps terminal-default backgrounds`)
+        renderer.root.remove(screen.id)
+        screen.destroyRecursively()
+      }
+    } finally {
+      renderer.destroy()
+    }
+  })
+
   test("manager create route edits title, submits on Enter, and cancels on Escape or Ctrl+[", () => {
     const { controller, calls } = createController("manager")
     controller.getState().mode = "manager.create"
@@ -1128,6 +1201,7 @@ describe("TUI render keyboard routing", () => {
       const textFor = (node: any): string => node.content?.chunks?.map?.((chunk: { text?: string }) => chunk.text ?? "").join("") ?? node.content ?? ""
       const text = descendants(screen).map(textFor).join("\n")
       const titleRow = screen.getChildren().find((node: any) => textFor(node) === "Search Everything") as { bg?: { toInts?: () => number[] } } | undefined
+      assertNoDarkPanelBackgrounds([screen, ...descendants(screen)], "search input/results/preview chrome keep terminal-default backgrounds")
       assertTransparentBackground((screen as any).backgroundColor, "search root keeps terminal-default transparent background")
       assertNoOpaqueBlackBackground(titleRow?.bg, "search title row must not paint opaque black")
       assert.notEqual(findById(screen, "bluenote-search-query"), undefined)
