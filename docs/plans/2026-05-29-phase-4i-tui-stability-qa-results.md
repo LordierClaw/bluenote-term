@@ -344,3 +344,28 @@ Conclusion: screenshot capture is now working, but visual acceptance is not clea
 1. Rerun or improve harness window positioning for `manager-80x24` so the screenshot is unobstructed.
 2. Revisit long-line unwrap indicator rendering; the visible screenshot should clearly show a continuation/overflow symbol while there is hidden content.
 3. Revisit Search Everything preview content; remove or justify the remaining `Path`/`Description` metadata rows according to the user's requested simplification.
+
+## Task 12 — Visual UI fix-and-verify loop
+
+Date added: 2026-05-29
+Status: planned / approved by user direction
+
+The user directed: fix the UI and verify visually, looping until it meets the expected modern UI quality. Task 12 in the Phase 4I plan is now the active follow-up. The loop must continue until screenshot-backed QA shows every core case at 4/5 or higher, with no visual-contract failures.
+
+Initial fix targets:
+
+1. Fix harness/window positioning so `manager-80x24` screenshots are unobstructed.
+2. Fix long-line unwrap visual indicator so hidden right-side content is obvious before horizontal navigation.
+3. Remove Search Everything preview metadata rows that remain visually useless (`Path`, `Description`) and re-center the preview on useful title/content/snippet information.
+
+Required verification after every loop:
+
+```bash
+bun run typecheck
+bun test tests/unit/tui/render-view-models.test.ts tests/unit/tui/search-everything-adapter.test.ts tests/unit/tui/editor-buffer-adapter.test.ts tests/integration/tui-workflow.test.ts
+bun run qa:visual:tui -- --no-screenshots --out-dir=/tmp/bluenote-visual-qa-dryrun-next
+rm -rf /tmp/bluenote-visual-qa-final
+bun run qa:visual:tui -- --out-dir=/tmp/bluenote-visual-qa-final
+```
+
+Final stop condition: all core screenshots valid/unobstructed, all core ratings at least 4/5, no stale processes after harness, and full repo verification passes.

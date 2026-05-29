@@ -874,6 +874,134 @@ git commit -m "test: add tui visual qa harness"
 
 ---
 
+### Task 12: Visual UI fix-and-verify loop until modern UI acceptance
+
+**Reason added:** Task 11 proved screenshot capture now works and exposed remaining visual/UI acceptance failures. The branch must not be considered visually accepted until these findings are fixed and the screenshot harness confirms the TUI meets the user's expectation for a modern, calm, readable terminal UI.
+
+**Design target:** Preserve the approved **Quiet Blue Dashboard** direction from `docs/product/design-language.md`, plus the user's Phase 4I overrides:
+
+- terminal default/black background, not broad dark-blue app fills,
+- title/content first; metadata quiet or removed when not useful,
+- one accent/focus cue at a time,
+- calm editor chrome,
+- Manager/Search as modern terminal dashboards, not debug boxes,
+- visual acceptance based on pixel screenshots, not text captures alone.
+
+**Known visual findings to fix first:**
+
+1. `manager-80x24` screenshot is obstructed by another terminal/top window, so the small-size screenshot evidence is invalid.
+2. `longline-100x30` does not show an obvious long-line continuation/overflow indicator while hidden content remains.
+3. `search-100x30` preview still shows metadata-like `Path` and `Description` rows, conflicting with the user's request to remove useless metadata from Search Everything preview.
+
+**Files likely involved:**
+
+- Harness/window management: `scripts/visual-tui-qa.ts`
+- Editor long-line rendering: `src/tui/render-editor.ts`, related view-model/buffer tests
+- Search preview rendering: `src/tui/search-everything-adapter.ts`, `src/tui/render-search-everything.ts` or current search render files, related tests
+- Visual results: `docs/plans/2026-05-29-phase-4i-tui-stability-qa-results.md`
+
+**Acceptance criteria:**
+
+- `manager-80x24`, `manager-100x30`, `manager-120x40`, `manager-100x30-zoom150`, `editor-100x30`, `search-100x30`, and `longline-100x30` all have valid, unobstructed PNG evidence.
+- Each core case scores at least **4/5** from the user perspective.
+- No screenshot shows unrelated window overlap, clipped desktop artifacts, or accidental background terminals.
+- Long-line unwrap visibly communicates that hidden content exists before the user scrolls horizontally.
+- Search Everything preview removes the useless metadata row(s); note preview emphasizes title/content/snippet over path/debug fields unless the field is genuinely useful.
+- Terminal default/black background remains visible across all screens.
+- Layout still works at `80x24`, `100x30`, `120x40`, and `100x30 --zoom=1.5`.
+- Post-run process check reports no live BlueNote TUI processes for the harness QA root.
+
+**Loop protocol:**
+
+Repeat this loop until all acceptance criteria pass:
+
+1. **Plan/check current screenshot evidence**
+   - Inspect `/tmp/bluenote-visual-qa-final/contact-sheet.png` and per-case screenshots.
+   - Record specific visual failures in the QA results doc before coding.
+2. **Write or update failing coverage where feasible**
+   - For search preview: add/update unit tests proving removed metadata rows are absent.
+   - For long-line unwrap: add/update render/view-model tests proving an overflow indicator is emitted for hidden right-side content and, if applicable, left-side hidden content after horizontal pan.
+   - For harness obstruction: add harness validation where feasible, such as target-window crop, window focus/raise before capture, or non-overlap sanity notes.
+3. **Implement the smallest visual fix**
+   - Prefer semantic view-model/render changes over brittle screenshot-only hacks.
+   - Keep modern UI restrained: no loud borders, no extra metadata, no broad dark fill, no noisy decoration.
+4. **Run automated verification**
+
+   ```bash
+   bun run typecheck
+   bun test tests/unit/tui/render-view-models.test.ts tests/unit/tui/search-everything-adapter.test.ts tests/unit/tui/editor-buffer-adapter.test.ts tests/integration/tui-workflow.test.ts
+   bun run qa:visual:tui -- --no-screenshots --out-dir=/tmp/bluenote-visual-qa-dryrun-next
+   ```
+
+5. **Run screenshot visual QA**
+
+   ```bash
+   rm -rf /tmp/bluenote-visual-qa-final
+   bun run qa:visual:tui -- --out-dir=/tmp/bluenote-visual-qa-final
+   ```
+
+   Build/inspect contact sheet:
+
+   ```bash
+   python3 - <<'PY'
+   from pathlib import Path
+   from PIL import Image, ImageDraw
+   root=Path('/tmp/bluenote-visual-qa-final')
+   items=[]
+   for p in sorted(root.glob('*/screen.png')):
+       img=Image.open(p).convert('RGB')
+       img.thumbnail((480,340))
+       tile=Image.new('RGB',(520,390),'white')
+       tile.paste(img,(20,35))
+       ImageDraw.Draw(tile).text((20,10),p.parent.name,fill='black')
+       items.append(tile)
+   sheet=Image.new('RGB',(1040,((len(items)+1)//2)*390),'white')
+   for i,tile in enumerate(items): sheet.paste(tile,((i%2)*520,(i//2)*390))
+   sheet.save(root/'contact-sheet.png')
+   print(root/'contact-sheet.png')
+   PY
+   ```
+
+6. **Rate screenshots from user perspective**
+   - Rate every case 1–5.
+   - If any core case is below 4/5, write the finding and repeat the loop.
+   - Do not claim visual acceptance based only on passing automated tests.
+7. **Review and final verification**
+   - Dispatch/perform spec review and code-quality review for the visual fixes.
+   - Run final repo verification:
+
+   ```bash
+   bun run typecheck
+   bun test
+   bun run smoke:opentui
+   bun run smoke:opentui:interactive
+   env -u BLUENOTE_ROOT bun run smoke:cli
+   bun run qa:visual:tui -- --out-dir=/tmp/bluenote-visual-qa-final
+   git diff --check
+   git status --short --branch
+   ```
+
+8. **Commit each green loop checkpoint**
+
+   ```bash
+   git add src/tui tests scripts docs/plans package.json
+   git commit -m "fix: polish tui visual qa findings"
+   ```
+
+**Stop condition:**
+
+Stop only when the screenshot-backed QA results document shows:
+
+- every core case at **4/5 or higher**,
+- no remaining Blocker/High/visual-contract findings,
+- all screenshots valid and unobstructed,
+- process cleanup clean after harness,
+- final automated verification passing.
+
+If the user changes the desired style beyond Quiet Blue Dashboard / modern terminal UI, pause implementation and update the design language or a new design note before continuing.
+
+---
+
 ## 5. Subagent-driven execution plan after approval
 
 Use `delegate_task` in place of `sessions_spawn` if `sessions_spawn` is unavailable. Each implementation task follows:
@@ -892,6 +1020,7 @@ Recommended grouping:
 - Group D: Task 8 long-line unwrap behavior.
 - Group E: Tasks 9–10 manual QA and performance review.
 - Group F: Task 11 visual-manual QA rerun using screenshot artifacts.
+- Group G: Task 12 visual fix-and-verify loop until modern UI acceptance.
 
 Do not proceed to visual/layout polish if Task 1 or Task 2 still has Blocker/High stability findings.
 
