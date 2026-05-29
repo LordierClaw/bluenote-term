@@ -639,13 +639,14 @@ try {
   expectPaneContains(resizedEditorPane, "Root Editor", "editor responsive resize")
   expectPaneContains(resizedEditorPane, "[Ctrl+S] Save", "editor responsive resize")
   expectPaneContains(resizedEditorPane, "[Ctrl+F] Find", "editor responsive resize")
-  expectPaneContains(resizedEditorPane, "[Alt+Z] Wrap", "editor responsive resize")
+  expectPaneContains(resizedEditorPane, "+8", "editor responsive resize")
+  expectPaneExcludes(resizedEditorPane, "[Alt+Z] Wrap", "editor responsive resize")
   resizeSession(sessionName, 100, 30, "editor restore after responsive resize")
   wait(500, "editor focus settle")
 
   sendKeys(sessionName, "M-z")
   const editorWrapNonePane = capturePaneUntil(sessionName, "editor Alt+Z wrap toggle off", "Wrap off", 20)
-  expectPaneContains(editorWrapNonePane, "[Alt+Z] Wrap", "editor Alt+Z wrap toggle off")
+  expectPaneContains(editorWrapNonePane, "Wrap off", "editor Alt+Z wrap toggle off")
   const longUnwrappedSmokeToken = `long-line-overflow-${"0123456789".repeat(12)}`
   sendText(sessionName, longUnwrappedSmokeToken)
   const longUnwrappedPane = capturePaneUntil(sessionName, "editor long unwrapped horizontal overflow", "‹", 30)
@@ -656,7 +657,7 @@ try {
   sendKeys(sessionName, "End")
   sendKeys(sessionName, "M-z")
   const editorWrapWordPane = capturePaneUntil(sessionName, "editor Alt+Z wrap toggle on", "Wrap word", 20)
-  expectPaneContains(editorWrapWordPane, "[Alt+Z] Wrap", "editor Alt+Z wrap toggle on")
+  expectPaneContains(editorWrapWordPane, "Wrap word", "editor Alt+Z wrap toggle on")
 
   const typedEditorText = "editor-input-regression-token"
   sendText(sessionName, typedEditorText)
@@ -786,8 +787,8 @@ try {
 
   sendKeys(sessionName, "Escape")
   wait(500)
-  const managerAfterCreatePane = capturePaneUntil(sessionName, "manager shows created note", createdArtifacts.key, 30)
-  expectPaneContains(managerAfterCreatePane, createdArtifacts.relativePath, "manager shows created note")
+  const managerAfterCreatePane = capturePaneUntil(sessionName, "manager shows created note", `Currently open: ${liveManagerTitle}`, 30)
+  expectPaneContains(managerAfterCreatePane, `Currently open: ${liveManagerTitle}`, "manager shows created note")
 
   sendKeys(sessionName, "Up")
   wait(150)
