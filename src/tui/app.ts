@@ -456,6 +456,9 @@ export async function waitForInteractiveTuiExit(running: RunningTuiWorkspace): P
     const handleSignal = (_signal: NodeJS.Signals): void => {
       exitCode = 1
       running.destroy()
+      if (resolved) {
+        return
+      }
       // Renderer destroy can be deferred while OpenTUI is rendering. Prefer the
       // renderer's destroy event so terminal final cleanup completes before the
       // CLI resolves, but do not hang forever if an injected/test renderer fails

@@ -40,7 +40,7 @@ Root-cause areas fixed or verified:
 - Pending scheduled rerenders are cleared during destroy.
 - Workspace input handlers are removed during destroy when the renderer exposes `removeInputHandler`.
 - Current render tree inputs are blurred/destroyed, resize listeners are removed, the controller is disposed, and the renderer is destroyed exactly once.
-- `runTuiCliInteractive()` now handles `SIGINT`, `SIGTERM`, and `SIGHUP`, destroys the workspace, removes signal handlers, and returns signal-appropriate exit codes.
+- `runTuiCliInteractive()` now handles `SIGINT`, `SIGTERM`, and `SIGHUP`, destroys the workspace, waits for renderer cleanup before resolving, and removes signal handlers. Signal exits currently return `1` to match the existing `CliResult.exitCode` type.
 - `WorkspaceController.dispose()` clears autosave timers and detaches autosave state-change handlers; a regression test verifies stale async autosave completion cannot invoke renderer invalidation callbacks after dispose.
 - The tmux smoke harness tracks temp roots/sessions/pane pids and kills only those scoped smoke resources in `finally`.
 
