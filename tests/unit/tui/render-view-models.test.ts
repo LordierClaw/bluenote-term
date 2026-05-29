@@ -701,6 +701,8 @@ describe("TUI render view models", () => {
         "[Ctrl+S] Save",
         "[Ctrl+F] Find",
         "[Ctrl+H] Replace",
+        "[Ctrl+Z] Undo",
+        "[Ctrl+Y] Redo",
         "[Alt+Z] Wrap",
         "[Ctrl+Shift+C] Copy",
         "[Ctrl+Shift+X] Cut",
@@ -712,6 +714,8 @@ describe("TUI render view models", () => {
         "[Ctrl+S] Save",
         "[Ctrl+F] Find",
         "[Ctrl+H] Replace",
+        "[Ctrl+Z] Undo",
+        "[Ctrl+Y] Redo",
         "[Alt+Z] Wrap",
         "[Ctrl+Shift+C] Copy",
         "[Ctrl+Shift+X] Cut",
@@ -723,6 +727,8 @@ describe("TUI render view models", () => {
         { key: "Ctrl+S", action: "Save" },
         { key: "Ctrl+F", action: "Find" },
         { key: "Ctrl+H", action: "Replace" },
+        { key: "Ctrl+Z", action: "Undo" },
+        { key: "Ctrl+Y", action: "Redo" },
         { key: "Alt+Z", action: "Wrap" },
         { key: "Ctrl+Shift+C", action: "Copy" },
         { key: "Ctrl+Shift+X", action: "Cut" },
@@ -795,7 +801,7 @@ describe("TUI render view models", () => {
     assert.equal(vm.topbar.statusLabel, "Saved")
     assert.equal(vm.topbar.wrapLabel, "Wrap word")
     assert.deepEqual(vm.bottombar.row2.visibleShortcuts, ["[Ctrl+S] Save", "[Ctrl+F] Find"])
-    assert.equal(vm.bottombar.row2.hiddenShortcutCount, 7)
+    assert.equal(vm.bottombar.row2.hiddenShortcutCount, 9)
   })
 
   test("editor find prompt is a quiet task sheet with query, match count, and find-specific actions", () => {
@@ -881,7 +887,7 @@ describe("TUI render view models", () => {
       { key: "Ctrl+S", action: "Save" },
       { key: "Ctrl+F", action: "Find" },
     ])
-    assert.equal(narrowVm.bottombar.row2.hiddenShortcutCount, 7)
+    assert.equal(narrowVm.bottombar.row2.hiddenShortcutCount, 9)
     assert.doesNotMatch(narrowVm.bottombar.row2.shortcuts.join(" "), /\[\?\] More/u)
     assert.deepEqual(narrowVm.body.overflow, { above: false, below: true, indicator: "↓" })
 

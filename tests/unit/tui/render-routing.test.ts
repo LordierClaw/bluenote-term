@@ -153,6 +153,8 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
     advanceEditorFind: (direction = "next") => calls.push(`advanceEditorFind:${direction}`),
     replaceCurrentEditorMatch: () => calls.push("replaceCurrentEditorMatch"),
     replaceAllEditorMatches: () => calls.push("replaceAllEditorMatches"),
+    undoEditor: () => calls.push("undoEditor"),
+    redoEditor: () => calls.push("redoEditor"),
     requestQuit: () => {
       calls.push("requestQuit")
       return { blocked: false }
@@ -730,7 +732,7 @@ describe("TUI render keyboard routing", () => {
       assert.equal(findById(screen, "bluenote-editor-bottombar-save-status"), undefined)
       const shortcutChunks = shortcutRow?.content?.chunks ?? []
       const shortcutText = shortcutChunks.map((chunk: { text?: string }) => chunk.text ?? "").join("") || shortcutRow?.content
-      assert.equal(shortcutText, "[Ctrl+S] Save  [Ctrl+F] Find  [Ctrl+H] Replace  [Alt+Z] Wrap  [Ctrl+Shift+C] Copy  [Ctrl+Shift+X] Cut  +3")
+      assert.equal(shortcutText, "[Ctrl+S] Save  [Ctrl+F] Find  [Ctrl+H] Replace  [Ctrl+Z] Undo  [Ctrl+Y] Redo  [Alt+Z] Wrap  [Ctrl+Shift+C] Copy  +4")
       assert.deepEqual(shortcutChunks.filter((chunk: { text?: string }) => /^\[[^\]]+\]$/u.test(chunk.text ?? "")).at(0)?.fg?.toInts?.(), [56, 189, 248, 255])
     } finally {
       renderer.destroy()

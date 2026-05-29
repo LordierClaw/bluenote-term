@@ -2407,4 +2407,94 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().editor?.dirty, false)
     assert.equal(controller.getState().editor?.autosaveStatus, "saved")
   })
+
+  test("editor undo and redo restore snapshots, clear redo on new edits, and keep autosave semantics", async () => {
+    const scheduler = createFakeScheduler()
+    const persistedBodies: string[] = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) => {
+        persistedBodies.push(body)
+        return { ...note, body }
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.openEditorFind("daily")
+    controller.updateEditorFindQuery("daily")
+    controller.goBack()
+    controller.setEditorSelection(8, 8)
+    controller.insertEditorText(" edited")
+
+    let editor = controller.getState().editor
+    assert.equal(editor?.body, "Original edited daily body")
+    assert.equal(editor?.dirty, true)
+    assert.equal(editor?.autosaveStatus, "pending")
+    assert.equal(editor?.undoStack?.length, 1)
+    assert.equal(editor?.redoStack?.length, 0)
+
+    controller.undoEditor()
+
+    editor = controller.getState().editor
+    assert.equal(editor?.body, "Original daily body")
+    assert.equal(editor?.cursorOffset, 8)
+    assert.equal(editor?.selectionStart, 8)
+    assert.equal(editor?.selectionEnd, 8)
+    assert.equal(editor?.dirty, false)
+    assert.equal(editor?.autosaveStatus, "saved")
+    assert.equal(editor?.findQuery, "daily")
+    assert.equal(editor?.findMatchCount, 1)
+    assert.equal(editor?.activeFindIndex, 0)
+    assert.equal(editor?.undoStack?.length, 0)
+    assert.equal(editor?.redoStack?.length, 1)
+    assert.equal(scheduler.activeTasks().length, 0)
+
+    controller.redoEditor()
+
+    editor = controller.getState().editor
+    assert.equal(editor?.body, "Original edited daily body")
+    assert.equal(editor?.dirty, true)
+    assert.equal(editor?.autosaveStatus, "pending")
+    assert.equal(editor?.redoStack?.length, 0)
+    assert.equal(scheduler.activeTasks().length, 1)
+
+    scheduler.runNext()
+    await Promise.resolve()
+    assert.deepEqual(persistedBodies, ["Original edited daily body"])
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.savedBody, "Original edited daily body")
+
+    controller.undoEditor()
+    editor = controller.getState().editor
+    assert.equal(editor?.body, "Original daily body")
+    assert.equal(editor?.savedBody, "Original edited daily body")
+    assert.equal(editor?.dirty, true)
+    assert.equal(editor?.autosaveStatus, "pending")
+    assert.equal(scheduler.activeTasks().length, 1)
+
+    controller.insertEditorText(" fresh")
+    editor = controller.getState().editor
+    assert.equal(editor?.body, "Original fresh daily body")
+    assert.equal(editor?.redoStack?.length, 0)
+  })
+
+  test("editor undo history is bounded and empty undo redo are safe", () => {
+    const scheduler = createFakeScheduler()
+    const { deps } = createDeps({ autosaveScheduler: scheduler })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.undoEditor()
+    controller.redoEditor()
+    assert.equal(controller.getState().editor?.body, "Original daily body")
+
+    for (let index = 0; index < 60; index += 1) {
+      controller.insertEditorText(String(index % 10))
+    }
+
+    const editor = controller.getState().editor
+    assert.ok((editor?.undoStack?.length ?? 0) <= 50)
+    assert.equal(editor?.redoStack?.length, 0)
+  })
 })

@@ -63,6 +63,19 @@ function selection(start: number, end: number): EditorSelection {
 }
 
 describe("TUI editor buffer adapter", () => {
+  test("editor edit helpers preserve serializable undo and redo stacks for controller-owned history", () => {
+    const editor: EditorBufferState = {
+      ...createEditor("abc"),
+      undoStack: [{ body: "ab", savedBody: "abc", dirty: true, cursorOffset: 2, selectionStart: 2, selectionEnd: 2 }],
+      redoStack: [{ body: "abcd", savedBody: "abc", dirty: true, cursorOffset: 4, selectionStart: 4, selectionEnd: 4 }],
+    }
+
+    const inserted = insertTextAtEditorCursor(editor, "d")
+
+    assert.deepEqual(inserted.undoStack, editor.undoStack)
+    assert.deepEqual(inserted.redoStack, editor.redoStack)
+  })
+
   test("controlled cursor editing inserts, deletes, and moves by Unicode code points", () => {
     let editor = createEditor("A🌊C\n日本語")
     editor = moveEditorCursor(editor, "left")

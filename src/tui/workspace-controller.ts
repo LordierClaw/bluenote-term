@@ -25,8 +25,12 @@ import {
   markAutosaveError,
   markAutosavePending,
   markAutosaveSaving,
+  EDITOR_HISTORY_LIMIT,
+  createEditorHistorySnapshot,
+  editorHistorySnapshotsEqual,
   markEditorBodyChanged,
   openEditorForNote,
+  restoreEditorHistorySnapshot,
   openManagerCreate as openManagerCreateState,
   openManagerDeleteConfirm as openManagerDeleteConfirmState,
   openSearchEverything,
@@ -126,6 +130,8 @@ export interface WorkspaceController {
   advanceEditorFind: (direction?: "next" | "previous") => void
   replaceCurrentEditorMatch: () => void
   replaceAllEditorMatches: () => void
+  undoEditor: () => void
+  redoEditor: () => void
   requestQuit: (options?: WorkspaceActionOptions) => WorkspaceActionResult
   dispose: () => void
   setAutosaveStateChangeHandler: (handler: (() => void) | null) => void
@@ -185,6 +191,8 @@ function cloneStateSnapshot(source: TuiState): TuiState {
       ? {
           ...source.editor,
           note: toTuiNote(source.editor.note),
+          undoStack: source.editor.undoStack?.map((snapshot) => ({ ...snapshot })) ?? [],
+          redoStack: source.editor.redoStack?.map((snapshot) => ({ ...snapshot })) ?? [],
         }
       : null,
     search: source.search
@@ -227,16 +235,24 @@ function applySavedEditor(state: TuiState, persistedNote: TuiNote, submittedBody
   }
 
   const currentEditor = state.editor
+  const savedBody = persistedNote.body
+  const rebaseHistory = (stack: typeof currentEditor.undoStack) => stack?.map((snapshot) => ({
+    ...snapshot,
+    savedBody,
+    dirty: snapshot.body !== savedBody,
+  })) ?? []
 
   return {
     ...state,
     editor: {
       ...currentEditor,
       note: toTuiNote(persistedNote),
-      body: persistedNote.body,
-      savedBody: persistedNote.body,
+      body: savedBody,
+      savedBody,
       dirty: false,
       autosaveStatus: "saved",
+      undoStack: rebaseHistory(currentEditor.undoStack),
+      redoStack: rebaseHistory(currentEditor.redoStack),
     },
   }
 }
@@ -553,10 +569,28 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     applyManagerBrowserModel()
   }
 
-  function applyEditorChange(nextEditor: EditorBufferState): void {
+  function applyEditorChange(nextEditor: EditorBufferState, options: { recordHistory?: boolean } = {}): void {
+    const previousEditor = state.editor
+    let editorToApply = nextEditor
+    if (options.recordHistory !== false && previousEditor) {
+      const previousSnapshot = createEditorHistorySnapshot(previousEditor)
+      const nextSnapshot = createEditorHistorySnapshot(nextEditor)
+      if (!editorHistorySnapshotsEqual(previousSnapshot, nextSnapshot)) {
+        const previousUndoStack = previousEditor.undoStack ?? []
+        const lastUndoSnapshot = previousUndoStack.at(-1)
+        const nextUndoStack = lastUndoSnapshot && editorHistorySnapshotsEqual(lastUndoSnapshot, previousSnapshot)
+          ? previousUndoStack
+          : [...previousUndoStack, previousSnapshot].slice(-EDITOR_HISTORY_LIMIT)
+        editorToApply = {
+          ...nextEditor,
+          undoStack: nextUndoStack,
+          redoStack: [],
+        }
+      }
+    }
     state = {
       ...state,
-      editor: nextEditor,
+      editor: editorToApply,
     }
     const editor = state.editor
     if (!editor) return
@@ -1044,6 +1078,36 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       })
     },
 
+    undoEditor: () => {
+      const editor = state.editor
+      const undoStack = editor?.undoStack ?? []
+      if (!editor || undoStack.length === 0) {
+        return
+      }
+      const snapshot = undoStack.at(-1)!
+      const redoSnapshot = createEditorHistorySnapshot(editor)
+      applyEditorChange({
+        ...restoreEditorHistorySnapshot(editor, snapshot),
+        undoStack: undoStack.slice(0, -1),
+        redoStack: [...(editor.redoStack ?? []), redoSnapshot].slice(-EDITOR_HISTORY_LIMIT),
+      }, { recordHistory: false })
+    },
+
+    redoEditor: () => {
+      const editor = state.editor
+      const redoStack = editor?.redoStack ?? []
+      if (!editor || redoStack.length === 0) {
+        return
+      }
+      const snapshot = redoStack.at(-1)!
+      const undoSnapshot = createEditorHistorySnapshot(editor)
+      applyEditorChange({
+        ...restoreEditorHistorySnapshot(editor, snapshot),
+        undoStack: [...(editor.undoStack ?? []), undoSnapshot].slice(-EDITOR_HISTORY_LIMIT),
+        redoStack: redoStack.slice(0, -1),
+      }, { recordHistory: false })
+    },
+
     showManager: () => {
       state = {
         ...state,
@@ -1077,13 +1141,13 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
     updateEditorBody: (body) => {
       const previousEditor = state.editor
-      state = markEditorBodyChanged(state, body)
-      if (!state.editor) {
+      const nextState = markEditorBodyChanged(state, body)
+      if (!nextState.editor) {
         clearAutosaveTimer()
         return
       }
       applyEditorChange({
-        ...state.editor,
+        ...nextState.editor,
         cursorOffset: previousEditor?.cursorOffset ?? Array.from(body).length,
         selectionStart: previousEditor?.cursorOffset ?? Array.from(body).length,
         selectionEnd: previousEditor?.cursorOffset ?? Array.from(body).length,

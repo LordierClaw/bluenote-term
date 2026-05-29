@@ -334,6 +334,37 @@ describe("TUI workspace workflows", () => {
     assert.equal(await readFile(path.join(rootPath, note.relativePath), "utf8"), "Alpha Event Gamma")
   })
 
+  test("editor undo redo shortcuts restore body and shortcut labels are honest", () => {
+    const note = createNote({
+      override: rootPath,
+      title: "Undo Shortcut Flow",
+      body: "start",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerNoteByKey(controller, note.key)
+    const shortcutLabels = buildEditorViewModel(controller.getState()).bottombar.row2.shortcuts
+    assert.ok(shortcutLabels.includes("[Ctrl+Z] Undo"))
+    assert.ok(shortcutLabels.includes("[Ctrl+Y] Redo"))
+
+    controller.insertEditorText(" one")
+    assert.equal(controller.getState().editor?.body, "start one")
+
+    assert.deepEqual(routeWorkspaceKey("\u001a", controller, () => {}), { handled: true })
+    assert.equal(controller.getState().editor?.body, "start")
+    assert.equal(controller.getState().editor?.dirty, false)
+
+    assert.deepEqual(routeWorkspaceKey("\u0019", controller, () => {}), { handled: true })
+    assert.equal(controller.getState().editor?.body, "start one")
+    assert.equal(controller.getState().editor?.dirty, true)
+
+    assert.deepEqual(routeWorkspaceKey("\u001a", controller, () => {}), { handled: true })
+    assert.deepEqual(routeWorkspaceKey("\u001a", controller, () => {}), { handled: true })
+    assert.equal(controller.getState().editor?.body, "start")
+  })
+
   test("editor replace shortcut highlights the active match and replacement flow autosaves to disk", async () => {
     const note = createNote({
       override: rootPath,

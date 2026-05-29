@@ -71,6 +71,23 @@ export interface EditorBufferState {
   findMatchCount?: number
   activeFindIndex?: number | null
   autosaveStatus?: AutosaveStatus
+  undoStack?: EditorHistorySnapshot[]
+  redoStack?: EditorHistorySnapshot[]
+}
+
+export interface EditorHistorySnapshot {
+  body: string
+  savedBody: string
+  dirty: boolean
+  cursorOffset?: number
+  selectionStart?: number
+  selectionEnd?: number
+  preferredColumn?: number | null
+  wrapMode?: "word" | "none"
+  findQuery?: string
+  replacementText?: string
+  findMatchCount?: number
+  activeFindIndex?: number | null
 }
 
 export interface SearchEverythingState {
@@ -155,6 +172,14 @@ function cloneSearchEverythingState(search: SearchEverythingState): SearchEveryt
     previewVisible: search.previewVisible ?? true,
     status: search.status ?? null,
   }
+}
+
+function cloneEditorHistorySnapshot(snapshot: EditorHistorySnapshot): EditorHistorySnapshot {
+  return { ...snapshot }
+}
+
+function cloneEditorHistory(stack: EditorHistorySnapshot[] | undefined): EditorHistorySnapshot[] {
+  return stack?.map(cloneEditorHistorySnapshot) ?? []
 }
 
 const defaultManagerState = (): ManagerState => ({
@@ -249,6 +274,8 @@ export function openEditorForNote(state: TuiState, note: TuiNote): TuiState {
       findMatchCount: 0,
       activeFindIndex: null,
       autosaveStatus: "idle",
+      undoStack: [],
+      redoStack: [],
     },
     search: null,
   }
@@ -489,6 +516,58 @@ export function closeTransientMode(state: TuiState): TuiState {
   }
 }
 
+export const EDITOR_HISTORY_LIMIT = 50
+
+export function createEditorHistorySnapshot(editor: EditorBufferState): EditorHistorySnapshot {
+  return {
+    body: editor.body,
+    savedBody: editor.savedBody,
+    dirty: editor.dirty,
+    cursorOffset: editor.cursorOffset,
+    selectionStart: editor.selectionStart,
+    selectionEnd: editor.selectionEnd,
+    preferredColumn: editor.preferredColumn ?? null,
+    wrapMode: editor.wrapMode ?? "word",
+    findQuery: editor.findQuery ?? "",
+    replacementText: editor.replacementText ?? "",
+    findMatchCount: editor.findMatchCount ?? 0,
+    activeFindIndex: editor.activeFindIndex ?? null,
+  }
+}
+
+export function editorHistorySnapshotsEqual(left: EditorHistorySnapshot, right: EditorHistorySnapshot): boolean {
+  return left.body === right.body
+    && left.savedBody === right.savedBody
+    && left.dirty === right.dirty
+    && left.cursorOffset === right.cursorOffset
+    && left.selectionStart === right.selectionStart
+    && left.selectionEnd === right.selectionEnd
+    && (left.preferredColumn ?? null) === (right.preferredColumn ?? null)
+    && (left.wrapMode ?? "word") === (right.wrapMode ?? "word")
+    && (left.findQuery ?? "") === (right.findQuery ?? "")
+    && (left.replacementText ?? "") === (right.replacementText ?? "")
+    && (left.findMatchCount ?? 0) === (right.findMatchCount ?? 0)
+    && (left.activeFindIndex ?? null) === (right.activeFindIndex ?? null)
+}
+
+export function restoreEditorHistorySnapshot(editor: EditorBufferState, snapshot: EditorHistorySnapshot): EditorBufferState {
+  return {
+    ...editor,
+    body: snapshot.body,
+    savedBody: snapshot.savedBody,
+    dirty: snapshot.body !== snapshot.savedBody,
+    cursorOffset: snapshot.cursorOffset,
+    selectionStart: snapshot.selectionStart,
+    selectionEnd: snapshot.selectionEnd,
+    preferredColumn: snapshot.preferredColumn ?? null,
+    wrapMode: snapshot.wrapMode ?? "word",
+    findQuery: snapshot.findQuery ?? "",
+    replacementText: snapshot.replacementText ?? "",
+    findMatchCount: snapshot.findMatchCount ?? 0,
+    activeFindIndex: snapshot.activeFindIndex ?? null,
+  }
+}
+
 export function markEditorBodyChanged(state: TuiState, body: string): TuiState {
   if (!state.editor) {
     return state
@@ -512,17 +591,26 @@ export function markEditorSaved(state: TuiState): TuiState {
     return state
   }
 
+  const savedBody = state.editor.body
+  const rebaseHistory = (stack: EditorHistorySnapshot[] | undefined): EditorHistorySnapshot[] => cloneEditorHistory(stack).map((snapshot) => ({
+    ...snapshot,
+    savedBody,
+    dirty: snapshot.body !== savedBody,
+  }))
+
   return {
     ...state,
     editor: {
       ...state.editor,
       note: {
         ...state.editor.note,
-        body: state.editor.body,
+        body: savedBody,
       },
-      savedBody: state.editor.body,
+      savedBody,
       dirty: false,
       autosaveStatus: "saved",
+      undoStack: rebaseHistory(state.editor.undoStack),
+      redoStack: rebaseHistory(state.editor.redoStack),
     },
   }
 }

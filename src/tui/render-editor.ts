@@ -271,12 +271,14 @@ function editorShortcuts(): EditorShortcutViewModel[] {
     { key: "Ctrl+S", action: "Save", order: 1 },
     { key: "Ctrl+F", action: "Find", order: 2 },
     { key: "Ctrl+H", action: "Replace", order: 3 },
-    { key: "Alt+Z", action: "Wrap", order: 4 },
-    { key: "Ctrl+Shift+C", action: "Copy", order: 5 },
-    { key: "Ctrl+Shift+X", action: "Cut", order: 6 },
-    { key: "Ctrl+Shift+V", action: "Paste", order: 7 },
-    { key: "Ctrl+P", action: "Search", order: 8 },
-    { key: "Esc", action: "Manager", order: 9 },
+    { key: "Ctrl+Z", action: "Undo", order: 4 },
+    { key: "Ctrl+Y", action: "Redo", order: 5 },
+    { key: "Alt+Z", action: "Wrap", order: 6 },
+    { key: "Ctrl+Shift+C", action: "Copy", order: 7 },
+    { key: "Ctrl+Shift+X", action: "Cut", order: 8 },
+    { key: "Ctrl+Shift+V", action: "Paste", order: 9 },
+    { key: "Ctrl+P", action: "Search", order: 10 },
+    { key: "Esc", action: "Manager", order: 11 },
   ]
 }
 
@@ -794,6 +796,14 @@ export function routeEditorKey(sequence: string, controller: WorkspaceController
   switch (sequence) {
     case "\u0013":
       void controller.saveEditor().then(() => onInvalidate?.()).catch(() => onInvalidate?.())
+      return true
+    case "\u001a":
+      if (state.mode !== "editor.body") return false
+      controller.undoEditor()
+      return true
+    case "\u0019":
+      if (state.mode !== "editor.body") return false
+      controller.redoEditor()
       return true
     case "\u0006":
     case "\u001b[27;5;102~":
