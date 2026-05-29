@@ -1263,6 +1263,36 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(calls, ["list", "show:daily-plan"])
   })
 
+  test("editor replace mode replaces current match and all matches while preserving autosave semantics", () => {
+    const scheduler = createFakeScheduler()
+    const { deps } = createDeps({ autosaveScheduler: scheduler })
+    const controller = createWorkspaceController(deps)
+    openInboxDaily(controller)
+
+    controller.updateEditorBody("alpha beta alpha")
+    controller.openEditorReplace("alpha")
+    controller.updateEditorReplacement("omega")
+    assert.equal(controller.getState().mode, "editor.replace")
+    assert.equal(controller.getState().editor?.findMatchCount, 2)
+    assert.equal(controller.getState().editor?.activeFindIndex, 0)
+
+    controller.replaceCurrentEditorMatch()
+    assert.equal(controller.getState().editor?.body, "omega beta alpha")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+    assert.equal(controller.getState().editor?.findQuery, "alpha")
+    assert.equal(controller.getState().editor?.replacementText, "omega")
+    assert.equal(controller.getState().editor?.activeFindIndex, 0)
+    assert.equal(scheduler.tasks.length > 0, true)
+
+    controller.updateEditorReplacement("done")
+    controller.replaceAllEditorMatches()
+    assert.equal(controller.getState().editor?.body, "omega beta done")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.findMatchCount, 0)
+    assert.equal(controller.getState().editor?.activeFindIndex, null)
+  })
+
   test("goBack closes transient modes and navigates manager folders to their parent", () => {
     const { deps } = createDeps()
     const controller = createWorkspaceController(deps)
@@ -1279,9 +1309,11 @@ describe("TUI workspace controller", () => {
     controller.goBack()
     assert.equal(controller.getState().screen, "editor")
     assert.equal(controller.getState().mode, "editor.body")
+    controller.openEditorReplace("daily")
+    assert.equal(controller.getState().mode, "editor.replace")
     controller.goBack()
-    assert.equal(controller.getState().screen, "manager")
-    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().mode, "editor.body")
     assert.equal(controller.getState().editor?.note.key, "daily-plan")
 
     controller.showManager()

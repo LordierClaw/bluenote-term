@@ -1,5 +1,5 @@
 import type { ClipboardModel, EditorCursorDirection, EditorSelection, SaveEditorBufferDependencies } from "./adapters/editor-buffer-adapter"
-import { advanceEditorFindState, backspaceAtEditorCursor, copySelection, cutSelection, deleteAtEditorCursor, findInEditorBody, insertTextAtEditorCursor, moveEditorCursor, pasteText } from "./adapters/editor-buffer-adapter"
+import { advanceEditorFindState, backspaceAtEditorCursor, copySelection, cutSelection, deleteAtEditorCursor, findInEditorBody, insertTextAtEditorCursor, moveEditorCursor, pasteText, replaceAllMatches, replaceCurrentMatch } from "./adapters/editor-buffer-adapter"
 import {
   buildManagerBrowserModel,
   focusedManagerBrowserItem,
@@ -120,8 +120,12 @@ export interface WorkspaceController {
   setSearchPreviewVisible: (visible: boolean) => void
   toggleSearch: (query?: string) => void
   openEditorFind: (query?: string) => void
+  openEditorReplace: (query?: string) => void
   updateEditorFindQuery: (query: string) => void
+  updateEditorReplacement: (replacement: string) => void
   advanceEditorFind: (direction?: "next" | "previous") => void
+  replaceCurrentEditorMatch: () => void
+  replaceAllEditorMatches: () => void
   requestQuit: (options?: WorkspaceActionOptions) => WorkspaceActionResult
   dispose: () => void
   setAutosaveStateChangeHandler: (handler: (() => void) | null) => void
@@ -927,6 +931,21 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         query: findState.query,
         matchCount: findState.matches.length,
         activeIndex: findState.currentIndex >= 0 ? findState.currentIndex : null,
+        mode: "editor.find",
+      })
+    },
+
+    openEditorReplace: (query = "") => {
+      if (!state.editor) {
+        return
+      }
+      const findState = findInEditorBody(state.editor, query || state.editor.findQuery || "")
+      state = openEditorFindState(state, {
+        query: findState.query,
+        replacementText: state.editor.replacementText ?? "",
+        matchCount: findState.matches.length,
+        activeIndex: findState.currentIndex >= 0 ? findState.currentIndex : null,
+        mode: "editor.replace",
       })
     },
 
@@ -937,8 +956,23 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       const findState = findInEditorBody(state.editor, query)
       state = openEditorFindState(state, {
         query: findState.query,
+        replacementText: state.editor.replacementText ?? "",
         matchCount: findState.matches.length,
         activeIndex: findState.currentIndex >= 0 ? findState.currentIndex : null,
+        mode: state.mode === "editor.replace" ? "editor.replace" : "editor.find",
+      })
+    },
+
+    updateEditorReplacement: (replacementText) => {
+      if (!state.editor) {
+        return
+      }
+      state = openEditorFindState(state, {
+        query: state.editor.findQuery ?? "",
+        replacementText,
+        matchCount: state.editor.findMatchCount ?? 0,
+        activeIndex: state.editor.activeFindIndex ?? null,
+        mode: "editor.replace",
       })
     },
 
@@ -958,8 +992,55 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       })
       state = openEditorFindState(state, {
         query: advanced.query,
+        replacementText: state.editor.replacementText ?? "",
         matchCount: advanced.matches.length,
         activeIndex: advanced.currentIndex >= 0 ? advanced.currentIndex : null,
+        mode: state.mode === "editor.replace" ? "editor.replace" : "editor.find",
+      })
+    },
+
+    replaceCurrentEditorMatch: () => {
+      if (!state.editor) return
+      const findState = findInEditorBody(state.editor, state.editor.findQuery ?? "")
+      const activeIndex = state.editor.activeFindIndex ?? findState.currentIndex
+      const currentFindState = {
+        ...findState,
+        currentIndex: activeIndex,
+        currentMatch: activeIndex >= 0 ? findState.matches[activeIndex] ?? null : null,
+      }
+      const result = replaceCurrentMatch(state.editor, currentFindState, state.editor.replacementText ?? "")
+      applyEditorChange({
+        ...result.editor,
+        findQuery: result.findState.query,
+        replacementText: state.editor.replacementText ?? "",
+        findMatchCount: result.findState.matches.length,
+        activeFindIndex: result.findState.currentIndex >= 0 ? result.findState.currentIndex : null,
+      })
+      state = openEditorFindState(state, {
+        query: result.findState.query,
+        replacementText: state.editor?.replacementText ?? "",
+        matchCount: result.findState.matches.length,
+        activeIndex: result.findState.currentIndex >= 0 ? result.findState.currentIndex : null,
+        mode: "editor.replace",
+      })
+    },
+
+    replaceAllEditorMatches: () => {
+      if (!state.editor) return
+      const result = replaceAllMatches(state.editor, state.editor.findQuery ?? "", state.editor.replacementText ?? "")
+      applyEditorChange({
+        ...result.editor,
+        findQuery: result.findState.query,
+        replacementText: state.editor.replacementText ?? "",
+        findMatchCount: result.findState.matches.length,
+        activeFindIndex: result.findState.currentIndex >= 0 ? result.findState.currentIndex : null,
+      })
+      state = openEditorFindState(state, {
+        query: result.findState.query,
+        replacementText: state.editor?.replacementText ?? "",
+        matchCount: result.findState.matches.length,
+        activeIndex: result.findState.currentIndex >= 0 ? result.findState.currentIndex : null,
+        mode: "editor.replace",
       })
     },
 

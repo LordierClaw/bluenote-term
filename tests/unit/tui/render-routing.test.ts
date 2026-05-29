@@ -147,8 +147,12 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
     setSearchPreviewVisible: (visible) => calls.push(`setSearchPreviewVisible:${visible}`),
     toggleSearch: (query) => calls.push(`toggleSearch:${query ?? ""}`),
     openEditorFind: (query) => calls.push(`openEditorFind:${query ?? ""}`),
+    openEditorReplace: (query) => calls.push(`openEditorReplace:${query ?? ""}`),
     updateEditorFindQuery: (query) => calls.push(`updateEditorFindQuery:${query}`),
+    updateEditorReplacement: (replacement) => calls.push(`updateEditorReplacement:${replacement}`),
     advanceEditorFind: (direction = "next") => calls.push(`advanceEditorFind:${direction}`),
+    replaceCurrentEditorMatch: () => calls.push("replaceCurrentEditorMatch"),
+    replaceAllEditorMatches: () => calls.push("replaceAllEditorMatches"),
     requestQuit: () => {
       calls.push("requestQuit")
       return { blocked: false }
@@ -216,6 +220,14 @@ describe("TUI render keyboard routing", () => {
 
     assert.equal(routeEditorKey("\u0006", controller), true)
     assert.deepEqual(calls, ["openEditorFind:"])
+  })
+
+  test("editor Ctrl+H enters editor replace mode from the body", () => {
+    const { controller, calls } = createController("editor")
+    controller.getState().mode = "editor.body"
+
+    assert.equal(routeEditorKey("\u001b[104;5u", controller), true)
+    assert.deepEqual(calls, ["openEditorReplace:"])
   })
 
   test("editor Alt+Z toggles wrap mode from the body", () => {
@@ -319,6 +331,18 @@ describe("TUI render keyboard routing", () => {
     assert.equal(routeEditorKey("\u001b", controller), true)
 
     assert.deepEqual(calls, ["advanceEditorFind:next", "goBack"])
+  })
+
+  test("editor replace mode routes Enter to replace current, Alt+Enter to replace all, and Escape closes", () => {
+    const { controller, calls } = createController("editor")
+    controller.getState().mode = "editor.replace"
+
+    assert.equal(routeEditorKey("a", controller), false)
+    assert.equal(routeEditorKey("\r", controller), true)
+    assert.equal(routeEditorKey("\u001b\r", controller), true)
+    assert.equal(routeEditorKey("\u001b", controller), true)
+
+    assert.deepEqual(calls, ["replaceCurrentEditorMatch", "replaceAllEditorMatches", "goBack"])
   })
 
   test("editor find mode treats Ctrl+[ as Escape", () => {
@@ -694,7 +718,7 @@ describe("TUI render keyboard routing", () => {
       assert.equal(findById(screen, "bluenote-editor-bottombar-save-status"), undefined)
       const shortcutChunks = shortcutRow?.content?.chunks ?? []
       const shortcutText = shortcutChunks.map((chunk: { text?: string }) => chunk.text ?? "").join("") || shortcutRow?.content
-      assert.equal(shortcutText, "[Ctrl+S] Save  [Ctrl+F] Find  [Alt+Z] Wrap  [Ctrl+Shift+C] Copy  [Ctrl+Shift+X] Cut  [Ctrl+Shift+V] Paste  +2")
+      assert.equal(shortcutText, "[Ctrl+S] Save  [Ctrl+F] Find  [Ctrl+H] Replace  [Alt+Z] Wrap  [Ctrl+Shift+C] Copy  [Ctrl+Shift+X] Cut  +3")
       assert.deepEqual(shortcutChunks.filter((chunk: { text?: string }) => /^\[[^\]]+\]$/u.test(chunk.text ?? "")).at(0)?.fg?.toInts?.(), [56, 189, 248, 255])
     } finally {
       renderer.destroy()

@@ -10,7 +10,7 @@ import {
   type TextChunk,
 } from "@opentui/core"
 
-import { editorCursorOffset, editorCursorPosition } from "./adapters/editor-buffer-adapter"
+import { editorCursorOffset, editorCursorPosition, findInEditorBody } from "./adapters/editor-buffer-adapter"
 import { displayCellWidth } from "./display-width"
 import { renderShortcutHints, shortcutHintLabel, type ShortcutHint, type ShortcutRenderableHint } from "./render-chrome"
 
@@ -62,6 +62,7 @@ export interface EditorBodyViewModel {
   textIntent: TuiColorIntent
   placeholderIntent: TuiColorIntent
   cursorIntent: TuiColorIntent
+  activeFindRange?: { start: number; end: number; intent: TuiColorIntent }
 }
 
 export interface EditorOverflowViewModel {
@@ -85,6 +86,8 @@ export interface EditorFindViewModel {
   description: string
   inputLabel: string
   query: string
+  replacementLabel?: string
+  replacement?: string
   matchCount: number
   activeIndex: number | null
   countLabel: string
@@ -151,32 +154,43 @@ function countLines(value: string): number {
   return value.split("\n").length
 }
 
-function renderControlledBodyValue(value: string, cursorOffset = Array.from(value).length, focused = true): string | StyledText {
+function renderControlledBodyValue(value: string, cursorOffset = Array.from(value).length, focused = true, activeRange?: { start: number; end: number; intent: TuiColorIntent }): string | StyledText {
   const displayValue = value.length > 0 ? value : "Write your note…"
-  if (!focused) {
+  if (!focused && (!activeRange || activeRange.start === activeRange.end)) {
     return displayValue
   }
 
   const bodyChars = Array.from(value)
   const displayChars = Array.from(displayValue)
+  const chunks: TextChunk[] = []
+  const pushPlain = (text: string): void => {
+    if (text.length > 0) chunks.push(fg(value.length > 0 ? "#ffffff" : tuiTheme.mutedText)(text) as TextChunk)
+  }
+  const normalizedActiveRange = activeRange && value.length > 0
+    ? {
+        start: Math.max(0, Math.min(Math.trunc(activeRange.start), bodyChars.length)),
+        end: Math.max(0, Math.min(Math.trunc(activeRange.end), bodyChars.length)),
+      }
+    : null
+
+  if (!focused && normalizedActiveRange && normalizedActiveRange.end > normalizedActiveRange.start) {
+    pushPlain(displayChars.slice(0, normalizedActiveRange.start).join(""))
+    chunks.push(bg(tuiTheme[activeRange!.intent])(fg(tuiTheme.background)(displayChars.slice(normalizedActiveRange.start, normalizedActiveRange.end).join(""))) as TextChunk)
+    pushPlain(displayChars.slice(normalizedActiveRange.end).join(""))
+    return new StyledText(chunks)
+  }
+
   const normalizedCursorOffset = Math.max(0, Math.min(Math.trunc(Number.isFinite(cursorOffset) ? cursorOffset : bodyChars.length), bodyChars.length))
   const cursorDisplayOffset = value.length > 0 ? normalizedCursorOffset : 0
-  const before = displayChars.slice(0, cursorDisplayOffset).join("")
+  const plainBefore = displayChars.slice(0, cursorDisplayOffset).join("")
   const cursorCharacter = value.length > 0 && cursorDisplayOffset < displayChars.length ? displayChars[cursorDisplayOffset]! : " "
   const cursorIsOnNewline = cursorCharacter === "\n"
   const cursorText = cursorIsOnNewline ? " " : cursorCharacter
   const afterStart = value.length > 0 && cursorDisplayOffset < displayChars.length && !cursorIsOnNewline ? cursorDisplayOffset + 1 : cursorDisplayOffset
-  const after = displayChars.slice(afterStart).join("")
   const cursorChunk = bg(tuiTheme.primaryAccent)(fg(tuiTheme.background)(cursorText)) as TextChunk
-  const chunks: TextChunk[] = []
-
-  if (before.length > 0) {
-    chunks.push(fg(value.length > 0 ? "#ffffff" : tuiTheme.mutedText)(before) as TextChunk)
-  }
+  pushPlain(plainBefore)
   chunks.push(cursorChunk)
-  if (after.length > 0) {
-    chunks.push(fg(value.length > 0 ? "#ffffff" : tuiTheme.mutedText)(after) as TextChunk)
-  }
+  pushPlain(displayChars.slice(afterStart).join(""))
 
   return new StyledText(chunks)
 }
@@ -256,12 +270,13 @@ function editorShortcuts(): EditorShortcutViewModel[] {
   return [
     { key: "Ctrl+S", action: "Save", order: 1 },
     { key: "Ctrl+F", action: "Find", order: 2 },
-    { key: "Alt+Z", action: "Wrap", order: 3 },
-    { key: "Ctrl+Shift+C", action: "Copy", order: 4 },
-    { key: "Ctrl+Shift+X", action: "Cut", order: 5 },
-    { key: "Ctrl+Shift+V", action: "Paste", order: 6 },
-    { key: "Ctrl+P", action: "Search", order: 7 },
-    { key: "Esc", action: "Manager", order: 8 },
+    { key: "Ctrl+H", action: "Replace", order: 3 },
+    { key: "Alt+Z", action: "Wrap", order: 4 },
+    { key: "Ctrl+Shift+C", action: "Copy", order: 5 },
+    { key: "Ctrl+Shift+X", action: "Cut", order: 6 },
+    { key: "Ctrl+Shift+V", action: "Paste", order: 7 },
+    { key: "Ctrl+P", action: "Search", order: 8 },
+    { key: "Esc", action: "Manager", order: 9 },
   ]
 }
 
@@ -369,10 +384,14 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
   const errorLabel = editorStatusErrorLabel(editor)
   const relativePath = normalizeRelativePath(note?.relativePath ?? "")
   const updatedLabel = updatedLabelFor(note as NoteWithEditorMetadata | null | undefined)
-  const findMode = state.mode === "editor.find"
+  const findMode = state.mode === "editor.find" || state.mode === "editor.replace"
+  const replaceMode = state.mode === "editor.replace"
   const findMatchCount = editor?.findMatchCount ?? 0
   const activeFindIndex = editor?.activeFindIndex ?? null
   const findCountLabel = findMatchCount > 0 && activeFindIndex !== null ? `${activeFindIndex + 1}/${findMatchCount} matches` : `0/${findMatchCount} matches`
+  const activeFindRange = editor && (editor.findQuery ?? "").length > 0 && activeFindIndex !== null
+    ? findInEditorBody(editor, editor.findQuery ?? "").matches[activeFindIndex]
+    : undefined
 
   const cursor = editor ? editorCursorPosition(editor, editorCursorOffset(editor)) : { line: 1, column: 1 }
   const baseWrapLabel = (editor?.wrapMode ?? "word") === "word" ? "Wrap word" : "Wrap off"
@@ -410,24 +429,32 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
     find: findMode
       ? {
           visible: true,
-          sheetTitle: "Find in note",
+          sheetTitle: replaceMode ? "Find and replace" : "Find in note",
           description: `Search within ${note?.title ?? "current note"}.`,
-          inputLabel: "Query:",
+          inputLabel: replaceMode ? "Find:" : "Query:",
           query: editor?.findQuery ?? "",
+          ...(replaceMode ? { replacementLabel: "Replace:", replacement: editor?.replacementText ?? "" } : {}),
           matchCount: findMatchCount,
           activeIndex: activeFindIndex,
           countLabel: findCountLabel,
-          placeholder: "Find in note…",
+          placeholder: replaceMode ? "Find text…" : "Find in note…",
           focused: true,
           styleIntent: "borderFocus",
           surfaceIntent: "surfacePanelRaised",
           statusIntent: "info",
-          shortcutHints: [
-            { text: findCountLabel },
-            { key: "Enter", action: "Next" },
-            { key: "Shift+Enter", action: "Previous" },
-            { key: "Esc", action: "Close" },
-          ],
+          shortcutHints: replaceMode
+            ? [
+                { text: findCountLabel },
+                { key: "Enter", action: "Replace" },
+                { key: "Alt+Enter", action: "All" },
+                { key: "Esc", action: "Close" },
+              ]
+            : [
+                { text: findCountLabel },
+                { key: "Enter", action: "Next" },
+                { key: "Shift+Enter", action: "Previous" },
+                { key: "Esc", action: "Close" },
+              ],
         }
       : null,
     body: {
@@ -444,6 +471,7 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
       textIntent: "textPrimary",
       placeholderIntent: "mutedText",
       cursorIntent: "borderFocus",
+      ...(activeFindRange ? { activeFindRange: { start: activeFindRange.start, end: activeFindRange.end, intent: "activeItem" as const } } : {}),
     },
     bottombar: {
       row2: {
@@ -473,7 +501,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   const screenWidth = rendererSize.width ?? rendererSize.terminalWidth ?? 80
   const screenHeight = rendererSize.height ?? rendererSize.terminalHeight ?? 24
   const state = options.controller.getState()
-  const findBarRows = state.mode === "editor.find" ? 5 : 0
+  const findBarRows = state.mode === "editor.replace" ? 6 : state.mode === "editor.find" ? 5 : 0
   const topbarRows = 1
   const shortcutRows = 1
   const bodyTopMarginRows = 1
@@ -609,7 +637,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   })
   const bodyDisplay = new TextRenderable(options.renderer, {
     id: "bluenote-editor-body",
-    content: renderControlledBodyValue(vm.body.value, editorState ? editorCursorOffset(editorState) : 0, vm.body.focused),
+    content: renderControlledBodyValue(vm.body.value, editorState ? editorCursorOffset(editorState) : 0, vm.body.focused, vm.body.activeFindRange),
     height: "100%",
     flexGrow: 1,
     flexShrink: 1,
@@ -638,7 +666,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
       id: "bluenote-editor-find-bar",
       flexDirection: "column",
       width: "100%",
-      height: 5,
+      height: findBarRows,
       border: true,
       borderColor: tuiTheme[vm.find.styleIntent],
       title: vm.find.sheetTitle,
@@ -680,6 +708,33 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
       options.onInvalidate?.()
     })
     findBar.add(findInput)
+    if (vm.find.replacementLabel !== undefined) {
+      findBar.add(new TextRenderable(options.renderer, {
+        id: "bluenote-editor-replace-input-label",
+        content: vm.find.replacementLabel,
+        height: 1,
+        fg: tuiTheme.textPrimary,
+      }))
+      const replaceInput = new InputRenderable(options.renderer, {
+        id: "bluenote-editor-replace-text",
+        value: vm.find.replacement ?? "",
+        placeholder: "Replacement text…",
+        width: "70%",
+      })
+      replaceInput.on(InputRenderableEvents.INPUT, () => {
+        options.controller.updateEditorReplacement(replaceInput.value ?? "")
+        options.onInvalidate?.()
+      })
+      replaceInput.on(InputRenderableEvents.CHANGE, () => {
+        options.controller.updateEditorReplacement(replaceInput.value ?? "")
+        options.onInvalidate?.()
+      })
+      replaceInput.on(InputRenderableEvents.ENTER, () => {
+        options.controller.replaceCurrentEditorMatch()
+        options.onInvalidate?.()
+      })
+      findBar.add(replaceInput)
+    }
     findBar.add(matchCount)
     root.add(findBar)
   }
@@ -707,10 +762,21 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
 
 export function routeEditorKey(sequence: string, controller: WorkspaceController, onExit?: () => void, onInvalidate?: () => void): boolean {
   const state = controller.getState()
-  if (state.mode === "editor.find") {
+  if (state.mode === "editor.find" || state.mode === "editor.replace") {
     if (sequence === "\u001b" || sequence === "\u001b[") {
       controller.goBack()
       return true
+    }
+    if (state.mode === "editor.replace") {
+      if (sequence === "\u001b\r" || sequence === "\u001b\n" || sequence === "\u001b[13;3u") {
+        controller.replaceAllEditorMatches()
+        return true
+      }
+      if (sequence === "\r" || sequence === "\n") {
+        controller.replaceCurrentEditorMatch()
+        return true
+      }
+      return false
     }
     if (sequence === "\u001b[13;2u" || sequence === "\u001b\r") {
       controller.advanceEditorFind("previous")
@@ -729,6 +795,11 @@ export function routeEditorKey(sequence: string, controller: WorkspaceController
     case "\u0006":
     case "\u001b[27;5;102~":
       controller.openEditorFind()
+      return true
+    case "\u001b[104;5u":
+    case "\u001b[72;5u":
+      if (state.mode !== "editor.body") return false
+      controller.openEditorReplace()
       return true
     case "\u001b[99;6u":
     case "\u001b[67;6u":

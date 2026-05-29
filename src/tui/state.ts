@@ -67,6 +67,7 @@ export interface EditorBufferState {
   preferredColumn?: number | null
   wrapMode?: "word" | "none"
   findQuery?: string
+  replacementText?: string
   findMatchCount?: number
   activeFindIndex?: number | null
   autosaveStatus?: AutosaveStatus
@@ -103,6 +104,7 @@ export interface OpenEditorFindOptions {
   matchCount?: number
   activeIndex?: number | null
   mode?: "editor.find" | "editor.replace"
+  replacementText?: string
 }
 
 function cloneManagerItems(items: ManagerItem[]): ManagerItem[] {
@@ -243,6 +245,7 @@ export function openEditorForNote(state: TuiState, note: TuiNote): TuiState {
       preferredColumn: null,
       wrapMode: "word",
       findQuery: "",
+      replacementText: "",
       findMatchCount: 0,
       activeFindIndex: null,
       autosaveStatus: "idle",
@@ -265,6 +268,7 @@ export function openEditorFind(state: TuiState, options: OpenEditorFindOptions =
     editor: {
       ...state.editor,
       findQuery: options.query ?? state.editor.findQuery ?? "",
+      replacementText: options.replacementText ?? state.editor.replacementText ?? "",
       findMatchCount: options.matchCount ?? state.editor.findMatchCount ?? 0,
       activeFindIndex,
     },

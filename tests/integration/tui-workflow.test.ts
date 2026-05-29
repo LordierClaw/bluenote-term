@@ -11,6 +11,7 @@ import { rebuildIndexes } from "../../src/core/rebuild-indexes"
 import { showNote } from "../../src/core/show-note"
 import { buildSearchEverythingPreview, type SearchEverythingContentResult } from "../../src/tui/adapters/search-everything-adapter"
 import { createDefaultWorkspaceController, routeWorkspaceKey } from "../../src/tui/app"
+import { buildEditorViewModel } from "../../src/tui/render-editor"
 import { routeManagerKey } from "../../src/tui/render-manager"
 import { createWorkspaceController, type WorkspaceCommandContext } from "../../src/tui/workspace-controller"
 import { ATOMIC_NOTE_WRITER_TEMP_PREFIX } from "../../src/storage/atomic-note-writer"
@@ -331,6 +332,40 @@ describe("TUI workspace workflows", () => {
 
     await waitForAutosave()
     assert.equal(await readFile(path.join(rootPath, note.relativePath), "utf8"), "Alpha Event Gamma")
+  })
+
+  test("editor replace shortcut highlights the active match and replacement flow autosaves to disk", async () => {
+    const note = createNote({
+      override: rootPath,
+      title: "Replace Flow",
+      body: "alpha beta alpha",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerNoteByKey(controller, note.key)
+    assert.deepEqual(routeWorkspaceKey("\u001b[104;5u", controller, () => {}), { handled: true })
+    controller.updateEditorFindQuery("alpha")
+    controller.updateEditorReplacement("omega")
+
+    let state = controller.getState()
+    assert.equal(state.mode, "editor.replace")
+    assert.equal(state.editor?.findMatchCount, 2)
+    assert.deepEqual(buildEditorViewModel(state).body.activeFindRange, { start: 0, end: 5, intent: "activeItem" })
+
+    controller.replaceCurrentEditorMatch()
+    state = controller.getState()
+    assert.equal(state.editor?.body, "omega beta alpha")
+    assert.equal(state.editor?.dirty, true)
+    assert.equal(state.editor?.autosaveStatus, "pending")
+    assert.deepEqual(buildEditorViewModel(state).body.activeFindRange, { start: 11, end: 16, intent: "activeItem" })
+
+    controller.updateEditorReplacement("done")
+    controller.replaceAllEditorMatches()
+    assert.equal(controller.getState().editor?.body, "omega beta done")
+    await waitForAutosave()
+    assert.equal(await readFile(path.join(rootPath, note.relativePath), "utf8"), "omega beta done")
   })
 
   test("autosave after editor input persists and manager can switch notes without blocking", async () => {

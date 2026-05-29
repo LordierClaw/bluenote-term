@@ -700,6 +700,7 @@ describe("TUI render view models", () => {
       shortcuts: [
         "[Ctrl+S] Save",
         "[Ctrl+F] Find",
+        "[Ctrl+H] Replace",
         "[Alt+Z] Wrap",
         "[Ctrl+Shift+C] Copy",
         "[Ctrl+Shift+X] Cut",
@@ -710,6 +711,7 @@ describe("TUI render view models", () => {
       visibleShortcuts: [
         "[Ctrl+S] Save",
         "[Ctrl+F] Find",
+        "[Ctrl+H] Replace",
         "[Alt+Z] Wrap",
         "[Ctrl+Shift+C] Copy",
         "[Ctrl+Shift+X] Cut",
@@ -720,6 +722,7 @@ describe("TUI render view models", () => {
       visibleShortcutHints: [
         { key: "Ctrl+S", action: "Save" },
         { key: "Ctrl+F", action: "Find" },
+        { key: "Ctrl+H", action: "Replace" },
         { key: "Alt+Z", action: "Wrap" },
         { key: "Ctrl+Shift+C", action: "Copy" },
         { key: "Ctrl+Shift+X", action: "Cut" },
@@ -791,8 +794,8 @@ describe("TUI render view models", () => {
     )
     assert.equal(vm.topbar.statusLabel, "Saved")
     assert.equal(vm.topbar.wrapLabel, "Wrap word")
-    assert.deepEqual(vm.bottombar.row2.visibleShortcuts, ["[Ctrl+S] Save", "[Ctrl+F] Find", "[Alt+Z] Wrap"])
-    assert.equal(vm.bottombar.row2.hiddenShortcutCount, 5)
+    assert.deepEqual(vm.bottombar.row2.visibleShortcuts, ["[Ctrl+S] Save", "[Ctrl+F] Find"])
+    assert.equal(vm.bottombar.row2.hiddenShortcutCount, 7)
   })
 
   test("editor find prompt is a quiet task sheet with query, match count, and find-specific actions", () => {
@@ -834,6 +837,37 @@ describe("TUI render view models", () => {
     assert.equal(vm.bottombar.row2.hiddenShortcutCount, 0)
   })
 
+  test("editor replace prompt shows find and replacement inputs, replace actions, and active match range", () => {
+    const vm = buildEditorViewModel({
+      ...baseState,
+      screen: "editor",
+      mode: "editor.replace",
+      editor: {
+        ...baseState.editor!,
+        body: "alpha beta alpha",
+        savedBody: "alpha beta alpha",
+        findQuery: "alpha",
+        replacementText: "omega",
+        findMatchCount: 2,
+        activeFindIndex: 1,
+      },
+    })
+
+    assert.equal(vm.find?.sheetTitle, "Find and replace")
+    assert.equal(vm.find?.inputLabel, "Find:")
+    assert.equal(vm.find?.query, "alpha")
+    assert.equal(vm.find?.replacementLabel, "Replace:")
+    assert.equal(vm.find?.replacement, "omega")
+    assert.deepEqual(vm.find?.shortcutHints, [
+      { text: "2/2 matches" },
+      { key: "Enter", action: "Replace" },
+      { key: "Alt+Enter", action: "All" },
+      { key: "Esc", action: "Close" },
+    ])
+    assert.deepEqual(vm.body.activeFindRange, { start: 11, end: 16, intent: "activeItem" })
+    assert.equal(vm.body.value, "alpha beta alpha")
+  })
+
   test("editor responsive view model hides low-priority shortcuts first and reports body overflow", () => {
     const longBody = Array.from({ length: 30 }, (_, index) => `line ${index + 1}`).join("\n")
     const narrowVm = buildEditorViewModel({
@@ -847,7 +881,7 @@ describe("TUI render view models", () => {
       { key: "Ctrl+S", action: "Save" },
       { key: "Ctrl+F", action: "Find" },
     ])
-    assert.equal(narrowVm.bottombar.row2.hiddenShortcutCount, 6)
+    assert.equal(narrowVm.bottombar.row2.hiddenShortcutCount, 7)
     assert.doesNotMatch(narrowVm.bottombar.row2.shortcuts.join(" "), /\[\?\] More/u)
     assert.deepEqual(narrowVm.body.overflow, { above: false, below: true, indicator: "↓" })
 
