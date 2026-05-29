@@ -22,6 +22,7 @@
     "check:env": "bun run ./scripts/check-env.ts",
     "smoke:opentui": "bun run ./scripts/smoke-opentui.ts",
     "smoke:opentui:interactive": "bun run ./scripts/smoke-opentui-interactive.ts",
+    "qa:visual:tui": "bun run ./scripts/visual-tui-qa.ts",
     "smoke:cli": "bun run ./scripts/smoke-cli.ts",
     "typecheck": "tsc --noEmit",
     "test": "bun test",

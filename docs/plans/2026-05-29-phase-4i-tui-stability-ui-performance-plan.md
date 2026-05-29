@@ -794,6 +794,86 @@ git add docs/plans tests scripts src/tui && git commit -m "test: verify tui stab
 
 ---
 
+### Task 11: Dedicated visual manual QA rerun with pixel artifacts
+
+**Reason added:** The first Task 9 live QA verified functional behavior with `computer-use-linux` input, disk/process checks, and tmux pane captures, but GNOME/XDG screenshot capture was denied by the desktop portal. Because color, contrast, styling, positioning, and readability require pixel-level evidence, final UI acceptance must include a second visual manual QA pass after a reusable harness is prepared.
+
+**Files:**
+- Add/maintain harness: `scripts/visual-tui-qa.ts`
+- Wire script: `package.json` (`qa:visual:tui`)
+- Update results: `docs/plans/2026-05-29-phase-4i-tui-stability-qa-results.md`
+
+**Step 1: Prepare screenshot permissions**
+
+Run the focused-terminal screenshot probe from `computer-use-linux` guidance before visual acceptance:
+
+```bash
+gnome-terminal --title='Computer Use Screenshot Probe' -- bash -lc '
+  computer-use-linux screenshot > /tmp/cul-screenshot.out 2> /tmp/cul-screenshot.err
+  code=$?
+  echo exit=$code | tee -a /tmp/cul-screenshot.out
+  printf "Done. Press Enter to close..."; read
+'
+```
+
+If GNOME shows a screenshot/screen-sharing permission dialog, the user must approve it. Do not claim visual QA if permission remains blocked.
+
+**Step 2: Run the dedicated harness**
+
+```bash
+bun run qa:visual:tui
+```
+
+The harness should:
+
+- create or accept a seeded QA root,
+- launch real GNOME Terminal + tmux TUI sessions,
+- test multiple terminal sizes/zooms (`80x24`, `100x30`, `120x40`, `100x30 --zoom=1.5`),
+- navigate to Manager, Editor, Search Everything, and long-line unwrap states,
+- capture pane text and focused-terminal screenshot PNGs,
+- write a report with screenshot paths and rating placeholders,
+- perform a post-run process check for stale `bn.ts tui` processes.
+
+Useful options:
+
+```bash
+bun run qa:visual:tui -- --out-dir=/tmp/bluenote-visual-qa
+bun run qa:visual:tui -- --root=/path/to/existing/bluenote-root
+bun run qa:visual:tui -- --no-screenshots  # functional/pane dry run only; not visual acceptance
+```
+
+**Step 3: Manual user-perspective review**
+
+Inspect every PNG produced by the harness and rate from the user's perspective:
+
+- background is terminal default/black, not broad dark blue,
+- Manager columns are readable and the title remains primary,
+- hover/selection/focus states are obvious,
+- Editor topbar/bottombar/body spacing look calm,
+- Search Everything results/preview are readable,
+- long-line unwrap indicator is visible and understandable,
+- all layouts remain usable across size/zoom matrix.
+
+Record ratings and findings in the QA results doc using the existing 1–5 scale. Any Blocker/High visual findings must produce a follow-up plan before more UI polishing.
+
+**Step 4: Verification and commit**
+
+```bash
+bun run typecheck
+bun run qa:visual:tui -- --no-screenshots
+git diff --check
+git status --short --branch
+```
+
+Commit harness/plan updates:
+
+```bash
+git add package.json scripts/visual-tui-qa.ts docs/plans/2026-05-29-phase-4i-tui-stability-ui-performance-plan.md docs/plans/2026-05-29-phase-4i-tui-stability-qa-results.md
+git commit -m "test: add tui visual qa harness"
+```
+
+---
+
 ## 5. Subagent-driven execution plan after approval
 
 Use `delegate_task` in place of `sessions_spawn` if `sessions_spawn` is unavailable. Each implementation task follows:
@@ -811,6 +891,7 @@ Recommended grouping:
 - Group C: Tasks 3–7 visual/layout corrections.
 - Group D: Task 8 long-line unwrap behavior.
 - Group E: Tasks 9–10 manual QA and performance review.
+- Group F: Task 11 visual-manual QA rerun using screenshot artifacts.
 
 Do not proceed to visual/layout polish if Task 1 or Task 2 still has Blocker/High stability findings.
 

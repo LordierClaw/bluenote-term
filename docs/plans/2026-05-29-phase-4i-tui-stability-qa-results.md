@@ -306,3 +306,35 @@ live matching process rows: 0
 ### Conclusion
 
 Phase 4I performance/memory/race/deadlock review is approved. The implemented fixes address the reported stale-process and post-save-lag risks for the current TUI scope; remaining observations are future scalability notes, not blockers.
+
+## Task 11 — Pending visual manual QA rerun with pixel artifacts
+
+Date added: 2026-05-29
+Status: planned / not yet accepted
+
+A final visual-manual verification pass was added to `docs/plans/2026-05-29-phase-4i-tui-stability-ui-performance-plan.md` because the first live QA pass could not capture GNOME screenshot PNGs. The first pass remains valid for functional behavior, process cleanup, disk verification, and pane-text evidence, but color/background/readability/positioning acceptance requires pixel artifacts.
+
+Prepared harness:
+
+```bash
+bun run qa:visual:tui
+```
+
+Expected output:
+
+- seeded QA root,
+- GNOME Terminal + tmux sessions across size/zoom matrix,
+- pane text captures,
+- focused-terminal MCP screenshot attempts,
+- report with screenshot paths and 1–5 visual rating placeholders,
+- post-run process check.
+
+Useful commands:
+
+```bash
+bun run qa:visual:tui -- --out-dir=/tmp/bluenote-visual-qa
+bun run qa:visual:tui -- --root=/path/to/existing/bluenote-root
+bun run qa:visual:tui -- --no-screenshots
+```
+
+Visual acceptance remains pending until screenshots are successfully captured and manually rated.
