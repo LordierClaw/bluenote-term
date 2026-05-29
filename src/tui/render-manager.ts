@@ -2,7 +2,7 @@ import { BoxRenderable, InputRenderable, InputRenderableEvents, TextRenderable, 
 
 import type { ManagerBrowserModel, ManagerBrowserRow, ManagerPreviewModel } from "./adapters/note-manager-adapter"
 import { padEndDisplayCells, truncateDisplayCells } from "./display-width"
-import { renderShortcutHints, shortcutHintLabels, topbarTextIntent, type ShortcutHint, type ShortcutRenderableHint } from "./render-chrome"
+import { TUI_SHORTCUTS, renderShortcutHints, shortcutHintLabels, topbarTextIntent, type ShortcutHint, type ShortcutRenderableHint } from "./render-chrome"
 import type { ManagerItem, TuiState } from "./state"
 import { tuiTheme, type TuiColorIntent } from "./theme"
 import type { WorkspaceController } from "./workspace-controller"
@@ -230,15 +230,17 @@ function managerShortcutHints(state: TuiState, previewHidden: boolean, width?: n
   }
 
   const primary: ShortcutHint[] = [
-    { key: "Enter", action: "Open", priority: "primary" },
-    { key: "/", action: "Filter", priority: "primary" },
-    { key: "n", action: "New", priority: "primary" },
+    { ...TUI_SHORTCUTS.managerOpen, priority: "primary" },
+    { ...TUI_SHORTCUTS.managerFilter, priority: "primary" },
+    { ...TUI_SHORTCUTS.managerNew, priority: "primary" },
+    { ...TUI_SHORTCUTS.globalSearch, priority: "primary" },
+    { ...TUI_SHORTCUTS.managerBack, priority: "primary" },
   ]
   if (typeof width === "number" && width < MANAGER_PREVIEW_NARROW_WIDTH) {
     return primary
   }
 
-  return [...primary, { key: "s", action: "Search", priority: "secondary" }]
+  return primary
 }
 
 function managerRowTextWidth(width: number | undefined): number | undefined {
@@ -386,7 +388,7 @@ function emptyStateFor(currentPath: string): ManagerEmptyStateViewModel {
   return {
     title: "No notes here yet",
     body: `Create a note in ${currentPath} or search your workspace.`,
-    actions: ["[n] New", "[s] Search"],
+    actions: [shortcutHintLabels([{ ...TUI_SHORTCUTS.managerNew }])[0]!, shortcutHintLabels([{ ...TUI_SHORTCUTS.globalSearch }])[0]!],
     styleIntent: "mutedText",
   }
 }

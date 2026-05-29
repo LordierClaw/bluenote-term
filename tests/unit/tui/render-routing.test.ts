@@ -732,7 +732,7 @@ describe("TUI render keyboard routing", () => {
       assert.equal(findById(screen, "bluenote-editor-bottombar-save-status"), undefined)
       const shortcutChunks = shortcutRow?.content?.chunks ?? []
       const shortcutText = shortcutChunks.map((chunk: { text?: string }) => chunk.text ?? "").join("") || shortcutRow?.content
-      assert.equal(shortcutText, "[Ctrl+S] Save  [Ctrl+F] Find  [Ctrl+H] Replace  [Ctrl+Z] Undo  [Ctrl+Y] Redo  [Alt+Z] Wrap  [Ctrl+Shift+C] Copy  +4")
+      assert.equal(shortcutText, "[Ctrl+S] Save  [Ctrl+F] Find  [Ctrl+P] Search  [Esc] Manager  [Ctrl+H] Replace  [Ctrl+Z] Undo  [Ctrl+Y] Redo  +4")
       assert.deepEqual(shortcutChunks.filter((chunk: { text?: string }) => /^\[[^\]]+\]$/u.test(chunk.text ?? "")).at(0)?.fg?.toInts?.(), [56, 189, 248, 255])
     } finally {
       renderer.destroy()
@@ -1065,8 +1065,9 @@ describe("TUI render keyboard routing", () => {
       assert.notEqual(topbar?.border, true)
       assert.deepEqual(topbar?.fg?.toInts?.(), [248, 250, 252, 255])
       assert.notEqual(footer?.border, true)
-      assert.equal(footerText, "[Enter] Open  [/] Filter  [n] New  [s] Search")
+      assert.equal(footerText, "[Enter] Open  [/] Filter  [n] New  [Ctrl+P] Search  [Esc] Back")
       assert.deepEqual(footerChunks.filter((chunk: { text?: string }) => /^\[[^\]]+\]$/u.test(chunk.text ?? "")).map((chunk: any) => chunk.fg?.toInts?.()), [
+        [56, 189, 248, 255],
         [56, 189, 248, 255],
         [56, 189, 248, 255],
         [56, 189, 248, 255],

@@ -1,6 +1,7 @@
 import type { SearchNoteMatch } from "../../core/search-notes"
 import { collectContainsFieldMatches, scoreContainsMatch } from "../../search/contains-match"
 import { buildManagerBrowserItems, buildManagerFolderPreviewLinesFromItems, type NoteManagerSummary } from "./note-manager-adapter"
+import { TUI_SHORTCUTS } from "../render-chrome"
 import type { ManagerItem } from "../state"
 import type { SearchEverythingState, TuiScreen } from "../state"
 
@@ -99,25 +100,23 @@ export const TUI_COMMANDS: readonly TuiCommandDefinition[] = [
     name: "/new",
     description: "Create a new note and open it in the editor",
     usage: "/new [title]",
-    shortcut: "N",
+    shortcut: TUI_SHORTCUTS.managerNew.key,
   },
   {
     name: "/archive",
     description: "Archive the selected or active note",
     usage: "/archive [note-key]",
-    shortcut: "A",
   },
   {
     name: "/delete",
     description: "Delete the selected or active note after confirmation",
     usage: "/delete [note-key]",
-    shortcut: "D",
+    shortcut: "d",
   },
   {
     name: "/rebuild",
     description: "Rebuild BlueNote search indexes",
     usage: "/rebuild",
-    shortcut: "R",
   },
   {
     name: "/migrate",
@@ -128,19 +127,19 @@ export const TUI_COMMANDS: readonly TuiCommandDefinition[] = [
     name: "/find",
     description: "Find text in the active editor buffer",
     usage: "/find <query>",
-    shortcut: "Ctrl+F",
+    shortcut: TUI_SHORTCUTS.editorFind.key,
   },
   {
     name: "/replace",
     description: "Find and replace text in the active editor buffer",
     usage: "/replace <query> <replacement>",
-    shortcut: "Ctrl+H",
+    shortcut: TUI_SHORTCUTS.editorReplace.key,
   },
   {
     name: "/save",
     description: "Save the active editor buffer",
     usage: "/save",
-    shortcut: "Ctrl+S",
+    shortcut: TUI_SHORTCUTS.editorSave.key,
   },
 ]
 

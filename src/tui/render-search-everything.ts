@@ -6,7 +6,7 @@ import {
   type SearchEverythingPreviewText,
   type SearchEverythingResult,
 } from "./adapters/search-everything-adapter"
-import { renderShortcutHints, shortcutHintLabels, topbarTextIntent, type ShortcutHint } from "./render-chrome"
+import { TUI_SHORTCUTS, renderShortcutHints, shortcutHintLabels, topbarTextIntent, type ShortcutHint } from "./render-chrome"
 import type { TuiScreen, TuiState } from "./state"
 import { tuiTheme, type TuiColorIntent } from "./theme"
 import type { WorkspaceController } from "./workspace-controller"
@@ -113,13 +113,14 @@ function clampIndex(index: number, length: number): number {
 function searchShortcutHints(_query: string, previousScreen: Exclude<TuiScreen, "search">, resultCount: number): ShortcutHint[] {
   const backLabel = previousScreen === "editor" ? "Editor" : "Manager"
   if (resultCount === 0) {
-    return [{ key: "Esc", action: backLabel, priority: "primary" }]
+    return [{ key: "Esc", action: backLabel, priority: "primary" }, { ...TUI_SHORTCUTS.globalSearch, action: "Close", priority: "primary" }]
   }
 
   return [
     { key: "Enter", action: "Open/run", priority: "primary" },
     { key: "↑/↓", action: "Select", priority: "primary" },
     { key: "Esc", action: backLabel, priority: "primary" },
+    { ...TUI_SHORTCUTS.globalSearch, action: "Close", priority: "primary" },
   ]
 }
 

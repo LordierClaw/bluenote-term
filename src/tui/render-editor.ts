@@ -12,7 +12,7 @@ import {
 
 import { editorCursorOffset, editorCursorPosition, findInEditorBody } from "./adapters/editor-buffer-adapter"
 import { displayCellWidth } from "./display-width"
-import { renderShortcutHints, shortcutHintLabel, type ShortcutHint, type ShortcutRenderableHint } from "./render-chrome"
+import { TUI_SHORTCUTS, renderShortcutHints, shortcutHintLabel, type ShortcutHint, type ShortcutRenderableHint } from "./render-chrome"
 
 import type { TuiState } from "./state"
 import { tuiTheme, type TuiColorIntent } from "./theme"
@@ -272,17 +272,17 @@ function humanizeTimestamp(value: string): string {
 
 function editorShortcuts(): EditorShortcutViewModel[] {
   return [
-    { key: "Ctrl+S", action: "Save", order: 1 },
-    { key: "Ctrl+F", action: "Find", order: 2 },
-    { key: "Ctrl+H", action: "Replace", order: 3 },
-    { key: "Ctrl+Z", action: "Undo", order: 4 },
-    { key: "Ctrl+Y", action: "Redo", order: 5 },
-    { key: "Alt+Z", action: "Wrap", order: 6 },
-    { key: "Ctrl+Shift+C", action: "Copy", order: 7 },
-    { key: "Ctrl+Shift+X", action: "Cut", order: 8 },
-    { key: "Ctrl+Shift+V", action: "Paste", order: 9 },
-    { key: "Ctrl+P", action: "Search", order: 10 },
-    { key: "Esc", action: "Manager", order: 11 },
+    { ...TUI_SHORTCUTS.editorSave, order: 1 },
+    { ...TUI_SHORTCUTS.editorFind, order: 2 },
+    { ...TUI_SHORTCUTS.globalSearch, order: 3 },
+    { ...TUI_SHORTCUTS.editorBack, order: 4 },
+    { ...TUI_SHORTCUTS.editorReplace, order: 5 },
+    { ...TUI_SHORTCUTS.editorUndo, order: 6 },
+    { ...TUI_SHORTCUTS.editorRedo, order: 7 },
+    { ...TUI_SHORTCUTS.editorWrap, order: 8 },
+    { ...TUI_SHORTCUTS.editorCopy, order: 9 },
+    { ...TUI_SHORTCUTS.editorCut, order: 10 },
+    { ...TUI_SHORTCUTS.editorPaste, order: 11 },
   ]
 }
 

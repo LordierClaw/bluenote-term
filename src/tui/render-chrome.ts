@@ -15,6 +15,24 @@ export interface ShortcutTextHint {
 
 export type ShortcutRenderableHint = ShortcutHint | ShortcutTextHint
 
+export const TUI_SHORTCUTS = {
+  managerOpen: { key: "Enter", action: "Open" },
+  managerFilter: { key: "/", action: "Filter" },
+  managerNew: { key: "n", action: "New" },
+  globalSearch: { key: "Ctrl+P", action: "Search" },
+  managerBack: { key: "Esc", action: "Back" },
+  editorBack: { key: "Esc", action: "Manager" },
+  editorSave: { key: "Ctrl+S", action: "Save" },
+  editorFind: { key: "Ctrl+F", action: "Find" },
+  editorReplace: { key: "Ctrl+H", action: "Replace" },
+  editorUndo: { key: "Ctrl+Z", action: "Undo" },
+  editorRedo: { key: "Ctrl+Y", action: "Redo" },
+  editorWrap: { key: "Alt+Z", action: "Wrap" },
+  editorCopy: { key: "Ctrl+Shift+C", action: "Copy" },
+  editorCut: { key: "Ctrl+Shift+X", action: "Cut" },
+  editorPaste: { key: "Ctrl+Shift+V", action: "Paste" },
+} as const
+
 export function shortcutHintLabel(hint: ShortcutHint): string {
   return `[${hint.key}] ${hint.action}`
 }

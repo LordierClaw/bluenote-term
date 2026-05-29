@@ -612,6 +612,19 @@ describe("TUI Search Everything adapter", () => {
       TUI_COMMANDS.map((command) => command.name),
       ["/new", "/archive", "/delete", "/rebuild", "/migrate", "/find", "/replace", "/save"],
     )
+    assert.deepEqual(
+      Object.fromEntries(TUI_COMMANDS.map((command) => [command.name, command.shortcut ?? null])),
+      {
+        "/new": "n",
+        "/archive": null,
+        "/delete": "d",
+        "/rebuild": null,
+        "/migrate": null,
+        "/find": "Ctrl+F",
+        "/replace": "Ctrl+H",
+        "/save": "Ctrl+S",
+      },
+    )
 
     const results = buildSearchEverythingResults("/re", createDeps())
     assert.deepEqual(
