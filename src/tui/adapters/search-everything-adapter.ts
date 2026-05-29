@@ -65,11 +65,25 @@ export type SearchEverythingResult =
   | SearchEverythingFolderResult
   | SearchEverythingCommandResult
 
+export interface SearchEverythingHighlightRange {
+  start: number
+  end: number
+}
+
+export interface SearchEverythingPreviewText {
+  text: string
+  highlights?: SearchEverythingHighlightRange[]
+}
+
 export interface SearchEverythingPreview {
   title: string
   subtitle: string
   lines: string[]
   sections: Array<{ label: string; lines: string[] }>
+  titleText?: SearchEverythingPreviewText
+  subtitleText?: SearchEverythingPreviewText
+  linesText?: SearchEverythingPreviewText[]
+  sectionsText?: Array<{ label: string; lines: SearchEverythingPreviewText[] }>
 }
 
 export const TUI_COMMANDS: readonly TuiCommandDefinition[] = [
@@ -137,6 +151,58 @@ function folderNameFor(path: string): string {
 
 function containsScore(query: string, value: string): number {
   return scoreContainsMatch(value, query)
+}
+
+export function collectCaseInsensitiveContainsRanges(text: string, query: string): SearchEverythingHighlightRange[] {
+  const normalizedText = text.toLocaleLowerCase()
+  const normalizedQuery = query.trim().toLocaleLowerCase().replace(/\s+/gu, " ")
+  const needles = normalizedQuery.length > 0
+    ? normalizedText.includes(normalizedQuery)
+      ? [normalizedQuery]
+      : normalizedQuery.split(/\s+/gu).filter((token) => token.length > 0)
+    : []
+  const ranges: SearchEverythingHighlightRange[] = []
+
+  for (const needle of needles) {
+    let offset = 0
+    while (offset < normalizedText.length) {
+      const start = normalizedText.indexOf(needle, offset)
+      if (start === -1) {
+        break
+      }
+      ranges.push({ start, end: start + needle.length })
+      offset = start + Math.max(needle.length, 1)
+    }
+  }
+
+  return ranges
+    .sort((left, right) => left.start - right.start || left.end - right.end)
+    .filter((range, index, all) => index === 0 || range.start >= all[index - 1]!.end)
+}
+
+function previewText(text: string, query?: string): SearchEverythingPreviewText {
+  const highlights = query ? collectCaseInsensitiveContainsRanges(text, query) : []
+  return highlights.length > 0 ? { text, highlights } : { text }
+}
+
+function withHighlightedPreviewText(
+  preview: Omit<SearchEverythingPreview, "titleText" | "subtitleText" | "linesText" | "sectionsText">,
+  query?: string,
+): SearchEverythingPreview {
+  if (!query || query.trim().length === 0) {
+    return preview
+  }
+
+  return {
+    ...preview,
+    titleText: previewText(preview.title, query),
+    subtitleText: previewText(preview.subtitle, query),
+    linesText: preview.lines.map((line) => previewText(line, query)),
+    sectionsText: preview.sections.map((section) => ({
+      label: section.label,
+      lines: section.lines.map((line) => previewText(line, query)),
+    })),
+  }
 }
 
 function foldersFor(relativePath: string): string[] {
@@ -331,7 +397,7 @@ export function buildSearchEverythingResults(
   })
 }
 
-export function buildSearchEverythingPreview(result: SearchEverythingResult | null | undefined): SearchEverythingPreview | null {
+export function buildSearchEverythingPreview(result: SearchEverythingResult | null | undefined, query?: string): SearchEverythingPreview | null {
   if (!result) {
     return null
   }
@@ -355,7 +421,7 @@ export function buildSearchEverythingPreview(result: SearchEverythingResult | nu
   }
 
   if (result.kind === "content") {
-    return {
+    return withHighlightedPreviewText({
       title: result.title,
       subtitle: `${result.matchLabel} — ${result.relativePath}`,
       lines: [result.excerpt],
@@ -363,37 +429,38 @@ export function buildSearchEverythingPreview(result: SearchEverythingResult | nu
         { label: "Match", lines: [result.matchLabel] },
         { label: "Excerpt", lines: [result.excerpt] },
       ],
-    }
+    }, query)
   }
 
   if (result.kind === "folder") {
-    return {
-      title: result.label,
-      subtitle: result.path,
+    return withHighlightedPreviewText({
+      title: result.path,
+      subtitle: result.detail,
       lines: [result.detail],
       sections: [
         { label: "Folder", lines: [result.path] },
         { label: "Contents", lines: [result.detail] },
       ],
-    }
+    }, query)
   }
 
-  return {
-    title: result.title,
+  return withHighlightedPreviewText({
+    title: `${result.title} · ${result.filename}`,
     subtitle: result.relativePath,
     lines: [result.description],
     sections: [
       { label: "Summary", lines: [result.description] },
     ],
-  }
+  }, query)
 }
 
 export function buildHighlightedSearchEverythingPreview(
   results: readonly SearchEverythingResult[],
   selectedIndex: number,
+  query?: string,
 ): SearchEverythingPreview | null {
   const index = Math.max(0, Math.min(Math.trunc(selectedIndex), results.length - 1))
-  return buildSearchEverythingPreview(results[index])
+  return buildSearchEverythingPreview(results[index], query)
 }
 
 export function createSearchEverythingSession(

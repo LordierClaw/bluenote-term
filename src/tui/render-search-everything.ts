@@ -1,8 +1,9 @@
-import { BoxRenderable, InputRenderable, InputRenderableEvents, StyledText, TextRenderable, fg, type CliRenderer, type TextChunk } from "@opentui/core"
+import { BoxRenderable, InputRenderable, InputRenderableEvents, StyledText, TextRenderable, bg, fg, type CliRenderer, type TextChunk } from "@opentui/core"
 
 import {
   buildHighlightedSearchEverythingPreview,
   type SearchEverythingPreview,
+  type SearchEverythingPreviewText,
   type SearchEverythingResult,
 } from "./adapters/search-everything-adapter"
 import { renderShortcutHints, shortcutHintLabels, topbarTextIntent, type ShortcutHint } from "./render-chrome"
@@ -231,7 +232,7 @@ export function buildSearchEverythingViewModel(
       ? "short-height"
       : null
   const previewVisible = previewHiddenReason === null
-  const preview = previewVisible ? buildHighlightedSearchEverythingPreview(results, selectedIndex) : null
+  const preview = previewVisible ? buildHighlightedSearchEverythingPreview(results, selectedIndex, query) : null
   const shortcutHints = searchShortcutHints(query, previousScreen, results.length)
   const previewRegion: SearchEverythingRegionViewModel = {
     id: "preview",
@@ -304,6 +305,41 @@ export interface RenderSearchEverythingScreenOptions {
   controller: WorkspaceController
   onInvalidate?: () => void
   height?: number
+}
+
+function renderPreviewText(text: SearchEverythingPreviewText | string, intent: TuiColorIntent): StyledText | string {
+  const value = typeof text === "string" ? { text } : text
+  if (!value.highlights || value.highlights.length === 0) {
+    return value.text
+  }
+
+  const chunks: TextChunk[] = []
+  let offset = 0
+  for (const range of value.highlights) {
+    const start = Math.max(0, Math.min(range.start, value.text.length))
+    const end = Math.max(start, Math.min(range.end, value.text.length))
+    if (start > offset) {
+      chunks.push(fg(tuiTheme[intent])(value.text.slice(offset, start)) as TextChunk)
+    }
+    chunks.push(bg(tuiTheme.focusedRow)(fg(tuiTheme.textPrimary)(value.text.slice(start, end))) as TextChunk)
+    offset = end
+  }
+  if (offset < value.text.length) {
+    chunks.push(fg(tuiTheme[intent])(value.text.slice(offset)) as TextChunk)
+  }
+
+  return new StyledText(chunks)
+}
+
+function prefixedPreviewText(prefix: string, text: SearchEverythingPreviewText | string, intent: TuiColorIntent): StyledText | string {
+  const rendered = renderPreviewText(text, intent)
+  if (typeof rendered === "string") {
+    return `${prefix}${rendered}`
+  }
+  return new StyledText([
+    fg(tuiTheme[intent])(prefix) as TextChunk,
+    ...rendered.chunks,
+  ])
 }
 
 export function renderSearchEverythingScreen(options: RenderSearchEverythingScreenOptions): BoxRenderable {
@@ -393,12 +429,13 @@ export function renderSearchEverythingScreen(options: RenderSearchEverythingScre
   }
 
   if (vm.preview?.visible && previewRegion) {
-    previewRegion.add(new TextRenderable(options.renderer, { content: `Preview · ${vm.preview.title}`, height: 1, fg: tuiTheme.textSecondary }))
-    previewRegion.add(new TextRenderable(options.renderer, { content: vm.preview.subtitle, height: 1, fg: tuiTheme.mutedText }))
-    for (const section of vm.preview.sections) {
+    previewRegion.add(new TextRenderable(options.renderer, { content: prefixedPreviewText("Preview · ", vm.preview.titleText ?? vm.preview.title, "textSecondary"), height: 1, fg: tuiTheme.textSecondary }))
+    previewRegion.add(new TextRenderable(options.renderer, { content: renderPreviewText(vm.preview.subtitleText ?? vm.preview.subtitle, "mutedText"), height: 1, fg: tuiTheme.mutedText }))
+    for (const [sectionIndex, section] of vm.preview.sections.entries()) {
       previewRegion.add(new TextRenderable(options.renderer, { content: section.label, height: 1, fg: tuiTheme.textPrimary }))
-      for (const line of section.lines) {
-        previewRegion.add(new TextRenderable(options.renderer, { content: line, height: 1, fg: tuiTheme.mutedText }))
+      const richLines = vm.preview.sectionsText?.[sectionIndex]?.lines
+      for (const [lineIndex, line] of section.lines.entries()) {
+        previewRegion.add(new TextRenderable(options.renderer, { content: renderPreviewText(richLines?.[lineIndex] ?? line, "mutedText"), height: 1, fg: tuiTheme.mutedText }))
       }
     }
   }

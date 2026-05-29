@@ -126,6 +126,46 @@ describe("TUI Search Everything adapter", () => {
     ])
   })
 
+  test("preview text carries highlight ranges while preserving plain string fallbacks", () => {
+    const note = buildSearchEverythingResults("daily", createDeps()).find((result) => result.kind === "note")
+    const preview = buildSearchEverythingPreview(note, "daily")
+
+    assert.equal(preview?.title, "Daily Plan · daily-plan.md")
+    assert.deepEqual(preview?.titleText, {
+      text: "Daily Plan · daily-plan.md",
+      highlights: [{ start: 0, end: 5 }, { start: 13, end: 18 }],
+    })
+    assert.deepEqual(preview?.sections, [
+      { label: "Summary", lines: ["Today priorities and project focus."] },
+    ])
+    assert.deepEqual(preview?.sectionsText, [
+      { label: "Summary", lines: [{ text: "Today priorities and project focus." }] },
+    ])
+  })
+
+  test("folder preview title uses the full path and marks matching query ranges", () => {
+    const folder = buildSearchEverythingResults("archive", createDeps()).find((result) => result.kind === "folder")
+    const preview = buildSearchEverythingPreview(folder, "archive")
+
+    assert.equal(preview?.title, "notes/archive")
+    assert.deepEqual(preview?.titleText, {
+      text: "notes/archive",
+      highlights: [{ start: 6, end: 13 }],
+    })
+    assert.deepEqual(preview?.subtitleText, { text: "1 note in notes/archive", highlights: [{ start: 16, end: 23 }] })
+  })
+
+  test("file preview title combines note title and filename and highlights both", () => {
+    const note = buildSearchEverythingResults("plan", createDeps()).find((result) => result.kind === "note")
+    const preview = buildSearchEverythingPreview(note, "plan")
+
+    assert.equal(preview?.title, "Daily Plan · daily-plan.md")
+    assert.deepEqual(preview?.titleText, {
+      text: "Daily Plan · daily-plan.md",
+      highlights: [{ start: 6, end: 10 }, { start: 19, end: 23 }],
+    })
+  })
+
   test("returns note results with contains matches by filename/key, title, description, and path/folder", () => {
     const filenameMatch = buildSearchEverythingResults("daily-plan.md", createDeps())
     assert.equal(filenameMatch[0]?.kind, "note")
@@ -245,7 +285,7 @@ describe("TUI Search Everything adapter", () => {
   test("builds previews for highlighted note and content results", () => {
     const notePreview = buildHighlightedSearchEverythingPreview(buildSearchEverythingResults("daily", createDeps()), 0)
     assert.deepEqual(notePreview, {
-      title: "Daily Plan",
+      title: "Daily Plan · daily-plan.md",
       subtitle: "notes/inbox/daily-plan.md",
       lines: ["Today priorities and project focus."],
       sections: [

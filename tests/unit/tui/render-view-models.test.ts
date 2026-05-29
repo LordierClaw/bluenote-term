@@ -1542,8 +1542,12 @@ describe("TUI render view models", () => {
       assert.match(text, /Results · \d+/u)
       assert.match(resultText, /› \[note\] Daily Plan —/u)
       assert.doesNotMatch(resultText, /undefined/u)
-      assert.deepEqual(previewLines.slice(0, 4), ["Preview · Daily Plan", "notes/inbox/daily-plan.md", "Summary", "Today priorities."])
+      assert.deepEqual(previewLines.slice(0, 4), ["Preview · Daily Plan · daily-plan.md", "notes/inbox/daily-plan.md", "Summary", "Today priorities."])
       assert.match(text, /Today priorities\./u)
+      const previewTitle = previewRegion?.getChildren()[0] as any
+      assert.deepEqual(previewTitle?.content?.chunks?.map((chunk: { text?: string }) => chunk.text), ["Preview · ", "Daily", " Plan · ", "daily", "-plan.md"])
+      assert.deepEqual(Array.from(previewTitle?.content?.chunks?.[1]?.bg.buffer ?? []), colorInts(tuiTheme.focusedRow))
+      assert.deepEqual(Array.from(previewTitle?.content?.chunks?.[3]?.bg.buffer ?? []), colorInts(tuiTheme.focusedRow))
       controller.openSearch("/archive")
       controller.selectSearchResult()
       const statusRoot = renderSearchEverythingScreen({ renderer, controller })
