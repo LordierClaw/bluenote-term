@@ -138,6 +138,9 @@ function wait(milliseconds: number): void {
 
 export function buildGnomeTerminalGeometry(geometry: string, caseIndex: number): string {
   void caseIndex
+  if (geometry === "80x24") {
+    return `${geometry}+40+700`
+  }
   return `${geometry}+40+40`
 }
 
@@ -389,7 +392,7 @@ function launchCaseTerminal(testCase: VisualCase, session: string, qaRoot: strin
   const created = run("tmux", ["new-session", "-d", "-s", session, "-x", cols, "-y", rows, tmuxCommand], { timeout: 10_000 })
   if (created.status !== 0) throw new Error(`failed to create tmux session ${session}: ${created.stderr}`)
 
-  const attachCommand = `printf '\\033c'; exec tmux attach -t ${shellQuote(session)}`
+  const attachCommand = `printf '\\033[3J\\033[H\\033[2J'; exec tmux attach -t ${shellQuote(session)}`
   const launched = run("gnome-terminal", ["--title", title, `--geometry=${buildGnomeTerminalGeometry(testCase.geometry, caseIndex)}`, `--zoom=${testCase.zoom}`, "--", "bash", "-lc", attachCommand], { timeout: 10_000 })
   if (launched.status !== 0) throw new Error(`failed to launch GNOME Terminal for ${testCase.id}: ${launched.stderr}`)
   wait(1_500)
@@ -408,6 +411,25 @@ function waitForFile(filePath: string, timeoutMs: number): boolean {
     wait(250)
   }
   return false
+}
+
+function cropSmallManagerScreenshotIfNeeded(filePath: string, testCaseId: string): void {
+  if (testCaseId !== "manager-80x24") return
+
+  const crop = run("python3", ["-c", `
+from pathlib import Path
+from PIL import Image
+
+path = Path(${JSON.stringify(filePath)})
+img = Image.open(path)
+if img.width >= 780 and img.height >= 500:
+    # GNOME portal can include terminal scrollback above the small target.
+    # Keep the BlueNote window/titlebar and the 80x24 TUI, discard pollution.
+    img.crop((35, 170, img.width, img.height)).save(path)
+`], { timeout: 10_000 })
+  if (crop.status !== 0) {
+    throw new Error(`failed to crop manager-80x24 screenshot: ${crop.stderr || crop.stdout}`)
+  }
 }
 
 function main(): void {
@@ -469,6 +491,8 @@ function main(): void {
         if (!waitForFile(pngPath, 75_000)) {
           status = status === "Pass" ? "Screenshot blocked" : status
           notes += "Focused-terminal screenshot did not produce a PNG. Check screenshot.log and approve GNOME portal prompt if shown. "
+        } else {
+          cropSmallManagerScreenshotIfNeeded(pngPath, testCase.id)
         }
       }
     } catch (error) {
