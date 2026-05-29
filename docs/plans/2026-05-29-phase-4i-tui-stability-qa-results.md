@@ -310,31 +310,37 @@ Phase 4I performance/memory/race/deadlock review is approved. The implemented fi
 ## Task 11 — Pending visual manual QA rerun with pixel artifacts
 
 Date added: 2026-05-29
-Status: planned / not yet accepted
+Status: run / visual findings remain
 
 A final visual-manual verification pass was added to `docs/plans/2026-05-29-phase-4i-tui-stability-ui-performance-plan.md` because the first live QA pass could not capture GNOME screenshot PNGs. The first pass remains valid for functional behavior, process cleanup, disk verification, and pane-text evidence, but color/background/readability/positioning acceptance requires pixel artifacts.
 
-Prepared harness:
+Harness command run:
 
 ```bash
-bun run qa:visual:tui
+bun run qa:visual:tui -- --out-dir=/tmp/bluenote-visual-qa-final
 ```
 
-Expected output:
+Artifact summary:
 
-- seeded QA root,
-- GNOME Terminal + tmux sessions across size/zoom matrix,
-- pane text captures,
-- focused-terminal MCP screenshot attempts,
-- report with screenshot paths and 1–5 visual rating placeholders,
-- post-run process check.
+- Report: `/tmp/bluenote-visual-qa-final/report.md`
+- Contact sheet: `/tmp/bluenote-visual-qa-final/contact-sheet.png`
+- Screenshot PNGs captured for all 7 harness cases.
+- Post-run process check: no live BlueNote TUI processes for the harness QA root.
 
-Useful commands:
+Visual ratings and findings from screenshot review:
 
-```bash
-bun run qa:visual:tui -- --out-dir=/tmp/bluenote-visual-qa
-bun run qa:visual:tui -- --root=/path/to/existing/bluenote-root
-bun run qa:visual:tui -- --no-screenshots
-```
+| Case | Rating | Status | Notes |
+| --- | ---: | --- | --- |
+| `manager-100x30` | 4/5 | Pass | Default/black background is visible; manager columns are readable; first column/folder focus is clear. |
+| `manager-120x40` | 4/5 | Pass | Large layout remains readable and calm; extra space is not noisy. |
+| `manager-100x30-zoom150` | 4/5 | Pass | Zoomed layout remains readable; text and borders still align acceptably. |
+| `manager-80x24` | 2/5 | Needs rerun | Screenshot is partially obstructed/overlapped by another terminal/top output, so it is not valid visual evidence for the small-size case. |
+| `editor-100x30` | 4/5 | Pass | Editor background is default/black; body starts at the left writing surface; removed status row is not visible; topbar is readable. |
+| `longline-100x30` | 2/5 | Needs fix/review | Wrap-off state is visible, but the screenshot/pane capture does not show an obvious long-line continuation indicator at the right edge. This does not satisfy the visual discoverability requirement yet. |
+| `search-100x30` | 2/5 | Needs fix/review | Search layout is readable, but preview still displays `Path` and `Description` rows. This appears to conflict with the request to remove the useless metadata row from Search Everything preview. |
 
-Visual acceptance remains pending until screenshots are successfully captured and manually rated.
+Conclusion: screenshot capture is now working, but visual acceptance is not clean. Required follow-up before final UI acceptance:
+
+1. Rerun or improve harness window positioning for `manager-80x24` so the screenshot is unobstructed.
+2. Revisit long-line unwrap indicator rendering; the visible screenshot should clearly show a continuation/overflow symbol while there is hidden content.
+3. Revisit Search Everything preview content; remove or justify the remaining `Path`/`Description` metadata rows according to the user's requested simplification.
