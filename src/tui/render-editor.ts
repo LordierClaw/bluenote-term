@@ -74,6 +74,7 @@ export interface EditorHorizontalOverflowViewModel {
   left: boolean
   right: boolean
   indicator: "" | "‹" | "›" | "↔"
+  indicatorIntent: TuiColorIntent
   scrollLeft: number
 }
 
@@ -383,7 +384,7 @@ function editorHorizontalOverflowFor(editor: EditorBufferWithAutosave | null, bo
   const left = scrollLeft > 0
   const right = scrollLeft + viewportColumns < lineWidth
   const indicator = left && right ? "↔" : left ? "‹" : right ? "›" : ""
-  return { left, right, indicator, scrollLeft }
+  return { left, right, indicator, indicatorIntent: "info", scrollLeft }
 }
 
 export function buildEditorViewModel(state: TuiState, responsive: EditorResponsiveOptions = {}): EditorViewModel {
@@ -637,7 +638,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
       content: vm.body.overflow.horizontal.indicator,
       width: 1,
       height: "100%",
-      fg: tuiTheme[vm.body.placeholderIntent],
+      fg: tuiTheme[vm.body.overflow.horizontal.indicatorIntent],
     }))
   }
   bodyPanel.add(bodyTopMargin)

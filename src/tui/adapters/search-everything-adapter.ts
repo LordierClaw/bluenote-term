@@ -383,8 +383,7 @@ export function buildSearchEverythingPreview(result: SearchEverythingResult | nu
     subtitle: result.relativePath,
     lines: [result.description],
     sections: [
-      { label: "Path", lines: [result.relativePath] },
-      { label: "Description", lines: [result.description] },
+      { label: "Summary", lines: [result.description] },
     ],
   }
 }

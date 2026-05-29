@@ -19,6 +19,12 @@ interface VisualCase {
   ratingPrompt: string
 }
 
+export interface ScreenshotBridgeArguments {
+  window_id?: number
+  raise_window?: boolean
+  full_screen?: boolean
+}
+
 const repoRoot = process.cwd()
 const screenshotBridgePath = process.env.CUL_SCREENSHOT_BRIDGE ?? path.join(tmpdir(), "bluenote-focused-mcp-screenshot.py")
 
@@ -128,6 +134,20 @@ function shellQuote(value: string): string {
 
 function wait(milliseconds: number): void {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds)
+}
+
+export function buildGnomeTerminalGeometry(geometry: string, caseIndex: number): string {
+  const offsetX = 80 + (caseIndex % 8) * 60
+  const offsetY = 80 + (caseIndex % 8) * 40
+  return `${geometry}+${offsetX}+${offsetY}`
+}
+
+export function screenshotBridgeArgumentsFor(targetWindowId: number | null): ScreenshotBridgeArguments[] {
+  if (targetWindowId !== null) {
+    return [{ window_id: targetWindowId, raise_window: true }]
+  }
+
+  return [{ full_screen: true }]
 }
 
 interface LiveTuiProcess {
@@ -242,8 +262,12 @@ def call_screenshot(arguments):
         send(proc, {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"bluenote-visual-qa-focused-bridge","version":"1"}}})
         read_response(proc, 1, timeout=20)
         send(proc, {"jsonrpc":"2.0","method":"notifications/initialized","params":{}})
-        send(proc, {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"screenshot","arguments":arguments}})
-        return read_response(proc, 2, timeout=60)
+        if arguments.get("window_id") is not None:
+            send(proc, {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"activate_window","arguments":{"window_id": arguments.get("window_id")}}})
+            read_response(proc, 2, timeout=20)
+            time.sleep(0.5)
+        send(proc, {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"screenshot","arguments":arguments}})
+        return read_response(proc, 3, timeout=60)
     finally:
         proc.terminate()
         try:
@@ -258,7 +282,8 @@ def main():
     attempts = []
     if window_id is not None:
         attempts.append({"window_id": window_id, "raise_window": True})
-    attempts.append({"full_screen": True})
+    else:
+        attempts.append({"full_screen": True})
     for arguments in attempts:
         try:
             response = call_screenshot(arguments)
@@ -358,7 +383,7 @@ function capturePane(session: string): string {
   return result.stdout
 }
 
-function launchCaseTerminal(testCase: VisualCase, session: string, qaRoot: string, title: string): void {
+function launchCaseTerminal(testCase: VisualCase, session: string, qaRoot: string, title: string, caseIndex: number): void {
   run("tmux", ["kill-session", "-t", session], { timeout: 2_000 })
   const [cols, rows] = testCase.geometry.split("x")
   const tmuxCommand = `cd ${shellQuote(repoRoot)} && env BLUENOTE_ROOT=${shellQuote(qaRoot)} TERM=xterm-256color bun run ./bin/bn.ts tui`
@@ -366,7 +391,7 @@ function launchCaseTerminal(testCase: VisualCase, session: string, qaRoot: strin
   if (created.status !== 0) throw new Error(`failed to create tmux session ${session}: ${created.stderr}`)
 
   const attachCommand = `tmux attach -t ${shellQuote(session)}`
-  const launched = run("gnome-terminal", ["--title", title, `--geometry=${testCase.geometry}`, `--zoom=${testCase.zoom}`, "--", "bash", "-lc", attachCommand], { timeout: 10_000 })
+  const launched = run("gnome-terminal", ["--title", title, `--geometry=${buildGnomeTerminalGeometry(testCase.geometry, caseIndex)}`, `--zoom=${testCase.zoom}`, "--", "bash", "-lc", attachCommand], { timeout: 10_000 })
   if (launched.status !== 0) throw new Error(`failed to launch GNOME Terminal for ${testCase.id}: ${launched.stderr}`)
   wait(1_500)
 }
@@ -374,7 +399,7 @@ function launchCaseTerminal(testCase: VisualCase, session: string, qaRoot: strin
 function captureScreenshotViaFocusedBridge(outPath: string, targetWindowId: number | null): RunResult {
   const windowArg = targetWindowId === null ? "" : String(targetWindowId)
   const command = `python3 ${shellQuote(screenshotBridgePath)} ${shellQuote(outPath)} ${shellQuote(windowArg)}; code=$?; echo bridge_exit=$code; sleep 1; exit $code`
-  return run("gnome-terminal", ["--title", "BlueNote Visual QA Screenshot Bridge", "--geometry=44x8+20+20", "--", "bash", "-lc", command], { timeout: 10_000 })
+  return run("gnome-terminal", ["--title", "BlueNote Visual QA Screenshot Bridge", "--geometry=44x8+1400+40", "--", "bash", "-lc", command], { timeout: 10_000 })
 }
 
 function waitForFile(filePath: string, timeoutMs: number): boolean {
@@ -414,7 +439,7 @@ function main(): void {
     "",
   ]
 
-  for (const testCase of cases) {
+  for (const [caseIndex, testCase] of cases.entries()) {
     const session = `bluenote-vqa-${testCase.id}-${process.pid}`
     const terminalTitle = `BlueNote VQA ${testCase.id}`
     const caseDir = path.join(outDir, testCase.id)
@@ -427,7 +452,7 @@ function main(): void {
     let notes = ""
     let windowId: number | null = null
     try {
-      launchCaseTerminal(testCase, session, qaRoot, terminalTitle)
+      launchCaseTerminal(testCase, session, qaRoot, terminalTitle, caseIndex)
       windowId = findWindowIdByTitle(terminalTitle)
       for (const action of testCase.actions) sendAction(session, action)
       const pane = capturePane(session)
@@ -499,4 +524,6 @@ function main(): void {
   console.log(`Report: ${reportPath}`)
 }
 
-main()
+if (import.meta.main) {
+  main()
+}

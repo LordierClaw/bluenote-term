@@ -791,7 +791,7 @@ describe("TUI render view models", () => {
 
     assert.equal(atStart.body.value, longLine)
     assert.equal(atStart.body.wrapMode, "none")
-    assert.deepEqual(atStart.body.overflow.horizontal, { left: false, right: true, indicator: "›", scrollLeft: 0 })
+    assert.deepEqual(atStart.body.overflow.horizontal, { left: false, right: true, indicator: "›", indicatorIntent: "info", scrollLeft: 0 })
 
     const panned = buildEditorViewModel({
       ...baseState,
@@ -799,7 +799,7 @@ describe("TUI render view models", () => {
       editor: { ...baseState.editor!, body: longLine, savedBody: longLine, cursorOffset: 15, selectionStart: 15, selectionEnd: 15, wrapMode: "none" },
     }, { bodyViewportColumns: 10 })
 
-    assert.deepEqual(panned.body.overflow.horizontal, { left: true, right: true, indicator: "↔", scrollLeft: 6 })
+    assert.deepEqual(panned.body.overflow.horizontal, { left: true, right: true, indicator: "↔", indicatorIntent: "info", scrollLeft: 6 })
 
     const wrapped = buildEditorViewModel({
       ...baseState,
@@ -807,6 +807,23 @@ describe("TUI render view models", () => {
       editor: { ...baseState.editor!, body: longLine, savedBody: longLine, cursorOffset: 15, selectionStart: 15, selectionEnd: 15, wrapMode: "word" },
     }, { bodyViewportColumns: 10 })
     assert.equal(wrapped.body.overflow.horizontal, undefined)
+  })
+
+  test("editor unwrap right overflow exposes a high-contrast edge marker for undisplayed content", () => {
+    const longLine = "abcdefghijklmnopqrstuvwxyz"
+    const vm = buildEditorViewModel({
+      ...baseState,
+      screen: "editor",
+      editor: { ...baseState.editor!, body: longLine, savedBody: longLine, cursorOffset: 0, selectionStart: 0, selectionEnd: 0, wrapMode: "none" },
+    }, { bodyViewportColumns: 10 })
+
+    assert.deepEqual(vm.body.overflow.horizontal, {
+      left: false,
+      right: true,
+      indicator: "›",
+      scrollLeft: 0,
+      indicatorIntent: "info",
+    })
   })
 
   test("editor unwrap horizontal pan uses terminal display-cell widths for wide and combining characters", () => {
@@ -818,7 +835,7 @@ describe("TUI render view models", () => {
     }, { bodyViewportColumns: 10 })
 
     assert.equal(wideAtStart.body.value, wideLine)
-    assert.deepEqual(wideAtStart.body.overflow.horizontal, { left: false, right: true, indicator: "›", scrollLeft: 0 })
+    assert.deepEqual(wideAtStart.body.overflow.horizontal, { left: false, right: true, indicator: "›", indicatorIntent: "info", scrollLeft: 0 })
 
     const wideAtEnd = buildEditorViewModel({
       ...baseState,
@@ -826,7 +843,7 @@ describe("TUI render view models", () => {
       editor: { ...baseState.editor!, body: wideLine, savedBody: wideLine, cursorOffset: Array.from(wideLine).length, selectionStart: Array.from(wideLine).length, selectionEnd: Array.from(wideLine).length, wrapMode: "none" },
     }, { bodyViewportColumns: 10 })
 
-    assert.deepEqual(wideAtEnd.body.overflow.horizontal, { left: true, right: false, indicator: "‹", scrollLeft: 3 })
+    assert.deepEqual(wideAtEnd.body.overflow.horizontal, { left: true, right: false, indicator: "‹", indicatorIntent: "info", scrollLeft: 3 })
 
     const mixedLine = "abc日本語def"
     const mixedCursor = Array.from("abc日本").length
@@ -836,7 +853,7 @@ describe("TUI render view models", () => {
       editor: { ...baseState.editor!, body: mixedLine, savedBody: mixedLine, cursorOffset: mixedCursor, selectionStart: mixedCursor, selectionEnd: mixedCursor, wrapMode: "none" },
     }, { bodyViewportColumns: 6 })
 
-    assert.deepEqual(mixed.body.overflow.horizontal, { left: true, right: true, indicator: "↔", scrollLeft: 2 })
+    assert.deepEqual(mixed.body.overflow.horizontal, { left: true, right: true, indicator: "↔", indicatorIntent: "info", scrollLeft: 2 })
 
     const combiningLine = "a\u0301bcdefghi"
     const combining = buildEditorViewModel({
@@ -873,6 +890,7 @@ describe("TUI render view models", () => {
 
       assert.equal(bodyDisplay?.scrollX, 5)
       assert.equal(indicatorText, "↔")
+      assert.deepEqual((indicator as { fg?: { toInts?: () => number[] } } | undefined)?.fg?.toInts?.(), colorInts(tuiTheme.info))
       assert.equal(controller.getState().editor?.body, longLine)
     } finally {
       renderer.destroy()
@@ -1239,7 +1257,7 @@ describe("TUI render view models", () => {
     const thresholdPreview = thresholdVm.preview
     assert.equal(thresholdPreview?.visible, true)
     if (thresholdPreview?.visible) {
-      assert.deepEqual(thresholdPreview.sections.map((section) => section.label), ["Path", "Description"])
+      assert.deepEqual(thresholdPreview.sections.map((section) => section.label), ["Summary"])
     }
     assert.deepEqual(manualVm.regions.map((region) => region.id), ["input", "result-list"])
     assert.deepEqual(shortVm.regions.map((region) => region.id), ["input", "result-list"])
@@ -1432,7 +1450,7 @@ describe("TUI render view models", () => {
       assert.match(text, /Results · \d+/u)
       assert.match(resultText, /› \[note\] Daily Plan —/u)
       assert.doesNotMatch(resultText, /undefined/u)
-      assert.deepEqual(previewLines.slice(0, 5), ["Preview · Daily Plan", "notes/inbox/daily-plan.md", "Path", "notes/inbox/daily-plan.md", "Description"])
+      assert.deepEqual(previewLines.slice(0, 4), ["Preview · Daily Plan", "notes/inbox/daily-plan.md", "Summary", "Today priorities."])
       assert.match(text, /Today priorities\./u)
       controller.openSearch("/archive")
       controller.selectSearchResult()

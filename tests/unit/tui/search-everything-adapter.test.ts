@@ -105,8 +105,7 @@ describe("TUI Search Everything adapter", () => {
     const command = buildSearchEverythingResults("/find", createDeps()).find((result) => result.kind === "command")
 
     assert.deepEqual(buildSearchEverythingPreview(note)?.sections, [
-      { label: "Path", lines: ["notes/inbox/daily-plan.md"] },
-      { label: "Description", lines: ["Today priorities and project focus."] },
+      { label: "Summary", lines: ["Today priorities and project focus."] },
     ])
     assert.deepEqual(buildSearchEverythingPreview(note)?.lines, ["Today priorities and project focus."])
 
@@ -250,8 +249,7 @@ describe("TUI Search Everything adapter", () => {
       subtitle: "notes/inbox/daily-plan.md",
       lines: ["Today priorities and project focus."],
       sections: [
-        { label: "Path", lines: ["notes/inbox/daily-plan.md"] },
-        { label: "Description", lines: ["Today priorities and project focus."] },
+        { label: "Summary", lines: ["Today priorities and project focus."] },
       ],
     })
 
