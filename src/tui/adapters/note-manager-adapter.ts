@@ -293,7 +293,7 @@ function noteContentPreview(
     path: item.relativePath,
     noteKey: item.key,
     title: item.title,
-    description: item.description,
+    description: "",
     contentLines: bodyLines,
   }
 }

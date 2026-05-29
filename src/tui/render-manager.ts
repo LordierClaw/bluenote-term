@@ -345,15 +345,9 @@ function hiddenPreview(path: string | null, reason: "manual" | "responsive"): Ma
 }
 
 function previewSectionsFor(preview: Extract<ManagerPreviewViewModel, { type: "note-content" }>): ManagerPreviewSectionViewModel[] {
-  const sections: ManagerPreviewSectionViewModel[] = [
-    { label: "Title", lines: [preview.title] },
-    { label: "Path", lines: [preview.path] },
+  return [
+    { label: "Preview", lines: [preview.title, "", ...preview.contentLines] },
   ]
-  if (preview.description) {
-    sections.push({ label: "Description", lines: [preview.description] })
-  }
-  sections.push({ label: "Body", lines: preview.contentLines })
-  return sections
 }
 
 function previewViewModelFor(preview: ManagerPreviewModel | null | undefined, openNoteKey: string | null, maxWidth?: number): ManagerPreviewViewModel {
@@ -373,8 +367,7 @@ function previewViewModelFor(preview: ManagerPreviewModel | null | undefined, op
       title: basenameLabel(preview.path) || "Folder",
       message: `${preview.rows.length} ${preview.rows.length === 1 ? "item" : "items"}`,
       sections: [
-        { label: "Path", lines: [preview.path] },
-        { label: "Contents", lines: preview.rows.map((row) => displaySegmentsFor(row, maxWidth).primary) },
+        { label: "Items", lines: preview.rows.map((row) => displaySegmentsFor(row, maxWidth).primary) },
       ],
       styleIntent: "panel",
     }
@@ -627,16 +620,14 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
 
   const preview = vm.layout2.preview
   if (layout2 && preview.type === "folder") {
-    layout2.add(new TextRenderable(options.renderer, { content: `${preview.title} · ${preview.message}`, height: 1, fg: tuiTheme.textPrimary }))
-    layout2.add(new TextRenderable(options.renderer, { content: preview.path, height: 1, fg: tuiTheme.mutedText }))
     for (const row of preview.rows) {
       layout2.add(rowRenderable(options, row))
     }
   } else if (layout2 && preview.type === "note-content") {
     for (const section of preview.sections) {
       layout2.add(new TextRenderable(options.renderer, { content: section.label, height: 1, fg: tuiTheme.textSecondary }))
-      for (const line of section.lines.slice(0, section.label === "Body" ? 20 : 2)) {
-        layout2.add(new TextRenderable(options.renderer, { content: line, height: 1, fg: section.label === "Body" ? tuiTheme.textPrimary : tuiTheme.mutedText }))
+      for (const line of section.lines.slice(0, section.label === "Preview" ? 20 : 2)) {
+        layout2.add(new TextRenderable(options.renderer, { content: line, height: 1, fg: section.label === "Preview" ? tuiTheme.textPrimary : tuiTheme.mutedText }))
       }
     }
   } else if (layout2 && preview.type === "empty") {

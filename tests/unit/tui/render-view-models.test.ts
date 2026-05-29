@@ -433,6 +433,11 @@ describe("TUI render view models", () => {
       ],
     )
     assert.equal(vm.layout2.preview.type, "folder")
+    assert.deepEqual(vm.layout2.preview.sections, [
+      { label: "Items", lines: ["client", "api-roadmap.md"] },
+    ])
+    assert.deepEqual(vm.layout2.preview.sections.map((section) => section.label), ["Items"])
+    assert.doesNotMatch(JSON.stringify(vm.layout2.preview.sections), /Path|Description|Contents/u)
     assert.deepEqual(
       vm.layout2.preview.rows.map((row) => ({ filename: row.filename, displaySegments: row.displaySegments, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent })),
       [
@@ -487,7 +492,7 @@ describe("TUI render view models", () => {
     assert.ok(vm.layout1.rows[1]!.displaySegments.secondary.endsWith("…"), vm.layout1.rows[1]!.displaySegments.secondary)
   })
 
-  test("manager note preview exposes title, path, content lines, and focus background without open marker styling", () => {
+  test("manager note preview exposes title and content lines without metadata rows", () => {
     const browser = buildManagerBrowserModel([
       {
         key: "root-note",
@@ -522,16 +527,15 @@ describe("TUI render view models", () => {
       title: "Root Note",
       path: "notes/root-note.md",
       noteKey: "root-note",
-      description: "A top-level note.",
+      description: "",
       contentLines: ["# Root Note", "", "Preview body."],
       sections: [
-        { label: "Title", lines: ["Root Note"] },
-        { label: "Path", lines: ["notes/root-note.md"] },
-        { label: "Description", lines: ["A top-level note."] },
-        { label: "Body", lines: ["# Root Note", "", "Preview body."] },
+        { label: "Preview", lines: ["Root Note", "", "# Root Note", "", "Preview body."] },
       ],
       styleIntent: "panel",
     })
+    assert.deepEqual(vm.layout2.preview.sections.map((section) => section.label), ["Preview"])
+    assert.doesNotMatch(JSON.stringify(vm.layout2.preview.sections), /Path|Description|root-note\.md|A top-level note\.|root-note/u)
     assert.equal(vm.layout1.rows[0]?.styleIntent, "focusedRow")
     assert.equal(vm.layout1.rows[0]?.focusMarker, "")
     assert.equal(vm.layout1.rows[0]?.openMarker, "")
@@ -1408,7 +1412,8 @@ describe("TUI render view models", () => {
       assert.equal(wideIds.includes("bluenote-manager-layout-2"), true)
       assert.equal((wideScreen as any).border, false)
       assert.equal((wideScreen as any).title ?? "", "")
-      assert.deepEqual(widePreviewText.slice(0, 6), ["Title", "Root Note", "Path", "notes/root-note.md", "Description", "A top-level note."])
+      assert.deepEqual(widePreviewText.slice(0, 6), ["Preview", "Root Note", "", "# Root Note", "", "Preview body."])
+      assert.doesNotMatch(widePreviewText.join("\n"), /Path|Description|notes\/root-note\.md|A top-level note\./u)
       assert.equal(renderedRowText.startsWith("root-note.md"), true)
       assert.doesNotMatch(renderedRowText, /^[\s›●📁📄]/u)
       assert.doesNotMatch(renderedRowText, /[›●]/u)
