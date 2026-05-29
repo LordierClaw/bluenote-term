@@ -389,7 +389,7 @@ function launchCaseTerminal(testCase: VisualCase, session: string, qaRoot: strin
   const created = run("tmux", ["new-session", "-d", "-s", session, "-x", cols, "-y", rows, tmuxCommand], { timeout: 10_000 })
   if (created.status !== 0) throw new Error(`failed to create tmux session ${session}: ${created.stderr}`)
 
-  const attachCommand = `tmux attach -t ${shellQuote(session)}`
+  const attachCommand = `printf '\\033c'; exec tmux attach -t ${shellQuote(session)}`
   const launched = run("gnome-terminal", ["--title", title, `--geometry=${buildGnomeTerminalGeometry(testCase.geometry, caseIndex)}`, `--zoom=${testCase.zoom}`, "--", "bash", "-lc", attachCommand], { timeout: 10_000 })
   if (launched.status !== 0) throw new Error(`failed to launch GNOME Terminal for ${testCase.id}: ${launched.stderr}`)
   wait(1_500)
