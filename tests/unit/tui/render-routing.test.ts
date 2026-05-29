@@ -1,8 +1,9 @@
 import { describe, test } from "bun:test"
 import assert from "node:assert/strict"
+import { EventEmitter } from "node:events"
 import { createCliRenderer } from "@opentui/core"
 
-import { blurWorkspaceInputs, focusActiveWorkspaceInput, routeWorkspaceKey, startTuiWorkspace } from "../../../src/tui/app"
+import { blurWorkspaceInputs, focusActiveWorkspaceInput, routeWorkspaceKey, startTuiWorkspace, waitForInteractiveTuiExit } from "../../../src/tui/app"
 import { renderEditorScreen, routeEditorKey } from "../../../src/tui/render-editor"
 import { renderManagerScreen, routeManagerKey } from "../../../src/tui/render-manager"
 import { renderSearchEverythingScreen, routeSearchEverythingKey } from "../../../src/tui/render-search-everything"
@@ -124,6 +125,29 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
 }
 
 describe("TUI render keyboard routing", () => {
+  test("signal shutdown waits for renderer destroy before resolving", async () => {
+    const renderer = new EventEmitter() as EventEmitter & { isDestroyed: boolean }
+    renderer.isDestroyed = false
+    let destroyCalls = 0
+    const exitPromise = waitForInteractiveTuiExit({
+      renderer: renderer as any,
+      controller: {} as any,
+      destroy: () => {
+        destroyCalls += 1
+      },
+    })
+
+    process.emit("SIGINT", "SIGINT")
+
+    assert.equal(destroyCalls, 1)
+    assert.equal(await Promise.race([exitPromise.then(() => "resolved"), new Promise((resolve) => setTimeout(() => resolve("pending"), 0))]), "pending")
+
+    renderer.isDestroyed = true
+    renderer.emit("destroy")
+
+    assert.equal(await exitPromise, 1)
+  })
+
   test("editor route does not consume printable editing characters", () => {
     const { controller, calls } = createController("editor")
     let exited = false

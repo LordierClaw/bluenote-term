@@ -425,6 +425,58 @@ export async function startTuiWorkspace(options: StartTuiWorkspaceOptions = {}):
   return { renderer, controller, destroy }
 }
 
+export async function waitForInteractiveTuiExit(running: RunningTuiWorkspace): Promise<CliResult["exitCode"]> {
+  let exitCode: CliResult["exitCode"] = 0
+  const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const
+
+  await new Promise<void>((resolve) => {
+    let resolved = false
+    let signalFallbackTimer: ReturnType<typeof setTimeout> | null = null
+    const cleanupSignalHandlers = (): void => {
+      for (const signal of signals) {
+        process.off(signal, handleSignal)
+      }
+    }
+    const cleanupFallback = (): void => {
+      if (signalFallbackTimer) {
+        clearTimeout(signalFallbackTimer)
+        signalFallbackTimer = null
+      }
+    }
+    const finish = (): void => {
+      if (resolved) {
+        return
+      }
+      resolved = true
+      cleanupFallback()
+      cleanupSignalHandlers()
+      running.renderer.off("destroy", finish)
+      resolve()
+    }
+    const handleSignal = (_signal: NodeJS.Signals): void => {
+      exitCode = 1
+      running.destroy()
+      // Renderer destroy can be deferred while OpenTUI is rendering. Prefer the
+      // renderer's destroy event so terminal final cleanup completes before the
+      // CLI resolves, but do not hang forever if an injected/test renderer fails
+      // to emit the event after accepting destroy.
+      if (!signalFallbackTimer) {
+        signalFallbackTimer = setTimeout(finish, 1000)
+      }
+    }
+    for (const signal of signals) {
+      process.once(signal, handleSignal)
+    }
+    if (running.renderer.isDestroyed) {
+      finish()
+      return
+    }
+    running.renderer.once("destroy", finish)
+  })
+
+  return exitCode
+}
+
 export function runTuiCli(): CliResult {
   if (!process.stdin.isTTY || !process.stdout.isTTY) {
     return {
@@ -453,37 +505,7 @@ export async function runTuiCliInteractive(): Promise<CliResult> {
   }
 
   const running = await startTuiWorkspace()
-  let exitCode: CliResult["exitCode"] = 0
-  const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const
-  await new Promise<void>((resolve) => {
-    let resolved = false
-    const cleanupSignalHandlers = (): void => {
-      for (const signal of signals) {
-        process.off(signal, handleSignal)
-      }
-    }
-    const finish = (): void => {
-      if (resolved) {
-        return
-      }
-      resolved = true
-      cleanupSignalHandlers()
-      resolve()
-    }
-    const handleSignal = (_signal: NodeJS.Signals): void => {
-      exitCode = 1
-      running.destroy()
-      finish()
-    }
-    for (const signal of signals) {
-      process.once(signal, handleSignal)
-    }
-    if (running.renderer.isDestroyed) {
-      finish()
-      return
-    }
-    running.renderer.once("destroy", finish)
-  })
+  const exitCode = await waitForInteractiveTuiExit(running)
 
   return {
     exitCode,
