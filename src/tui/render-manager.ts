@@ -1,6 +1,7 @@
 import { BoxRenderable, InputRenderable, InputRenderableEvents, TextRenderable, type CliRenderer } from "@opentui/core"
 
 import type { ManagerBrowserModel, ManagerBrowserRow, ManagerPreviewModel } from "./adapters/note-manager-adapter"
+import { padEndDisplayCells, truncateDisplayCells } from "./display-width"
 import { renderShortcutHints, shortcutHintLabels, topbarTextIntent, type ShortcutHint, type ShortcutRenderableHint } from "./render-chrome"
 import type { ManagerItem, TuiState } from "./state"
 import { tuiTheme, type TuiColorIntent } from "./theme"
@@ -244,72 +245,6 @@ function managerShortcutHints(state: TuiState, previewHidden: boolean, width?: n
   return [...primary, { key: "s", action: "Search", priority: "secondary" }]
 }
 
-function isCombiningCodePoint(codePoint: number): boolean {
-  return (codePoint >= 0x0300 && codePoint <= 0x036F)
-    || (codePoint >= 0x1AB0 && codePoint <= 0x1AFF)
-    || (codePoint >= 0x1DC0 && codePoint <= 0x1DFF)
-    || (codePoint >= 0x20D0 && codePoint <= 0x20FF)
-    || (codePoint >= 0xFE20 && codePoint <= 0xFE2F)
-}
-
-function isWideCodePoint(codePoint: number): boolean {
-  return (codePoint >= 0x1100 && codePoint <= 0x115F)
-    || codePoint === 0x2329
-    || codePoint === 0x232A
-    || (codePoint >= 0x2E80 && codePoint <= 0xA4CF && codePoint !== 0x303F)
-    || (codePoint >= 0xAC00 && codePoint <= 0xD7A3)
-    || (codePoint >= 0xF900 && codePoint <= 0xFAFF)
-    || (codePoint >= 0xFE10 && codePoint <= 0xFE19)
-    || (codePoint >= 0xFE30 && codePoint <= 0xFE6F)
-    || (codePoint >= 0xFF00 && codePoint <= 0xFF60)
-    || (codePoint >= 0xFFE0 && codePoint <= 0xFFE6)
-    || (codePoint >= 0x1F300 && codePoint <= 0x1FAFF)
-}
-
-function displayCellWidth(value: string): number {
-  let width = 0
-  for (const char of Array.from(value)) {
-    const codePoint = char.codePointAt(0) ?? 0
-    if (codePoint === 0 || codePoint < 32 || (codePoint >= 0x7F && codePoint < 0xA0) || isCombiningCodePoint(codePoint)) {
-      continue
-    }
-    width += isWideCodePoint(codePoint) ? 2 : 1
-  }
-  return width
-}
-
-function truncateDisplayCells(value: string, maxCells: number): string {
-  if (maxCells <= 0) {
-    return ""
-  }
-  if (displayCellWidth(value) <= maxCells) {
-    return value
-  }
-  if (maxCells === 1) {
-    return "…"
-  }
-
-  const ellipsisWidth = 1
-  const contentMax = maxCells - ellipsisWidth
-  let result = ""
-  let width = 0
-  for (const char of Array.from(value)) {
-    const charWidth = displayCellWidth(char)
-    if (width + charWidth > contentMax) {
-      break
-    }
-    result += char
-    width += charWidth
-  }
-
-  return `${result}…`
-}
-
-function padEndDisplayCells(value: string, cells: number): string {
-  const padding = Math.max(0, cells - displayCellWidth(value))
-  return `${value}${" ".repeat(padding)}`
-}
-
 function managerRowTextWidth(width: number | undefined): number | undefined {
   if (typeof width !== "number") {
     return undefined
@@ -331,9 +266,13 @@ function rowSegmentWidthsForAvailable(available: number | undefined): { primary:
 }
 
 function displaySegmentsFor(row: BrowserishRow, maxWidth?: number): ManagerRowViewModel["displaySegments"] {
+  const primary = row.type === "folder"
+    ? row.title || basenameLabel(row.relativePath) || row.filename.replace(/\/+$/u, "")
+    : row.filename || row.title || row.key
+  const secondary = row.type === "folder" ? row.description : row.title || row.description
   const segments = {
-    primary: row.type === "folder" ? row.title || basenameLabel(row.relativePath) || row.filename.replace(/\/+$/u, "") : row.title || row.filename,
-    secondary: row.description,
+    primary,
+    secondary,
     metadata: "",
   }
 

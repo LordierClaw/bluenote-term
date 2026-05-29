@@ -6,6 +6,7 @@ import { buildEditorViewModel, renderEditorScreen } from "../../../src/tui/rende
 import { buildManagerViewModel, renderManagerScreen } from "../../../src/tui/render-manager"
 import { renderShortcutHints } from "../../../src/tui/render-chrome"
 import { buildSearchEverythingViewModel, renderSearchEverythingScreen } from "../../../src/tui/render-search-everything"
+import { displayCellWidth } from "../../../src/tui/display-width"
 import { tuiTheme } from "../../../src/tui/theme"
 import { buildManagerBrowserModel, type NoteManagerSummary } from "../../../src/tui/adapters/note-manager-adapter"
 import { createWorkspaceController } from "../../../src/tui/workspace-controller"
@@ -208,7 +209,7 @@ describe("TUI render view models", () => {
       vm.rows.map((row) => row.displaySegments),
       [
         { primary: "inbox", secondary: "2 notes", metadata: "" },
-        { primary: "Daily Plan", secondary: "Today priorities.", metadata: "" },
+        { primary: "daily-plan.md", secondary: "Daily Plan", metadata: "" },
       ],
     )
     assert.deepEqual(
@@ -428,7 +429,7 @@ describe("TUI render view models", () => {
       vm.layout1.rows.map((row) => ({ filename: row.filename, displaySegments: row.displaySegments, focused: row.focused, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent })),
       [
         { filename: "projects", displaySegments: { primary: "projects", secondary: "", metadata: "" }, focused: true, styleIntent: "focusedRow", itemStyleIntent: "textPrimary" },
-        { filename: "root-note.md", displaySegments: { primary: "Root Note", secondary: "A top-level note.", metadata: "" }, focused: false, styleIntent: "panel", itemStyleIntent: "textPrimary" },
+        { filename: "root-note.md", displaySegments: { primary: "root-note.md", secondary: "Root Note", metadata: "" }, focused: false, styleIntent: "panel", itemStyleIntent: "textPrimary" },
       ],
     )
     assert.equal(vm.layout2.preview.type, "folder")
@@ -436,13 +437,14 @@ describe("TUI render view models", () => {
       vm.layout2.preview.rows.map((row) => ({ filename: row.filename, displaySegments: row.displaySegments, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent })),
       [
         { filename: "client", displaySegments: { primary: "client", secondary: "", metadata: "" }, styleIntent: "panel", itemStyleIntent: "textPrimary" },
-        { filename: "api-roadmap.md", displaySegments: { primary: "API Roadmap", secondary: "Ship API work.", metadata: "" }, styleIntent: "panel", itemStyleIntent: "textPrimary" },
+        { filename: "api-roadmap.md", displaySegments: { primary: "api-roadmap.md", secondary: "API Roadmap", metadata: "" }, styleIntent: "panel", itemStyleIntent: "textPrimary" },
       ],
     )
   })
 
   test("manager row display labels clamp long folder and note text at narrow manager widths", () => {
     const longFolderName = "folder-".repeat(12)
+    const longNoteFilename = `${"filename-".repeat(10)}日本語𠀀.md`
     const longNoteTitle = `Launch notes ${"日本語".repeat(8)} ${"alpha ".repeat(10)}`
     const longDescription = `Description ${"detail ".repeat(20)}`
     const vm = buildManagerViewModel({
@@ -461,7 +463,7 @@ describe("TUI render view models", () => {
           {
             type: "note",
             key: "long-note",
-            filename: `${"filename-".repeat(10)}.md`,
+            filename: longNoteFilename,
             title: longNoteTitle,
             description: longDescription,
             relativePath: "notes/long-note.md",
@@ -475,11 +477,12 @@ describe("TUI render view models", () => {
     assert.equal(vm.layout1.rows.length, 2)
     for (const row of vm.layout1.rows) {
       assert.ok(row.displaySegments.primary.endsWith("…"), row.displaySegments.primary)
-      assert.ok(row.displaySegments.primary.length <= 24, row.displaySegments.primary)
-      assert.ok(row.displaySegments.secondary.length <= 12, row.displaySegments.secondary)
+      assert.ok(displayCellWidth(row.displaySegments.primary) <= 24, row.displaySegments.primary)
+      assert.ok(displayCellWidth(row.displaySegments.secondary) <= 12, row.displaySegments.secondary)
     }
     assert.match(vm.layout1.rows[0]!.displaySegments.primary, /^folder-/u)
-    assert.match(vm.layout1.rows[1]!.displaySegments.primary, /^Launch notes/u)
+    assert.match(vm.layout1.rows[1]!.displaySegments.primary, /^filename-/u)
+    assert.doesNotMatch(vm.layout1.rows[1]!.displaySegments.primary, /Launch notes/u)
     assert.doesNotMatch(vm.layout1.rows[1]!.displaySegments.primary, /�/u)
     assert.ok(vm.layout1.rows[1]!.displaySegments.secondary.endsWith("…"), vm.layout1.rows[1]!.displaySegments.secondary)
   })
@@ -1406,10 +1409,10 @@ describe("TUI render view models", () => {
       assert.equal((wideScreen as any).border, false)
       assert.equal((wideScreen as any).title ?? "", "")
       assert.deepEqual(widePreviewText.slice(0, 6), ["Title", "Root Note", "Path", "notes/root-note.md", "Description", "A top-level note."])
-      assert.equal(renderedRowText.startsWith("Root Note"), true)
+      assert.equal(renderedRowText.startsWith("root-note.md"), true)
       assert.doesNotMatch(renderedRowText, /^[\s›●📁📄]/u)
       assert.doesNotMatch(renderedRowText, /[›●]/u)
-      assert.deepEqual(renderedRowSegments.slice(0, 1), ["Root Note".padEnd(24)])
+      assert.deepEqual(renderedRowSegments.slice(0, 1), ["root-note.md".padEnd(24)])
 
       renderer.root.remove(wideScreen.id)
       wideScreen.destroyRecursively()
@@ -1423,8 +1426,9 @@ describe("TUI render view models", () => {
       assert.equal(narrowIds.includes("bluenote-manager-layout-1"), true)
       assert.equal(narrowIds.includes("bluenote-manager-layout-2"), false)
       assert.equal((narrowLayout1 as any)?._width, "100%")
+      assert.match(narrowText, /root-note\.md/u)
       assert.match(narrowText, /Root Note/u)
-      assert.doesNotMatch(narrowText, /notes\/root-note\.md|root-note\.md/u)
+      assert.doesNotMatch(narrowText, /notes\/root-note\.md/u)
       assert.doesNotMatch(narrowText, /\[\?\] More/u)
       assert.match(narrowText, /Preview hidden for narrow terminal · p show/u)
       assert.doesNotMatch(narrowText, /Preview body/u)

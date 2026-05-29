@@ -1082,8 +1082,9 @@ describe("TUI render keyboard routing", () => {
       assert.equal(showCalls, 0)
       assert.notEqual(narrowLayout1, undefined)
       assert.equal(narrowLayout2, undefined)
+      assert.match(narrowText, /daily\.md/u)
       assert.match(narrowText, /Daily/u)
-      assert.doesNotMatch(narrowText, /notes\/daily\.md|daily\.md/u)
+      assert.doesNotMatch(narrowText, /notes\/daily\.md/u)
       assert.match(narrowText, /Preview hidden for narrow terminal · p show/u)
       assert.doesNotMatch(narrowText, /Preview body/u)
 
@@ -1115,8 +1116,9 @@ describe("TUI render keyboard routing", () => {
       assert.equal(showCalls, 0)
       assert.notEqual(findById(narrowScreen, "bluenote-manager-layout-1"), undefined)
       assert.equal(findById(narrowScreen, "bluenote-manager-layout-2"), undefined)
+      assert.match(narrowText, /daily\.md/u)
       assert.match(narrowText, /Daily/u)
-      assert.doesNotMatch(narrowText, /notes\/daily\.md|daily\.md/u)
+      assert.doesNotMatch(narrowText, /notes\/daily\.md/u)
       assert.doesNotMatch(narrowText, /Preview hidden \(narrow width\)/u)
       assert.doesNotMatch(narrowText, /Preview body/u)
     } finally {
