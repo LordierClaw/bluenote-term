@@ -226,7 +226,7 @@ describe("TUI render keyboard routing", () => {
     assert.deepEqual(calls, ["toggleEditorWrapMode"])
   })
 
-  test("editor routes terminal-friendly enhanced copy/cut/paste shortcuts", () => {
+  test("editor routes terminal-friendly enhanced copy/cut/paste shortcuts from the body", () => {
     const { controller, calls } = createController("editor")
     controller.getState().mode = "editor.body"
 
@@ -235,6 +235,16 @@ describe("TUI render keyboard routing", () => {
     assert.equal(routeEditorKey("\u001b[118;6u", controller), true)
 
     assert.deepEqual(calls, ["copyEditorSelection", "cutEditorSelection", "pasteEditorClipboard:"])
+  })
+
+  test("editor find mode leaves enhanced clipboard shortcuts to the focused find input", () => {
+    const { controller, calls } = createController("editor")
+    controller.getState().mode = "editor.find"
+
+    assert.equal(routeEditorKey("\u001b[99;6u", controller), false)
+    assert.equal(routeEditorKey("\u001b[120;6u", controller), false)
+    assert.equal(routeEditorKey("\u001b[118;6u", controller), false)
+    assert.deepEqual(calls, [])
   })
 
   test("workspace body routing keeps bracketed paste as paste text fallback instead of clipboard shortcut", () => {

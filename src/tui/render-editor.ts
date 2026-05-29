@@ -732,14 +732,17 @@ export function routeEditorKey(sequence: string, controller: WorkspaceController
       return true
     case "\u001b[99;6u":
     case "\u001b[67;6u":
+      if (state.mode !== "editor.body") return false
       controller.copyEditorSelection()
       return true
     case "\u001b[120;6u":
     case "\u001b[88;6u":
+      if (state.mode !== "editor.body") return false
       controller.cutEditorSelection()
       return true
     case "\u001b[118;6u":
     case "\u001b[86;6u":
+      if (state.mode !== "editor.body") return false
       controller.pasteEditorClipboard()
       return true
     case "\u001bz":
