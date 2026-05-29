@@ -310,8 +310,12 @@ function foldersFor(relativePath: string): string[] {
   return parts.slice(1, -1).map((_, index) => ["notes", ...parts.slice(1, index + 2)].join("/"))
 }
 
-function collectFolders(noteSummaries: readonly NoteManagerSummary[]): SearchEverythingFolderResult[] {
-  const managerItems = buildManagerBrowserItems(noteSummaries)
+interface SearchEverythingFolderCandidate {
+  path: string
+  noteCount: number
+}
+
+function collectFolderCandidates(managerItems: readonly ManagerItem[]): SearchEverythingFolderCandidate[] {
   const folderCounts = new Map<string, number>()
 
   for (const item of managerItems) {
@@ -324,7 +328,7 @@ function collectFolders(noteSummaries: readonly NoteManagerSummary[]): SearchEve
     }
   }
 
-  return Array.from(folderCounts.entries()).map(([path, noteCount]) => buildFolderResult(path, noteCount, managerItems))
+  return Array.from(folderCounts.entries()).map(([path, noteCount]) => ({ path, noteCount }))
 }
 
 function buildFolderResult(path: string, noteCount: number, managerItems: readonly ManagerItem[]): SearchEverythingFolderResult {
@@ -421,12 +425,21 @@ function buildContentResults(query: string, deps: SearchEverythingDependencies):
 }
 
 function buildFolderResults(query: string, noteSummaries: readonly NoteManagerSummary[]): SearchEverythingFolderResult[] {
-  return collectFolders(noteSummaries)
-    .map((folder) => ({
-      ...folder,
-      score: Math.max(containsScore(query, folder.path), containsScore(query, folder.name)),
-    }))
+  const managerItems = buildManagerBrowserItems(noteSummaries)
+  return collectFolderCandidates(managerItems)
+    .map((folder) => {
+      const name = folderNameFor(folder.path)
+      return {
+        ...folder,
+        name,
+        score: Math.max(containsScore(query, folder.path), containsScore(query, name)),
+      }
+    })
     .filter((folder) => folder.score > 0)
+    .map((folder) => ({
+      ...buildFolderResult(folder.path, folder.noteCount, managerItems),
+      score: folder.score,
+    }))
 }
 
 function strictCommandScore(query: string, commandName: string): number {
