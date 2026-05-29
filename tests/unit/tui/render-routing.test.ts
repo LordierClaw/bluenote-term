@@ -916,7 +916,7 @@ describe("TUI render keyboard routing", () => {
     assert.deepEqual(calls, ["toggleManagerPreview", "openSearch:", "toggleSearch:"])
   })
 
-  test("manager renderer prints simplified topbar and open-note bottom path", async () => {
+  test("manager renderer prints simplified topbar and currently-open footer label", async () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const { controller } = createController("manager")
@@ -939,11 +939,12 @@ describe("TUI render keyboard routing", () => {
 
       const screen = renderManagerScreen({ renderer, controller, width: 60 })
       renderer.root.add(screen)
-      const textLines = descendants(screen).map((node) => node.content?.chunks?.[0]?.text ?? node.content ?? "")
+      const textLines = descendants(screen).map((node) => node.content?.chunks?.map((chunk: { text?: string }) => chunk.text ?? "").join("") ?? node.content ?? "")
       const renderedText = textLines.join("\n")
 
       assert.ok(textLines.includes("BlueNote  Workspace · notes/inbox  1 items (filtered) · Indexing..."))
-      assert.match(renderedText, /notes\/inbox\/daily-plan\.md/u)
+      assert.match(renderedText, /Currently open: Daily Plan/u)
+      assert.match(renderedText, /\[\/\] Filter/u)
       assert.doesNotMatch(renderedText, /Rebuild idle|Index ready|selected daily-plan|notes\/inbox → notes\/inbox\/daily-plan\.md|filter “daily”/u)
     } finally {
       renderer.destroy()
@@ -969,8 +970,9 @@ describe("TUI render keyboard routing", () => {
       assert.notEqual(topbar?.border, true)
       assert.deepEqual(topbar?.fg?.toInts?.(), [248, 250, 252, 255])
       assert.notEqual(footer?.border, true)
-      assert.equal(footerText, "[Enter] Open  [n] New  [s] Search")
+      assert.equal(footerText, "[Enter] Open  [/] Filter  [n] New  [s] Search")
       assert.deepEqual(footerChunks.filter((chunk: { text?: string }) => /^\[[^\]]+\]$/u.test(chunk.text ?? "")).map((chunk: any) => chunk.fg?.toInts?.()), [
+        [56, 189, 248, 255],
         [56, 189, 248, 255],
         [56, 189, 248, 255],
         [56, 189, 248, 255],

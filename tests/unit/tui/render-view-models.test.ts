@@ -123,14 +123,14 @@ describe("TUI render view models", () => {
       workspaceLabel: "Workspace · notes/",
       summaryLabel: "2 items · Ready",
       orientation: "Browse your local Markdown workspace.",
-      primaryActions: ["[Enter] Open", "[n] New", "[s] Search"],
+      primaryActions: ["[Enter] Open", "[/] Filter", "[n] New", "[s] Search"],
     })
     assert.deepEqual(vm.topbar, {
       leftTitle: "BlueNote",
       itemCountLabel: "2 items",
       appStatusLabel: "Ready",
       rightLabel: "2 items | Ready",
-      bottomPath: "notes/inbox/daily-plan.md",
+      bottomPath: "Currently open: Daily Plan",
       styleIntent: "textPrimary",
     })
     assert.equal(vm.panels.layout1.title, "notes/")
@@ -138,10 +138,11 @@ describe("TUI render view models", () => {
     assert.equal(vm.status, "Ready")
     assert.deepEqual(vm.shortcutHints, [
       { key: "Enter", action: "Open", priority: "primary" },
+      { key: "/", action: "Filter", priority: "primary" },
       { key: "n", action: "New", priority: "primary" },
       { key: "s", action: "Search", priority: "secondary" },
     ])
-    assert.deepEqual(vm.shortcuts, ["[Enter] Open", "[n] New", "[s] Search"])
+    assert.deepEqual(vm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New", "[s] Search"])
     const creatingVm = buildManagerViewModel({
       ...baseState,
       mode: "manager.create",
@@ -258,20 +259,21 @@ describe("TUI render view models", () => {
   })
 
   test("manager shortcut chrome prioritizes key/action pairs and demotes secondary hints on narrow widths", () => {
-    const wideVm = buildManagerViewModel(baseState, undefined, { width: 100 })
-    const narrowVm = buildManagerViewModel(baseState, undefined, { width: 60 })
+    const wideVm = buildManagerViewModel({ ...baseState, mode: "manager.browse" }, undefined, { width: 100 })
+    const narrowVm = buildManagerViewModel({ ...baseState, mode: "manager.browse" }, undefined, { width: 60 })
     const filteringVm = buildManagerViewModel({ ...baseState, mode: "manager.filter" }, undefined, { width: 100 })
 
     assert.deepEqual(wideVm.shortcutHints, [
       { key: "Enter", action: "Open", priority: "primary" },
+      { key: "/", action: "Filter", priority: "primary" },
       { key: "n", action: "New", priority: "primary" },
       { key: "s", action: "Search", priority: "secondary" },
     ])
-    assert.deepEqual(wideVm.shortcuts, ["[Enter] Open", "[n] New", "[s] Search"])
+    assert.deepEqual(wideVm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New", "[s] Search"])
     assert.ok(wideVm.shortcuts.every((hint) => /^\[[^\]]+\] [A-Z?]/u.test(hint)), wideVm.shortcuts.join(" | "))
-    assert.deepEqual(narrowVm.shortcuts, ["[Enter] Open", "[n] New"])
+    assert.deepEqual(narrowVm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New"])
     assert.doesNotMatch([...wideVm.shortcuts, ...narrowVm.shortcuts].join(" "), /\[\?\] More/u)
-    assert.doesNotMatch(narrowVm.shortcuts.join(" "), /Delete|Filter|Quit|Preview/u)
+    assert.doesNotMatch(narrowVm.shortcuts.join(" "), /Delete|Quit|Preview/u)
     assert.deepEqual(filteringVm.shortcutHints, [
       { key: "Enter", action: "Open", priority: "primary" },
       { key: "Esc", action: "Close", priority: "primary" },
@@ -297,8 +299,17 @@ describe("TUI render view models", () => {
     assert.equal(vm.topbar.itemCountLabel, "1 items (filtered)")
     assert.equal(vm.topbar.appStatusLabel, "Indexing...")
     assert.equal(vm.topbar.rightLabel, "1 items (filtered) | Indexing...")
-    assert.equal(vm.topbar.bottomPath, "notes/inbox/daily-plan.md")
+    assert.equal(vm.topbar.bottomPath, "Currently open: Daily Plan")
     assert.doesNotMatch(vm.topbar.rightLabel, /notes\/|daily-plan|Rebuild idle|Index ready/u)
+
+    const filenameFallbackVm = buildManagerViewModel({
+      ...baseState,
+      editor: {
+        ...baseState.editor!,
+        note: { ...baseState.editor!.note, title: "", relativePath: "notes/inbox/untitled-note.md" },
+      },
+    })
+    assert.equal(filenameFallbackVm.topbar.bottomPath, "Currently open: untitled-note.md")
 
     const noOpenNoteVm = buildManagerViewModel({
       ...baseState,
@@ -403,7 +414,7 @@ describe("TUI render view models", () => {
       itemCountLabel: "2 items",
       appStatusLabel: "Ready",
       rightLabel: "2 items | Ready",
-      bottomPath: "notes/inbox/daily-plan.md",
+      bottomPath: "Currently open: Daily Plan",
       styleIntent: "textPrimary",
     })
     assert.deepEqual(vm.panels, {

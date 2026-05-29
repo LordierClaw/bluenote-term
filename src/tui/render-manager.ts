@@ -186,6 +186,16 @@ function basenameLabel(path: string | null | undefined): string {
   return normalized.split("/").filter(Boolean).at(-1) ?? ""
 }
 
+function currentOpenNoteLabel(state: TuiState): string {
+  const note = state.editor?.note
+  if (!note) {
+    return ""
+  }
+
+  const contentLabel = note.title.trim() || basenameLabel(note.relativePath) || note.key
+  return `Currently open: ${contentLabel}`
+}
+
 function focusedItemLabel(rows: ManagerRowViewModel[], preview: ManagerPreviewViewModel): string {
   if (preview.type === "hidden") {
     return "Preview hidden"
@@ -223,6 +233,7 @@ function managerShortcutHints(state: TuiState, previewHidden: boolean, width?: n
 
   const primary: ShortcutHint[] = [
     { key: "Enter", action: "Open", priority: "primary" },
+    { key: "/", action: "Filter", priority: "primary" },
     { key: "n", action: "New", priority: "primary" },
   ]
   if (typeof width === "number" && width < MANAGER_PREVIEW_NARROW_WIDTH) {
@@ -375,7 +386,7 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
   const itemCountLabel = `${rows.length} items${state.manager.filterQuery ? " (filtered)" : ""}`
   const appStatusLabel = state.manager.status?.trim() || "Ready"
   const rightLabel = `${itemCountLabel} | ${appStatusLabel}`
-  const bottomPath = state.editor?.note.relativePath ?? ""
+  const bottomPath = currentOpenNoteLabel(state)
 
   const currentPath = currentPathLabel(currentFolderPath)
   const createPrompt = state.mode === "manager.create"
