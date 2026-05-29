@@ -601,7 +601,7 @@ describe("TUI note manager adapter", () => {
     assert.equal(goToManagerParent(root), root)
   })
 
-  test("filters Layout 1 and updates Layout 2 from the hovered filtered item", () => {
+  test("filters Layout 1 by visible item name and updates Layout 2 from the hovered filtered item", () => {
     const model = buildManagerBrowserModel(browserSummaries, {
       items: [],
       focusedIndex: 0,
@@ -617,7 +617,7 @@ describe("TUI note manager adapter", () => {
     assert.deepEqual(model.preview.rows?.map((row) => row.relativePath), ["notes/projects/client", "notes/projects/api-roadmap.md"])
   })
 
-  test("filters with contains semantics across visible filename, key, title, description, and path fields", () => {
+  test("filters with contains semantics only against visible item filenames", () => {
     const model = buildManagerBrowserModel(browserSummaries, {
       items: [],
       focusedIndex: 0,
@@ -629,11 +629,45 @@ describe("TUI note manager adapter", () => {
 
     assert.deepEqual(model.layout1Rows.map((row) => row.relativePath), [
       "notes/client-123",
-      "notes/case-key-only.md",
-      "notes/description-match.md",
       "notes/meeting-123.md",
-      "notes/receipt-title.md",
     ])
+  })
+
+  test("does not match manager filter queries against parent path, title, description, or key", () => {
+    const pathOnlyModel = buildManagerBrowserModel(browserSummaries, {
+      items: [],
+      focusedIndex: 0,
+      selectedNoteKey: null,
+      currentFolderPath: "notes/projects",
+      hoveredPath: null,
+      filterQuery: "projects",
+    })
+    assert.deepEqual(pathOnlyModel.layout1Rows.map((row) => row.relativePath), [])
+
+    const titleDescriptionKeyModel = buildManagerBrowserModel(browserSummaries, {
+      items: [],
+      focusedIndex: 0,
+      selectedNoteKey: null,
+      currentFolderPath: "",
+      hoveredPath: null,
+      filterQuery: "123",
+    })
+    assert.equal(titleDescriptionKeyModel.layout1Rows.some((row) => row.relativePath === "notes/case-key-only.md"), false)
+    assert.equal(titleDescriptionKeyModel.layout1Rows.some((row) => row.relativePath === "notes/description-match.md"), false)
+    assert.equal(titleDescriptionKeyModel.layout1Rows.some((row) => row.relativePath === "notes/receipt-title.md"), false)
+  })
+
+  test("manager filter does not include nested descendants outside the current folder", () => {
+    const model = buildManagerBrowserModel(browserSummaries, {
+      items: [],
+      focusedIndex: 0,
+      selectedNoteKey: null,
+      currentFolderPath: "",
+      hoveredPath: null,
+      filterQuery: "brief",
+    })
+
+    assert.deepEqual(model.layout1Rows.map((row) => row.relativePath), [])
   })
 
   test("does not include fuzzy subsequence-only or body-only manager filter matches", () => {

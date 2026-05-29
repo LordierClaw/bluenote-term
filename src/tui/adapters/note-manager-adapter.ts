@@ -1,6 +1,6 @@
 import type { NoteSummary } from "../../core/list-notes"
 import type { ShowNoteSummary } from "../../core/show-note"
-import { collectContainsFieldMatches } from "../../search/contains-match"
+import { containsSearchQuery } from "../../search/contains-match"
 import type { ManagerItem, ManagerState, TuiNote } from "../state"
 
 export interface NoteManagerSummary extends NoteSummary {
@@ -241,16 +241,7 @@ function filterRows(rows: readonly ManagerItem[], query: string): ManagerItem[] 
     return [...rows]
   }
 
-  return rows.filter(
-    (row) =>
-      collectContainsFieldMatches(normalizedQuery, [
-        { field: "filename", value: row.filename },
-        { field: "key", value: row.key },
-        { field: "title", value: row.title },
-        { field: "description", value: row.description },
-        { field: "path", value: row.relativePath },
-      ]).length > 0,
-  )
+  return rows.filter((row) => containsSearchQuery(row.filename, normalizedQuery))
 }
 
 function browserRowFor(item: ManagerItem, index: number, focused: boolean, selectedNoteKey: string | null): ManagerBrowserRow {

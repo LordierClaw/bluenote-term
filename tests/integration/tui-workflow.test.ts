@@ -95,7 +95,7 @@ describe("TUI workspace workflows", () => {
     }
   })
 
-  test("manager filter navigation routes to filtered rows and opens the focused note", () => {
+  test("manager filter navigation routes to rows filtered by visible filename and opens the focused note", () => {
     const first = createNote({
       override: rootPath,
       title: "Alpha Filter Target",
@@ -115,7 +115,7 @@ describe("TUI workspace workflows", () => {
     assert.equal(path.dirname(second.relativePath), path.dirname(first.relativePath))
 
     controller.openManagerFilter()
-    for (const key of "Filter Target") {
+    for (const key of "filter-target") {
       assert.equal(routeManagerKey(key, controller), true)
     }
     assert.deepEqual(controller.getState().manager.items.map((item) => item.key), [first.key, second.key])
@@ -129,7 +129,7 @@ describe("TUI workspace workflows", () => {
 
     assert.equal(controller.showManager().blocked, false)
     controller.openManagerFilter()
-    controller.updateManagerFilter("Beta")
+    controller.updateManagerFilter("beta-filter")
     assert.equal(routeManagerKey("\u001b[D", controller), true)
     assert.equal(controller.getState().mode, "manager.browse")
     assert.equal(controller.getState().manager.filterQuery, "")
