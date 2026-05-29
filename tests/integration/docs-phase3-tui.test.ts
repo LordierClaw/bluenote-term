@@ -119,7 +119,7 @@ function assertDeliveredPhase4FTuiCleanupBehavior(content: string): void {
   assert.match(content, /Phase 4F[^\n.]*TUI cleanup[^\n.]*navigation[^\n.]*save|Phase 4F[^\n.]*cleanup[^\n.]*navigation[^\n.]*filtering[^\n.]*save/i)
   assert.match(content, /accepted|delivered|complete/i)
   assert.match(content, /Manager[^\n.]*topbar[^\n.]*filtered count|filtered count[^\n.]*Manager[^\n.]*topbar/i)
-  assert.match(content, /open(?:ed)?-note[^\n.]*full-path[^\n.]*bottom path|open-note bottom path[^\n.]*currently opened note full path|bottom path[^\n.]*currently opened note full path/i)
+  assert.match(content, /footer[^\n.]*currently opened note|currently opened note[^\n.]*Currently open|Currently open: <title>|currently open[^\n.]*title/i)
   assert.match(content, /empty\/calm placeholder[^\n.]*no note is open|no note is open[^\n.]*empty\/calm placeholder/i)
   assert.doesNotMatch(content, /(?:open-note\s+)?bottom path[^\n.]*selected note path|(?:open-note\s+)?bottom path[^\n.]*open\/selected note path|(?:open-note\s+)?bottom path[^\n.]*focused note path|(?:open-note\s+)?bottom path[^\n.]*hovered path/i)
   assert.match(content, /filtered result[^\n.]*navigation|navigation[^\n.]*filtered result|filtered results?[^\n.]*open/i)

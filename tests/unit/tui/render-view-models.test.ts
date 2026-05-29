@@ -1345,10 +1345,10 @@ describe("TUI render view models", () => {
   test("Search Everything slash commands expose compact semantic risk and availability tags", () => {
     const commands: SearchEverythingResult[] = [
       { kind: "command", id: "command:/save", typeLabel: "command", typeIcon: "command", label: "/save", detail: "Save the active editor buffer", score: 100, name: "/save", description: "Save the active editor buffer", usage: "/save", shortcut: "Ctrl+S" },
-      { kind: "command", id: "command:/delete", typeLabel: "command", typeIcon: "command", label: "/delete", detail: "Delete the selected or active note after confirmation", score: 90, name: "/delete", description: "Delete the selected or active note after confirmation", usage: "/delete [note-key]", shortcut: "D" },
+      { kind: "command", id: "command:/delete", typeLabel: "command", typeIcon: "command", label: "/delete", detail: "Delete the selected or active note after confirmation", score: 90, name: "/delete", description: "Delete the selected or active note after confirmation", usage: "/delete [note-key]", shortcut: "d" },
       { kind: "command", id: "command:/migrate", typeLabel: "command", typeIcon: "command", label: "/migrate", detail: "Migrate legacy BlueNote storage into the current layout", score: 80, name: "/migrate", description: "Migrate legacy BlueNote storage into the current layout", usage: "/migrate" },
-      { kind: "command", id: "command:/rebuild", typeLabel: "command", typeIcon: "command", label: "/rebuild", detail: "Rebuild BlueNote search indexes", score: 70, name: "/rebuild", description: "Rebuild BlueNote search indexes", usage: "/rebuild", shortcut: "R" },
-      { kind: "command", id: "command:/archive", typeLabel: "command", typeIcon: "command", label: "/archive", detail: "Archive the selected or active note", score: 60, name: "/archive", description: "Archive the selected or active note", usage: "/archive [note-key]", shortcut: "A" },
+      { kind: "command", id: "command:/rebuild", typeLabel: "command", typeIcon: "command", label: "/rebuild", detail: "Rebuild BlueNote search indexes", score: 70, name: "/rebuild", description: "Rebuild BlueNote search indexes", usage: "/rebuild" },
+      { kind: "command", id: "command:/archive", typeLabel: "command", typeIcon: "command", label: "/archive", detail: "Archive the selected or active note", score: 60, name: "/archive", description: "Archive the selected or active note", usage: "/archive [note-key]" },
     ]
     const vm = buildSearchEverythingViewModel({ ...baseState, screen: "search", search: { query: "/", selectedIndex: 1, previousScreen: "manager" } }, commands)
 
