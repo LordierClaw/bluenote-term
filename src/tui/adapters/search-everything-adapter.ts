@@ -153,31 +153,65 @@ function containsScore(query: string, value: string): number {
   return scoreContainsMatch(value, query)
 }
 
+const caseInsensitiveCollator = new Intl.Collator(undefined, { sensitivity: "base", usage: "search" })
+
+function findCaseInsensitiveRanges(text: string, needle: string): SearchEverythingHighlightRange[] {
+  if (needle.length === 0 || text.length === 0 || needle.length > text.length) {
+    return []
+  }
+
+  const ranges: SearchEverythingHighlightRange[] = []
+  let offset = 0
+  while (offset <= text.length - needle.length) {
+    const candidate = text.slice(offset, offset + needle.length)
+    if (caseInsensitiveCollator.compare(candidate, needle) === 0) {
+      ranges.push({ start: offset, end: offset + needle.length })
+      offset += needle.length
+    } else {
+      offset += 1
+    }
+  }
+
+  return ranges
+}
+
+function normalizeNonOverlappingRanges(ranges: SearchEverythingHighlightRange[], textLength: number): SearchEverythingHighlightRange[] {
+  const normalized = ranges
+    .map((range) => {
+      const rawStart = Number.isFinite(range.start) ? Math.trunc(range.start) : 0
+      const rawEnd = Number.isFinite(range.end) ? Math.trunc(range.end) : 0
+      const start = Math.max(0, Math.min(rawStart, textLength))
+      const end = Math.max(0, Math.min(rawEnd, textLength))
+      return { start, end }
+    })
+    .filter((range) => range.end > range.start)
+    .sort((left, right) => left.start - right.start || (right.end - right.start) - (left.end - left.start) || left.end - right.end)
+
+  const nonOverlapping: SearchEverythingHighlightRange[] = []
+  for (const range of normalized) {
+    const previous = nonOverlapping.at(-1)
+    if (!previous || range.start >= previous.end) {
+      nonOverlapping.push(range)
+    }
+  }
+
+  return nonOverlapping
+}
+
 export function collectCaseInsensitiveContainsRanges(text: string, query: string): SearchEverythingHighlightRange[] {
-  const normalizedText = text.toLocaleLowerCase()
-  const normalizedQuery = query.trim().toLocaleLowerCase().replace(/\s+/gu, " ")
+  const normalizedQuery = query.trim().replace(/\s+/gu, " ")
   const needles = normalizedQuery.length > 0
-    ? normalizedText.includes(normalizedQuery)
+    ? findCaseInsensitiveRanges(text, normalizedQuery).length > 0
       ? [normalizedQuery]
       : normalizedQuery.split(/\s+/gu).filter((token) => token.length > 0)
     : []
   const ranges: SearchEverythingHighlightRange[] = []
 
   for (const needle of needles) {
-    let offset = 0
-    while (offset < normalizedText.length) {
-      const start = normalizedText.indexOf(needle, offset)
-      if (start === -1) {
-        break
-      }
-      ranges.push({ start, end: start + needle.length })
-      offset = start + Math.max(needle.length, 1)
-    }
+    ranges.push(...findCaseInsensitiveRanges(text, needle))
   }
 
-  return ranges
-    .sort((left, right) => left.start - right.start || left.end - right.end)
-    .filter((range, index, all) => index === 0 || range.start >= all[index - 1]!.end)
+  return normalizeNonOverlappingRanges(ranges, text.length)
 }
 
 function previewText(text: string, query?: string): SearchEverythingPreviewText {

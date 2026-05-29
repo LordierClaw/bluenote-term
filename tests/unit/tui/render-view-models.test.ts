@@ -5,7 +5,7 @@ import { createCliRenderer, InputRenderable, type Renderable } from "@opentui/co
 import { buildEditorViewModel, renderEditorScreen } from "../../../src/tui/render-editor"
 import { buildManagerViewModel, renderManagerScreen } from "../../../src/tui/render-manager"
 import { renderShortcutHints } from "../../../src/tui/render-chrome"
-import { buildSearchEverythingViewModel, renderSearchEverythingScreen } from "../../../src/tui/render-search-everything"
+import { buildSearchEverythingViewModel, renderPreviewText, renderSearchEverythingScreen } from "../../../src/tui/render-search-everything"
 import { displayCellWidth } from "../../../src/tui/display-width"
 import { tuiTheme } from "../../../src/tui/theme"
 import { buildManagerBrowserModel, type NoteManagerSummary } from "../../../src/tui/adapters/note-manager-adapter"
@@ -1591,6 +1591,22 @@ describe("TUI render view models", () => {
     } finally {
       renderer.destroy()
     }
+  })
+
+  test("Search Everything preview text rendering normalizes malformed highlight ranges", () => {
+    const text = "abcdef"
+    const rendered = renderPreviewText({
+      text,
+      highlights: [
+        { start: 4, end: 2 },
+        { start: -5, end: 2 },
+        { start: 1, end: 4 },
+        { start: 3, end: 99 },
+      ],
+    }, "mutedText")
+
+    const chunks = typeof rendered === "string" ? [{ text: rendered }] : rendered.chunks
+    assert.equal(chunks.map((chunk: { text?: string }) => chunk.text ?? "").join(""), text)
   })
 
   test("Search Everything renderer omits preview pane when hidden and does not render stale preview content", async () => {

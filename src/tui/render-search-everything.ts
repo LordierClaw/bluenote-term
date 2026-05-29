@@ -307,22 +307,46 @@ export interface RenderSearchEverythingScreenOptions {
   height?: number
 }
 
-function renderPreviewText(text: SearchEverythingPreviewText | string, intent: TuiColorIntent): StyledText | string {
+function normalizePreviewHighlightRanges(value: SearchEverythingPreviewText): Array<{ start: number; end: number }> {
+  const textLength = value.text.length
+  const ranges = value.highlights ?? []
+  const normalized = ranges
+    .map((range) => {
+      const rawStart = Number.isFinite(range.start) ? Math.trunc(range.start) : 0
+      const rawEnd = Number.isFinite(range.end) ? Math.trunc(range.end) : 0
+      const start = Math.max(0, Math.min(rawStart, textLength))
+      const end = Math.max(0, Math.min(rawEnd, textLength))
+      return { start, end }
+    })
+    .filter((range) => range.end > range.start)
+    .sort((left, right) => left.start - right.start || (right.end - right.start) - (left.end - left.start) || left.end - right.end)
+
+  const nonOverlapping: Array<{ start: number; end: number }> = []
+  for (const range of normalized) {
+    const previous = nonOverlapping.at(-1)
+    if (!previous || range.start >= previous.end) {
+      nonOverlapping.push(range)
+    }
+  }
+
+  return nonOverlapping
+}
+
+export function renderPreviewText(text: SearchEverythingPreviewText | string, intent: TuiColorIntent): StyledText | string {
   const value = typeof text === "string" ? { text } : text
-  if (!value.highlights || value.highlights.length === 0) {
+  const ranges = normalizePreviewHighlightRanges(value)
+  if (ranges.length === 0) {
     return value.text
   }
 
   const chunks: TextChunk[] = []
   let offset = 0
-  for (const range of value.highlights) {
-    const start = Math.max(0, Math.min(range.start, value.text.length))
-    const end = Math.max(start, Math.min(range.end, value.text.length))
-    if (start > offset) {
-      chunks.push(fg(tuiTheme[intent])(value.text.slice(offset, start)) as TextChunk)
+  for (const range of ranges) {
+    if (range.start > offset) {
+      chunks.push(fg(tuiTheme[intent])(value.text.slice(offset, range.start)) as TextChunk)
     }
-    chunks.push(bg(tuiTheme.focusedRow)(fg(tuiTheme.textPrimary)(value.text.slice(start, end))) as TextChunk)
-    offset = end
+    chunks.push(bg(tuiTheme.focusedRow)(fg(tuiTheme.textPrimary)(value.text.slice(range.start, range.end))) as TextChunk)
+    offset = Math.max(offset, range.end)
   }
   if (offset < value.text.length) {
     chunks.push(fg(tuiTheme[intent])(value.text.slice(offset)) as TextChunk)

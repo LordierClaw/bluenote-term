@@ -6,6 +6,7 @@ import {
   buildHighlightedSearchEverythingPreview,
   buildSearchEverythingPreview,
   buildSearchEverythingResults,
+  collectCaseInsensitiveContainsRanges,
   createSearchEverythingSession,
   type SearchEverythingDependencies,
   type SearchEverythingResult,
@@ -164,6 +165,21 @@ describe("TUI Search Everything adapter", () => {
       text: "Daily Plan · daily-plan.md",
       highlights: [{ start: 6, end: 10 }, { start: 19, end: 23 }],
     })
+  })
+
+  test("highlight ranges stay aligned with original Unicode text when case folding changes length", () => {
+    const text = "İstanbul"
+    const ranges = collectCaseInsensitiveContainsRanges(text, "st")
+
+    assert.deepEqual(ranges, [{ start: 1, end: 3 }])
+    assert.deepEqual(ranges.map((range) => text.slice(range.start, range.end)), ["st"])
+  })
+
+  test("highlight ranges drop later overlaps while preserving earlier larger matches", () => {
+    const ranges = collectCaseInsensitiveContainsRanges("abcdefghijk", "abcdefghij cde ijk")
+
+    assert.deepEqual(ranges, [{ start: 0, end: 10 }])
+    assert.equal(ranges.every((range, index) => index === 0 || range.start >= ranges[index - 1]!.end), true)
   })
 
   test("returns note results with contains matches by filename/key, title, description, and path/folder", () => {
