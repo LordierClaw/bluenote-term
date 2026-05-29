@@ -407,7 +407,10 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   const screenHeight = rendererSize.height ?? rendererSize.terminalHeight ?? 24
   const state = options.controller.getState()
   const findBarRows = state.mode === "editor.find" ? 5 : 0
-  const bodyViewportLines = Math.max(1, screenHeight - 1 - findBarRows - 2 - 4 - 1)
+  const topbarRows = 1
+  const shortcutRows = 1
+  const bodyTopMarginRows = 1
+  const bodyViewportLines = Math.max(1, screenHeight - topbarRows - findBarRows - shortcutRows - bodyTopMarginRows)
   const vm = buildEditorViewModel(state, { width: Math.max(0, screenWidth - 4), bodyViewportLines })
   const editorState = state.editor
   const root = new BoxRenderable(options.renderer, {
@@ -416,7 +419,6 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     width: "100%",
     height: "100%",
     border: false,
-    backgroundColor: tuiTheme.background,
   })
 
   const topbar = new BoxRenderable(options.renderer, {
@@ -516,13 +518,11 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     minHeight: 1,
     overflow: "hidden",
     border: false,
-    backgroundColor: tuiTheme.background,
   })
   const bodyTopMargin = new BoxRenderable(options.renderer, {
     id: "bluenote-editor-body-margin-top",
     width: "100%",
     height: vm.body.margin.top,
-    backgroundColor: tuiTheme.background,
   })
   const bodyContentRow = new BoxRenderable(options.renderer, {
     id: "bluenote-editor-body-content-row",
@@ -533,7 +533,6 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     flexShrink: 1,
     minHeight: 1,
     overflow: "hidden",
-    backgroundColor: tuiTheme.background,
   })
   const bodyLeftMargin = new TextRenderable(options.renderer, {
     id: "bluenote-editor-body-margin-left",
@@ -541,7 +540,6 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     width: vm.body.margin.x,
     height: "100%",
     fg: tuiTheme[vm.body.placeholderIntent],
-    bg: tuiTheme.background,
   })
   const bodyDisplay = new TextRenderable(options.renderer, {
     id: "bluenote-editor-body",
@@ -551,7 +549,6 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     flexShrink: 1,
     wrapMode: vm.body.wrapMode,
     fg: vm.body.value.length > 0 ? undefined : tuiTheme[vm.body.placeholderIntent],
-    bg: tuiTheme.background,
   })
   bodyContentRow.add(bodyLeftMargin)
   bodyContentRow.add(bodyDisplay)

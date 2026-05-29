@@ -314,12 +314,11 @@ export function renderSearchEverythingScreen(options: RenderSearchEverythingScre
     width: "100%",
     height: "100%",
     border: false,
-    backgroundColor: tuiTheme.background,
     title: "",
   })
-  root.add(new TextRenderable(options.renderer, { content: "Search Everything", height: 1, fg: tuiTheme[topbarTextIntent()], bg: tuiTheme.background }))
+  root.add(new TextRenderable(options.renderer, { content: "Search Everything", height: 1, fg: tuiTheme[topbarTextIntent()] }))
   if (vm.status) {
-    root.add(new TextRenderable(options.renderer, { content: vm.status, height: 1, fg: tuiTheme.statusInfo, bg: tuiTheme.background }))
+    root.add(new TextRenderable(options.renderer, { content: vm.status, height: 1, fg: tuiTheme.statusInfo }))
   }
 
   const inputRegion = new BoxRenderable(options.renderer, {

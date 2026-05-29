@@ -20,6 +20,14 @@ function findById(node: { getChildren: () => any[] }, id: string): any | undefin
   return descendants(node).find((child) => child.id === id)
 }
 
+function assertTransparentBackground(value: { toInts?: () => number[] } | undefined, label: string): void {
+  assert.deepEqual(value?.toInts?.(), [0, 0, 0, 0], label)
+}
+
+function assertNoOpaqueBlackBackground(value: { toInts?: () => number[] } | undefined, label: string): void {
+  assert.notDeepEqual(value?.toInts?.(), [0, 0, 0, 255], label)
+}
+
 function createController(screen: TuiState["screen"]): { controller: WorkspaceController; calls: string[] } {
   const calls: string[] = []
   const state: TuiState = {
@@ -455,7 +463,7 @@ describe("TUI render keyboard routing", () => {
     }
   })
 
-  test("editor body renders without root/body borders, border title, or custom cursor glyph", async () => {
+  test("editor body renders without root/body borders, background fills, border title, or custom cursor glyph", async () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const controller = createWorkspaceController({
@@ -467,20 +475,49 @@ describe("TUI render keyboard routing", () => {
       const screen = renderEditorScreen({ renderer, controller }) as { border?: boolean; title?: unknown; getChildren: () => any[] }
       renderer.root.add(screen as any)
 
-      const bodyInput = findById(screen, "bluenote-editor-body-input") as { border?: boolean; title?: unknown } | undefined
-      const bodyDisplay = findById(screen, "bluenote-editor-body") as { content?: { chunks?: Array<{ text?: string }> } | string } | undefined
+      const bodyInput = findById(screen, "bluenote-editor-body-input") as { backgroundColor?: { toInts?: () => number[] }; border?: boolean; title?: unknown } | undefined
+      const bodyTopMargin = findById(screen, "bluenote-editor-body-margin-top") as { backgroundColor?: { toInts?: () => number[] } } | undefined
+      const bodyContentRow = findById(screen, "bluenote-editor-body-content-row") as { backgroundColor?: { toInts?: () => number[] } } | undefined
+      const bodyDisplay = findById(screen, "bluenote-editor-body") as { bg?: { toInts?: () => number[] }; content?: { chunks?: Array<{ text?: string }> } | string } | undefined
       const renderables = [screen, ...descendants(screen)]
       const renderableText = renderables.map((node) => node.content?.chunks?.[0]?.text ?? node.content ?? "").join("\n")
       const titleText = renderables.map((node) => node.title ?? "").join("\n")
       const bodyText = typeof bodyDisplay?.content === "string" ? bodyDisplay.content : bodyDisplay?.content?.chunks?.[0]?.text ?? ""
 
       assert.equal(screen.border, false)
+      assertTransparentBackground((screen as any).backgroundColor, "editor root keeps terminal-default transparent background")
       assert.ok(bodyInput && (bodyInput.border === false || bodyInput.title === undefined))
+      assertNoOpaqueBlackBackground(bodyInput?.backgroundColor, "editor body input must not paint opaque black")
+      assertTransparentBackground(bodyTopMargin?.backgroundColor, "editor top margin keeps terminal-default transparent background")
+      assertTransparentBackground(bodyContentRow?.backgroundColor, "editor body row keeps terminal-default transparent background")
+      assertNoOpaqueBlackBackground(bodyDisplay?.bg, "editor body text must not paint opaque black")
       assert.doesNotMatch(titleText, /Editor body|Line \d+, Col \d+/u)
       assert.doesNotMatch(renderableText, /Editor body/u)
       assert.doesNotMatch(bodyText, /[|▌]/u)
       assert.doesNotMatch(renderableText, /Line \d+, Col \d+|Ln \d+, Col \d+/u)
       assert.match(renderableText, /\[Ctrl\+S\]/u)
+    } finally {
+      renderer.destroy()
+    }
+  })
+
+  test("editor viewport height matches the status-row-free chrome at 24 rows", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      ;(renderer as typeof renderer & { height?: number; width?: number }).height = 24
+      ;(renderer as typeof renderer & { height?: number; width?: number }).width = 80
+      const body = Array.from({ length: 21 }, (_, index) => `line ${index + 1}`).join("\n")
+      const controller = createWorkspaceController({
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body }),
+        searchNotes: () => [],
+      })
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+      const screen = renderEditorScreen({ renderer, controller })
+      renderer.root.add(screen)
+
+      const bodyDisplay = findById(screen, "bluenote-editor-body") as { scrollY?: number } | undefined
+      assert.equal(bodyDisplay?.scrollY, 0)
     } finally {
       renderer.destroy()
     }
@@ -882,6 +919,7 @@ describe("TUI render keyboard routing", () => {
       const footerChunks = footer?.content?.chunks ?? []
       const footerText = footerChunks.map((chunk: { text?: string }) => chunk.text ?? "").join("") || footer?.content || ""
 
+      assertTransparentBackground((screen as any).backgroundColor, "manager root keeps terminal-default transparent background")
       assert.notEqual(topbar, undefined)
       assert.notEqual(topbar?.border, true)
       assert.deepEqual(topbar?.fg?.toInts?.(), [248, 250, 252, 255])
@@ -1089,6 +1127,9 @@ describe("TUI render keyboard routing", () => {
       renderer.root.add(screen)
       const textFor = (node: any): string => node.content?.chunks?.map?.((chunk: { text?: string }) => chunk.text ?? "").join("") ?? node.content ?? ""
       const text = descendants(screen).map(textFor).join("\n")
+      const titleRow = screen.getChildren().find((node: any) => textFor(node) === "Search Everything") as { bg?: { toInts?: () => number[] } } | undefined
+      assertTransparentBackground((screen as any).backgroundColor, "search root keeps terminal-default transparent background")
+      assertNoOpaqueBlackBackground(titleRow?.bg, "search title row must not paint opaque black")
       assert.notEqual(findById(screen, "bluenote-search-query"), undefined)
       assert.notEqual(findById(screen, "bluenote-search-results-region"), undefined)
       assert.equal(findById(screen, "bluenote-search-preview-region"), undefined)
