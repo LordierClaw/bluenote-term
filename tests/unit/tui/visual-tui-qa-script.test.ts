@@ -36,7 +36,8 @@ describe("visual TUI QA harness helpers", () => {
       "editor-separator-100x30",
       "editor-find-replace-highlight-100x30",
       "editor-clipboard-attempt-100x30",
-      "editor-undo-redo-flow-100x30",
+      "editor-undo-flow-100x30",
+      "editor-redo-flow-100x30",
     ]
 
     const caseIds = phase4JVisualCases.map((testCase) => testCase.id)
@@ -64,6 +65,7 @@ describe("visual TUI QA harness helpers", () => {
       zoom: "1.0",
       actions: ["Enter", "C-h", "text:replace-target"],
       expected: ["Replace", "replace-target"],
+      forbidden: ["stale-body"],
       panePath: "/tmp/qa/editor-find-replace-highlight-100x30/pane.txt",
       screenshotPath: "/tmp/qa/editor-find-replace-highlight-100x30/screen.png",
       screenshotLogPath: "/tmp/qa/editor-find-replace-highlight-100x30/screenshot.log",
@@ -76,5 +78,6 @@ describe("visual TUI QA harness helpers", () => {
     assert.match(markdown, /editor-find-replace-highlight-100x30/)
     assert.match(markdown, /screen\.png/)
     assert.match(markdown, /pane\.txt/)
+    assert.match(markdown, /absent: stale-body/)
   })
 })

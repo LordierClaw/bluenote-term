@@ -17,6 +17,7 @@ interface VisualCase {
   requirementIds: number[]
   actions: string[]
   expected: string[]
+  forbidden?: string[]
   ratingPrompt: string
 }
 
@@ -28,6 +29,7 @@ export interface EvidenceRowInput {
   zoom: string
   actions: string[]
   expected: string[]
+  forbidden?: string[]
   panePath: string
   screenshotPath: string
   screenshotLogPath: string
@@ -206,7 +208,7 @@ export const phase4JVisualCases: VisualCase[] = [
     requirementIds: [12],
     actions: ["Enter", "/", "text:editor-body", "Enter", "Enter", "C-f", "text:replace-target"],
     expected: ["Find", "replace-target", "1/2", "matches"],
-    ratingPrompt: "Verify find/replace search state opens and the found result is highlighted/selected in the editor body.",
+    ratingPrompt: "Verify find-highlight state opens and the found result is highlighted/selected in the editor body; live QA covers Ctrl+H replace delivery.",
   },
   {
     id: "editor-clipboard-attempt-100x30",
@@ -219,14 +221,25 @@ export const phase4JVisualCases: VisualCase[] = [
     ratingPrompt: "Attempt terminal-compatible Ctrl+Shift+C/X/V and record whether GNOME Terminal/OpenTUI delivers or consumes each binding.",
   },
   {
-    id: "editor-undo-redo-flow-100x30",
-    title: "Editor undo/redo flow",
+    id: "editor-undo-flow-100x30",
+    title: "Editor undo flow",
     geometry: "100x30",
     zoom: "1.0",
     requirementIds: [13, 14],
-    actions: ["Enter", "/", "text:undo-note", "Enter", "Enter", "text: added", "C-z", "C-y"],
+    actions: ["Enter", "/", "text:undo-note", "Enter", "Enter", "text: added", "C-z", "C-z", "C-z", "C-z", "C-z", "C-z"],
+    expected: ["undo-redo-start", "Ctrl+S"],
+    forbidden: ["added", "adde"],
+    ratingPrompt: "Verify recent edit undo removes inserted text and shortcut labels match delivered terminal bindings.",
+  },
+  {
+    id: "editor-redo-flow-100x30",
+    title: "Editor redo flow",
+    geometry: "100x30",
+    zoom: "1.0",
+    requirementIds: [13, 14],
+    actions: ["Enter", "/", "text:undo-note", "Enter", "Enter", "text: added", "C-z", "C-z", "C-z", "C-z", "C-z", "C-z", "C-y", "C-y", "C-y", "C-y", "C-y", "C-y"],
     expected: ["undo-redo-start", "added", "Ctrl+S"],
-    ratingPrompt: "Verify recent edit undo/redo shortcuts work and shortcut labels match delivered terminal bindings.",
+    ratingPrompt: "Verify redo restores the recently undone edit and shortcut labels match delivered terminal bindings.",
   },
 ]
 
@@ -315,10 +328,13 @@ function markdownCell(value: string): string {
 
 export function buildEvidenceRows(input: EvidenceRowInput): string[] {
   const requirement = input.requirementIds.join(", ")
+  const expectedText = input.forbidden && input.forbidden.length > 0
+    ? `${input.expected.join(", ")} / absent: ${input.forbidden.join(", ")}`
+    : input.expected.join(", ")
   return [
     "| Requirement(s) | Case | Size/zoom | Key sequence | Expected text | Pane evidence | Screenshot evidence | Screenshot log | Status | Notes |",
     "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
-    `| ${markdownCell(requirement)} | ${markdownCell(input.caseId)} — ${markdownCell(input.title)} | ${markdownCell(`${input.geometry} / ${input.zoom}`)} | ${markdownCell(input.actions.join(" ") || "initial state")} | ${markdownCell(input.expected.join(", "))} | ${markdownCell(input.panePath)} | ${markdownCell(input.screenshotPath)} | ${markdownCell(input.screenshotLogPath)} | ${markdownCell(input.status)} | ${markdownCell(input.notes || "TODO manual rating/readback")} |`,
+    `| ${markdownCell(requirement)} | ${markdownCell(input.caseId)} — ${markdownCell(input.title)} | ${markdownCell(`${input.geometry} / ${input.zoom}`)} | ${markdownCell(input.actions.join(" ") || "initial state")} | ${markdownCell(expectedText)} | ${markdownCell(input.panePath)} | ${markdownCell(input.screenshotPath)} | ${markdownCell(input.screenshotLogPath)} | ${markdownCell(input.status)} | ${markdownCell(input.notes || "TODO manual rating/readback")} |`,
   ]
 }
 
@@ -738,6 +754,12 @@ function main(): void {
           notes += `Missing expected text ${JSON.stringify(expected)} in pane capture. `
         }
       }
+      for (const forbidden of testCase.forbidden ?? []) {
+        if (pane.includes(forbidden)) {
+          status = "Needs review"
+          notes += `Forbidden text ${JSON.stringify(forbidden)} appeared in pane capture. `
+        }
+      }
 
       if (!noScreenshots) {
         const bridge = captureScreenshotViaFocusedBridge(pngPath, windowId)
@@ -795,6 +817,7 @@ function main(): void {
       zoom: testCase.zoom,
       actions: testCase.actions,
       expected: testCase.expected,
+      forbidden: testCase.forbidden,
       panePath,
       screenshotPath: existsSync(pngPath) ? pngPath : "not captured",
       screenshotLogPath: existsSync(screenshotLogPath) ? screenshotLogPath : "not written",
