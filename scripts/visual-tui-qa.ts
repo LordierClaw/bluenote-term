@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
@@ -14,9 +14,25 @@ interface VisualCase {
   title: string
   geometry: string
   zoom: string
+  requirementIds: number[]
   actions: string[]
   expected: string[]
   ratingPrompt: string
+}
+
+export interface EvidenceRowInput {
+  caseId: string
+  title: string
+  requirementIds: number[]
+  geometry: string
+  zoom: string
+  actions: string[]
+  expected: string[]
+  panePath: string
+  screenshotPath: string
+  screenshotLogPath: string
+  status: string
+  notes: string
 }
 
 export interface ScreenshotBridgeArguments {
@@ -28,12 +44,13 @@ export interface ScreenshotBridgeArguments {
 const repoRoot = process.cwd()
 const screenshotBridgePath = process.env.CUL_SCREENSHOT_BRIDGE ?? path.join(tmpdir(), "bluenote-focused-mcp-screenshot.py")
 
-const cases: VisualCase[] = [
+const legacyVisualCases: VisualCase[] = [
   {
     id: "manager-100x30",
     title: "Manager medium",
     geometry: "100x30",
     zoom: "1.0",
+    requirementIds: [1, 7, 14],
     actions: [],
     expected: ["BlueNote", "Workspace", "Alpha", "Long Line"],
     ratingPrompt: "Rate manager readability, terminal-default background, title focus, dim secondary text, and absence of a third note-path column.",
@@ -43,6 +60,7 @@ const cases: VisualCase[] = [
     title: "Editor medium",
     geometry: "100x30",
     zoom: "1.0",
+    requirementIds: [5, 14],
     actions: ["Enter", "Enter"],
     expected: ["Wrap word", "[Ctrl+S] Save"],
     ratingPrompt: "Rate editor topbar, removed line/column row, body left edge, shortcut bar, and calm styling.",
@@ -52,6 +70,7 @@ const cases: VisualCase[] = [
     title: "Search Everything medium",
     geometry: "100x30",
     zoom: "1.0",
+    requirementIds: [9, 10, 11],
     actions: ["C-p", "text:alpha"],
     expected: ["Search Everything", "Results", "Alpha"],
     ratingPrompt: "Rate search input/results/preview readability and confirm no useless metadata row is visible.",
@@ -61,6 +80,7 @@ const cases: VisualCase[] = [
     title: "Long line unwrap medium",
     geometry: "100x30",
     zoom: "1.0",
+    requirementIds: [2],
     actions: ["C-p", "text:long line", "Enter", "M-z"],
     expected: ["Wrap off"],
     ratingPrompt: "Rate long-line unwrap usability, continuation indicator, and whether hidden content is discoverable.",
@@ -70,6 +90,7 @@ const cases: VisualCase[] = [
     title: "Manager small",
     geometry: "80x24",
     zoom: "1.0",
+    requirementIds: [1, 2, 7, 14],
     actions: [],
     expected: ["BlueNote", "Alpha"],
     ratingPrompt: "Rate small-terminal manager layout and whether primary actions remain visible.",
@@ -79,6 +100,7 @@ const cases: VisualCase[] = [
     title: "Manager large",
     geometry: "120x40",
     zoom: "1.0",
+    requirementIds: [1, 2, 7, 14],
     actions: [],
     expected: ["BlueNote", "Alpha", "Unicode Café"],
     ratingPrompt: "Rate large-terminal spacing, alignment, and whether extra space is used calmly.",
@@ -88,11 +110,139 @@ const cases: VisualCase[] = [
     title: "Manager zoom 1.5",
     geometry: "100x30",
     zoom: "1.5",
+    requirementIds: [1, 2, 7, 14],
     actions: [],
     expected: ["BlueNote", "Alpha"],
     ratingPrompt: "Rate high-zoom readability and whether layout remains usable at larger font scale.",
   },
 ]
+
+export const phase4JVisualCases: VisualCase[] = [
+  {
+    id: "manager-long-row-truncation-100x30",
+    title: "Manager long row truncation",
+    geometry: "100x30",
+    zoom: "1.0",
+    requirementIds: [2],
+    actions: ["Enter", "/", "text:ultra-long"],
+    expected: ["Ultra long", "Filter"],
+    ratingPrompt: "Verify long filename/title/description text is clamped and does not bleed into the preview pane.",
+  },
+  {
+    id: "manager-folder-preview-100x30",
+    title: "Manager folder preview",
+    geometry: "100x30",
+    zoom: "1.0",
+    requirementIds: [3],
+    actions: ["j"],
+    expected: ["projects", "client"],
+    ratingPrompt: "Verify focused folder preview shows immediate items only and no folder metadata rows.",
+  },
+  {
+    id: "manager-note-preview-100x30",
+    title: "Manager note preview",
+    geometry: "100x30",
+    zoom: "1.0",
+    requirementIds: [4],
+    actions: ["Enter", "/", "text:preview-note", "Enter"],
+    expected: ["preview-note", "note-preview-body"],
+    ratingPrompt: "Verify focused note preview shows title/body content without path/description metadata rows.",
+  },
+  {
+    id: "manager-filter-name-only-100x30",
+    title: "Manager filter name-only scope",
+    geometry: "100x30",
+    zoom: "1.0",
+    requirementIds: [7, 8],
+    actions: ["Enter", "/", "text:name-only-target"],
+    expected: ["Filter", "name-only-target"],
+    ratingPrompt: "Verify manager shows / Filter and the filter matches visible item names only, not title/path/description-only text.",
+  },
+  {
+    id: "search-folder-preview-100x30",
+    title: "Search Everything folder preview",
+    geometry: "100x30",
+    zoom: "1.0",
+    requirementIds: [9],
+    actions: ["C-p", "text:client"],
+    expected: ["Search Everything", "projects/client", "client-note"],
+    ratingPrompt: "Verify folder result title is full path, match is highlighted, and preview content resembles manager item preview.",
+  },
+  {
+    id: "search-file-title-preview-100x30",
+    title: "Search Everything file/title preview",
+    geometry: "100x30",
+    zoom: "1.0",
+    requirementIds: [10],
+    actions: ["C-p", "text:titlematch"],
+    expected: ["Search Everything", "TitleMatch", "titlematch-file"],
+    ratingPrompt: "Verify file preview title combines note title and filename with highlighted title/filename matches.",
+  },
+  {
+    id: "search-multi-content-results-100x30",
+    title: "Search Everything repeated content results",
+    geometry: "100x30",
+    zoom: "1.0",
+    requirementIds: [11],
+    actions: ["C-p", "text:needle-repeat"],
+    expected: ["Search Everything", "needle-repeat"],
+    ratingPrompt: "Verify repeated note content matches are shown as multiple result rows with centered/highlighted previews.",
+  },
+  {
+    id: "editor-separator-100x30",
+    title: "Editor separator",
+    geometry: "100x30",
+    zoom: "1.0",
+    requirementIds: [5],
+    actions: ["Enter", "/", "text:editor-body", "Enter", "Enter"],
+    expected: ["editor-body", "Ctrl+S"],
+    ratingPrompt: "Verify editor topbar/body/bottombar separation is visible and calm.",
+  },
+  {
+    id: "editor-find-replace-highlight-100x30",
+    title: "Editor find/replace highlight",
+    geometry: "100x30",
+    zoom: "1.0",
+    requirementIds: [12],
+    actions: ["Enter", "/", "text:editor-body", "Enter", "Enter", "C-h", "text:replace-target"],
+    expected: ["Replace", "replace-target"],
+    ratingPrompt: "Verify Ctrl+H opens find/replace and the found result is highlighted/selected in the editor body.",
+  },
+  {
+    id: "editor-clipboard-attempt-100x30",
+    title: "Editor clipboard attempt",
+    geometry: "100x30",
+    zoom: "1.0",
+    requirementIds: [6, 14],
+    actions: ["Enter", "/", "text:clipboard-note", "Enter", "Enter", "C-S-c", "C-S-x", "C-S-v"],
+    expected: ["clipboard-source"],
+    ratingPrompt: "Attempt terminal-compatible Ctrl+Shift+C/X/V and record whether GNOME Terminal/OpenTUI delivers or consumes each binding.",
+  },
+  {
+    id: "editor-undo-redo-flow-100x30",
+    title: "Editor undo/redo flow",
+    geometry: "100x30",
+    zoom: "1.0",
+    requirementIds: [13, 14],
+    actions: ["Enter", "/", "text:undo-note", "Enter", "Enter", "text: added", "C-z", "C-y"],
+    expected: ["undo-redo-start", "added", "Ctrl+S"],
+    ratingPrompt: "Verify recent edit undo/redo shortcuts work and shortcut labels match delivered terminal bindings.",
+  },
+]
+
+const cases: VisualCase[] = [...phase4JVisualCases, ...legacyVisualCases]
+
+export const qaSeedExpectations = {
+  titles: [
+    "Ultra long title used to exercise manager row truncation with enough extra words to exceed eighty display columns",
+    "TitleMatch Search File Preview",
+  ],
+  relativePaths: [
+    "notes/projects/client/client-note.md",
+    "notes/projects/client/nested/name-only-target.md",
+  ],
+  bodyMarkers: ["needle-repeat", "replace-target", "clipboard-source", "undo-redo-start"],
+} as const
 
 function parseArg(name: string): string | null {
   const prefix = `${name}=`
@@ -153,10 +303,23 @@ export function buildGnomeTerminalGeometry(geometry: string, caseIndex: number):
 
 export function screenshotBridgeArgumentsFor(targetWindowId: number | null): ScreenshotBridgeArguments[] {
   if (targetWindowId !== null) {
-    return [{ window_id: targetWindowId, raise_window: true }]
+    return [{ window_id: targetWindowId, raise_window: true }, { full_screen: true, raise_window: false }]
   }
 
   return [{ full_screen: true }]
+}
+
+function markdownCell(value: string): string {
+  return value.replaceAll("|", "\\|").replaceAll("\n", " ")
+}
+
+export function buildEvidenceRows(input: EvidenceRowInput): string[] {
+  const requirement = input.requirementIds.join(", ")
+  return [
+    "| Requirement(s) | Case | Size/zoom | Key sequence | Expected text | Pane evidence | Screenshot evidence | Screenshot log | Status | Notes |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+    `| ${markdownCell(requirement)} | ${markdownCell(input.caseId)} — ${markdownCell(input.title)} | ${markdownCell(`${input.geometry} / ${input.zoom}`)} | ${markdownCell(input.actions.join(" ") || "initial state")} | ${markdownCell(input.expected.join(", "))} | ${markdownCell(input.panePath)} | ${markdownCell(input.screenshotPath)} | ${markdownCell(input.screenshotLogPath)} | ${markdownCell(input.status)} | ${markdownCell(input.notes || "TODO manual rating/readback")} |`,
+  ]
 }
 
 interface LiveTuiProcess {
@@ -291,14 +454,23 @@ def main():
     attempts = []
     if window_id is not None:
         attempts.append({"window_id": window_id, "raise_window": True})
+        attempts.append({"full_screen": True, "raise_window": False})
     else:
         attempts.append({"full_screen": True})
-    for arguments in attempts:
+    for index, arguments in enumerate(attempts):
         try:
             response = call_screenshot(arguments)
             png = extract_png(response)
-            out.write_bytes(png)
-            print(json.dumps({"ok": True, "out": str(out), "bytes": len(png), "arguments": arguments}))
+            target = out
+            target.write_bytes(png)
+            if index != 0:
+                fallback = out.with_name(out.stem + f".fallback-{index}.png")
+                fallback.write_bytes(png)
+                raw = out.with_name(out.stem + ".raw.png")
+                raw.write_bytes(png)
+                print(json.dumps({"ok": True, "out": str(target), "fallback_out": str(fallback), "raw": str(raw), "bytes": len(png), "arguments": arguments, "fallback": index}))
+            else:
+                print(json.dumps({"ok": True, "out": str(target), "bytes": len(png), "arguments": arguments}))
             return 0
         except Exception as exc:
             errors.append({"arguments": arguments, "error": str(exc)})
@@ -320,7 +492,26 @@ function ensureQaRoot(): string {
     throw new Error(`failed to init QA root:\n${init.stdout}\n${init.stderr}`)
   }
 
-  for (const title of ["Alpha", "Beta", "Long Line", "Unicode Café 测试 🙂", "Leading Spaces", "Empty", "Alpha Source", "Alpha Summary"]) {
+  for (const title of [
+    "Alpha",
+    "Beta",
+    "Long Line",
+    "Unicode Café 测试 🙂",
+    "Leading Spaces",
+    "Empty",
+    "Alpha Source",
+    "Alpha Summary",
+    "Ultra long title used to exercise manager row truncation with enough extra words to exceed eighty display columns",
+    "Projects Folder Seed",
+    "Preview Note Body",
+    "Name Only Target",
+    "TitleMatch Search File Preview",
+    "Repeated Content Match Note",
+    "Editor Body Replace Note",
+    "Clipboard Note",
+    "Undo Note",
+    "Client Note",
+  ]) {
     const created = run("bun", ["run", "./bin/bn.ts", "new", "--title", title], { env: { BLUENOTE_ROOT: root }, timeout: 30_000 })
     if (created.status !== 0) {
       throw new Error(`failed to create ${title}:\n${created.stdout}\n${created.stderr}`)
@@ -336,14 +527,56 @@ function ensureQaRoot(): string {
     Empty: "",
     "Alpha Source": "Alpha source content.\n",
     "Alpha Summary": "Alpha summary content.\n",
+    "Ultra long title used to exercise manager row truncation with enough extra words to exceed eighty display columns": "# Ultra long\nThis description-like body line is intentionally verbose so the manager row has long title and preview content pressure without bleeding into the adjacent pane.\n",
+    "Projects Folder Seed": "Folder seed used only to make projects visible during manager/search preview QA.\n",
+    "Preview Note Body": "# preview-note\nnote-preview-body first line\nNo metadata rows should be needed to understand this note.\n",
+    "Name Only Target": "This body intentionally mentions path-only-secret and description-only-secret but the visible filename should be name-only-target.\n",
+    "TitleMatch Search File Preview": "TitleMatch body line for file/title preview.\nA deep titlematch-file filename/title match should be highlighted.\n",
+    "Repeated Content Match Note": "needle-repeat one in this note.\nA second needle-repeat should produce another Search Everything row.\nThird needle-repeat occurrence confirms multi-content results.\n",
+    "Editor Body Replace Note": "editor-body replace-target line for find replace highlight.\nAnother replace-target keeps navigation realistic.\n",
+    "Clipboard Note": "clipboard-source text selected or attempted for terminal copy cut paste verification.\nclipboard-destination line remains for paste attempts.\n",
+    "Undo Note": "undo-redo-start baseline line for undo/redo visual QA.\n",
+    "Client Note": "client-note body inside nested projects/client folder.\nneedle-repeat client folder content.\n",
+  }
+
+  const desiredRelativePaths: Record<string, string> = {
+    "Ultra long title used to exercise manager row truncation with enough extra words to exceed eighty display columns": "notes/inbox/ultra-long-filename-with-title-and-description-that-must-truncate-before-preview-pane.md",
+    "Projects Folder Seed": "notes/projects/project-overview.md",
+    "Preview Note Body": "notes/inbox/preview-note.md",
+    "Name Only Target": "notes/projects/client/nested/name-only-target.md",
+    "TitleMatch Search File Preview": "notes/inbox/titlematch-file.md",
+    "Repeated Content Match Note": "notes/inbox/repeated-content.md",
+    "Editor Body Replace Note": "notes/inbox/editor-body.md",
+    "Clipboard Note": "notes/inbox/clipboard-note.md",
+    "Undo Note": "notes/inbox/undo-note.md",
+    "Client Note": "notes/projects/client/client-note.md",
   }
 
   const sidecarDir = path.join(root, ".data", "notes")
   for (const entry of readdirSync(sidecarDir)) {
     if (!entry.endsWith(".json")) continue
-    const sidecar = JSON.parse(readFileSync(path.join(sidecarDir, entry), "utf8")) as { title?: string; relativePath?: string }
-    if (sidecar.title && sidecar.relativePath && Object.hasOwn(bodies, sidecar.title)) {
-      writeFileSync(path.join(root, sidecar.relativePath), bodies[sidecar.title])
+    const sidecarPath = path.join(sidecarDir, entry)
+    const sidecar = JSON.parse(readFileSync(sidecarPath, "utf8")) as { key?: string; title?: string; relativePath?: string; description?: string }
+    if (!sidecar.title || !sidecar.relativePath) continue
+
+    let nextSidecarPath = sidecarPath
+    const desiredRelativePath = desiredRelativePaths[sidecar.title]
+    if (desiredRelativePath && desiredRelativePath !== sidecar.relativePath) {
+      const from = path.join(root, sidecar.relativePath)
+      const to = path.join(root, desiredRelativePath)
+      mkdirSync(path.dirname(to), { recursive: true })
+      if (existsSync(from)) renameSync(from, to)
+      sidecar.relativePath = desiredRelativePath
+      sidecar.key = path.basename(desiredRelativePath, ".md")
+      nextSidecarPath = path.join(sidecarDir, `${sidecar.key}.json`)
+      if (nextSidecarPath !== sidecarPath) renameSync(sidecarPath, nextSidecarPath)
+    }
+
+    if (Object.hasOwn(bodies, sidecar.title)) {
+      const body = bodies[sidecar.title]
+      sidecar.description = body.split(/\r?\n/u).find((line) => line.trim().length > 0)?.trim().slice(0, 120) ?? ""
+      writeFileSync(path.join(root, sidecar.relativePath), body)
+      writeFileSync(nextSidecarPath, `${JSON.stringify(sidecar, null, 2)}\n`)
     }
   }
 
@@ -377,6 +610,14 @@ function sendAction(session: string, action: string): void {
     const text = action.slice("text:".length)
     const result = run("tmux", ["send-keys", "-t", session, "-l", text])
     if (result.status !== 0) throw new Error(`tmux text action failed ${action}: ${result.stderr}`)
+    wait(250)
+    return
+  }
+
+  if (action.startsWith("C-S-")) {
+    // tmux/terminal emulators generally cannot synthesize Ctrl+Shift letter
+    // chords portably; preserve the scripted state and leave the real shortcut
+    // delivery attempt to live manual QA where GNOME Terminal/OpenTUI behavior is observable.
     wait(250)
     return
   }
@@ -531,6 +772,7 @@ function main(): void {
 
     reportLines.push(`## ${testCase.id} — ${testCase.title}`)
     reportLines.push("")
+    reportLines.push(`- Requirement(s): ${testCase.requirementIds.join(", ")}`)
     reportLines.push(`- Geometry: ${testCase.geometry}`)
     reportLines.push(`- Zoom: ${testCase.zoom}`)
     reportLines.push(`- TUI window id: ${windowId ?? "not found"}`)
@@ -541,6 +783,23 @@ function main(): void {
     reportLines.push(`- Visual rating (1-5): TODO`)
     reportLines.push(`- User-perspective prompt: ${testCase.ratingPrompt}`)
     if (notes) reportLines.push(`- Notes: ${notes}`)
+    reportLines.push("")
+    reportLines.push("### Requirement evidence")
+    reportLines.push("")
+    reportLines.push(...buildEvidenceRows({
+      caseId: testCase.id,
+      title: testCase.title,
+      requirementIds: testCase.requirementIds,
+      geometry: testCase.geometry,
+      zoom: testCase.zoom,
+      actions: testCase.actions,
+      expected: testCase.expected,
+      panePath,
+      screenshotPath: existsSync(pngPath) ? pngPath : "not captured",
+      screenshotLogPath: existsSync(screenshotLogPath) ? screenshotLogPath : "not written",
+      status,
+      notes,
+    }))
     reportLines.push("")
   }
 
