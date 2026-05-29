@@ -1,6 +1,7 @@
 import type { SearchNoteMatch } from "../../core/search-notes"
 import { collectContainsFieldMatches, scoreContainsMatch } from "../../search/contains-match"
-import { buildManagerFolderPreviewLines, type NoteManagerSummary } from "./note-manager-adapter"
+import { buildManagerBrowserItems, buildManagerFolderPreviewLinesFromItems, type NoteManagerSummary } from "./note-manager-adapter"
+import type { ManagerItem } from "../state"
 import type { SearchEverythingState, TuiScreen } from "../state"
 
 export type SearchEverythingResultKind = "note" | "content" | "folder" | "command"
@@ -310,31 +311,38 @@ function foldersFor(relativePath: string): string[] {
 }
 
 function collectFolders(noteSummaries: readonly NoteManagerSummary[]): SearchEverythingFolderResult[] {
+  const managerItems = buildManagerBrowserItems(noteSummaries)
   const folderCounts = new Map<string, number>()
 
-  for (const summary of noteSummaries) {
-    for (const folder of foldersFor(summary.relativePath)) {
+  for (const item of managerItems) {
+    if (item.type !== "note") {
+      continue
+    }
+
+    for (const folder of foldersFor(item.relativePath)) {
       folderCounts.set(folder, (folderCounts.get(folder) ?? 0) + 1)
     }
   }
 
-  return Array.from(folderCounts.entries()).map(([path, noteCount]) => {
-    const name = folderNameFor(path)
+  return Array.from(folderCounts.entries()).map(([path, noteCount]) => buildFolderResult(path, noteCount, managerItems))
+}
 
-    return {
-      kind: "folder",
-      typeLabel: "folder",
-      typeIcon: "folder",
-      id: `folder:${path}`,
-      path,
-      name,
-      label: `${name}/`,
-      detail: `${noteCount} ${noteCount === 1 ? "note" : "notes"} in ${path}`,
-      score: 0,
-      noteCount,
-      previewLines: buildManagerFolderPreviewLines(noteSummaries, path),
-    }
-  })
+function buildFolderResult(path: string, noteCount: number, managerItems: readonly ManagerItem[]): SearchEverythingFolderResult {
+  const name = folderNameFor(path)
+
+  return {
+    kind: "folder",
+    typeLabel: "folder",
+    typeIcon: "folder",
+    id: `folder:${path}`,
+    path,
+    name,
+    label: `${name}/`,
+    detail: `${noteCount} ${noteCount === 1 ? "note" : "notes"} in ${path}`,
+    score: 0,
+    noteCount,
+    previewLines: buildManagerFolderPreviewLinesFromItems(managerItems, path),
+  }
 }
 
 function buildNoteResult(query: string, summary: NoteManagerSummary): SearchEverythingNoteResult | null {

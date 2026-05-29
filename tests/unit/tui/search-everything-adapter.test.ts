@@ -179,6 +179,22 @@ describe("TUI Search Everything adapter", () => {
     assert.equal(preview?.lines.some((line) => /\bnote(?:s)?\b in notes\/projects\/client|notes\/projects\/client/u.test(line)), false)
   })
 
+  test("does not derive folder results from hidden/internal note paths", () => {
+    const deps: SearchEverythingDependencies = {
+      noteSummaries: [
+        { key: "hidden", title: "Hidden", description: "Internal data.", relativePath: "notes/.data/hidden.md" },
+        { key: "visible", title: "Visible", description: "Visible data note.", relativePath: "notes/data-public/visible.md" },
+      ],
+      searchNotes: () => [],
+    }
+
+    const results = buildSearchEverythingResults("data", deps)
+
+    assert.equal(results.some((result) => result.kind === "folder" && result.path === "notes/.data"), false)
+    assert.equal(results.some((result) => result.kind === "folder" && result.previewLines?.length === 0), false)
+    assert.equal(results.some((result) => result.kind === "folder" && result.path === "notes/data-public"), true)
+  })
+
   test("file preview title combines note title and filename and highlights both", () => {
     const note = buildSearchEverythingResults("plan", createDeps()).find((result) => result.kind === "note")
     const preview = buildSearchEverythingPreview(note, "plan")

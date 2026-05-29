@@ -3,6 +3,8 @@ import assert from "node:assert/strict"
 
 import {
   buildManagerBrowserModel,
+  buildManagerBrowserItems,
+  buildManagerFolderPreviewLinesFromItems,
   buildManagerItems,
   buildManagerViewModel,
   goToManagerParent,
@@ -434,6 +436,14 @@ describe("TUI note manager adapter", () => {
     assert.equal("description" in notePreview, false)
     assert.equal(notePreview.type === "note-content" && notePreview.contentLines.includes("notes/root-note.md"), false)
     assert.equal(notePreview.type === "note-content" && notePreview.contentLines.includes("A top-level note."), false)
+  })
+
+  test("builds folder preview lines from precomputed browser items", () => {
+    const items = buildManagerBrowserItems(browserSummaries)
+
+    assert.equal(items.some((item) => item.relativePath === "notes/.data"), false)
+    assert.deepEqual(buildManagerFolderPreviewLinesFromItems(items, "notes/projects"), ["client", "api-roadmap.md"])
+    assert.deepEqual(buildManagerFolderPreviewLinesFromItems(items, "notes/.data"), [])
   })
 
   test("returns an explicit hidden preview without resolving note content when preview is hidden", () => {

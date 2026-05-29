@@ -285,12 +285,10 @@ function noteContentPreview(
 }
 
 function folderPreview(items: readonly ManagerItem[], folderPath: string, selectedNoteKey: string | null): ManagerPreviewModel {
-  const previewItems = immediateRowsForFolder(items, folderPath)
-
   return {
     type: "folder",
     path: folderPath,
-    rows: browserRowsFor(previewItems, null, selectedNoteKey),
+    rows: buildManagerFolderPreviewRowsFromItems(items, folderPath, selectedNoteKey),
   }
 }
 
@@ -302,15 +300,40 @@ function compactFolderPreviewLabel(row: ManagerBrowserRow): string {
   return row.filename || row.title || row.key
 }
 
+export function buildManagerBrowserItems(noteSummaries: readonly NoteManagerSummary[]): ManagerItem[] {
+  return allBrowserItems(noteSummaries).map(cloneItem)
+}
+
+export function buildManagerFolderPreviewRowsFromItems(
+  items: readonly ManagerItem[],
+  folderPath: string,
+  selectedNoteKey: string | null = null,
+): ManagerBrowserRow[] {
+  const previewItems = immediateRowsForFolder(items, folderPath)
+
+  return browserRowsFor(previewItems, null, selectedNoteKey)
+}
+
 export function buildManagerFolderPreviewRows(
   noteSummaries: readonly NoteManagerSummary[],
   folderPath: string,
   selectedNoteKey: string | null = null,
 ): ManagerBrowserRow[] {
-  const items = allBrowserItems(noteSummaries)
-  const previewItems = immediateRowsForFolder(items, folderPath)
+  return buildManagerFolderPreviewRowsFromItems(allBrowserItems(noteSummaries), folderPath, selectedNoteKey)
+}
 
-  return browserRowsFor(previewItems, null, selectedNoteKey)
+export function buildManagerFolderPreviewLinesFromItems(
+  items: readonly ManagerItem[],
+  folderPath: string,
+  maxLines = 8,
+): string[] {
+  const rows = buildManagerFolderPreviewRowsFromItems(items, folderPath)
+  const lineLimit = Math.max(0, Math.trunc(maxLines))
+  const visibleRows = lineLimit > 0 ? rows.slice(0, lineLimit) : []
+  const lines = visibleRows.map(compactFolderPreviewLabel)
+  const hiddenCount = rows.length - visibleRows.length
+
+  return hiddenCount > 0 ? [...lines, `… ${hiddenCount} more`] : lines
 }
 
 export function buildManagerFolderPreviewLines(
@@ -318,13 +341,7 @@ export function buildManagerFolderPreviewLines(
   folderPath: string,
   maxLines = 8,
 ): string[] {
-  const rows = buildManagerFolderPreviewRows(noteSummaries, folderPath)
-  const lineLimit = Math.max(0, Math.trunc(maxLines))
-  const visibleRows = lineLimit > 0 ? rows.slice(0, lineLimit) : []
-  const lines = visibleRows.map(compactFolderPreviewLabel)
-  const hiddenCount = rows.length - visibleRows.length
-
-  return hiddenCount > 0 ? [...lines, `… ${hiddenCount} more`] : lines
+  return buildManagerFolderPreviewLinesFromItems(allBrowserItems(noteSummaries), folderPath, maxLines)
 }
 
 function selectedNoteKeyFor(items: ManagerItem[], focusedIndex: number): string | null {
