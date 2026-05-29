@@ -175,6 +175,23 @@ describe("TUI Search Everything adapter", () => {
     assert.deepEqual(ranges.map((range) => text.slice(range.start, range.end)), ["st"])
   })
 
+  test("highlight ranges cover variable-length Unicode collation matches", () => {
+    const dottedCapitalI = "İstanbul"
+    assert.deepEqual(collectCaseInsensitiveContainsRanges(dottedCapitalI, "i̇"), [{ start: 0, end: 1 }])
+    assert.deepEqual(
+      collectCaseInsensitiveContainsRanges("éclair", "é"),
+      [{ start: 0, end: 2 }],
+    )
+  })
+
+  test("highlight ranges do not split combining sequences", () => {
+    const text = "Café noir"
+    const ranges = collectCaseInsensitiveContainsRanges(text, "e")
+
+    assert.deepEqual(ranges, [{ start: 3, end: 5 }])
+    assert.deepEqual(ranges.map((range) => text.slice(range.start, range.end)), ["é"])
+  })
+
   test("highlight ranges drop later overlaps while preserving earlier larger matches", () => {
     const ranges = collectCaseInsensitiveContainsRanges("abcdefghijk", "abcdefghij cde ijk")
 

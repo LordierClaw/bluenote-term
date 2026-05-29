@@ -154,22 +154,81 @@ function containsScore(query: string, value: string): number {
 }
 
 const caseInsensitiveCollator = new Intl.Collator(undefined, { sensitivity: "base", usage: "search" })
+const combiningMarkPattern = /\p{Mark}/u
+const variationSelectorPattern = /[\u{fe00}-\u{fe0f}\u{e0100}-\u{e01ef}]/u
+const zeroWidthJoiner = "\u200d"
+
+type GraphemeSegmenter = {
+  segment(value: string): Iterable<{ index: number; segment: string }>
+}
+
+function getIntlSegmenter(): GraphemeSegmenter | undefined {
+  const segmenterConstructor = (
+    Intl as typeof Intl & { Segmenter?: new (locale?: string, options?: { granularity?: "grapheme" }) => GraphemeSegmenter }
+  ).Segmenter
+  return segmenterConstructor ? new segmenterConstructor(undefined, { granularity: "grapheme" }) : undefined
+}
+
+const graphemeSegmenter = getIntlSegmenter()
+
+function isGraphemeExtender(character: string): boolean {
+  return combiningMarkPattern.test(character) || variationSelectorPattern.test(character)
+}
+
+function graphemeBoundaryOffsets(text: string): number[] {
+  if (text.length === 0) {
+    return [0]
+  }
+
+  if (graphemeSegmenter) {
+    const boundaries = [0]
+    for (const segment of graphemeSegmenter.segment(text)) {
+      const end = segment.index + segment.segment.length
+      if (end > boundaries.at(-1)!) {
+        boundaries.push(end)
+      }
+    }
+    return boundaries.at(-1) === text.length ? boundaries : [...boundaries, text.length]
+  }
+
+  const boundaries = [0]
+  let previousCharacter = ""
+  for (let offset = 0; offset < text.length;) {
+    const character = text.slice(offset, offset + 2).codePointAt(0)!
+    const current = String.fromCodePoint(character)
+    if (offset > 0 && !isGraphemeExtender(current) && previousCharacter !== zeroWidthJoiner) {
+      boundaries.push(offset)
+    }
+    offset += current.length
+    previousCharacter = current
+  }
+  boundaries.push(text.length)
+  return boundaries
+}
 
 function findCaseInsensitiveRanges(text: string, needle: string): SearchEverythingHighlightRange[] {
-  if (needle.length === 0 || text.length === 0 || needle.length > text.length) {
+  if (needle.length === 0 || text.length === 0) {
     return []
   }
 
+  const boundaries = graphemeBoundaryOffsets(text)
   const ranges: SearchEverythingHighlightRange[] = []
-  let offset = 0
-  while (offset <= text.length - needle.length) {
-    const candidate = text.slice(offset, offset + needle.length)
-    if (caseInsensitiveCollator.compare(candidate, needle) === 0) {
-      ranges.push({ start: offset, end: offset + needle.length })
-      offset += needle.length
-    } else {
-      offset += 1
+  let startIndex = 0
+  while (startIndex < boundaries.length - 1) {
+    const start = boundaries[startIndex]!
+    let matchedEndIndex: number | undefined
+
+    for (let endIndex = startIndex + 1; endIndex < boundaries.length; endIndex += 1) {
+      const end = boundaries[endIndex]!
+      const candidate = text.slice(start, end)
+      if (caseInsensitiveCollator.compare(candidate, needle) === 0) {
+        matchedEndIndex = endIndex
+        ranges.push({ start, end })
+        break
+      }
     }
+
+    startIndex = matchedEndIndex ?? startIndex + 1
   }
 
   return ranges
