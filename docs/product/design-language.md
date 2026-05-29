@@ -180,7 +180,7 @@ Rules:
 - Manager is a dashboard and browser.
 - Note rows are title-first; key/path/date are muted.
 - Root/home explains where the user is and suggests next actions.
-- Preview is a structured card with title, path, metadata, and excerpt.
+- Preview is a structured card: folder previews show item lists, while note previews emphasize title and content excerpt without metadata rows.
 - Footer shows prioritized actions: `[Enter] Open`, `[/] Filter`, `[n] New`, `[Ctrl+P] Search`, `[Esc] Back`.
 
 ### Editor
