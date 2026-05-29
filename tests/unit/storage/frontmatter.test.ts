@@ -112,6 +112,34 @@ Body.
   )
 })
 
+test("parseNoteFile rejects YAML merge keys without polluting object prototypes", () => {
+  const markdown = `---
+id: note-123
+schemaVersion: 1
+title: Example title
+mode: plain
+tags: []
+createdAt: 2026-05-21T10:15:00.000Z
+updatedAt: 2026-05-21T12:30:00.000Z
+base: &base
+  polluted: yes
+<<: *base
+---
+Body.
+`
+
+  assert.equal(({} as Record<string, unknown>).polluted, undefined)
+  assert.throws(
+    () => parseNoteFile(markdown, "notes/inbox/merge-key.md"),
+    (error: unknown) => {
+      assert.ok(error instanceof InvalidFrontmatterError)
+      assert.match(error.message, /unknown field/i)
+      return true
+    },
+  )
+  assert.equal(({} as Record<string, unknown>).polluted, undefined)
+})
+
 test("parseNoteFile rejects malformed timestamps", () => {
   const markdown = `---
 id: note-123

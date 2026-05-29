@@ -31,7 +31,7 @@
   },
   "dependencies": {
     "@opentui/core": "0.2.14",
-    "js-yaml": "4.1.0",
+    "js-yaml": "4.1.1",
     "minisearch": "6.3.0",
     "sql.js": "1.10.3"
   },
