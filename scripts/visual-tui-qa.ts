@@ -128,6 +128,13 @@ function requireCommand(command: string, hint: string): void {
   }
 }
 
+function requirePythonPillow(): void {
+  const result = run("python3", ["-c", "import PIL.Image"], { timeout: 10_000 })
+  if (result.status !== 0) {
+    throw new Error("python3 Pillow is required for screenshot post-processing. Install python3-pil or run with --no-screenshots.")
+  }
+}
+
 function shellQuote(value: string): string {
   return `'${value.replaceAll("'", `'\\''`)}'`
 }
@@ -413,23 +420,28 @@ function waitForFile(filePath: string, timeoutMs: number): boolean {
   return false
 }
 
-function cropSmallManagerScreenshotIfNeeded(filePath: string, testCaseId: string): void {
-  if (testCaseId !== "manager-80x24") return
+function cropSmallManagerScreenshotIfNeeded(filePath: string, testCaseId: string): string | null {
+  if (testCaseId !== "manager-80x24") return null
 
   const crop = run("python3", ["-c", `
 from pathlib import Path
+import shutil
 from PIL import Image
 
 path = Path(${JSON.stringify(filePath)})
 img = Image.open(path)
 if img.width >= 780 and img.height >= 500:
     # GNOME portal can include terminal scrollback above the small target.
-    # Keep the BlueNote window/titlebar and the 80x24 TUI, discard pollution.
+    # Preserve the raw artifact and write an explicit cropped acceptance artifact.
+    raw = path.with_name("screen.raw.png")
+    shutil.copy2(path, raw)
     img.crop((35, 170, img.width, img.height)).save(path)
+    print(f"cropped manager-80x24 screenshot; raw preserved at {raw}")
 `], { timeout: 10_000 })
   if (crop.status !== 0) {
     throw new Error(`failed to crop manager-80x24 screenshot: ${crop.stderr || crop.stdout}`)
   }
+  return crop.stdout.trim() || null
 }
 
 function main(): void {
@@ -448,6 +460,9 @@ function main(): void {
   mkdirSync(outDir, { recursive: true })
   const qaRoot = ensureQaRoot()
   const noScreenshots = hasFlag("--no-screenshots")
+  if (!noScreenshots) {
+    requirePythonPillow()
+  }
   const reportLines: string[] = [
     "# BlueNote visual TUI QA harness report",
     "",
@@ -492,7 +507,8 @@ function main(): void {
           status = status === "Pass" ? "Screenshot blocked" : status
           notes += "Focused-terminal screenshot did not produce a PNG. Check screenshot.log and approve GNOME portal prompt if shown. "
         } else {
-          cropSmallManagerScreenshotIfNeeded(pngPath, testCase.id)
+          const cropNote = cropSmallManagerScreenshotIfNeeded(pngPath, testCase.id)
+          if (cropNote) notes += `${cropNote}. `
         }
       }
     } catch (error) {

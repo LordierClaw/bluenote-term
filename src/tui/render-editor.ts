@@ -412,7 +412,7 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
   if (horizontalOverflow) {
     overflow.horizontal = horizontalOverflow
   }
-  const wrapLabel = horizontalOverflow?.indicator ? `${baseWrapLabel} ${horizontalOverflow.indicator}` : baseWrapLabel
+  const wrapLabel = (editor?.wrapMode ?? "word") === "none" ? `${baseWrapLabel} · more →` : baseWrapLabel
   const { visibleShortcuts, visibleShortcutHints, hiddenShortcutCount } = visibleShortcutLabels(shortcuts, responsive.width ?? 0)
 
   return {
@@ -540,6 +540,20 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     height: 1,
     fg: tuiTheme[vm.topbar.fullPathIntent],
   }))
+  topbar.add(new TextRenderable(options.renderer, {
+    id: "bluenote-editor-topbar-separator-wrap",
+    content: " | ",
+    width: 3,
+    height: 1,
+    fg: tuiTheme[vm.topbar.metadataIntent],
+  }))
+  topbar.add(new TextRenderable(options.renderer, {
+    id: "bluenote-editor-topbar-wrap",
+    content: vm.topbar.wrapLabel,
+    width: Math.max(1, vm.topbar.wrapLabel.length),
+    height: 1,
+    fg: tuiTheme[vm.topbar.metadataIntent],
+  }))
   topbar.add(new BoxRenderable(options.renderer, {
     id: "bluenote-editor-topbar-spacer",
     flexGrow: 1,
@@ -566,20 +580,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     height: 1,
     fg: tuiTheme[vm.topbar.metadataIntent],
   }))
-  topbar.add(new TextRenderable(options.renderer, {
-    id: "bluenote-editor-topbar-wrap",
-    content: vm.topbar.wrapLabel,
-    width: Math.max(1, vm.topbar.wrapLabel.length),
-    height: 1,
-    fg: tuiTheme[vm.topbar.metadataIntent],
-  }))
-  topbar.add(new TextRenderable(options.renderer, {
-    id: "bluenote-editor-topbar-separator-save",
-    content: " | ",
-    width: 3,
-    height: 1,
-    fg: tuiTheme[vm.topbar.metadataIntent],
-  }))
+
   topbar.add(new TextRenderable(options.renderer, {
     id: "bluenote-editor-topbar-save-status",
     content: vm.topbar.statusLabel,
