@@ -45,6 +45,6 @@ To be filled by the implementing run:
 | --- | --- | --- |
 | `bun test tests/unit/tui/visual-tui-qa-script.test.ts` | Pass — 5 tests, 0 failures | Unit coverage for case list, evidence rows, screenshot fallback, seed expectations. |
 | `bun run qa:visual:tui -- --no-screenshots --out-dir=/tmp/bluenote-4j-visual-dryrun` | Pass | Dry-run report: `/tmp/bluenote-4j-visual-dryrun/report.md`; no `Needs review` entries after harness navigation/expectation fixes. |
-| `bun run qa:visual:tui -- --out-dir=/tmp/bluenote-4j-visual-final` | Pass | Screenshot report: `/tmp/bluenote-4j-visual-final/report.md`; PNG artifacts captured for all cases, including raw crop preservation at `/tmp/bluenote-4j-visual-final/manager-80x24/screen.raw.png`. |
+| `bun run qa:visual:tui -- --out-dir=/tmp/bluenote-4j-visual-final` | Pass with screenshot capture blocked by GNOME/XDG portal | Screenshot-mode report: `/tmp/bluenote-4j-visual-final/report.md`; command completed, pane evidence passed, each screenshot log captured focused-window and fullscreen fallback denial diagnostics (`XDG portal screenshot was denied or cancelled with response code 2`), and process cleanup passed. |
 
 Task 15 will replace TODO rows with live screenshot/manual acceptance results and UX ratings.

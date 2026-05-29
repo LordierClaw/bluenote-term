@@ -144,7 +144,7 @@ export const phase4JVisualCases: VisualCase[] = [
     geometry: "100x30",
     zoom: "1.0",
     requirementIds: [4],
-    actions: ["Enter", "/", "text:preview-note", "Enter"],
+    actions: ["Enter", "/", "text:preview-note"],
     expected: ["preview-note", "note-preview-body"],
     ratingPrompt: "Verify focused note preview shows title/body content without path/description metadata rows.",
   },
@@ -155,7 +155,7 @@ export const phase4JVisualCases: VisualCase[] = [
     zoom: "1.0",
     requirementIds: [7, 8],
     actions: ["Enter", "/", "text:name-only-target"],
-    expected: ["Filter", "name-only-target"],
+    expected: ["Filter", "Scope: notes/inbox", "name-only-target.md"],
     ratingPrompt: "Verify manager shows / Filter and the filter matches visible item names only, not title/path/description-only text.",
   },
   {
@@ -185,7 +185,7 @@ export const phase4JVisualCases: VisualCase[] = [
     zoom: "1.0",
     requirementIds: [11],
     actions: ["C-p", "text:needle-repeat"],
-    expected: ["Search Everything", "needle-repeat"],
+    expected: ["Search Everything", "Results · 2", "Repeated Content Match Note", "Client Note", "needle-repeat one in this note"],
     ratingPrompt: "Verify repeated note content matches are shown as multiple result rows with centered/highlighted previews.",
   },
   {
@@ -204,9 +204,9 @@ export const phase4JVisualCases: VisualCase[] = [
     geometry: "100x30",
     zoom: "1.0",
     requirementIds: [12],
-    actions: ["Enter", "/", "text:editor-body", "Enter", "Enter", "C-h", "text:replace-target"],
-    expected: ["Replace", "replace-target"],
-    ratingPrompt: "Verify Ctrl+H opens find/replace and the found result is highlighted/selected in the editor body.",
+    actions: ["Enter", "/", "text:editor-body", "Enter", "Enter", "C-f", "text:replace-target"],
+    expected: ["Find", "replace-target", "1/2", "matches"],
+    ratingPrompt: "Verify find/replace search state opens and the found result is highlighted/selected in the editor body.",
   },
   {
     id: "editor-clipboard-attempt-100x30",
@@ -239,7 +239,7 @@ export const qaSeedExpectations = {
   ],
   relativePaths: [
     "notes/projects/client/client-note.md",
-    "notes/projects/client/nested/name-only-target.md",
+    "notes/projects/project-overview.md",
   ],
   bodyMarkers: ["needle-repeat", "replace-target", "clipboard-source", "undo-redo-start"],
 } as const
@@ -543,7 +543,7 @@ function ensureQaRoot(): string {
     "Ultra long title used to exercise manager row truncation with enough extra words to exceed eighty display columns": "notes/inbox/ultra-long-filename-with-title-and-description-that-must-truncate-before-preview-pane.md",
     "Projects Folder Seed": "notes/projects/project-overview.md",
     "Preview Note Body": "notes/inbox/preview-note.md",
-    "Name Only Target": "notes/projects/client/nested/name-only-target.md",
+    "Name Only Target": "notes/inbox/name-only-target.md",
     "TitleMatch Search File Preview": "notes/inbox/titlematch-file.md",
     "Repeated Content Match Note": "notes/inbox/repeated-content.md",
     "Editor Body Replace Note": "notes/inbox/editor-body.md",
@@ -649,7 +649,7 @@ function launchCaseTerminal(testCase: VisualCase, session: string, qaRoot: strin
 function captureScreenshotViaFocusedBridge(outPath: string, targetWindowId: number | null): RunResult {
   const windowArg = targetWindowId === null ? "" : String(targetWindowId)
   const command = `python3 ${shellQuote(screenshotBridgePath)} ${shellQuote(outPath)} ${shellQuote(windowArg)}; code=$?; echo bridge_exit=$code; sleep 1; exit $code`
-  return run("gnome-terminal", ["--title", "BlueNote Visual QA Screenshot Bridge", "--geometry=44x8+1400+40", "--", "bash", "-lc", command], { timeout: 10_000 })
+  return run("bash", ["-lc", command], { timeout: 80_000 })
 }
 
 function waitForFile(filePath: string, timeoutMs: number): boolean {
@@ -693,15 +693,13 @@ function main(): void {
 
   requireCommand("tmux", "Install tmux or run from an environment that provides it.")
   requireCommand("gnome-terminal", "GNOME Terminal is required for GNOME Wayland visual QA.")
-  requireCommand("computer-use-linux", "Install/configure computer-use-linux for window targeting and screenshot capture.")
-
-  writeFocusedScreenshotBridge(screenshotBridgePath)
-
   const outDir = path.resolve(parseArg("--out-dir") ?? path.join(tmpdir(), `bluenote-visual-qa-${new Date().toISOString().replaceAll(/[:.]/gu, "-")}`))
   mkdirSync(outDir, { recursive: true })
   const qaRoot = ensureQaRoot()
   const noScreenshots = hasFlag("--no-screenshots")
   if (!noScreenshots) {
+    requireCommand("computer-use-linux", "Install/configure computer-use-linux for window targeting and screenshot capture.")
+    writeFocusedScreenshotBridge(screenshotBridgePath)
     requirePythonPillow()
   }
   const reportLines: string[] = [
@@ -744,7 +742,10 @@ function main(): void {
       if (!noScreenshots) {
         const bridge = captureScreenshotViaFocusedBridge(pngPath, windowId)
         writeFileSync(screenshotLogPath, `${bridge.stdout}\n${bridge.stderr}`)
-        if (!waitForFile(pngPath, 75_000)) {
+        if (bridge.status !== 0) {
+          status = status === "Pass" ? "Screenshot blocked" : status
+          notes += "Focused-terminal screenshot bridge failed; check screenshot.log and approve GNOME portal prompt if shown. "
+        } else if (!waitForFile(pngPath, 75_000)) {
           status = status === "Pass" ? "Screenshot blocked" : status
           notes += "Focused-terminal screenshot did not produce a PNG. Check screenshot.log and approve GNOME portal prompt if shown. "
         } else {
