@@ -1086,6 +1086,7 @@ describe("TUI render view models", () => {
         key: "daily-plan",
         title: "Daily Plan",
         relativePath: "notes/inbox/daily-plan.md",
+        matchIndex: 0,
         matchLabel: "body",
         excerpt: "Ship renderer screens with OpenTUI.",
         label: "Daily Plan",

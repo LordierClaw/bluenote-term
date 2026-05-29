@@ -288,16 +288,97 @@ describe("TUI Search Everything adapter", () => {
       kind: "content",
       typeLabel: "content",
       typeIcon: "content",
-      id: "content:project-brief:content line 7",
+      id: "content:project-brief:content%20line%207:0",
       key: "project-brief",
       title: "Client Launch Brief",
       relativePath: "notes/projects/client/brief.md",
       label: "Client Launch Brief",
       detail: "content line 7 — notes/projects/client/brief.md",
       score: contentResult?.score,
+      matchIndex: 0,
       matchLabel: "content line 7",
       excerpt: "...Launch blockers: legal review and design QA...",
     })
+  })
+
+  test("returns one content result per searchNotes content occurrence with stable unique ids", () => {
+    const deps: SearchEverythingDependencies = {
+      noteSummaries,
+      searchNotes: () => [
+        {
+          key: "project-brief",
+          title: "Client Launch Brief",
+          relativePath: "notes/projects/client/brief.md",
+          match: {
+            source: "content",
+            label: "content line 12",
+            excerpt: "...first launch blocker...",
+          },
+        },
+        {
+          key: "project-brief",
+          title: "Client Launch Brief",
+          relativePath: "notes/projects/client/brief.md",
+          match: {
+            source: "content",
+            label: "content line 18",
+            excerpt: "...second launch blocker...",
+          },
+        },
+      ],
+    }
+
+    const firstRun = buildSearchEverythingResults("launch", deps).filter((result) => result.kind === "content")
+    const secondRun = buildSearchEverythingResults("launch", deps).filter((result) => result.kind === "content")
+
+    assert.equal(firstRun.length, 2)
+    assert.deepEqual(firstRun.map((result) => result.id), [
+      "content:project-brief:content%20line%2012:0",
+      "content:project-brief:content%20line%2018:1",
+    ])
+    assert.deepEqual(new Set(firstRun.map((result) => result.id)).size, firstRun.length)
+    assert.deepEqual(secondRun.map((result) => result.id), firstRun.map((result) => result.id))
+    assert.deepEqual(firstRun.map((result) => ({ key: result.key, matchIndex: result.matchIndex, matchLabel: result.matchLabel, excerpt: result.excerpt })), [
+      { key: "project-brief", matchIndex: 0, matchLabel: "content line 12", excerpt: "...first launch blocker..." },
+      { key: "project-brief", matchIndex: 1, matchLabel: "content line 18", excerpt: "...second launch blocker..." },
+    ])
+  })
+
+  test("same-note content occurrences with the same label still receive collision-safe ids", () => {
+    const deps: SearchEverythingDependencies = {
+      noteSummaries,
+      searchNotes: () => [
+        {
+          key: "project-brief",
+          title: "Client Launch Brief",
+          relativePath: "notes/projects/client/brief.md",
+          match: {
+            source: "content",
+            label: "content line 7",
+            excerpt: "...launch blocker one...",
+          },
+        },
+        {
+          key: "project-brief",
+          title: "Client Launch Brief",
+          relativePath: "notes/projects/client/brief.md",
+          match: {
+            source: "content",
+            label: "content line 7",
+            excerpt: "...launch blocker two...",
+          },
+        },
+      ],
+    }
+
+    const contentResults = buildSearchEverythingResults("launch", deps).filter((result) => result.kind === "content")
+
+    assert.deepEqual(contentResults.map((result) => result.id), [
+      "content:project-brief:content%20line%207:0",
+      "content:project-brief:content%20line%207:1",
+    ])
+    assert.deepEqual(contentResults.map((result) => result.matchLabel), ["content line 7", "content line 7"])
+    assert.deepEqual(contentResults.map((result) => result.excerpt), ["...launch blocker one...", "...launch blocker two..."])
   })
 
   test("returns folder/path results for folder queries", () => {

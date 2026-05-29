@@ -9,7 +9,7 @@ import { initRoot } from "../../src/core/init-root"
 import { listNotes } from "../../src/core/list-notes"
 import { rebuildIndexes } from "../../src/core/rebuild-indexes"
 import { showNote } from "../../src/core/show-note"
-import { buildSearchEverythingPreview } from "../../src/tui/adapters/search-everything-adapter"
+import { buildSearchEverythingPreview, type SearchEverythingContentResult } from "../../src/tui/adapters/search-everything-adapter"
 import { createDefaultWorkspaceController, routeWorkspaceKey } from "../../src/tui/app"
 import { routeManagerKey } from "../../src/tui/render-manager"
 import { createWorkspaceController, type WorkspaceCommandContext } from "../../src/tui/workspace-controller"
@@ -693,6 +693,65 @@ describe("TUI workspace workflows", () => {
     assert.equal(controller.getState().screen, "editor")
     assert.equal(controller.getState().editor?.note.key, second.key)
     assert.equal(controller.getState().editor?.body, "Alpha beta gamma delta epsilon quokka zeta eta theta iota")
+  })
+
+  test("Search Everything exposes and selects every content occurrence for the same note", () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Current Note",
+      body: "current body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    const repeated = createNote({
+      override: rootPath,
+      title: "Repeated Occurrences",
+      body: "needle on line one\nneedle on line two",
+      clock: fixedClock("2026-05-26T10:01:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createWorkspaceController({
+      listNotes: () => listNotes({ override: rootPath }),
+      showNote: (selector) => showNote({ override: rootPath, selector }),
+      searchNotes: () => [
+        {
+          key: repeated.key,
+          title: repeated.title,
+          relativePath: repeated.relativePath,
+          match: { source: "content", label: "content line 1", excerpt: "...needle on line one..." },
+        },
+        {
+          key: repeated.key,
+          title: repeated.title,
+          relativePath: repeated.relativePath,
+          match: { source: "content", label: "content line 2", excerpt: "...needle on line two..." },
+        },
+      ],
+    })
+
+    openManagerNoteByKey(controller, first.key)
+    controller.openSearch("needle")
+
+    const contentResults = controller.getSearchResults().filter((result): result is SearchEverythingContentResult => result.kind === "content" && result.key === repeated.key)
+    assert.equal(contentResults.length, 2)
+    assert.deepEqual(contentResults.map((result) => result.id), [
+      `content:${repeated.key}:content%20line%201:0`,
+      `content:${repeated.key}:content%20line%202:1`,
+    ])
+    assert.deepEqual(contentResults.map((result) => result.matchIndex), [0, 1])
+    assert.match(buildSearchEverythingPreview(contentResults[0])?.lines.join("\n") ?? "", /line one/)
+    assert.match(buildSearchEverythingPreview(contentResults[1])?.lines.join("\n") ?? "", /line two/)
+
+    assert.equal(controller.selectSearchResult(contentResults[0]).blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, repeated.key)
+
+    controller.openSearch("needle")
+    const secondResult = controller.getSearchResults().filter((result) => result.kind === "content" && result.key === repeated.key)[1]
+    assert.ok(secondResult)
+    assert.equal(controller.selectSearchResult(secondResult).blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, repeated.key)
   })
 
   test("Search Everything can select summary results and cancel when content search index is unavailable", () => {

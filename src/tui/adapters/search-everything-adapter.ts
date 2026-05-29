@@ -45,6 +45,11 @@ export interface SearchEverythingContentResult extends SearchEverythingBaseResul
   key: string
   title: string
   relativePath: string
+  matchIndex: number
+  lineNumber?: number
+  offset?: number
+  matchStart?: number
+  matchEnd?: number
   matchLabel: string
   excerpt: string
 }
@@ -400,6 +405,39 @@ function buildNoteResult(query: string, summary: NoteManagerSummary): SearchEver
   }
 }
 
+type ContentMatchContext = {
+  matchIndex?: number
+  lineNumber?: number
+  line?: number
+  offset?: number
+  start?: number
+  end?: number
+}
+
+function finiteInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : undefined
+}
+
+function contentResultId(match: SearchNoteMatch, occurrenceIndex: number, context: ContentMatchContext): string {
+  const idParts = [
+    "content",
+    match.key,
+    encodeURIComponent(match.match.label),
+    finiteInteger(context.matchIndex) ?? occurrenceIndex,
+  ]
+
+  const lineNumber = finiteInteger(context.lineNumber) ?? finiteInteger(context.line)
+  const offset = finiteInteger(context.offset) ?? finiteInteger(context.start)
+  if (lineNumber !== undefined) {
+    idParts.push(`line${lineNumber}`)
+  }
+  if (offset !== undefined) {
+    idParts.push(`offset${offset}`)
+  }
+
+  return idParts.join(":")
+}
+
 function buildContentResults(query: string, deps: SearchEverythingDependencies): SearchEverythingContentResult[] {
   if (query.trim().length === 0) {
     return []
@@ -408,20 +446,33 @@ function buildContentResults(query: string, deps: SearchEverythingDependencies):
   return deps
     .searchNotes(query)
     .filter((match) => match.match.source === "content")
-    .map((match) => ({
-      kind: "content",
-      typeLabel: "content",
-      typeIcon: "content",
-      id: `content:${match.key}:${match.match.label}`,
-      key: match.key,
-      title: match.title,
-      relativePath: normalizePath(match.relativePath),
-      label: match.title,
-      detail: `${match.match.label} — ${normalizePath(match.relativePath)}`,
-      score: 100,
-      matchLabel: match.match.label,
-      excerpt: match.match.excerpt ?? match.match.label,
-    }))
+    .map((match, occurrenceIndex) => {
+      const context = match.match as typeof match.match & ContentMatchContext
+      const lineNumber = finiteInteger(context.lineNumber) ?? finiteInteger(context.line)
+      const offset = finiteInteger(context.offset) ?? finiteInteger(context.start)
+      const matchStart = finiteInteger(context.start)
+      const matchEnd = finiteInteger(context.end)
+
+      return {
+        kind: "content",
+        typeLabel: "content",
+        typeIcon: "content",
+        id: contentResultId(match, occurrenceIndex, context),
+        key: match.key,
+        title: match.title,
+        relativePath: normalizePath(match.relativePath),
+        label: match.title,
+        detail: `${match.match.label} — ${normalizePath(match.relativePath)}`,
+        score: 100,
+        matchIndex: finiteInteger(context.matchIndex) ?? occurrenceIndex,
+        ...(lineNumber !== undefined ? { lineNumber } : {}),
+        ...(offset !== undefined ? { offset } : {}),
+        ...(matchStart !== undefined ? { matchStart } : {}),
+        ...(matchEnd !== undefined ? { matchEnd } : {}),
+        matchLabel: match.match.label,
+        excerpt: match.match.excerpt ?? match.match.label,
+      }
+    })
 }
 
 function buildFolderResults(query: string, noteSummaries: readonly NoteManagerSummary[]): SearchEverythingFolderResult[] {
