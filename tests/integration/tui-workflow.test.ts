@@ -445,6 +445,37 @@ describe("TUI workspace workflows", () => {
     assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), changedBody)
   })
 
+  test("manual save refreshes search indexes for the saved note without requiring a full rebuild", async () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Incremental Save Source",
+      body: "Original searchable body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    await writeFile(path.join(rootPath, ".data", "notes", "dangling-save-validation.json"), JSON.stringify({
+      key: "dangling-save-validation",
+      title: "Dangling validation sidecar",
+      description: "This sidecar deliberately points at a missing note.",
+      relativePath: "notes/missing/dangling-save-validation.md",
+      createdAt: "2026-05-26T10:01:00.000Z",
+      updatedAt: "2026-05-26T10:01:00.000Z",
+      archivedAt: null,
+      namingVersion: 1,
+    }), "utf8")
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerNoteByKey(controller, first.key)
+    controller.updateEditorBody("Summary line without token\nSaved body contains lag regression token")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+
+    controller.openSearch("lag")
+    const savedResult = controller.getSearchResults().find((result) => (result.kind === "content" || result.kind === "note") && result.key === first.key)
+
+    assert.ok(savedResult)
+    assert.equal(showNote({ override: rootPath, selector: first.key }).body, "Summary line without token\nSaved body contains lag regression token")
+  })
+
   test("manual save atomic pre-write failure keeps TUI editor dirty and leaves note file unchanged", async () => {
     const first = createNote({
       override: rootPath,

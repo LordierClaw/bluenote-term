@@ -8,6 +8,7 @@ import { deleteNote } from "../core/delete-note"
 import { IndexUnavailableError } from "../core/errors"
 import { listNotes } from "../core/list-notes"
 import { rebuildIndexes } from "../core/rebuild-indexes"
+import { updateIndexedNote } from "../index/index-store"
 import { searchNotes } from "../core/search-notes"
 import { showNote } from "../core/show-note"
 import type { CliResult } from "../core/types"
@@ -70,13 +71,23 @@ function persistTuiEditorBody(rootPath: string, note: TuiNote, body: string, clo
     updatedAt: clock.now().toISOString(),
   })
 
+  const savedNote = showTuiNote(rootPath, note.key)
   try {
-    rebuildIndexes({ override: rootPath })
+    updateIndexedNote(rootPath, {
+      key: savedNote.key,
+      title: savedNote.title,
+      description: savedNote.description,
+      body: savedNote.body,
+      relativePath: savedNote.relativePath,
+      createdAt: savedNote.createdAt ?? "",
+      updatedAt: savedNote.updatedAt ?? "",
+      archivedAt: null,
+    })
   } catch {
-    return showTuiNote(rootPath, note.key)
+    return savedNote
   }
 
-  return showTuiNote(rootPath, note.key)
+  return savedNote
 }
 
 function showTuiNote(rootPath: string, selector: string): TuiNote {

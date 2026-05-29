@@ -210,6 +210,30 @@ export function rebuildIndexStore(input: RebuildIndexStoreInput): RebuildIndexSt
   }
 }
 
+export function updateIndexedNote(rootPath: string, note: IndexedNoteRecord): RebuildIndexStoreResult {
+  const normalizedRootPath = path.resolve(rootPath)
+  const existingSummaries = loadIndexStore(normalizedRootPath).listAllSummaries()
+  const existingSearchJson = readFileSync(getSearchIndexPath(normalizedRootPath), "utf8")
+  const existingSearchBodies = new Map(getStoredSearchMatches(existingSearchJson).map((match) => [match.key, match.body]))
+  const notesByKey = new Map<string, IndexedNoteRecord>()
+
+  for (const summary of existingSummaries) {
+    notesByKey.set(summary.key, {
+      key: summary.key,
+      title: summary.title,
+      description: summary.description,
+      body: existingSearchBodies.get(summary.key) ?? "",
+      relativePath: summary.relativePath,
+      createdAt: summary.createdAt,
+      updatedAt: summary.updatedAt,
+      archivedAt: summary.archivedAt,
+    })
+  }
+
+  notesByKey.set(note.key, note)
+  return rebuildIndexStore({ rootPath: normalizedRootPath, notes: [...notesByKey.values()] })
+}
+
 export function loadIndexStore(rootPath: string): LoadedIndexStore {
   const metadataDatabasePath = getMetadataDatabasePath(rootPath)
   const searchIndexPath = getSearchIndexPath(rootPath)

@@ -56,3 +56,41 @@ bun run smoke:opentui:interactive
 python3 scoped /proc process listing for bn.ts tui / smoke-opentui
 # PID PPID COMMAND
 ```
+
+## Task 2 — Save/autosave lag root-cause investigation and regression
+
+Date: 2026-05-29
+Branch: `feat/opentui-implement`
+
+### Investigation summary
+
+Hypotheses checked from the Task 2 plan:
+
+- **H1 unnecessary full index rebuild on save: confirmed.** `persistTuiEditorBody()` wrote the note and then called `rebuildIndexes({ override: rootPath })`, which scans/validates the whole notes tree and rewrites derived indexes after every manual save or autosave.
+- **H2 autosave/manual save overlap: confirmed.** A pending/in-flight autosave and a rapid manual save for the same note/body could invoke the persistence dependency more than once concurrently.
+- **H3 unbounded render invalidation: not confirmed as the primary cause.** Autosave status transitions still notify on `pending`/`saving`/`saved`, but the regression path showed duplicate persistence and full rebuild work rather than a render loop.
+- **H4 stale controller instances: not confirmed for this task.** Task 1 lifecycle cleanup plus dispose tests cover stale callbacks/timers.
+- **H5 body/cursor rendering cost: not confirmed as the save-specific trigger.** Input after save remained a controller-state race/work issue rather than an editor-buffer rendering bug.
+
+### Root cause / fix evidence
+
+Implemented the smallest fixes for the confirmed save path issues:
+
+- Replaced per-save full `rebuildIndexes()` in the TUI save path with `updateIndexedNote()`, which updates the saved note in the existing derived indexes without rescanning all note files/sidecars.
+- Added an integration regression with a deliberately dangling sidecar: a full rebuild would refuse to refresh derived indexes, while the incremental update keeps the saved note searchable.
+- Added in-flight save coalescing in `WorkspaceController` so repeated manual saves and manual-save-during-autosave for the same note/body share one persistence operation.
+- Manual save clears pending debounce timers before persisting, preserves immediate input responsiveness while an async save is in flight, and retries once if it attached to a failing in-flight autosave for the same still-current snapshot.
+- Existing dispose coverage continues to verify pending timers are cleared and stale async save completions cannot keep render callbacks live.
+
+### Verification
+
+```bash
+bun test tests/unit/tui/workspace-controller.test.ts tests/unit/tui/editor-buffer-adapter.test.ts tests/integration/tui-workflow.test.ts
+# 111 pass, 0 fail
+
+bun run typecheck
+# tsc --noEmit passed
+
+bun run smoke:opentui:interactive
+# Interactive OpenTUI smoke check passed.
+```

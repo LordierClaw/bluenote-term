@@ -1925,6 +1925,101 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().editor?.autosaveStatus, "saved")
   })
 
+  test("manual save coalesces with an in-flight autosave for the same editor snapshot", async () => {
+    const scheduler = createFakeScheduler()
+    const persistedBodies: string[] = []
+    let finishPersist!: (note: TuiNote) => void
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) =>
+        new Promise<TuiNote>((resolve) => {
+          persistedBodies.push(`${note.key}:${body}`)
+          finishPersist = (savedNote) => resolve({ ...note, ...savedNote, body })
+        }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Shared autosave manual body")
+    scheduler.runNext()
+    await Promise.resolve()
+    assert.equal(controller.getState().editor?.autosaveStatus, "saving")
+
+    const manualSave = controller.saveEditor()
+    await Promise.resolve()
+
+    assert.deepEqual(persistedBodies, ["daily-plan:Shared autosave manual body"])
+    finishPersist({ ...notesByKey["daily-plan"], body: "Shared autosave manual body" })
+    assert.deepEqual(await manualSave, { blocked: false })
+    await Promise.resolve()
+
+    assert.deepEqual(persistedBodies, ["daily-plan:Shared autosave manual body"])
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+  })
+
+  test("rapid repeated manual saves keep only one persistence operation in flight", async () => {
+    const scheduler = createFakeScheduler()
+    const persistedBodies: string[] = []
+    let finishPersist!: (note: TuiNote) => void
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) =>
+        new Promise<TuiNote>((resolve) => {
+          persistedBodies.push(`${note.key}:${body}`)
+          finishPersist = (savedNote) => resolve({ ...note, ...savedNote, body })
+        }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Rapid manual body")
+    const firstSave = controller.saveEditor()
+    const secondSave = controller.saveEditor()
+    const thirdSave = controller.saveEditor()
+    await Promise.resolve()
+
+    assert.deepEqual(persistedBodies, ["daily-plan:Rapid manual body"])
+    assert.deepEqual(scheduler.activeTasks(), [])
+
+    finishPersist({ ...notesByKey["daily-plan"], body: "Rapid manual body" })
+    assert.deepEqual(await firstSave, { blocked: false })
+    assert.deepEqual(await secondSave, { blocked: false })
+    assert.deepEqual(await thirdSave, { blocked: false })
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+  })
+
+  test("typing immediately after a save request is accepted without waiting for persistence", async () => {
+    const persistedBodies: string[] = []
+    let finishPersist!: (note: TuiNote) => void
+    const { deps } = createDeps({
+      persistEditorBody: (note, body) =>
+        new Promise<TuiNote>((resolve) => {
+          persistedBodies.push(`${note.key}:${body}`)
+          finishPersist = (savedNote) => resolve({ ...note, ...savedNote, body })
+        }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("First saved body")
+    const save = controller.saveEditor()
+    controller.insertEditorText(" plus immediate typing")
+
+    assert.equal(controller.getState().editor?.body, "First saved body plus immediate typing")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+    assert.deepEqual(persistedBodies, ["daily-plan:First saved body"])
+
+    finishPersist({ ...notesByKey["daily-plan"], body: "First saved body" })
+    await save
+
+    assert.equal(controller.getState().editor?.body, "First saved body plus immediate typing")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+  })
+
   test("dispose clears pending autosave timers", () => {
     const scheduler = createFakeScheduler()
     const { deps } = createDeps({ autosaveScheduler: scheduler })
@@ -2054,10 +2149,11 @@ describe("TUI workspace controller", () => {
     scheduler.runNext()
     await Promise.resolve()
     const manualSave = controller.saveEditor()
+    pendingSaves[0]?.reject(new Error("late autosave failure"))
+    await Promise.resolve()
     pendingSaves[1]?.resolve({ ...notesByKey["daily-plan"], body: "Shared body" })
     await manualSave
 
-    pendingSaves[0]?.reject(new Error("late autosave failure"))
     await Promise.resolve()
     await Promise.resolve()
 

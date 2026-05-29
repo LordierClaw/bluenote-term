@@ -249,6 +249,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   let state = createInitialTuiState()
   let searchResults: SearchEverythingResult[] = []
   let autosaveTimer: unknown = null
+  let inFlightSave: { noteKey: string; body: string; promise: Promise<TuiNote> } | null = null
   let autosaveStateChangeHandler: (() => void) | null = deps.onAutosaveStateChange ?? null
   const previewBodyCache = new Map<string, string>()
   const autosaveScheduler: WorkspaceDebounceScheduler = deps.autosaveScheduler ?? {
@@ -272,6 +273,33 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     return persist(noteToPersist, submittedBody)
   }
 
+  function persistEditorSnapshotCoalesced(noteToPersist: TuiNote, submittedBody: string): TuiNote | Promise<TuiNote> {
+    if (inFlightSave?.noteKey === noteToPersist.key && inFlightSave.body === submittedBody) {
+      return inFlightSave.promise
+    }
+
+    const persistedNote = persistEditorSnapshot(noteToPersist, submittedBody)
+    if (!isPromiseLike(persistedNote)) {
+      return persistedNote
+    }
+
+    const promise = persistedNote
+    inFlightSave = { noteKey: noteToPersist.key, body: submittedBody, promise }
+    promise.then(
+      () => {
+        if (inFlightSave?.promise === promise) {
+          inFlightSave = null
+        }
+      },
+      () => {
+        if (inFlightSave?.promise === promise) {
+          inFlightSave = null
+        }
+      },
+    )
+    return promise
+  }
+
   async function autosaveEditor(noteToPersist: TuiNote, submittedBody: string): Promise<void> {
     if (state.editor?.note.key !== noteToPersist.key || state.editor.body !== submittedBody) {
       return
@@ -280,7 +308,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     state = markAutosaveSaving(state)
     notifyAutosaveStateChange()
     try {
-      const persistedNote = persistEditorSnapshot(noteToPersist, submittedBody)
+      const persistedNote = persistEditorSnapshotCoalesced(noteToPersist, submittedBody)
       const savedNote = isPromiseLike(persistedNote) ? await persistedNote : persistedNote
       const previousState = state
       applySavedEditorAndPreviewCache(savedNote, submittedBody)
@@ -978,12 +1006,23 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       const noteToPersist = toTuiNote(state.editor.note)
       const submittedBody = state.editor.body
       try {
-        const persistedNote = persistEditorSnapshot(noteToPersist, submittedBody)
+        const coalescedWithInFlight = inFlightSave?.noteKey === noteToPersist.key && inFlightSave.body === submittedBody
+        const persistedNote = persistEditorSnapshotCoalesced(noteToPersist, submittedBody)
 
         if (isPromiseLike(persistedNote)) {
-          const savedNote = await persistedNote
-          applySavedEditorAndPreviewCache(savedNote, submittedBody)
-          return ok()
+          try {
+            const savedNote = await persistedNote
+            applySavedEditorAndPreviewCache(savedNote, submittedBody)
+            return ok()
+          } catch (error) {
+            if (!coalescedWithInFlight || state.editor?.note.key !== noteToPersist.key || state.editor.body !== submittedBody) {
+              throw error
+            }
+            const retriedNote = persistEditorSnapshot(noteToPersist, submittedBody)
+            const savedNote = isPromiseLike(retriedNote) ? await retriedNote : retriedNote
+            applySavedEditorAndPreviewCache(savedNote, submittedBody)
+            return ok()
+          }
         }
 
         applySavedEditorAndPreviewCache(persistedNote, submittedBody)
