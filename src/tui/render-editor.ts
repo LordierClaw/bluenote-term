@@ -595,6 +595,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   }))
 
   let findInput: InputRenderable | null = null
+  let replaceInput: InputRenderable | null = null
   const bodyPanel = new BoxRenderable(options.renderer, {
     id: vm.body.inputId,
     flexDirection: "column",
@@ -715,18 +716,18 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
         height: 1,
         fg: tuiTheme.textPrimary,
       }))
-      const replaceInput = new InputRenderable(options.renderer, {
+      replaceInput = new InputRenderable(options.renderer, {
         id: "bluenote-editor-replace-text",
         value: vm.find.replacement ?? "",
         placeholder: "Replacement text…",
         width: "70%",
       })
       replaceInput.on(InputRenderableEvents.INPUT, () => {
-        options.controller.updateEditorReplacement(replaceInput.value ?? "")
+        options.controller.updateEditorReplacement(replaceInput?.value ?? "")
         options.onInvalidate?.()
       })
       replaceInput.on(InputRenderableEvents.CHANGE, () => {
-        options.controller.updateEditorReplacement(replaceInput.value ?? "")
+        options.controller.updateEditorReplacement(replaceInput?.value ?? "")
         options.onInvalidate?.()
       })
       replaceInput.on(InputRenderableEvents.ENTER, () => {
@@ -753,7 +754,9 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     height: 1,
     fg: tuiTheme.textMuted,
   }))
-  if (findInput) {
+  if (replaceInput) {
+    replaceInput.focus()
+  } else if (findInput) {
     findInput.focus()
   }
 

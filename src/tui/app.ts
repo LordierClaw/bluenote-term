@@ -306,25 +306,44 @@ function routeControlledEditorBodyInput(controller: WorkspaceController, sequenc
   }
 }
 
+function isWorkspaceInput(node: Renderable): boolean {
+  return node.id === "bluenote-search-query"
+    || node.id === "bluenote-editor-replace-text"
+    || node.id === "bluenote-editor-find-query"
+    || node.id === "bluenote-editor-body-input"
+    || node.id === "bluenote-editor-body"
+    || node.id === "bluenote-manager-filter-query"
+    || node.id === "bluenote-manager-create-title"
+}
+
 export function focusActiveWorkspaceInput(screen: Renderable): void {
-  const activeInput = renderableDescendants(screen).find((node) =>
-    node.id === "bluenote-search-query" || node.id === "bluenote-editor-find-query" || node.id === "bluenote-editor-body-input" || node.id === "bluenote-manager-filter-query" || node.id === "bluenote-manager-create-title",
-  )
+  const descendants = renderableDescendants(screen)
+  const activeInputIds = [
+    "bluenote-search-query",
+    "bluenote-editor-replace-text",
+    "bluenote-editor-find-query",
+    "bluenote-editor-body-input",
+    "bluenote-manager-filter-query",
+    "bluenote-manager-create-title",
+  ]
+  const activeInput = activeInputIds.flatMap((id) => descendants.filter((node) => node.id === id)).at(0)
   if (!activeInput) {
     return
   }
   // OpenTUI focus registration is tied to the live renderable tree. Renderers may
   // focus inputs while composing a screen, before that screen is attached to the
   // root, so re-register the active component after attach.
-  if (activeInput.focused) {
-    activeInput.blur()
+  for (const node of descendants) {
+    if (isWorkspaceInput(node) && node.focused) {
+      node.blur()
+    }
   }
   activeInput.focus()
 }
 
 export function blurWorkspaceInputs(screen: Renderable): void {
   for (const node of renderableDescendants(screen)) {
-    if (node.id === "bluenote-search-query" || node.id === "bluenote-editor-find-query" || node.id === "bluenote-editor-body-input" || node.id === "bluenote-editor-body" || node.id === "bluenote-manager-filter-query" || node.id === "bluenote-manager-create-title") {
+    if (isWorkspaceInput(node)) {
       node.blur()
     }
   }

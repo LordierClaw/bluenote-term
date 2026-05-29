@@ -297,9 +297,9 @@ describe("TUI render keyboard routing", () => {
       })
       assert.equal(controller.openFocusedManagerItem().blocked, false)
       controller.openEditorFind()
-      const screen = renderEditorScreen({ renderer, controller })
+      let screen = renderEditorScreen({ renderer, controller })
       renderer.root.add(screen)
-      const findInput = screen.getChildren().flatMap((child) => child.getChildren()).find((node) => node.id === "bluenote-editor-find-query")
+      const findInput = findById(screen, "bluenote-editor-find-query")
       findInput?.blur()
 
       assert.equal(findInput?.focused, false)
@@ -307,6 +307,18 @@ describe("TUI render keyboard routing", () => {
       assert.equal(findInput?.focused, true)
       blurWorkspaceInputs(screen)
       assert.equal(findInput?.focused, false)
+
+      controller.openEditorReplace()
+      screen = renderEditorScreen({ renderer, controller })
+      renderer.root.add(screen)
+      const replaceInput = findById(screen, "bluenote-editor-replace-text")
+      const replacementFocusOwners = descendants(screen).filter((node) => (node.id === "bluenote-editor-replace-text" || node.id === "bluenote-editor-find-query" || node.id === "bluenote-editor-body-input") && node.focused)
+      assert.deepEqual(replacementFocusOwners.map((node) => node.id), ["bluenote-editor-replace-text"])
+
+      focusActiveWorkspaceInput(screen)
+      assert.equal(replaceInput?.focused, true)
+      blurWorkspaceInputs(screen)
+      assert.equal(replaceInput?.focused, false)
     } finally {
       renderer.destroy()
     }
