@@ -77,7 +77,6 @@ export type ManagerPreviewViewModel =
       sections: ManagerPreviewSectionViewModel[]
       rows?: undefined
       noteKey?: undefined
-      description?: undefined
       contentLines?: undefined
       styleIntent: TuiColorIntent
     }
@@ -90,7 +89,6 @@ export type ManagerPreviewViewModel =
       sections: ManagerPreviewSectionViewModel[]
       rows?: undefined
       noteKey?: undefined
-      description?: undefined
       contentLines?: undefined
       styleIntent: TuiColorIntent
     }
@@ -102,7 +100,6 @@ export type ManagerPreviewViewModel =
       message: string
       sections: ManagerPreviewSectionViewModel[]
       noteKey?: undefined
-      description?: undefined
       contentLines?: undefined
       styleIntent: TuiColorIntent
     }
@@ -111,7 +108,6 @@ export type ManagerPreviewViewModel =
       path: string
       noteKey: string
       title: string
-      description: string
       contentLines: string[]
       sections: ManagerPreviewSectionViewModel[]
       rows?: undefined
@@ -378,7 +374,6 @@ function previewViewModelFor(preview: ManagerPreviewModel | null | undefined, op
     path: preview.path,
     noteKey: preview.noteKey,
     title: preview.title,
-    description: preview.description,
     contentLines: [...preview.contentLines],
     sections: [],
     styleIntent: "panel",
@@ -626,8 +621,8 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
   } else if (layout2 && preview.type === "note-content") {
     for (const section of preview.sections) {
       layout2.add(new TextRenderable(options.renderer, { content: section.label, height: 1, fg: tuiTheme.textSecondary }))
-      for (const line of section.lines.slice(0, section.label === "Preview" ? 20 : 2)) {
-        layout2.add(new TextRenderable(options.renderer, { content: line, height: 1, fg: section.label === "Preview" ? tuiTheme.textPrimary : tuiTheme.mutedText }))
+      for (const line of section.lines.slice(0, 20)) {
+        layout2.add(new TextRenderable(options.renderer, { content: line, height: 1, fg: tuiTheme.textPrimary }))
       }
     }
   } else if (layout2 && preview.type === "empty") {

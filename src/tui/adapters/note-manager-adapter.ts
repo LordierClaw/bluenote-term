@@ -46,7 +46,6 @@ export type ManagerPreviewModel =
       rows?: undefined
       noteKey?: undefined
       title?: undefined
-      description?: undefined
       contentLines?: undefined
     }
   | {
@@ -56,7 +55,6 @@ export type ManagerPreviewModel =
       rows?: undefined
       noteKey?: undefined
       title?: undefined
-      description?: undefined
       contentLines?: undefined
     }
   | {
@@ -65,7 +63,6 @@ export type ManagerPreviewModel =
       rows: ManagerBrowserRow[]
       noteKey?: undefined
       title?: undefined
-      description?: undefined
       contentLines?: undefined
     }
   | {
@@ -73,7 +70,6 @@ export type ManagerPreviewModel =
       path: string
       noteKey: string
       title: string
-      description: string
       contentLines: string[]
       rows?: undefined
     }
@@ -293,7 +289,6 @@ function noteContentPreview(
     path: item.relativePath,
     noteKey: item.key,
     title: item.title,
-    description: "",
     contentLines: bodyLines,
   }
 }

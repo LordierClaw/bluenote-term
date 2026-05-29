@@ -527,15 +527,15 @@ describe("TUI render view models", () => {
       title: "Root Note",
       path: "notes/root-note.md",
       noteKey: "root-note",
-      description: "",
       contentLines: ["# Root Note", "", "Preview body."],
       sections: [
         { label: "Preview", lines: ["Root Note", "", "# Root Note", "", "Preview body."] },
       ],
       styleIntent: "panel",
     })
+    assert.equal("description" in vm.layout2.preview, false)
     assert.deepEqual(vm.layout2.preview.sections.map((section) => section.label), ["Preview"])
-    assert.doesNotMatch(JSON.stringify(vm.layout2.preview.sections), /Path|Description|root-note\.md|A top-level note\.|root-note/u)
+    assert.deepEqual(vm.layout2.preview.sections[0]?.lines, ["Root Note", "", "# Root Note", "", "Preview body."])
     assert.equal(vm.layout1.rows[0]?.styleIntent, "focusedRow")
     assert.equal(vm.layout1.rows[0]?.focusMarker, "")
     assert.equal(vm.layout1.rows[0]?.openMarker, "")

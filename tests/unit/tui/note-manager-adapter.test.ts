@@ -429,9 +429,9 @@ describe("TUI note manager adapter", () => {
       path: "notes/root-note.md",
       noteKey: "root-note",
       title: "Root Note",
-      description: "",
       contentLines: ["# Root Note", "", "This is the real note body.", "- Preview this content."],
     })
+    assert.equal("description" in notePreview, false)
     assert.equal(notePreview.type === "note-content" && notePreview.contentLines.includes("notes/root-note.md"), false)
     assert.equal(notePreview.type === "note-content" && notePreview.contentLines.includes("A top-level note."), false)
   })
