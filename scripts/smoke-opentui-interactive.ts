@@ -26,6 +26,65 @@ function run(command: string, args: string[], options: { env?: NodeJS.ProcessEnv
   })
 }
 
+interface LiveBlueNoteTuiProcess {
+  pid: number
+  ppid: string
+  stat: string
+  command: string
+}
+
+function readProcFile(pid: string, name: string): string | null {
+  try {
+    return readFileSync(path.join("/proc", pid, name), "utf8")
+  } catch {
+    return null
+  }
+}
+
+function listLiveBlueNoteTuiProcessesForRoot(targetRootPath: string): LiveBlueNoteTuiProcess[] {
+  const processes: LiveBlueNoteTuiProcess[] = []
+  for (const entry of readdirSync("/proc", { withFileTypes: true })) {
+    if (!entry.isDirectory() || !/^\d+$/u.test(entry.name)) {
+      continue
+    }
+
+    const cmdline = readProcFile(entry.name, "cmdline")
+    if (!cmdline || !cmdline.includes("bn.ts\u0000tui") && !cmdline.includes("bn.ts tui")) {
+      continue
+    }
+
+    const environ = readProcFile(entry.name, "environ") ?? ""
+    if (!environ.split("\u0000").includes(`BLUENOTE_ROOT=${targetRootPath}`)) {
+      continue
+    }
+
+    const stat = readProcFile(entry.name, "stat") ?? ""
+    const status = readProcFile(entry.name, "status") ?? ""
+    const ppid = status.match(/^PPid:\s+(\d+)/mu)?.[1] ?? "?"
+    processes.push({
+      pid: Number.parseInt(entry.name, 10),
+      ppid,
+      stat: stat.match(/^\d+\s+\([^)]*\)\s+(\S+)/u)?.[1] ?? "?",
+      command: cmdline.replaceAll("\u0000", " ").trim(),
+    })
+  }
+  return processes.sort((left, right) => left.pid - right.pid)
+}
+
+function expectNoLiveBlueNoteTuiProcessesForRoot(targetRootPath: string, context: string): void {
+  const deadline = Date.now() + 5_000
+  let live: LiveBlueNoteTuiProcess[] = []
+  while (Date.now() <= deadline) {
+    live = listLiveBlueNoteTuiProcessesForRoot(targetRootPath)
+    if (live.length === 0) {
+      return
+    }
+    waitWithoutSmokeDeadline(100)
+  }
+
+  throw new Error(`${context}: expected no live BlueNote TUI processes for ${targetRootPath}; found ${JSON.stringify(live, null, 2)}`)
+}
+
 function ensureCommandAvailable(command: string, installHint: string): void {
   const result = spawnSync("bash", ["-lc", `command -v ${command}`], {
     cwd: process.cwd(),
@@ -343,6 +402,7 @@ function assertPostAutosaveQuitRoute(route: "q" | "C-c"): void {
     sendKeys(routeSessionName, route)
     expectTmuxSessionExited(routeSessionName, `${route} route exits from manager after autosave`)
     routeSmokeResource.panePid = null
+    expectNoLiveBlueNoteTuiProcessesForRoot(routeRootPath, `${route} route process lifecycle after quit`)
   } finally {
     cleanupTrackedSmokeResource(routeSmokeResource)
     trackedSmokeResources.delete(routeSmokeResource)
@@ -752,7 +812,9 @@ try {
   expectNoteArtifactsDeleted(createdArtifacts, "manager delete filesystem")
 
   sendKeys(sessionName, "q")
-  wait(500)
+  expectTmuxSessionExited(sessionName, "main smoke exits after final q")
+  mainSmokeResource.panePid = null
+  expectNoLiveBlueNoteTuiProcessesForRoot(rootPath, "main smoke process lifecycle after final q")
 
   console.log("Interactive OpenTUI smoke check passed.")
 } finally {

@@ -1939,6 +1939,31 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(scheduler.activeTasks(), [])
   })
 
+  test("dispose detaches autosave state change handlers so stale saves cannot keep render callbacks live", async () => {
+    const scheduler = createFakeScheduler()
+    const invalidations: string[] = []
+    let resolvePersist!: (note: TuiNote) => void
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      onAutosaveStateChange: () => invalidations.push(controller.getState().editor?.autosaveStatus ?? "none"),
+      persistEditorBody: (note, body) => new Promise<TuiNote>((resolve) => {
+        resolvePersist = (savedNote) => resolve({ ...note, ...savedNote, body })
+      }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Pending before destroy")
+    scheduler.runNext()
+    assert.deepEqual(invalidations, ["pending", "saving"])
+
+    controller.dispose()
+    resolvePersist({ ...notesByKey["daily-plan"], body: "Pending before destroy" })
+    await Promise.resolve()
+
+    assert.deepEqual(invalidations, ["pending", "saving"])
+  })
+
   test("autosave status changes notify the renderer to rerender", async () => {
     const scheduler = createFakeScheduler()
     const invalidations: string[] = []

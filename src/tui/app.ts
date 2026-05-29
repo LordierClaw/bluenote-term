@@ -38,6 +38,11 @@ export interface RunningTuiWorkspace {
   destroy: () => void
 }
 
+type WorkspaceInputRenderer = CliRenderer & {
+  prependInputHandler?: (handler: (sequence: string) => boolean) => void
+  removeInputHandler?: (handler: (sequence: string) => boolean) => void
+}
+
 export interface DefaultWorkspaceControllerOptions {
   rootPath?: string
   clock?: Clock
@@ -318,13 +323,22 @@ export async function startTuiWorkspace(options: StartTuiWorkspaceOptions = {}):
   let currentScreen: BoxRenderable | null = null
   let destroyed = false
   let rerenderScheduled = false
+  let rerenderTimer: ReturnType<typeof setTimeout> | null = null
   let cleanupTerminalResize = (): void => {}
+  let cleanupWorkspaceInput = (): void => {}
 
   const destroy = (): void => {
     if (destroyed) {
       return
     }
     destroyed = true
+    if (rerenderTimer) {
+      clearTimeout(rerenderTimer)
+      rerenderTimer = null
+      rerenderScheduled = false
+    }
+    cleanupWorkspaceInput()
+    cleanupWorkspaceInput = (): void => {}
     if (currentScreen) {
       blurWorkspaceInputs(currentScreen)
       currentScreen.destroyRecursively()
@@ -359,7 +373,8 @@ export async function startTuiWorkspace(options: StartTuiWorkspaceOptions = {}):
       return
     }
     rerenderScheduled = true
-    setTimeout(() => {
+    rerenderTimer = setTimeout(() => {
+      rerenderTimer = null
       rerenderScheduled = false
       rerender()
     }, 0)
@@ -394,11 +409,14 @@ export async function startTuiWorkspace(options: StartTuiWorkspaceOptions = {}):
     }
     return routed.handled
   }
-  const inputRegistration = renderer as unknown as { prependInputHandler?: (handler: (sequence: string) => boolean) => void }
+  const inputRegistration = renderer as WorkspaceInputRenderer
   if (inputRegistration.prependInputHandler) {
     inputRegistration.prependInputHandler(workspaceInputHandler)
   } else {
     renderer.addInputHandler(workspaceInputHandler)
+  }
+  cleanupWorkspaceInput = () => {
+    inputRegistration.removeInputHandler?.(workspaceInputHandler)
   }
 
   renderer.start()
@@ -435,12 +453,40 @@ export async function runTuiCliInteractive(): Promise<CliResult> {
   }
 
   const running = await startTuiWorkspace()
+  let exitCode: CliResult["exitCode"] = 0
+  const signals = ["SIGINT", "SIGTERM", "SIGHUP"] as const
   await new Promise<void>((resolve) => {
-    running.renderer.on("destroy", resolve)
+    let resolved = false
+    const cleanupSignalHandlers = (): void => {
+      for (const signal of signals) {
+        process.off(signal, handleSignal)
+      }
+    }
+    const finish = (): void => {
+      if (resolved) {
+        return
+      }
+      resolved = true
+      cleanupSignalHandlers()
+      resolve()
+    }
+    const handleSignal = (_signal: NodeJS.Signals): void => {
+      exitCode = 1
+      running.destroy()
+      finish()
+    }
+    for (const signal of signals) {
+      process.once(signal, handleSignal)
+    }
+    if (running.renderer.isDestroyed) {
+      finish()
+      return
+    }
+    running.renderer.once("destroy", finish)
   })
 
   return {
-    exitCode: 0,
+    exitCode,
     stdout: "",
     stderr: "",
   }
