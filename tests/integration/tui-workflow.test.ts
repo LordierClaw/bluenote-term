@@ -289,6 +289,50 @@ describe("TUI workspace workflows", () => {
     assert.equal(showNote({ override: rootPath, selector: beta.key }).body, "beta saved")
   })
 
+  test("editor clipboard shortcuts use injected clipboard and paste-event fallback through default controller", async () => {
+    const note = createNote({
+      override: rootPath,
+      title: "Clipboard Flow",
+      body: "Alpha Beta Gamma",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    let clipboardText = ""
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clipboard: {
+        readText: () => clipboardText,
+        writeText: (text) => {
+          clipboardText = text
+        },
+      },
+    })
+
+    openManagerNoteByKey(controller, note.key)
+    controller.setEditorSelection(6, 10)
+
+    assert.deepEqual(routeWorkspaceKey("\u001b[99;6u", controller, () => {}), { handled: true })
+    assert.equal(clipboardText, "Beta")
+    assert.equal(controller.getState().editor?.body, "Alpha Beta Gamma")
+
+    assert.deepEqual(routeWorkspaceKey("\u001b[120;6u", controller, () => {}), { handled: true })
+    assert.equal(clipboardText, "Beta")
+    assert.equal(controller.getState().editor?.body, "Alpha  Gamma")
+    assert.equal(controller.getState().editor?.cursorOffset, 6)
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+
+    clipboardText = "Delta"
+    assert.deepEqual(routeWorkspaceKey("\u001b[118;6u", controller, () => {}), { handled: true })
+    assert.equal(controller.getState().editor?.body, "Alpha Delta Gamma")
+
+    controller.setEditorSelection(6, 11)
+    assert.deepEqual(routeWorkspaceKey("\u001b[200~Event\u001b[201~", controller, () => {}), { handled: true })
+    assert.equal(controller.getState().editor?.body, "Alpha Event Gamma")
+
+    await waitForAutosave()
+    assert.equal(await readFile(path.join(rootPath, note.relativePath), "utf8"), "Alpha Event Gamma")
+  })
+
   test("autosave after editor input persists and manager can switch notes without blocking", async () => {
     const first = createNote({
       override: rootPath,

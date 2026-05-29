@@ -20,7 +20,7 @@ import { renderEditorScreen, routeEditorKey } from "./render-editor"
 import { renderManagerScreen, routeManagerKey } from "./render-manager"
 import { renderSearchEverythingScreen, routeSearchEverythingKey } from "./render-search-everything"
 import type { TuiNote } from "./state"
-import { createWorkspaceController, type WorkspaceCommandHandler, type WorkspaceController } from "./workspace-controller"
+import { createWorkspaceController, type WorkspaceCommandHandler, type WorkspaceController, type WorkspaceControllerDependencies } from "./workspace-controller"
 
 export interface TuiBootstrapInfo {
   appName: string
@@ -48,6 +48,7 @@ export interface DefaultWorkspaceControllerOptions {
   rootPath?: string
   clock?: Clock
   commandHandlers?: Partial<Record<string, WorkspaceCommandHandler>>
+  clipboard?: WorkspaceControllerDependencies["clipboard"]
   cleanupStaleAtomicTemps?: (rootPath: string) => void
 }
 
@@ -135,6 +136,7 @@ export function createDefaultWorkspaceController(options: DefaultWorkspaceContro
       deleteNote({ override: rootPath, selector, force: true })
     },
     persistEditorBody: (note, body) => persistTuiEditorBody(rootPath, note, body, clock),
+    clipboard: options.clipboard,
     commandHandlers: options.commandHandlers,
   })
 }
@@ -245,7 +247,7 @@ function routeControlledEditorBodyInput(controller: WorkspaceController, sequenc
     const pasted = sequence.slice(bracketedPasteStart.length, -bracketedPasteEnd.length)
     const sanitized = sanitizePastedEditorText(pasted)
     if (sanitized.length > 0) {
-      controller.insertEditorText(sanitized)
+      controller.pasteEditorClipboard(sanitized)
     }
     return true
   }
@@ -291,7 +293,7 @@ function routeControlledEditorBodyInput(controller: WorkspaceController, sequenc
       if (sequence.length > 1) {
         const sanitized = sanitizePastedEditorText(sequence)
         if (sanitized.length > 0) {
-          controller.insertEditorText(sanitized)
+          controller.pasteEditorClipboard(sanitized)
         }
         return true
       }

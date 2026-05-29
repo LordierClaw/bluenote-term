@@ -784,6 +784,93 @@ describe("TUI workspace controller", () => {
     assert.equal(afterSave?.wrapMode, beforeSave?.wrapMode)
   })
 
+  test("copies current editor selection to injected clipboard without changing the buffer", () => {
+    let clipboardText = ""
+    const { deps } = createDeps({
+      clipboard: {
+        readText: () => clipboardText,
+        writeText: (text) => {
+          clipboardText = text
+        },
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.setEditorSelection(9, 14)
+
+    const before = controller.getState().editor
+    const copied = controller.copyEditorSelection()
+    const after = controller.getState().editor
+
+    assert.equal(copied, "daily")
+    assert.equal(clipboardText, "daily")
+    assert.equal(after?.body, before?.body)
+    assert.equal(after?.dirty, false)
+    assert.equal(after?.autosaveStatus, "idle")
+  })
+
+  test("cuts current editor selection, writes clipboard, preserves cursor position, and schedules autosave", () => {
+    let clipboardText = ""
+    const scheduler = createFakeScheduler()
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      clipboard: {
+        readText: () => clipboardText,
+        writeText: (text) => {
+          clipboardText = text
+        },
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.setEditorSelection(9, 14)
+
+    const cut = controller.cutEditorSelection()
+    const editor = controller.getState().editor
+
+    assert.equal(cut, "daily")
+    assert.equal(clipboardText, "daily")
+    assert.equal(editor?.body, "Original  body")
+    assert.equal(editor?.dirty, true)
+    assert.equal(editor?.autosaveStatus, "pending")
+    assert.equal(editor?.cursorOffset, 9)
+    assert.equal(editor?.selectionStart, 9)
+    assert.equal(editor?.selectionEnd, 9)
+    assert.equal(scheduler.activeTasks().length, 1)
+  })
+
+  test("pastes injected clipboard or paste event text over current selection and schedules autosave", () => {
+    let clipboardText = "clipboard"
+    const scheduler = createFakeScheduler()
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      clipboard: {
+        readText: () => clipboardText,
+        writeText: (text) => {
+          clipboardText = text
+        },
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.setEditorSelection(9, 14)
+
+    controller.pasteEditorClipboard()
+    assert.equal(controller.getState().editor?.body, "Original clipboard body")
+    assert.equal(controller.getState().editor?.cursorOffset, 18)
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+
+    controller.setEditorSelection(9, 18)
+    controller.pasteEditorClipboard("event text")
+
+    assert.equal(controller.getState().editor?.body, "Original event text body")
+    assert.equal(controller.getState().editor?.cursorOffset, 19)
+    assert.equal(scheduler.activeTasks().length, 1)
+  })
+
   test("toggles editor wrap mode without marking the editor dirty", () => {
     const { deps } = createDeps()
     const controller = createWorkspaceController(deps)

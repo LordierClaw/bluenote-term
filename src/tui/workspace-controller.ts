@@ -1,5 +1,5 @@
-import type { EditorCursorDirection, SaveEditorBufferDependencies } from "./adapters/editor-buffer-adapter"
-import { advanceEditorFindState, backspaceAtEditorCursor, deleteAtEditorCursor, findInEditorBody, insertTextAtEditorCursor, moveEditorCursor } from "./adapters/editor-buffer-adapter"
+import type { ClipboardModel, EditorCursorDirection, EditorSelection, SaveEditorBufferDependencies } from "./adapters/editor-buffer-adapter"
+import { advanceEditorFindState, backspaceAtEditorCursor, copySelection, cutSelection, deleteAtEditorCursor, findInEditorBody, insertTextAtEditorCursor, moveEditorCursor, pasteText } from "./adapters/editor-buffer-adapter"
 import {
   buildManagerBrowserModel,
   focusedManagerBrowserItem,
@@ -72,6 +72,7 @@ export interface WorkspaceControllerDependencies {
   rebuildIndexes?: () => void
   persistEditorBody?: SaveEditorBufferDependencies["persist"]
   autosaveScheduler?: WorkspaceDebounceScheduler
+  clipboard?: ClipboardModel
   onAutosaveStateChange?: () => void
   commandHandlers?: Partial<Record<string, WorkspaceCommandHandler>>
 }
@@ -88,6 +89,10 @@ export interface WorkspaceController {
   showEditor: () => WorkspaceActionResult
   updateEditorBody: (body: string) => void
   insertEditorText: (text: string) => void
+  setEditorSelection: (start: number, end: number) => void
+  copyEditorSelection: () => string
+  cutEditorSelection: () => string
+  pasteEditorClipboard: (text?: string) => void
   backspaceEditor: () => void
   deleteEditor: () => void
   moveEditorCursor: (direction: EditorCursorDirection) => void
@@ -256,6 +261,13 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   const autosaveScheduler: WorkspaceDebounceScheduler = deps.autosaveScheduler ?? {
     setTimeout: (callback, delay) => globalThis.setTimeout(callback, delay),
     clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
+  }
+  let fallbackClipboardText = ""
+  const clipboard: ClipboardModel = deps.clipboard ?? {
+    readText: () => fallbackClipboardText,
+    writeText: (text) => {
+      fallbackClipboardText = text
+    },
   }
 
   function clearAutosaveTimer(): void {
@@ -559,6 +571,36 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     state = markAutosavePending(state)
     notifyAutosaveStateChange()
     scheduleAutosave()
+  }
+
+  function codePointLength(text: string): number {
+    return Array.from(text).length
+  }
+
+  function normalizeEditorOffset(offset: number, body: string): number {
+    const finiteOffset = Number.isFinite(offset) ? Math.trunc(offset) : 0
+    return Math.max(0, Math.min(finiteOffset, codePointLength(body)))
+  }
+
+  function currentEditorSelection(editor: EditorBufferState): EditorSelection {
+    const bodyLength = codePointLength(editor.body)
+    const fallback = normalizeEditorOffset(editor.cursorOffset ?? bodyLength, editor.body)
+    const start = normalizeEditorOffset(editor.selectionStart ?? fallback, editor.body)
+    const end = normalizeEditorOffset(editor.selectionEnd ?? fallback, editor.body)
+    const rangeStart = Math.min(start, end)
+    const rangeEnd = Math.max(start, end)
+    const text = Array.from(editor.body).slice(rangeStart, rangeEnd).join("")
+    return { start: rangeStart, end: rangeEnd, text, collapsed: rangeStart === rangeEnd }
+  }
+
+  function applyEditorEditResult(result: { editor: EditorBufferState; selection: EditorSelection }): void {
+    applyEditorChange({
+      ...result.editor,
+      cursorOffset: result.selection.end,
+      selectionStart: result.selection.start,
+      selectionEnd: result.selection.end,
+      preferredColumn: null,
+    })
   }
 
   const controller: WorkspaceController = {
@@ -970,6 +1012,46 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     insertEditorText: (text) => {
       if (!state.editor || text.length === 0) return
       applyEditorChange(insertTextAtEditorCursor(state.editor, text))
+    },
+
+    setEditorSelection: (start, end) => {
+      if (!state.editor) return
+      const normalizedStart = normalizeEditorOffset(start, state.editor.body)
+      const normalizedEnd = normalizeEditorOffset(end, state.editor.body)
+      state = {
+        ...state,
+        editor: {
+          ...state.editor,
+          cursorOffset: normalizedEnd,
+          selectionStart: normalizedStart,
+          selectionEnd: normalizedEnd,
+          preferredColumn: null,
+        },
+      }
+    },
+
+    copyEditorSelection: () => {
+      if (!state.editor) return ""
+      return copySelection(state.editor, currentEditorSelection(state.editor), clipboard)
+    },
+
+    cutEditorSelection: () => {
+      if (!state.editor) return ""
+      const selection = currentEditorSelection(state.editor)
+      const selectedText = selection.text
+      const result = cutSelection(state.editor, selection, clipboard)
+      applyEditorEditResult(result)
+      return selectedText
+    },
+
+    pasteEditorClipboard: (text) => {
+      if (!state.editor) return
+      const selection = currentEditorSelection(state.editor)
+      const result = pasteText(state.editor, selection, text ?? clipboard)
+      if (result.editor.body === state.editor.body && result.selection.start === selection.start && result.selection.end === selection.end) {
+        return
+      }
+      applyEditorEditResult(result)
     },
 
     backspaceEditor: () => {

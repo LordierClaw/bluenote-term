@@ -92,6 +92,18 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
     },
     updateEditorBody: (body) => calls.push(`updateEditorBody:${body}`),
     insertEditorText: (text) => calls.push(`insertEditorText:${text}`),
+    setEditorSelection: (start, end) => calls.push(`setEditorSelection:${start}:${end}`),
+    copyEditorSelection: () => {
+      calls.push("copyEditorSelection")
+      return "copied"
+    },
+    cutEditorSelection: () => {
+      calls.push("cutEditorSelection")
+      return "cut"
+    },
+    pasteEditorClipboard: (text) => {
+      calls.push(`pasteEditorClipboard:${text ?? ""}`)
+    },
     backspaceEditor: () => calls.push("backspaceEditor"),
     deleteEditor: () => calls.push("deleteEditor"),
     moveEditorCursor: (direction) => calls.push(`moveEditorCursor:${direction}`),
@@ -212,6 +224,31 @@ describe("TUI render keyboard routing", () => {
 
     assert.equal(routeEditorKey("\u001bz", controller), true)
     assert.deepEqual(calls, ["toggleEditorWrapMode"])
+  })
+
+  test("editor routes terminal-friendly enhanced copy/cut/paste shortcuts", () => {
+    const { controller, calls } = createController("editor")
+    controller.getState().mode = "editor.body"
+
+    assert.equal(routeEditorKey("\u001b[99;6u", controller), true)
+    assert.equal(routeEditorKey("\u001b[120;6u", controller), true)
+    assert.equal(routeEditorKey("\u001b[118;6u", controller), true)
+
+    assert.deepEqual(calls, ["copyEditorSelection", "cutEditorSelection", "pasteEditorClipboard:"])
+  })
+
+  test("workspace body routing keeps bracketed paste as paste text fallback instead of clipboard shortcut", () => {
+    const { controller, calls } = createController("editor")
+    controller.getState().mode = "editor.body"
+    controller.getState().editor = {
+      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" },
+      body: "",
+      savedBody: "",
+      dirty: false,
+    }
+
+    assert.deepEqual(routeWorkspaceKey("\u001b[200~from terminal\u001b[201~", controller, () => {}), { handled: true })
+    assert.deepEqual(calls, ["pasteEditorClipboard:from terminal"])
   })
 
   test("post-attach focus re-registers the active editor input with OpenTUI key routing", async () => {
@@ -360,7 +397,7 @@ describe("TUI render keyboard routing", () => {
     }
 
     assert.deepEqual(routeWorkspaceKey("\u001b[200~/literal \u0010 \u0013 text\u001b[201~", controller, () => {}), { handled: true })
-    assert.deepEqual(calls, ["insertEditorText:/literal   text"])
+    assert.deepEqual(calls, ["pasteEditorClipboard:/literal   text"])
   })
 
   test("editor body routing strips ANSI escape sequences from bracketed paste", () => {
@@ -374,7 +411,7 @@ describe("TUI render keyboard routing", () => {
     }
 
     assert.deepEqual(routeWorkspaceKey("\u001b[200~\u001b[31mred\u001b[0m \u001b]0;title\u0007text\u001b[201~", controller, () => {}), { handled: true })
-    assert.deepEqual(calls, ["insertEditorText:red text"])
+    assert.deepEqual(calls, ["pasteEditorClipboard:red text"])
   })
 
   test("editor body routing sanitizes non-bracketed multi-character paste fallback", () => {
@@ -388,7 +425,7 @@ describe("TUI render keyboard routing", () => {
     }
 
     assert.deepEqual(routeWorkspaceKey("plain\u0010\u0013\u001b[31mred\u001b[0m", controller, () => {}), { handled: true })
-    assert.deepEqual(calls, ["insertEditorText:plainred"])
+    assert.deepEqual(calls, ["pasteEditorClipboard:plainred"])
   })
 
   test("editor body routing strips ESC-terminated OSC and 8-bit C1 CSI paste residue", () => {
@@ -402,7 +439,7 @@ describe("TUI render keyboard routing", () => {
     }
 
     assert.deepEqual(routeWorkspaceKey("a\u001b]0;title\u001b\\b\u009b31mred\u009b0m", controller, () => {}), { handled: true })
-    assert.deepEqual(calls, ["insertEditorText:abred"])
+    assert.deepEqual(calls, ["pasteEditorClipboard:abred"])
   })
 
   test("editor body routing strips 8-bit OSC and DCS paste residue", () => {
@@ -416,7 +453,7 @@ describe("TUI render keyboard routing", () => {
     }
 
     assert.deepEqual(routeWorkspaceKey("\u001b[200~c\u0090payload\u009cd e\u009d0;title\u0007f\u001b[201~", controller, () => {}), { handled: true })
-    assert.deepEqual(calls, ["insertEditorText:cd ef"])
+    assert.deepEqual(calls, ["pasteEditorClipboard:cd ef"])
   })
 
   test("editor body routing rejects standalone C1 controls", () => {
@@ -647,7 +684,7 @@ describe("TUI render keyboard routing", () => {
       assert.equal(findById(screen, "bluenote-editor-bottombar-save-status"), undefined)
       const shortcutChunks = shortcutRow?.content?.chunks ?? []
       const shortcutText = shortcutChunks.map((chunk: { text?: string }) => chunk.text ?? "").join("") || shortcutRow?.content
-      assert.equal(shortcutText, "[Ctrl+S] Save  [Ctrl+F] Find  [Alt+Z] Wrap  [Ctrl+P] Search  [Esc] Manager")
+      assert.equal(shortcutText, "[Ctrl+S] Save  [Ctrl+F] Find  [Alt+Z] Wrap  [Ctrl+Shift+C] Copy  [Ctrl+Shift+X] Cut  [Ctrl+Shift+V] Paste  +2")
       assert.deepEqual(shortcutChunks.filter((chunk: { text?: string }) => /^\[[^\]]+\]$/u.test(chunk.text ?? "")).at(0)?.fg?.toInts?.(), [56, 189, 248, 255])
     } finally {
       renderer.destroy()

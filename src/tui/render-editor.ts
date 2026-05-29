@@ -257,8 +257,11 @@ function editorShortcuts(): EditorShortcutViewModel[] {
     { key: "Ctrl+S", action: "Save", order: 1 },
     { key: "Ctrl+F", action: "Find", order: 2 },
     { key: "Alt+Z", action: "Wrap", order: 3 },
-    { key: "Ctrl+P", action: "Search", order: 4 },
-    { key: "Esc", action: "Manager", order: 5 },
+    { key: "Ctrl+Shift+C", action: "Copy", order: 4 },
+    { key: "Ctrl+Shift+X", action: "Cut", order: 5 },
+    { key: "Ctrl+Shift+V", action: "Paste", order: 6 },
+    { key: "Ctrl+P", action: "Search", order: 7 },
+    { key: "Esc", action: "Manager", order: 8 },
   ]
 }
 
@@ -726,6 +729,18 @@ export function routeEditorKey(sequence: string, controller: WorkspaceController
     case "\u0006":
     case "\u001b[27;5;102~":
       controller.openEditorFind()
+      return true
+    case "\u001b[99;6u":
+    case "\u001b[67;6u":
+      controller.copyEditorSelection()
+      return true
+    case "\u001b[120;6u":
+    case "\u001b[88;6u":
+      controller.cutEditorSelection()
+      return true
+    case "\u001b[118;6u":
+    case "\u001b[86;6u":
+      controller.pasteEditorClipboard()
       return true
     case "\u001bz":
       controller.toggleEditorWrapMode()
