@@ -413,6 +413,8 @@ type ContentMatchContext = {
   offset?: number
   start?: number
   end?: number
+  matchStart?: number
+  matchEnd?: number
 }
 
 function finiteInteger(value: unknown): number | undefined {
@@ -446,18 +448,74 @@ function summaryForContentMatch(match: SearchNoteMatch, noteSummaries: readonly 
   return noteSummaries.find((summary) => summary.key === match.key || normalizePath(summary.relativePath) === relativePath)
 }
 
-function centeredBodyContext(body: string | undefined, query: string, matchStart?: number, matchEnd?: number): string | undefined {
+function validatedBodyMatchRange(bodyLength: number, matchStart?: number, matchEnd?: number): SearchEverythingHighlightRange | undefined {
+  if (
+    matchStart === undefined
+    || matchEnd === undefined
+    || matchStart < 0
+    || matchStart >= bodyLength
+    || matchEnd <= matchStart
+    || matchEnd > bodyLength
+  ) {
+    return undefined
+  }
+
+  return { start: matchStart, end: matchEnd }
+}
+
+const GRAPHEME_CONTEXT_BOUNDARY_WINDOW = 64
+
+function closestGraphemeBoundaryAtOrBefore(text: string, offset: number): number {
+  const boundedOffset = Math.max(0, Math.min(Math.trunc(offset), text.length))
+  const windowStart = Math.max(0, boundedOffset - GRAPHEME_CONTEXT_BOUNDARY_WINDOW)
+  const windowEnd = Math.min(text.length, boundedOffset + GRAPHEME_CONTEXT_BOUNDARY_WINDOW)
+  let candidate = windowStart
+
+  for (const boundary of graphemeBoundaryOffsets(text.slice(windowStart, windowEnd))) {
+    const absoluteBoundary = windowStart + boundary
+    if (absoluteBoundary > boundedOffset) {
+      return candidate
+    }
+    candidate = absoluteBoundary
+  }
+
+  return candidate
+}
+
+function closestGraphemeBoundaryAtOrAfter(text: string, offset: number): number {
+  const boundedOffset = Math.max(0, Math.min(Math.trunc(offset), text.length))
+  const windowStart = Math.max(0, boundedOffset - GRAPHEME_CONTEXT_BOUNDARY_WINDOW)
+  const windowEnd = Math.min(text.length, boundedOffset + GRAPHEME_CONTEXT_BOUNDARY_WINDOW)
+
+  for (const boundary of graphemeBoundaryOffsets(text.slice(windowStart, windowEnd))) {
+    const absoluteBoundary = windowStart + boundary
+    if (absoluteBoundary >= boundedOffset) {
+      return absoluteBoundary
+    }
+  }
+
+  return windowEnd
+}
+
+function centeredBodyContext(
+  body: string | undefined,
+  query: string,
+  matchStart?: number,
+  matchEnd?: number,
+  options: { allowQuerySearch?: boolean } = {},
+): string | undefined {
   if (!body || body.trim().length === 0) {
     return undefined
   }
 
   const bodyLength = body.length
-  const queryRange = collectCaseInsensitiveContainsRanges(body, query)[0]
-  const start = queryRange?.start ?? (matchStart !== undefined && matchStart >= 0 && matchStart < bodyLength ? matchStart : undefined)
-  const end = queryRange?.end ?? (matchEnd !== undefined && matchEnd > (start ?? -1) && matchEnd <= bodyLength ? matchEnd : undefined)
-  if (start === undefined || end === undefined) {
+  const suppliedRange = validatedBodyMatchRange(bodyLength, matchStart, matchEnd)
+  const queryRange = suppliedRange ? undefined : options.allowQuerySearch === false ? undefined : collectCaseInsensitiveContainsRanges(body, query)[0]
+  const range = suppliedRange ?? queryRange
+  if (!range) {
     return undefined
   }
+  const { start, end } = range
 
   const lineStart = body.lastIndexOf("\n", start - 1) + 1
   const nextLineBreak = body.indexOf("\n", end)
@@ -469,13 +527,14 @@ function centeredBodyContext(body: string | undefined, query: string, matchStart
 
   const desiredStart = Math.max(0, start - Math.floor((CONTENT_PREVIEW_CONTEXT_CHARS - (end - start)) / 2))
   const desiredEnd = Math.min(bodyLength, desiredStart + CONTENT_PREVIEW_CONTEXT_CHARS)
-  const contextStart = Math.max(0, Math.min(desiredStart, Math.max(0, desiredEnd - CONTENT_PREVIEW_CONTEXT_CHARS)))
-  const rawContext = body.slice(contextStart, desiredEnd).replace(/\s+/gu, " ").trim()
+  const contextStart = closestGraphemeBoundaryAtOrBefore(body, Math.max(0, Math.min(desiredStart, Math.max(0, desiredEnd - CONTENT_PREVIEW_CONTEXT_CHARS))))
+  const contextEnd = closestGraphemeBoundaryAtOrAfter(body, desiredEnd)
+  const rawContext = body.slice(contextStart, contextEnd).replace(/\s+/gu, " ").trim()
   if (rawContext.length === 0) {
     return undefined
   }
 
-  return `${contextStart > 0 ? "..." : ""}${rawContext}${desiredEnd < bodyLength ? "..." : ""}`
+  return `${contextStart > 0 ? "..." : ""}${rawContext}${contextEnd < bodyLength ? "..." : ""}`
 }
 
 function buildContentResults(query: string, deps: SearchEverythingDependencies): SearchEverythingContentResult[] {
@@ -490,10 +549,15 @@ function buildContentResults(query: string, deps: SearchEverythingDependencies):
       const context = match.match as typeof match.match & ContentMatchContext
       const lineNumber = finiteInteger(context.lineNumber) ?? finiteInteger(context.line)
       const offset = finiteInteger(context.offset) ?? finiteInteger(context.start)
-      const matchStart = finiteInteger(context.start)
-      const matchEnd = finiteInteger(context.end)
+      const matchStart = finiteInteger(context.start) ?? finiteInteger(context.matchStart)
+      const matchEnd = finiteInteger(context.end) ?? finiteInteger(context.matchEnd)
       const summary = summaryForContentMatch(match, deps.noteSummaries)
-      const previewExcerpt = centeredBodyContext(summary?.body, query, matchStart, matchEnd)
+      const bodyMatchRange = summary?.body ? validatedBodyMatchRange(summary.body.length, matchStart, matchEnd) : undefined
+      const previewExcerpt = bodyMatchRange
+        ? centeredBodyContext(summary?.body, query, matchStart, matchEnd, { allowQuerySearch: false })
+        : match.match.excerpt
+          ? undefined
+          : centeredBodyContext(summary?.body, query, undefined, undefined, { allowQuerySearch: true })
 
       return {
         kind: "content",

@@ -225,6 +225,8 @@ describe("TUI Search Everything adapter", () => {
             source: "content",
             label: "content line 5",
             excerpt: "...launch blockers...",
+            start: deepBody.indexOf("launch blockers"),
+            end: deepBody.indexOf("launch blockers") + "launch blockers".length,
           },
         },
       ],
@@ -251,6 +253,130 @@ describe("TUI Search Everything adapter", () => {
         ],
       },
     ])
+  })
+
+  test("content preview centers supplied offsets instead of the first body query occurrence", () => {
+    const earlyLine = "Early launch blockers mention that must not anchor the selected preview."
+    const laterLine = "Selected occurrence has launch blockers next to the customer approval checklist."
+    const body = [
+      earlyLine,
+      "Filler context before the selected match.",
+      laterLine,
+      "Follow-up after the selected match.",
+    ].join("\n")
+    const start = body.indexOf("launch blockers", earlyLine.length)
+    const deps: SearchEverythingDependencies = {
+      noteSummaries: noteSummaries.map((summary) => summary.key === "project-brief" ? { ...summary, body } : summary),
+      searchNotes: () => [
+        {
+          key: "project-brief",
+          title: "Client Launch Brief",
+          relativePath: "notes/projects/client/brief.md",
+          match: {
+            source: "content",
+            label: "content line 3",
+            excerpt: "...Selected occurrence has launch blockers...",
+            start,
+            end: start + "launch blockers".length,
+          },
+        },
+      ],
+    }
+
+    const content = buildSearchEverythingResults("launch blockers", deps).find((result) => result.kind === "content")
+    const preview = buildSearchEverythingPreview(content, "launch blockers")
+
+    assert.equal(preview?.lines[0], laterLine)
+    assert.doesNotMatch(preview?.lines[0] ?? "", /Early launch blockers/u)
+  })
+
+  test("content preview accepts matchStart and matchEnd aliases for centering selected occurrence", () => {
+    const body = [
+      "Earlier blocker text has launch blockers near the top.",
+      "Unrelated filler.",
+      "Alias offsets select launch blockers in the later paragraph.",
+    ].join("\n")
+    const matchStart = body.lastIndexOf("launch blockers")
+    const deps: SearchEverythingDependencies = {
+      noteSummaries: noteSummaries.map((summary) => summary.key === "project-brief" ? { ...summary, body } : summary),
+      searchNotes: () => [
+        {
+          key: "project-brief",
+          title: "Client Launch Brief",
+          relativePath: "notes/projects/client/brief.md",
+          match: {
+            source: "content",
+            label: "content line 3",
+            excerpt: "...Alias offsets select launch blockers...",
+            matchStart,
+            matchEnd: matchStart + "launch blockers".length,
+          },
+        },
+      ],
+    }
+
+    const content = buildSearchEverythingResults("launch blockers", deps).find((result) => result.kind === "content")
+    const preview = buildSearchEverythingPreview(content, "launch blockers")
+
+    assert.equal(preview?.lines[0], "Alias offsets select launch blockers in the later paragraph.")
+    assert.doesNotMatch(preview?.lines[0] ?? "", /Earlier blocker/u)
+  })
+
+  test("content preview prefers supplied excerpt over scanning body when offsets are unavailable", () => {
+    const body = [
+      "Body has an early launch blockers occurrence that should not be scanned for preview.",
+      "More body text that is not part of the supplied result excerpt.",
+    ].join("\n")
+    const deps: SearchEverythingDependencies = {
+      noteSummaries: noteSummaries.map((summary) => summary.key === "project-brief" ? { ...summary, body } : summary),
+      searchNotes: () => [
+        {
+          key: "project-brief",
+          title: "Client Launch Brief",
+          relativePath: "notes/projects/client/brief.md",
+          match: {
+            source: "content",
+            label: "content line 20",
+            excerpt: "...supplied excerpt with launch blockers near selected occurrence...",
+          },
+        },
+      ],
+    }
+
+    const content = buildSearchEverythingResults("launch blockers", deps).find((result) => result.kind === "content")
+    const preview = buildSearchEverythingPreview(content, "launch blockers")
+
+    assert.deepEqual(preview?.lines, ["...supplied excerpt with launch blockers near selected occurrence..."])
+  })
+
+  test("content preview context boundaries do not split grapheme clusters", () => {
+    const prefix = "a".repeat(132)
+    const body = `${prefix}é launch blockers 😀 trailing context that makes the line longer than the preview limit.`
+    const start = body.indexOf("launch blockers")
+    const deps: SearchEverythingDependencies = {
+      noteSummaries: noteSummaries.map((summary) => summary.key === "project-brief" ? { ...summary, body } : summary),
+      searchNotes: () => [
+        {
+          key: "project-brief",
+          title: "Client Launch Brief",
+          relativePath: "notes/projects/client/brief.md",
+          match: {
+            source: "content",
+            label: "content line 1",
+            excerpt: "...launch blockers...",
+            start,
+            end: start + "launch blockers".length,
+          },
+        },
+      ],
+    }
+
+    const content = buildSearchEverythingResults("launch blockers", deps).find((result) => result.kind === "content")
+    const line = buildSearchEverythingPreview(content, "launch blockers")?.lines[0] ?? ""
+
+    assert.doesNotMatch(line, /�/u)
+    assert.doesNotMatch(line, /^\.\.\.[\u0300-\u036f]/u)
+    assert.doesNotMatch(line, /[\uD800-\uDBFF]$|^[\uDC00-\uDFFF]/u)
   })
 
   test("content preview uses supplied excerpt when no full body is available and omits match metadata rows", () => {
