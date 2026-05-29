@@ -44,7 +44,7 @@ export interface EditorTopbarViewModel {
   statusIntent: TuiColorIntent
   updatedLabel: string
   updatedIntent: TuiColorIntent
-  cursorLabel: string
+  wrapLabel: string
 }
 
 export interface EditorBodyViewModel {
@@ -87,15 +87,6 @@ export interface EditorFindViewModel {
 }
 
 export interface EditorBottombarViewModel {
-  row1: {
-    leftLabel: string
-    centerPrefixLabel: string
-    centerStatusLabel: "Enabled" | "Disabled"
-    centerStatusIntent: TuiColorIntent
-    rightLabel: string
-    rightIntent: TuiColorIntent
-    errorLabel: string | null
-  }
   row2: {
     shortcuts: string[]
     visibleShortcuts: string[]
@@ -327,11 +318,7 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
   const findCountLabel = findMatchCount > 0 && activeFindIndex !== null ? `${activeFindIndex + 1}/${findMatchCount} matches` : `0/${findMatchCount} matches`
 
   const cursor = editor ? editorCursorPosition(editor, editorCursorOffset(editor)) : { line: 1, column: 1 }
-  const cursorLabel = `Line ${cursor.line}, Col ${cursor.column}`
-  const compactCursorLabel = `Ln ${cursor.line}, Col ${cursor.column}`
-  const wrapStatusLabel = (editor?.wrapMode ?? "word") === "word" ? "Enabled" : "Disabled"
-  const wrapStatusIntent: TuiColorIntent = wrapStatusLabel === "Enabled" ? "success" : "danger"
-  const wrapPrefixLabel = "Wrap word: "
+  const wrapLabel = (editor?.wrapMode ?? "word") === "word" ? "Wrap word" : "Wrap off"
   const shortcuts = editorShortcuts()
   const lineCount = countLines(body)
   const overflow = editorOverflowFor(lineCount, cursor.line, responsive.bodyViewportLines ?? Number.POSITIVE_INFINITY)
@@ -356,7 +343,7 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
       statusIntent,
       updatedLabel,
       updatedIntent: "mutedText",
-      cursorLabel: compactCursorLabel,
+      wrapLabel,
     },
     find: findMode
       ? {
@@ -391,21 +378,12 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
       cursor,
       wrapMode: editor?.wrapMode ?? "word",
       overflow,
-      margin: { top: 1, x: 2 },
+      margin: { top: 1, x: 0 },
       textIntent: "textPrimary",
       placeholderIntent: "mutedText",
       cursorIntent: "borderFocus",
     },
     bottombar: {
-      row1: {
-        leftLabel: cursorLabel,
-        centerPrefixLabel: wrapPrefixLabel,
-        centerStatusLabel: wrapStatusLabel,
-        centerStatusIntent: wrapStatusIntent,
-        rightLabel: saveStatusLabel,
-        rightIntent: saveStatusIntent,
-        errorLabel,
-      },
       row2: {
         shortcuts: shortcuts.map(toShortcutHint).map(shortcutHintLabel),
         visibleShortcuts: findMode ? [] : visibleShortcuts,
@@ -503,9 +481,9 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     bg: tuiTheme.panel,
   }))
   topbar.add(new TextRenderable(options.renderer, {
-    id: "bluenote-editor-topbar-cursor",
-    content: vm.topbar.cursorLabel,
-    width: Math.max(1, vm.topbar.cursorLabel.length),
+    id: "bluenote-editor-topbar-wrap",
+    content: vm.topbar.wrapLabel,
+    width: Math.max(1, vm.topbar.wrapLabel.length),
     height: 1,
     fg: tuiTheme[vm.topbar.metadataIntent],
     bg: tuiTheme.panel,
@@ -527,67 +505,6 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     bg: tuiTheme.panel,
   }))
 
-  const bottombarStatus = new BoxRenderable(options.renderer, {
-    id: "bluenote-editor-bottombar-status-row",
-    flexDirection: "row",
-    width: "100%",
-    height: 1,
-    backgroundColor: tuiTheme.panel,
-  })
-  bottombarStatus.add(new TextRenderable(options.renderer, {
-    id: "bluenote-editor-bottombar-cursor",
-    content: ` ${vm.bottombar.row1.leftLabel}`,
-    width: vm.bottombar.row1.leftLabel.length + 1,
-    height: 1,
-    fg: tuiTheme[vm.topbar.metadataIntent],
-    bg: tuiTheme.panel,
-  }))
-  bottombarStatus.add(new BoxRenderable(options.renderer, {
-    id: "bluenote-editor-bottombar-left-spacer",
-    flexGrow: 1,
-    height: 1,
-    backgroundColor: tuiTheme.panel,
-  }))
-  bottombarStatus.add(new TextRenderable(options.renderer, {
-    id: "bluenote-editor-bottombar-wrap-prefix",
-    content: vm.bottombar.row1.centerPrefixLabel,
-    width: vm.bottombar.row1.centerPrefixLabel.length,
-    height: 1,
-    fg: tuiTheme[vm.topbar.metadataIntent],
-    bg: tuiTheme.panel,
-  }))
-  bottombarStatus.add(new TextRenderable(options.renderer, {
-    id: "bluenote-editor-bottombar-wrap-status",
-    content: vm.bottombar.row1.centerStatusLabel,
-    width: vm.bottombar.row1.centerStatusLabel.length,
-    height: 1,
-    fg: tuiTheme[vm.bottombar.row1.centerStatusIntent],
-    bg: tuiTheme.panel,
-  }))
-  bottombarStatus.add(new BoxRenderable(options.renderer, {
-    id: "bluenote-editor-bottombar-right-spacer",
-    flexGrow: 1,
-    height: 1,
-    backgroundColor: tuiTheme.panel,
-  }))
-  if (vm.bottombar.row1.errorLabel) {
-    bottombarStatus.add(new TextRenderable(options.renderer, {
-      id: "bluenote-editor-bottombar-error-status",
-      content: `${vm.bottombar.row1.errorLabel} `,
-      width: vm.bottombar.row1.errorLabel.length + 1,
-      height: 1,
-      fg: tuiTheme.danger,
-      bg: tuiTheme.panel,
-    }))
-  }
-  bottombarStatus.add(new TextRenderable(options.renderer, {
-    id: "bluenote-editor-bottombar-save-status",
-    content: vm.bottombar.row1.rightLabel,
-    width: vm.bottombar.row1.rightLabel.length,
-    height: 1,
-    fg: tuiTheme[vm.bottombar.row1.rightIntent],
-    bg: tuiTheme.panel,
-  }))
   let findInput: InputRenderable | null = null
   const bodyPanel = new BoxRenderable(options.renderer, {
     id: vm.body.inputId,
@@ -698,7 +615,6 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     root.add(findBar)
   }
   root.add(bodyPanel)
-  root.add(bottombarStatus)
   const shortcutHints: ShortcutRenderableHint[] = [...vm.bottombar.row2.visibleShortcutHints, ...(vm.bottombar.row2.hiddenShortcutCount > 0 ? [{ text: `+${vm.bottombar.row2.hiddenShortcutCount}` }] : [])]
   root.add(new TextRenderable(options.renderer, {
     id: "bluenote-editor-bottombar-shortcuts",

@@ -479,7 +479,8 @@ describe("TUI render keyboard routing", () => {
       assert.doesNotMatch(titleText, /Editor body|Line \d+, Col \d+/u)
       assert.doesNotMatch(renderableText, /Editor body/u)
       assert.doesNotMatch(bodyText, /[|▌]/u)
-      assert.match(renderableText, /Line 1, Col 5/u)
+      assert.doesNotMatch(renderableText, /Line \d+, Col \d+|Ln \d+, Col \d+/u)
+      assert.match(renderableText, /\[Ctrl\+S\]/u)
     } finally {
       renderer.destroy()
     }
@@ -505,7 +506,7 @@ describe("TUI render keyboard routing", () => {
     }
   })
 
-  test("editor renderer lays out topbar updated time right and status row with colored labels above shortcuts", async () => {
+  test("editor renderer lays out topbar updated time right and shortcut row", async () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       ;(renderer as any).width = 120
@@ -525,11 +526,8 @@ describe("TUI render keyboard routing", () => {
       const path = findById(screen, "bluenote-editor-topbar-path") as { content?: any; fg?: string } | undefined
       const updated = findById(screen, "bluenote-editor-topbar-updated") as { content?: any; fg?: string } | undefined
       const topbarSpacer = findById(screen, "bluenote-editor-topbar-spacer") as { yogaNode?: { getFlexGrow?: () => number } } | undefined
-      const statusRow = findById(screen, "bluenote-editor-bottombar-status-row")
       const shortcutRow = findById(screen, "bluenote-editor-bottombar-shortcuts") as { content?: any } | undefined
-      const wrapStatus = findById(screen, "bluenote-editor-bottombar-wrap-status") as { content?: any; fg?: string } | undefined
-      const saveStatus = findById(screen, "bluenote-editor-bottombar-save-status") as { content?: any; fg?: string } | undefined
-      const topbarCursor = findById(screen, "bluenote-editor-topbar-cursor") as { content?: any; fg?: string } | undefined
+      const topbarWrap = findById(screen, "bluenote-editor-topbar-wrap") as { content?: any; fg?: string } | undefined
       const topbarSaveStatus = findById(screen, "bluenote-editor-topbar-save-status") as { content?: any; fg?: string } | undefined
 
       assert.deepEqual(topbarChildren.map((child: any) => child.id), [
@@ -540,7 +538,7 @@ describe("TUI render keyboard routing", () => {
         "bluenote-editor-topbar-separator-updated",
         "bluenote-editor-topbar-updated",
         "bluenote-editor-topbar-separator-status",
-        "bluenote-editor-topbar-cursor",
+        "bluenote-editor-topbar-wrap",
         "bluenote-editor-topbar-separator-save",
         "bluenote-editor-topbar-save-status",
       ])
@@ -549,15 +547,13 @@ describe("TUI render keyboard routing", () => {
       assert.equal(topbarSpacer?.yogaNode?.getFlexGrow?.(), 1)
       assert.equal(updated?.content?.chunks?.[0]?.text ?? updated?.content, "Updated May 28, 2026, 10:30 UTC")
       assert.deepEqual((updated as any)?.fg?.toInts?.(), [148, 163, 184, 255])
-      assert.equal(topbarCursor?.content?.chunks?.[0]?.text ?? topbarCursor?.content, "Ln 1, Col 5")
-      assert.deepEqual((topbarCursor as any)?.fg?.toInts?.(), [148, 163, 184, 255])
+      assert.equal(topbarWrap?.content?.chunks?.[0]?.text ?? topbarWrap?.content, "Wrap word")
+      assert.deepEqual((topbarWrap as any)?.fg?.toInts?.(), [148, 163, 184, 255])
       assert.equal(topbarSaveStatus?.content?.chunks?.[0]?.text ?? topbarSaveStatus?.content, "Saved")
       assert.deepEqual((topbarSaveStatus as any)?.fg?.toInts?.(), [34, 197, 94, 255])
-      assert.ok(statusRow)
-      assert.equal(wrapStatus?.content?.chunks?.[0]?.text ?? wrapStatus?.content, "Enabled")
-      assert.deepEqual((wrapStatus as any)?.fg?.toInts?.(), [34, 197, 94, 255])
-      assert.equal(saveStatus?.content?.chunks?.[0]?.text ?? saveStatus?.content, "Saved")
-      assert.deepEqual((saveStatus as any)?.fg?.toInts?.(), [34, 197, 94, 255])
+      assert.equal(findById(screen, "bluenote-editor-bottombar-status-row"), undefined)
+      assert.equal(findById(screen, "bluenote-editor-bottombar-wrap-status"), undefined)
+      assert.equal(findById(screen, "bluenote-editor-bottombar-save-status"), undefined)
       const shortcutChunks = shortcutRow?.content?.chunks ?? []
       const shortcutText = shortcutChunks.map((chunk: { text?: string }) => chunk.text ?? "").join("") || shortcutRow?.content
       assert.equal(shortcutText, "[Ctrl+S] Save  [Ctrl+F] Find  [Alt+Z] Wrap  [Ctrl+P] Search  [Esc] Manager")
@@ -588,7 +584,7 @@ describe("TUI render keyboard routing", () => {
       assert.equal(plainText, "body ")
       assert.doesNotMatch(plainText, /[|▌█]/u)
       assert.equal(cursorChunk?.text, " ")
-      assert.deepEqual(cursorChunk?.fg?.toInts?.(), [15, 23, 42, 255])
+      assert.deepEqual(cursorChunk?.fg?.toInts?.(), [0, 0, 0, 255])
     } finally {
       renderer.destroy()
     }
@@ -934,7 +930,8 @@ describe("TUI render keyboard routing", () => {
       assert.equal(showCalls, 0)
       assert.notEqual(narrowLayout1, undefined)
       assert.equal(narrowLayout2, undefined)
-      assert.match(narrowText, /daily\.md/u)
+      assert.match(narrowText, /Daily/u)
+      assert.doesNotMatch(narrowText, /notes\/daily\.md|daily\.md/u)
       assert.match(narrowText, /Preview hidden for narrow terminal · p show/u)
       assert.doesNotMatch(narrowText, /Preview body/u)
 
@@ -966,7 +963,8 @@ describe("TUI render keyboard routing", () => {
       assert.equal(showCalls, 0)
       assert.notEqual(findById(narrowScreen, "bluenote-manager-layout-1"), undefined)
       assert.equal(findById(narrowScreen, "bluenote-manager-layout-2"), undefined)
-      assert.match(narrowText, /daily\.md/u)
+      assert.match(narrowText, /Daily/u)
+      assert.doesNotMatch(narrowText, /notes\/daily\.md|daily\.md/u)
       assert.doesNotMatch(narrowText, /Preview hidden \(narrow width\)/u)
       assert.doesNotMatch(narrowText, /Preview body/u)
     } finally {

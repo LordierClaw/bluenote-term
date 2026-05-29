@@ -233,18 +233,10 @@ function managerShortcutHints(state: TuiState, previewHidden: boolean, width?: n
 }
 
 function displaySegmentsFor(row: BrowserishRow): ManagerRowViewModel["displaySegments"] {
-  if (row.type === "folder") {
-    return {
-      primary: row.title || basenameLabel(row.relativePath) || row.filename.replace(/\/+$/u, ""),
-      secondary: row.description,
-      metadata: `folder · ${row.relativePath}`,
-    }
-  }
-
   return {
-    primary: row.title || row.filename,
+    primary: row.type === "folder" ? row.title || basenameLabel(row.relativePath) || row.filename.replace(/\/+$/u, "") : row.title || row.filename,
     secondary: row.description,
-    metadata: `${row.filename} · ${row.relativePath}`,
+    metadata: "",
   }
 }
 
@@ -507,8 +499,7 @@ function rowRenderable(options: RenderManagerScreenOptions, row: ManagerRowViewM
   })
 
   box.add(rowSegment(options, row.displaySegments.primary.padEnd(24), itemColor, bg, 24))
-  box.add(rowSegment(options, ` ${row.displaySegments.secondary.padEnd(22)}`, tuiTheme.textSecondary, bg, 23))
-  box.add(rowSegment(options, ` ${row.displaySegments.metadata}`, metadataColor, bg))
+  box.add(rowSegment(options, ` ${row.displaySegments.secondary}`, metadataColor, bg))
 
   return box
 }
@@ -542,7 +533,6 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     flexDirection: "row",
     width: "100%",
     flexGrow: 1,
-    backgroundColor: tuiTheme.background,
     columnGap: 1,
   })
   const layout1 = new BoxRenderable(options.renderer, {

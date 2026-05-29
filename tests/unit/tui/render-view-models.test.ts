@@ -86,7 +86,7 @@ describe("TUI render view models", () => {
       "textSecondary",
       "warning",
     ])
-    assert.equal(tuiTheme.background, "#0f172a")
+    assert.equal(tuiTheme.background, "#000000")
     assert.equal(tuiTheme.surfacePanel, "#111827")
     assert.equal(tuiTheme.surfacePanelRaised, "#162033")
     assert.equal(tuiTheme.panel, tuiTheme.surfacePanel)
@@ -206,8 +206,8 @@ describe("TUI render view models", () => {
     assert.deepEqual(
       vm.rows.map((row) => row.displaySegments),
       [
-        { primary: "inbox", secondary: "2 notes", metadata: "folder · notes/inbox" },
-        { primary: "Daily Plan", secondary: "Today priorities.", metadata: "daily-plan.md · notes/inbox/daily-plan.md" },
+        { primary: "inbox", secondary: "2 notes", metadata: "" },
+        { primary: "Daily Plan", secondary: "Today priorities.", metadata: "" },
       ],
     )
     assert.deepEqual(
@@ -416,16 +416,16 @@ describe("TUI render view models", () => {
     assert.deepEqual(
       vm.layout1.rows.map((row) => ({ filename: row.filename, displaySegments: row.displaySegments, focused: row.focused, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent })),
       [
-        { filename: "projects", displaySegments: { primary: "projects", secondary: "", metadata: "folder · notes/projects" }, focused: true, styleIntent: "focusedRow", itemStyleIntent: "textPrimary" },
-        { filename: "root-note.md", displaySegments: { primary: "Root Note", secondary: "A top-level note.", metadata: "root-note.md · notes/root-note.md" }, focused: false, styleIntent: "panel", itemStyleIntent: "textPrimary" },
+        { filename: "projects", displaySegments: { primary: "projects", secondary: "", metadata: "" }, focused: true, styleIntent: "focusedRow", itemStyleIntent: "textPrimary" },
+        { filename: "root-note.md", displaySegments: { primary: "Root Note", secondary: "A top-level note.", metadata: "" }, focused: false, styleIntent: "panel", itemStyleIntent: "textPrimary" },
       ],
     )
     assert.equal(vm.layout2.preview.type, "folder")
     assert.deepEqual(
       vm.layout2.preview.rows.map((row) => ({ filename: row.filename, displaySegments: row.displaySegments, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent })),
       [
-        { filename: "client", displaySegments: { primary: "client", secondary: "", metadata: "folder · notes/projects/client" }, styleIntent: "panel", itemStyleIntent: "textPrimary" },
-        { filename: "api-roadmap.md", displaySegments: { primary: "API Roadmap", secondary: "Ship API work.", metadata: "api-roadmap.md · notes/projects/api-roadmap.md" }, styleIntent: "panel", itemStyleIntent: "textPrimary" },
+        { filename: "client", displaySegments: { primary: "client", secondary: "", metadata: "" }, styleIntent: "panel", itemStyleIntent: "textPrimary" },
+        { filename: "api-roadmap.md", displaySegments: { primary: "API Roadmap", secondary: "Ship API work.", metadata: "" }, styleIntent: "panel", itemStyleIntent: "textPrimary" },
       ],
     )
   })
@@ -611,7 +611,7 @@ describe("TUI render view models", () => {
       titleIntent: "textPrimary",
       metadataIntent: "mutedText",
       statusLabel: "Saved",
-      cursorLabel: "Ln 3, Col 23",
+      wrapLabel: "Wrap word",
     })
     assert.deepEqual(vm.body, {
       inputId: "bluenote-editor-body-input",
@@ -623,21 +623,13 @@ describe("TUI render view models", () => {
       cursor: { line: 3, column: 23 },
       wrapMode: "word",
       overflow: { above: false, below: false, indicator: "" },
-      margin: { top: 1, x: 2 },
+      margin: { top: 1, x: 0 },
       textIntent: "textPrimary",
       placeholderIntent: "mutedText",
       cursorIntent: "borderFocus",
     })
     assert.equal(vm.find, null)
-    assert.deepEqual(vm.bottombar.row1, {
-      leftLabel: "Line 3, Col 23",
-      centerPrefixLabel: "Wrap word: ",
-      centerStatusLabel: "Enabled",
-      centerStatusIntent: "success",
-      rightLabel: "Saved",
-      rightIntent: "success",
-      errorLabel: null,
-    })
+    assert.equal("row1" in vm.bottombar, false)
     assert.deepEqual(vm.bottombar.row2, {
       shortcuts: ["[Ctrl+S] Save", "[Ctrl+F] Find", "[Alt+Z] Wrap", "[Ctrl+P] Search", "[Esc] Manager"],
       visibleShortcuts: ["[Ctrl+S] Save", "[Ctrl+F] Find", "[Alt+Z] Wrap", "[Ctrl+P] Search", "[Esc] Manager"],
@@ -654,20 +646,16 @@ describe("TUI render view models", () => {
     const editorChrome = JSON.stringify({ topbar: vm.topbar, bottombar: vm.bottombar })
     assert.doesNotMatch(editorChrome, /BlueNote(?: TUI| Editor)?/i)
     assert.equal("title" in vm.topbar, false)
-    assert.doesNotMatch(JSON.stringify({ topbar: vm.topbar, body: vm.body }), /Editor body|Line \d+, Col \d+/u)
-    assert.equal(vm.bottombar.row1.leftLabel, "Line 3, Col 23")
+    assert.doesNotMatch(JSON.stringify({ topbar: vm.topbar, body: vm.body, bottombar: vm.bottombar }), /Editor body|Line \d+, Col \d+|Ln \d+, Col \d+/u)
+    assert.equal(vm.topbar.wrapLabel, "Wrap word")
 
     const dirtyVm = buildEditorViewModel({ ...baseState, screen: "editor", editor: { ...baseState.editor!, dirty: true, body: `${baseState.editor!.body}\nunsaved` } })
     assert.equal(dirtyVm.topbar.saveStatusLabel, "Unsaved")
-    assert.equal(dirtyVm.bottombar.row1.rightLabel, "Unsaved")
     assert.equal(dirtyVm.topbar.statusIntent, "warning")
-    assert.equal(dirtyVm.bottombar.row1.rightIntent, "warning")
 
     const autosaveVm = buildEditorViewModel({ ...baseState, screen: "editor", editor: { ...baseState.editor!, autosaveStatus: "saving" } as TuiState["editor"] })
     assert.equal(autosaveVm.topbar.saveStatusLabel, "Saving…")
-    assert.equal(autosaveVm.bottombar.row1.rightLabel, "Saving…")
     assert.equal(autosaveVm.topbar.statusIntent, "warning")
-    assert.equal(autosaveVm.bottombar.row1.rightIntent, "warning")
   })
 
   test("editor topbar shows note updated timestamp when metadata exists", () => {
@@ -711,11 +699,11 @@ describe("TUI render view models", () => {
         statusIntent: "success",
         bodyTextIntent: "textPrimary",
         cursorIntent: "borderFocus",
-        margin: { top: 1, x: 2 },
+        margin: { top: 1, x: 0 },
       },
     )
     assert.equal(vm.topbar.statusLabel, "Saved")
-    assert.equal(vm.topbar.cursorLabel, "Ln 3, Col 23")
+    assert.equal(vm.topbar.wrapLabel, "Wrap word")
     assert.deepEqual(vm.bottombar.row2.visibleShortcuts, ["[Ctrl+S] Save", "[Ctrl+F] Find", "[Alt+Z] Wrap"])
     assert.equal(vm.bottombar.row2.hiddenShortcutCount, 2)
   })
@@ -813,7 +801,7 @@ describe("TUI render view models", () => {
     assert.equal(vm.topbar.updatedLabel, "Modified May 28, 2026, 11:45 UTC")
   })
 
-  test("editor bottom bar displays autosave status labels", () => {
+  test("editor topbar displays autosave status labels", () => {
     const statusFor = (autosaveStatus: NonNullable<TuiState["editor"]>["autosaveStatus"], dirty = true) =>
       buildEditorViewModel({
         ...baseState,
@@ -823,19 +811,19 @@ describe("TUI render view models", () => {
           dirty,
           autosaveStatus,
         },
-      }).bottombar
+      }).topbar
 
     assert.deepEqual(
       [statusFor("pending"), statusFor("saving"), statusFor("saved", false), statusFor("error")].map((bar) => ({
-        saveStatusLabel: bar.row1.rightLabel,
-        saveStatusIntent: bar.row1.rightIntent,
-        errorLabel: bar.row1.errorLabel,
+        saveStatusLabel: bar.saveStatusLabel,
+        saveStatusIntent: bar.statusIntent,
+        statusLabel: bar.statusLabel,
       })),
       [
-        { saveStatusLabel: "Unsaved", saveStatusIntent: "warning", errorLabel: null },
-        { saveStatusLabel: "Saving…", saveStatusIntent: "warning", errorLabel: null },
-        { saveStatusLabel: "Saved", saveStatusIntent: "success", errorLabel: null },
-        { saveStatusLabel: "Unsaved", saveStatusIntent: "danger", errorLabel: "Autosave failed" },
+        { saveStatusLabel: "Unsaved", saveStatusIntent: "warning", statusLabel: "Unsaved" },
+        { saveStatusLabel: "Saving…", saveStatusIntent: "warning", statusLabel: "Saving…" },
+        { saveStatusLabel: "Saved", saveStatusIntent: "success", statusLabel: "Saved" },
+        { saveStatusLabel: "Unsaved", saveStatusIntent: "danger", statusLabel: "Autosave failed" },
       ],
     )
   })
@@ -1153,7 +1141,7 @@ describe("TUI render view models", () => {
     const thresholdPreview = thresholdVm.preview
     assert.equal(thresholdPreview?.visible, true)
     if (thresholdPreview?.visible) {
-      assert.deepEqual(thresholdPreview.sections.map((section) => section.label), ["Metadata", "Description"])
+      assert.deepEqual(thresholdPreview.sections.map((section) => section.label), ["Path", "Description"])
     }
     assert.deepEqual(manualVm.regions.map((region) => region.id), ["input", "result-list"])
     assert.deepEqual(shortVm.regions.map((region) => region.id), ["input", "result-list"])
@@ -1262,7 +1250,8 @@ describe("TUI render view models", () => {
       assert.equal(narrowIds.includes("bluenote-manager-layout-1"), true)
       assert.equal(narrowIds.includes("bluenote-manager-layout-2"), false)
       assert.equal((narrowLayout1 as any)?._width, "100%")
-      assert.match(narrowText, /root-note\.md/u)
+      assert.match(narrowText, /Root Note/u)
+      assert.doesNotMatch(narrowText, /notes\/root-note\.md|root-note\.md/u)
       assert.doesNotMatch(narrowText, /\[\?\] More/u)
       assert.match(narrowText, /Preview hidden for narrow terminal · p show/u)
       assert.doesNotMatch(narrowText, /Preview body/u)
@@ -1345,7 +1334,7 @@ describe("TUI render view models", () => {
       assert.match(text, /Results · \d+/u)
       assert.match(resultText, /› \[note\] Daily Plan —/u)
       assert.doesNotMatch(resultText, /undefined/u)
-      assert.deepEqual(previewLines.slice(0, 5), ["Preview · Daily Plan", "daily-plan.md — notes/inbox/daily-plan.md", "Metadata", "daily-plan.md — notes/inbox/daily-plan.md", "Description"])
+      assert.deepEqual(previewLines.slice(0, 5), ["Preview · Daily Plan", "notes/inbox/daily-plan.md", "Path", "notes/inbox/daily-plan.md", "Description"])
       assert.match(text, /Today priorities\./u)
       controller.openSearch("/archive")
       controller.selectSearchResult()

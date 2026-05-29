@@ -23,7 +23,7 @@ export type TuiColorIntent =
   | "secondaryAccent"
 
 export const tuiTheme: Record<TuiColorIntent, `#${string}`> = {
-  background: "#0f172a",
+  background: "#000000",
   surfacePanel: "#111827",
   surfacePanelRaised: "#162033",
   borderSubtle: "#334155",

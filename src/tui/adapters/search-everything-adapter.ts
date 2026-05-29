@@ -380,10 +380,10 @@ export function buildSearchEverythingPreview(result: SearchEverythingResult | nu
 
   return {
     title: result.title,
-    subtitle: `${result.filename} — ${result.relativePath}`,
+    subtitle: result.relativePath,
     lines: [result.description],
     sections: [
-      { label: "Metadata", lines: [`${result.filename} — ${result.relativePath}`] },
+      { label: "Path", lines: [result.relativePath] },
       { label: "Description", lines: [result.description] },
     ],
   }
