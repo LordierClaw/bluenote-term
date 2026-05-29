@@ -1895,14 +1895,21 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(scheduler.activeTasks(), [])
   })
 
-  test("stale autosave completion after a newer manual save does not corrupt clean saved state", async () => {
+  test("newer manual save waits behind an older autosave so disk side effects cannot complete out of order", async () => {
     const scheduler = createFakeScheduler()
-    const pendingSaves: Array<{ body: string; resolve: (note: TuiNote) => void }> = []
+    const startedSaves: Array<{ body: string; resolve: (note: TuiNote) => void }> = []
+    const completedDiskWrites: string[] = []
     const { deps } = createDeps({
       autosaveScheduler: scheduler,
       persistEditorBody: (note, body) =>
         new Promise<TuiNote>((resolve) => {
-          pendingSaves.push({ body, resolve: (savedNote) => resolve({ ...note, ...savedNote }) })
+          startedSaves.push({
+            body,
+            resolve: (savedNote) => {
+              completedDiskWrites.push(body)
+              resolve({ ...note, ...savedNote })
+            },
+          })
         }),
     })
     const controller = createWorkspaceController(deps)
@@ -1911,14 +1918,22 @@ describe("TUI workspace controller", () => {
     controller.updateEditorBody("Older autosave body")
     scheduler.runNext()
     await Promise.resolve()
+    assert.deepEqual(startedSaves.map((save) => save.body), ["Older autosave body"])
+
     controller.updateEditorBody("Newer manual body")
     const manualSave = controller.saveEditor()
-    pendingSaves[1]?.resolve({ ...notesByKey["daily-plan"], body: "Newer manual body" })
-    await manualSave
+    await Promise.resolve()
+    assert.deepEqual(startedSaves.map((save) => save.body), ["Older autosave body"])
 
-    pendingSaves[0]?.resolve({ ...notesByKey["daily-plan"], body: "Older autosave body" })
+    startedSaves[0]?.resolve({ ...notesByKey["daily-plan"], body: "Older autosave body" })
+    await Promise.resolve()
+    await Promise.resolve()
+    assert.deepEqual(startedSaves.map((save) => save.body), ["Older autosave body", "Newer manual body"])
+    startedSaves[1]?.resolve({ ...notesByKey["daily-plan"], body: "Newer manual body" })
+    assert.deepEqual(await manualSave, { blocked: false })
     await Promise.resolve()
 
+    assert.deepEqual(completedDiskWrites, ["Older autosave body", "Newer manual body"])
     assert.equal(controller.getState().editor?.body, "Newer manual body")
     assert.equal(controller.getState().editor?.savedBody, "Newer manual body")
     assert.equal(controller.getState().editor?.dirty, false)

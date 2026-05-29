@@ -74,22 +74,51 @@ Hypotheses checked from the Task 2 plan:
 
 ### Root cause / fix evidence
 
-Implemented the smallest fixes for the confirmed save path issues:
+Implemented the smallest fixes for the confirmed save path issues, plus review-blocking follow-ups:
 
 - Replaced per-save full `rebuildIndexes()` in the TUI save path with `updateIndexedNote()`, which updates the saved note in the existing derived indexes without rescanning all note files/sidecars.
+- Review follow-up: `updateIndexedNote()` no longer reconstructs all note records from metadata/search JSON and no longer calls `rebuildIndexStore()` from the interactive save path. It opens the existing SQLite metadata artifact, performs one `INSERT ... ON CONFLICT DO UPDATE` for the saved note row, then loads the existing MiniSearch artifact and uses `replace()`/`add()` for the one saved search document.
 - Added an integration regression with a deliberately dangling sidecar: a full rebuild would refuse to refresh derived indexes, while the incremental update keeps the saved note searchable.
+- Added unit regressions proving incremental index updates preserve unrelated stored search documents and can insert a new note document without a full rebuild.
 - Added in-flight save coalescing in `WorkspaceController` so repeated manual saves and manual-save-during-autosave for the same note/body share one persistence operation.
+- Review follow-up: save persistence is now serialized per note, so a newer snapshot cannot have its disk/index side effects completed before an older in-flight snapshot later overwrites it. The regression `newer manual save waits behind an older autosave so disk side effects cannot complete out of order` verifies the side-effect order and final clean editor state.
 - Manual save clears pending debounce timers before persisting, preserves immediate input responsiveness while an async save is in flight, and retries once if it attached to a failing in-flight autosave for the same still-current snapshot.
 - Existing dispose coverage continues to verify pending timers are cleared and stale async save completions cannot keep render callbacks live.
+
+### Measurement / lag evidence
+
+Controlled process measurements from the review follow-up:
+
+```bash
+/usr/bin/time -v bun test tests/unit/index/index-store.test.ts
+# 7 pass, 0 fail; elapsed 0:00.08; max RSS 95,264 KB; exit status 0.
+# The targeted incremental-index tests include one-note update/insert coverage and ran in 77 ms according to Bun.
+
+/usr/bin/time -v bun run smoke:opentui:interactive
+# Interactive OpenTUI smoke check passed; elapsed 1:03.56; max RSS 105,096 KB; exit status 0.
+```
+
+Post-smoke process check:
+
+```text
+PID    PPID STAT %MEM   RSS     ELAPSED COMMAND
+# No live `bn.ts tui` or `smoke-opentui` process rows remained, other than the transient shell/awk used for inspection.
+```
+
+Visible lag/counter notes:
+
+- The real tmux-backed interactive smoke completed the autosave/manual-save paths, including `autosave-persist` and `manual-save-persist`, with no timeout or stuck process.
+- Save work is still intentionally not performed on every keypress; typing marks autosave `pending` and the 750 ms debounce coalesces input before persistence.
+- The remaining synchronous work on save is bounded to the one note body write, one SQLite row upsert/export, and one MiniSearch document replace/add against the existing artifact; no note-tree scan or all-notes derived-index reconstruction remains in the interactive path.
 
 ### Verification
 
 ```bash
-bun test tests/unit/tui/workspace-controller.test.ts tests/unit/tui/editor-buffer-adapter.test.ts tests/integration/tui-workflow.test.ts
-# 111 pass, 0 fail
-
 bun run typecheck
 # tsc --noEmit passed
+
+bun test tests/unit/tui/workspace-controller.test.ts tests/unit/tui/editor-buffer-adapter.test.ts tests/integration/tui-workflow.test.ts tests/unit/index/index-store.test.ts
+# 118 pass, 0 fail
 
 bun run smoke:opentui:interactive
 # Interactive OpenTUI smoke check passed.

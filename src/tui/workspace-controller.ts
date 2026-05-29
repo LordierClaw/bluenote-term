@@ -250,6 +250,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   let searchResults: SearchEverythingResult[] = []
   let autosaveTimer: unknown = null
   let inFlightSave: { noteKey: string; body: string; promise: Promise<TuiNote> } | null = null
+  const saveQueuesByNote = new Map<string, Promise<void>>()
   let autosaveStateChangeHandler: (() => void) | null = deps.onAutosaveStateChange ?? null
   const previewBodyCache = new Map<string, string>()
   const autosaveScheduler: WorkspaceDebounceScheduler = deps.autosaveScheduler ?? {
@@ -278,25 +279,46 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       return inFlightSave.promise
     }
 
-    const persistedNote = persistEditorSnapshot(noteToPersist, submittedBody)
-    if (!isPromiseLike(persistedNote)) {
-      return persistedNote
+    const previousSaveForNote = saveQueuesByNote.get(noteToPersist.key)
+    if (!previousSaveForNote) {
+      const persistedNote = persistEditorSnapshot(noteToPersist, submittedBody)
+      if (!isPromiseLike(persistedNote)) {
+        return persistedNote
+      }
+
+      const promise = persistedNote
+      const queueTail = promise.then(
+        () => undefined,
+        () => undefined,
+      )
+      saveQueuesByNote.set(noteToPersist.key, queueTail)
+      inFlightSave = { noteKey: noteToPersist.key, body: submittedBody, promise }
+      queueTail.then(() => {
+        if (saveQueuesByNote.get(noteToPersist.key) === queueTail) {
+          saveQueuesByNote.delete(noteToPersist.key)
+        }
+        if (inFlightSave?.promise === promise) {
+          inFlightSave = null
+        }
+      })
+      return promise
     }
 
-    const promise = persistedNote
-    inFlightSave = { noteKey: noteToPersist.key, body: submittedBody, promise }
-    promise.then(
-      () => {
-        if (inFlightSave?.promise === promise) {
-          inFlightSave = null
-        }
-      },
-      () => {
-        if (inFlightSave?.promise === promise) {
-          inFlightSave = null
-        }
-      },
+    const promise = previousSaveForNote.then(() => persistEditorSnapshot(noteToPersist, submittedBody))
+    const queueTail = promise.then(
+      () => undefined,
+      () => undefined,
     )
+    saveQueuesByNote.set(noteToPersist.key, queueTail)
+    inFlightSave = { noteKey: noteToPersist.key, body: submittedBody, promise }
+    queueTail.then(() => {
+      if (saveQueuesByNote.get(noteToPersist.key) === queueTail) {
+        saveQueuesByNote.delete(noteToPersist.key)
+      }
+      if (inFlightSave?.promise === promise) {
+        inFlightSave = null
+      }
+    })
     return promise
   }
 

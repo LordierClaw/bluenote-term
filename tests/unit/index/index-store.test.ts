@@ -9,7 +9,7 @@ import initSqlJs from "sql.js"
 
 import { IndexUnavailableError } from "../../../src/core/errors"
 import { createSearchDocuments } from "../../../src/index/search-documents"
-import { loadIndexStore, rebuildIndexStore } from "../../../src/index/index-store"
+import { loadIndexStore, rebuildIndexStore, updateIndexedNote } from "../../../src/index/index-store"
 
 const NOTE_ALPHA = {
   key: "note-alpha",
@@ -166,6 +166,69 @@ test("loadIndexStore preserves archived metadata in derived artifacts without su
     } finally {
       db.close()
     }
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("updateIndexedNote upserts one note without rebuilding unrelated search documents", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-index-store-incremental-"))
+
+  try {
+    const rebuilt = rebuildIndexStore({
+      rootPath,
+      notes: [NOTE_ALPHA, NOTE_BETA],
+    })
+    const initialSearchJson = JSON.parse(await readFile(rebuilt.searchIndexPath, "utf8")) as {
+      storedFields?: Record<string, { key?: string; body?: string }>
+    }
+    const initialStoredFields = Object.values(initialSearchJson.storedFields ?? {})
+    assert.equal(initialStoredFields.find((field) => field.key === NOTE_BETA.key)?.body, NOTE_BETA.body)
+
+    const updatedAlpha = {
+      ...NOTE_ALPHA,
+      title: "Alpha Note Updated",
+      description: "Alpha updated summary",
+      body: "Alpha replacement body mentions aurora only.\n",
+      updatedAt: "2026-05-23T10:15:00.000Z",
+    }
+    const result = updateIndexedNote(rootPath, updatedAlpha)
+
+    assert.equal(result.noteCount, 2)
+    const store = loadIndexStore(rootPath)
+    assert.deepEqual(store.search("aurora").map((match) => match.key), ["note-alpha"])
+    assert.deepEqual(store.search("project comet").map((match) => match.key), [])
+    assert.deepEqual(store.search("launch windows").map((match) => match.key), ["note-beta"])
+
+    const summaries = store.listSummaries()
+    assert.equal(summaries.find((summary) => summary.key === NOTE_ALPHA.key)?.title, "Alpha Note Updated")
+    assert.equal(summaries.find((summary) => summary.key === NOTE_BETA.key)?.title, NOTE_BETA.title)
+    const searchJson = JSON.parse(await readFile(rebuilt.searchIndexPath, "utf8")) as {
+      storedFields?: Record<string, { key?: string; body?: string }>
+    }
+    const storedFields = Object.values(searchJson.storedFields ?? {})
+    assert.equal(storedFields.find((field) => field.key === NOTE_ALPHA.key)?.body, updatedAlpha.body)
+    assert.equal(storedFields.find((field) => field.key === NOTE_BETA.key)?.body, NOTE_BETA.body)
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("updateIndexedNote inserts a new note with a single metadata row and search document", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-index-store-incremental-insert-"))
+
+  try {
+    rebuildIndexStore({
+      rootPath,
+      notes: [NOTE_ALPHA],
+    })
+    const result = updateIndexedNote(rootPath, NOTE_BETA)
+
+    assert.equal(result.noteCount, 2)
+    const store = loadIndexStore(rootPath)
+    assert.deepEqual(store.listSummaries().map((summary) => summary.key), ["note-alpha", "note-beta"])
+    assert.deepEqual(store.search("launch windows").map((match) => match.key), ["note-beta"])
+    assert.deepEqual(store.search("project comet").map((match) => match.key), ["note-alpha"])
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }

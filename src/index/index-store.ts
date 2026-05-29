@@ -212,26 +212,92 @@ export function rebuildIndexStore(input: RebuildIndexStoreInput): RebuildIndexSt
 
 export function updateIndexedNote(rootPath: string, note: IndexedNoteRecord): RebuildIndexStoreResult {
   const normalizedRootPath = path.resolve(rootPath)
-  const existingSummaries = loadIndexStore(normalizedRootPath).listAllSummaries()
-  const existingSearchJson = readFileSync(getSearchIndexPath(normalizedRootPath), "utf8")
-  const existingSearchBodies = new Map(getStoredSearchMatches(existingSearchJson).map((match) => [match.key, match.body]))
-  const notesByKey = new Map<string, IndexedNoteRecord>()
+  const metadataDatabasePath = getMetadataDatabasePath(normalizedRootPath)
+  const searchIndexPath = getSearchIndexPath(normalizedRootPath)
+  mkdirSync(path.dirname(metadataDatabasePath), { recursive: true })
 
-  for (const summary of existingSummaries) {
-    notesByKey.set(summary.key, {
-      key: summary.key,
-      title: summary.title,
-      description: summary.description,
-      body: existingSearchBodies.get(summary.key) ?? "",
-      relativePath: summary.relativePath,
-      createdAt: summary.createdAt,
-      updatedAt: summary.updatedAt,
-      archivedAt: summary.archivedAt,
+  let metadataBytes: Uint8Array
+  let searchJson: string
+
+  try {
+    metadataBytes = readFileSync(metadataDatabasePath)
+    searchJson = readFileSync(searchIndexPath, "utf8")
+  } catch (error) {
+    throw new IndexUnavailableError("Derived indexes are unavailable.", {
+      hint: REBUILD_INDEX_HINT,
+      cause: error,
     })
   }
 
-  notesByKey.set(note.key, note)
-  return rebuildIndexStore({ rootPath: normalizedRootPath, notes: [...notesByKey.values()] })
+  try {
+    const db = new SQL.Database(metadataBytes)
+
+    try {
+      db.run("BEGIN IMMEDIATE TRANSACTION")
+      const upsert = db.prepare(`
+        INSERT INTO notes (key, title, description, relativePath, createdAt, updatedAt, archivedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET
+          title = excluded.title,
+          description = excluded.description,
+          relativePath = excluded.relativePath,
+          createdAt = excluded.createdAt,
+          updatedAt = excluded.updatedAt,
+          archivedAt = excluded.archivedAt
+      `)
+
+      try {
+        upsert.run([
+          note.key,
+          note.title,
+          note.description,
+          note.relativePath,
+          note.createdAt,
+          note.updatedAt,
+          note.archivedAt,
+        ])
+      } finally {
+        upsert.free()
+      }
+
+      const noteCountResult = db.exec("SELECT COUNT(*) FROM notes")
+      const noteCount = Number(noteCountResult[0]?.values[0]?.[0] ?? 0)
+      db.run("COMMIT")
+      writeFileSync(metadataDatabasePath, db.export())
+
+      const searchEngine = MiniSearch.loadJSON<SearchIndexMatch>(searchJson, {
+        fields: [...SEARCH_FIELDS],
+        storeFields: [...SEARCH_STORE_FIELDS],
+      })
+      const [searchDocument] = createSearchDocuments([note])
+      if (searchEngine.has(searchDocument.id)) {
+        searchEngine.replace(searchDocument)
+      } else {
+        searchEngine.add(searchDocument)
+      }
+      writeFileSync(searchIndexPath, JSON.stringify(searchEngine), "utf8")
+
+      return {
+        noteCount,
+        metadataDatabasePath,
+        searchIndexPath,
+      }
+    } catch (error) {
+      try {
+        db.run("ROLLBACK")
+      } catch {
+        // Ignore rollback failures; the original error is more useful.
+      }
+      throw error
+    } finally {
+      db.close()
+    }
+  } catch (error) {
+    throw new IndexUnavailableError("Derived indexes are unavailable.", {
+      hint: REBUILD_INDEX_HINT,
+      cause: error,
+    })
+  }
 }
 
 export function loadIndexStore(rootPath: string): LoadedIndexStore {
