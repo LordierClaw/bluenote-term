@@ -809,6 +809,46 @@ describe("TUI render view models", () => {
     assert.equal(wrapped.body.overflow.horizontal, undefined)
   })
 
+  test("editor unwrap horizontal pan uses terminal display-cell widths for wide and combining characters", () => {
+    const wideLine = "日本語日本語"
+    const wideAtStart = buildEditorViewModel({
+      ...baseState,
+      screen: "editor",
+      editor: { ...baseState.editor!, body: wideLine, savedBody: wideLine, cursorOffset: 0, selectionStart: 0, selectionEnd: 0, wrapMode: "none" },
+    }, { bodyViewportColumns: 10 })
+
+    assert.equal(wideAtStart.body.value, wideLine)
+    assert.deepEqual(wideAtStart.body.overflow.horizontal, { left: false, right: true, indicator: "›", scrollLeft: 0 })
+
+    const wideAtEnd = buildEditorViewModel({
+      ...baseState,
+      screen: "editor",
+      editor: { ...baseState.editor!, body: wideLine, savedBody: wideLine, cursorOffset: Array.from(wideLine).length, selectionStart: Array.from(wideLine).length, selectionEnd: Array.from(wideLine).length, wrapMode: "none" },
+    }, { bodyViewportColumns: 10 })
+
+    assert.deepEqual(wideAtEnd.body.overflow.horizontal, { left: true, right: false, indicator: "‹", scrollLeft: 3 })
+
+    const mixedLine = "abc日本語def"
+    const mixedCursor = Array.from("abc日本").length
+    const mixed = buildEditorViewModel({
+      ...baseState,
+      screen: "editor",
+      editor: { ...baseState.editor!, body: mixedLine, savedBody: mixedLine, cursorOffset: mixedCursor, selectionStart: mixedCursor, selectionEnd: mixedCursor, wrapMode: "none" },
+    }, { bodyViewportColumns: 6 })
+
+    assert.deepEqual(mixed.body.overflow.horizontal, { left: true, right: true, indicator: "↔", scrollLeft: 2 })
+
+    const combiningLine = "a\u0301bcdefghi"
+    const combining = buildEditorViewModel({
+      ...baseState,
+      screen: "editor",
+      editor: { ...baseState.editor!, body: combiningLine, savedBody: combiningLine, cursorOffset: Array.from(combiningLine).length, selectionStart: Array.from(combiningLine).length, selectionEnd: Array.from(combiningLine).length, wrapMode: "none" },
+    }, { bodyViewportColumns: 9 })
+
+    assert.equal(combining.body.value, combiningLine)
+    assert.equal(combining.body.overflow.horizontal, undefined)
+  })
+
   test("editor renderer applies unwrapped horizontal scroll and display-only overflow indicator", async () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
