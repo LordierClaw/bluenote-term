@@ -71,6 +71,7 @@ export interface EditorBufferState {
   findMatchCount?: number
   activeFindIndex?: number | null
   autosaveStatus?: AutosaveStatus
+  statusMessage?: string | null
   undoStack?: EditorHistorySnapshot[]
   redoStack?: EditorHistorySnapshot[]
 }
@@ -274,6 +275,7 @@ export function openEditorForNote(state: TuiState, note: TuiNote): TuiState {
       findMatchCount: 0,
       activeFindIndex: null,
       autosaveStatus: "idle",
+      statusMessage: null,
       undoStack: [],
       redoStack: [],
     },

@@ -355,7 +355,12 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   }
 
   async function autosaveEditor(noteToPersist: TuiNote, submittedBody: string): Promise<void> {
-    if (state.editor?.note.key !== noteToPersist.key || state.editor.body !== submittedBody) {
+    if (
+      state.editor?.note.key !== noteToPersist.key
+      || state.editor.body !== submittedBody
+      || !state.editor.dirty
+      || state.editor.savedBody === submittedBody
+    ) {
       return
     }
 
@@ -435,6 +440,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     const previousState = state
     state = applySavedEditor(state, persistedNote, submittedBody)
     if (state !== previousState) {
+      clearAutosaveTimer()
       updatePreviewSourcesForSavedNote(persistedNote)
     }
   }
@@ -601,12 +607,22 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         editor: {
           ...editor,
           autosaveStatus: "saved",
+          statusMessage: null,
         },
       }
       notifyAutosaveStateChange()
       return
     }
     state = markAutosavePending(state)
+    if (state.editor) {
+      state = {
+        ...state,
+        editor: {
+          ...state.editor,
+          statusMessage: null,
+        },
+      }
+    }
     notifyAutosaveStateChange()
     scheduleAutosave()
   }
@@ -1082,6 +1098,15 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       const editor = state.editor
       const undoStack = editor?.undoStack ?? []
       if (!editor || undoStack.length === 0) {
+        if (editor) {
+          state = {
+            ...state,
+            editor: {
+              ...editor,
+              statusMessage: "Nothing to undo",
+            },
+          }
+        }
         return
       }
       const snapshot = undoStack.at(-1)!
@@ -1097,6 +1122,15 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       const editor = state.editor
       const redoStack = editor?.redoStack ?? []
       if (!editor || redoStack.length === 0) {
+        if (editor) {
+          state = {
+            ...state,
+            editor: {
+              ...editor,
+              statusMessage: "Nothing to redo",
+            },
+          }
+        }
         return
       }
       const snapshot = redoStack.at(-1)!

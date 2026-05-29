@@ -2486,7 +2486,9 @@ describe("TUI workspace controller", () => {
 
     openInboxDaily(controller)
     controller.undoEditor()
+    assert.equal(controller.getState().editor?.statusMessage, "Nothing to undo")
     controller.redoEditor()
+    assert.equal(controller.getState().editor?.statusMessage, "Nothing to redo")
     assert.equal(controller.getState().editor?.body, "Original daily body")
 
     for (let index = 0; index < 60; index += 1) {
@@ -2496,5 +2498,44 @@ describe("TUI workspace controller", () => {
     const editor = controller.getState().editor
     assert.ok((editor?.undoStack?.length ?? 0) <= 50)
     assert.equal(editor?.redoStack?.length, 0)
+    assert.equal(editor?.statusMessage, null)
+  })
+
+  test("stale autosave timer skips persistence after an in-flight save already made restored redo body clean", async () => {
+    const scheduler = createFakeScheduler()
+    const pendingSaves: Array<{ body: string; resolve: (note: TuiNote) => void }> = []
+    const persistedBodies: string[] = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) =>
+        new Promise<TuiNote>((resolve) => {
+          persistedBodies.push(body)
+          pendingSaves.push({
+            body,
+            resolve: (savedNote) => resolve({ ...note, ...savedNote }),
+          })
+        }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText(" updated")
+    scheduler.runNext()
+    await Promise.resolve()
+    assert.deepEqual(persistedBodies, ["Original daily body updated"])
+
+    controller.undoEditor()
+    assert.equal(controller.getState().editor?.body, "Original daily body")
+    controller.redoEditor()
+    assert.equal(controller.getState().editor?.body, "Original daily body updated")
+    assert.deepEqual(scheduler.activeTasks().map((task) => task.delay), [750])
+
+    pendingSaves[0]?.resolve({ ...notesByKey["daily-plan"], body: "Original daily body updated" })
+    await Promise.resolve()
+    await Promise.resolve()
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+    assert.deepEqual(scheduler.activeTasks(), [])
+    assert.deepEqual(persistedBodies, ["Original daily body updated"])
   })
 })

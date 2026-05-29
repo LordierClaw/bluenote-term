@@ -196,6 +196,10 @@ function renderControlledBodyValue(value: string, cursorOffset = Array.from(valu
 }
 
 function statusIntentForEditor(editor: EditorBufferWithAutosave | null): TuiColorIntent {
+  if (editor?.statusMessage) {
+    return "info"
+  }
+
   switch (editor?.autosaveStatus) {
     case "pending":
       return "warning"
@@ -384,6 +388,7 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
   const saveStatusLabel = editorSaveStatusLabel(editor, dirty)
   const saveStatusIntent = statusIntent
   const errorLabel = editorStatusErrorLabel(editor)
+  const visibleStatusLabel = editor?.statusMessage ?? errorLabel ?? saveStatusLabel
   const relativePath = normalizeRelativePath(note?.relativePath ?? "")
   const updatedLabel = updatedLabelFor(note as NoteWithEditorMetadata | null | undefined)
   const findMode = state.mode === "editor.find" || state.mode === "editor.replace"
@@ -422,7 +427,7 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
       key: note?.key ?? "",
       dirty,
       saveStatusLabel,
-      statusLabel: errorLabel ?? saveStatusLabel,
+      statusLabel: visibleStatusLabel,
       statusIntent,
       updatedLabel,
       updatedIntent: "mutedText",
