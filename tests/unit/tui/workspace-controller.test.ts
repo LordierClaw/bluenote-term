@@ -801,6 +801,34 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().editor?.dirty, false)
   })
 
+  test("moves across a long unwrapped editor line and returns to normal wrapping without mutating text", () => {
+    const { deps } = createDeps()
+    const controller = createWorkspaceController(deps)
+    openInboxDaily(controller)
+    const longBody = "abcdefghijklmnopqrstuvwxyz"
+    controller.updateEditorBody(longBody)
+    controller.moveEditorCursor("home")
+    controller.toggleEditorWrapMode()
+
+    for (let index = 0; index < 20; index += 1) {
+      controller.moveEditorCursor("right")
+    }
+    assert.equal(controller.getState().editor?.cursorOffset, 20)
+    assert.equal(controller.getState().editor?.body, longBody)
+    assert.equal(controller.getState().editor?.wrapMode, "none")
+
+    controller.moveEditorCursor("left")
+    assert.equal(controller.getState().editor?.cursorOffset, 19)
+    controller.moveEditorCursor("end")
+    assert.equal(controller.getState().editor?.cursorOffset, Array.from(longBody).length)
+    controller.moveEditorCursor("home")
+    assert.equal(controller.getState().editor?.cursorOffset, 0)
+
+    controller.toggleEditorWrapMode()
+    assert.equal(controller.getState().editor?.wrapMode, "word")
+    assert.equal(controller.getState().editor?.body, longBody)
+  })
+
   test("switches editor and manager with shortcut actions while preserving dirty editor state", () => {
     const { deps } = createDeps()
     const controller = createWorkspaceController(deps)

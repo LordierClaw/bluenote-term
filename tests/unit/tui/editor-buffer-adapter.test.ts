@@ -95,6 +95,25 @@ describe("TUI editor buffer adapter", () => {
     assert.equal(moveEditorCursor(editor, "down").cursorOffset, 3)
   })
 
+  test("long-line navigation in unwrap mode reaches line boundaries without changing body text", () => {
+    const longLine = "abcdefghi日本語"
+    let editor: EditorBufferState = { ...createEditor(longLine), wrapMode: "none", cursorOffset: 0, selectionStart: 0, selectionEnd: 0 }
+
+    for (let index = 0; index < 8; index += 1) {
+      editor = moveEditorCursor(editor, "right")
+    }
+    assert.equal(editor.cursorOffset, 8)
+    assert.deepEqual(editorCursorPosition(editor), { line: 1, column: 9 })
+
+    editor = moveEditorCursor(editor, "end")
+    assert.equal(editor.cursorOffset, Array.from(longLine).length)
+    editor = moveEditorCursor(editor, "home")
+    assert.equal(editor.cursorOffset, 0)
+    assert.equal(editor.body, longLine)
+    assert.equal(editor.note.body, longLine)
+    assert.equal(editor.wrapMode, "none")
+  })
+
   test("multi-character literal input and newline insert at current cursor", () => {
     let editor = createEditor("abc")
     editor = moveEditorCursor(editor, "left")

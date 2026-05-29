@@ -781,6 +781,64 @@ describe("TUI render view models", () => {
     assert.deepEqual(bottomCursorVm.body.overflow, { above: true, below: false, indicator: "↑" })
   })
 
+  test("editor unwrap mode reports horizontal overflow and cursor-driven pan without changing body value", () => {
+    const longLine = "abcdefghijklmnopqrstuvwxyz"
+    const atStart = buildEditorViewModel({
+      ...baseState,
+      screen: "editor",
+      editor: { ...baseState.editor!, body: longLine, savedBody: longLine, cursorOffset: 0, selectionStart: 0, selectionEnd: 0, wrapMode: "none" },
+    }, { bodyViewportColumns: 10 })
+
+    assert.equal(atStart.body.value, longLine)
+    assert.equal(atStart.body.wrapMode, "none")
+    assert.deepEqual(atStart.body.overflow.horizontal, { left: false, right: true, indicator: "›", scrollLeft: 0 })
+
+    const panned = buildEditorViewModel({
+      ...baseState,
+      screen: "editor",
+      editor: { ...baseState.editor!, body: longLine, savedBody: longLine, cursorOffset: 15, selectionStart: 15, selectionEnd: 15, wrapMode: "none" },
+    }, { bodyViewportColumns: 10 })
+
+    assert.deepEqual(panned.body.overflow.horizontal, { left: true, right: true, indicator: "↔", scrollLeft: 6 })
+
+    const wrapped = buildEditorViewModel({
+      ...baseState,
+      screen: "editor",
+      editor: { ...baseState.editor!, body: longLine, savedBody: longLine, cursorOffset: 15, selectionStart: 15, selectionEnd: 15, wrapMode: "word" },
+    }, { bodyViewportColumns: 10 })
+    assert.equal(wrapped.body.overflow.horizontal, undefined)
+  })
+
+  test("editor renderer applies unwrapped horizontal scroll and display-only overflow indicator", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      ;(renderer as typeof renderer & { width?: number; height?: number }).width = 12
+      ;(renderer as typeof renderer & { width?: number; height?: number }).height = 8
+      const longLine = "abcdefghijklmnopqrstuvwxyz"
+      const controller = createWorkspaceController({
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: longLine }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: longLine }),
+        searchNotes: () => [],
+      })
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+      controller.toggleEditorWrapMode()
+      controller.moveEditorCursor("home")
+      for (let index = 0; index < 15; index += 1) controller.moveEditorCursor("right")
+
+      const screen = renderEditorScreen({ renderer, controller })
+      renderer.root.add(screen)
+      const bodyDisplay = descendants(screen).find((node) => node.id === "bluenote-editor-body") as { scrollX?: number; content?: unknown } | undefined
+      const indicator = descendants(screen).find((node) => node.id === "bluenote-editor-body-horizontal-overflow") as { content?: { chunks?: Array<{ text?: string }> } | string } | undefined
+      const indicatorText = typeof indicator?.content === "string" ? indicator.content : indicator?.content?.chunks?.map((chunk) => chunk.text ?? "").join("")
+
+      assert.equal(bodyDisplay?.scrollX, 5)
+      assert.equal(indicatorText, "↔")
+      assert.equal(controller.getState().editor?.body, longLine)
+    } finally {
+      renderer.destroy()
+    }
+  })
+
   test("editor chrome extracts note directory and latest updated or modified labels from metadata", () => {
     const vm = buildEditorViewModel({
       ...baseState,

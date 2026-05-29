@@ -202,6 +202,38 @@ describe("TUI workspace workflows", () => {
     assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), changedBody)
   })
 
+  test("unwrapped long-line navigation pans cursor logically and saves exact note body", async () => {
+    const longLine = "0123456789abcdefghijklmnopqrstuvwxyz日本語"
+    const note = createNote({
+      override: rootPath,
+      title: "Long Line",
+      body: longLine,
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerNoteByKey(controller, note.key)
+    const route = (sequence: string) => routeWorkspaceKey(sequence, controller, () => {})
+    assert.equal(route("\u001bz").handled, true)
+    assert.equal(controller.getState().editor?.wrapMode, "none")
+    assert.equal(route("\u001b[H").handled, true)
+    for (let index = 0; index < 18; index += 1) {
+      assert.equal(route("\u001b[C").handled, true)
+    }
+    assert.equal(controller.getState().editor?.cursorOffset, 18)
+    assert.equal(route("\u001b[D").handled, true)
+    assert.equal(controller.getState().editor?.cursorOffset, 17)
+    assert.equal(route("\u001b[F").handled, true)
+    assert.equal(controller.getState().editor?.cursorOffset, Array.from(longLine).length)
+    assert.equal(route("\u001bz").handled, true)
+    assert.equal(controller.getState().editor?.wrapMode, "word")
+
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+    assert.equal(await readFile(path.join(rootPath, note.relativePath), "utf8"), longLine)
+    assert.equal(showNote({ override: rootPath, selector: note.key }).body, longLine)
+  })
+
   test("edit-save-switch-quit workflow persists both edited files", async () => {
     const alphaSummary = createNote({
       override: rootPath,

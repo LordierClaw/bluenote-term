@@ -67,6 +67,14 @@ export interface EditorOverflowViewModel {
   above: boolean
   below: boolean
   indicator: "" | "↑" | "↓" | "↕"
+  horizontal?: EditorHorizontalOverflowViewModel
+}
+
+export interface EditorHorizontalOverflowViewModel {
+  left: boolean
+  right: boolean
+  indicator: "" | "‹" | "›" | "↔"
+  scrollLeft: number
 }
 
 export interface EditorFindViewModel {
@@ -105,6 +113,7 @@ export interface EditorViewModel {
 export interface EditorResponsiveOptions {
   width?: number
   bodyViewportLines?: number
+  bodyViewportColumns?: number
 }
 
 function normalizeRelativePath(relativePath: string): string {
@@ -301,6 +310,39 @@ function editorOverflowFor(lineCount: number, cursorLine: number, bodyViewportLi
   return { above, below, indicator }
 }
 
+function lineRangeForCursor(body: string, cursorOffset: number): { start: number; end: number } {
+  const chars = Array.from(body)
+  const cursor = Math.max(0, Math.min(Math.trunc(Number.isFinite(cursorOffset) ? cursorOffset : chars.length), chars.length))
+  let start = cursor
+  while (start > 0 && chars[start - 1] !== "\n") start -= 1
+  let end = cursor
+  while (end < chars.length && chars[end] !== "\n") end += 1
+  return { start, end }
+}
+
+function editorHorizontalOverflowFor(editor: EditorBufferWithAutosave | null, bodyViewportColumns: number): EditorHorizontalOverflowViewModel | undefined {
+  if (!editor || (editor.wrapMode ?? "word") !== "none" || !Number.isFinite(bodyViewportColumns) || bodyViewportColumns <= 0) {
+    return undefined
+  }
+
+  const cursorOffset = editorCursorOffset(editor)
+  const range = lineRangeForCursor(editor.body, cursorOffset)
+  const lineLength = range.end - range.start
+  const viewportColumns = Math.max(1, Math.trunc(bodyViewportColumns))
+  if (lineLength <= viewportColumns) {
+    return undefined
+  }
+
+  const cursorColumn = Math.max(0, Math.min(cursorOffset, range.end) - range.start)
+  const displayLineLength = lineLength + (cursorColumn === lineLength ? 1 : 0)
+  const maxScrollLeft = Math.max(0, displayLineLength - viewportColumns)
+  const scrollLeft = Math.max(0, Math.min(cursorColumn >= viewportColumns ? cursorColumn - viewportColumns + 1 : 0, maxScrollLeft))
+  const left = scrollLeft > 0
+  const right = scrollLeft + viewportColumns < lineLength
+  const indicator = left && right ? "↔" : left ? "‹" : right ? "›" : ""
+  return { left, right, indicator, scrollLeft }
+}
+
 export function buildEditorViewModel(state: TuiState, responsive: EditorResponsiveOptions = {}): EditorViewModel {
   const editor = state.editor as EditorBufferWithAutosave | null
   const note = editor?.note
@@ -322,6 +364,10 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
   const shortcuts = editorShortcuts()
   const lineCount = countLines(body)
   const overflow = editorOverflowFor(lineCount, cursor.line, responsive.bodyViewportLines ?? Number.POSITIVE_INFINITY)
+  const horizontalOverflow = editorHorizontalOverflowFor(editor, responsive.bodyViewportColumns ?? Number.POSITIVE_INFINITY)
+  if (horizontalOverflow) {
+    overflow.horizontal = horizontalOverflow
+  }
   const { visibleShortcuts, visibleShortcutHints, hiddenShortcutCount } = visibleShortcutLabels(shortcuts, responsive.width ?? 0)
 
   return {
@@ -411,7 +457,8 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   const shortcutRows = 1
   const bodyTopMarginRows = 1
   const bodyViewportLines = Math.max(1, screenHeight - topbarRows - findBarRows - shortcutRows - bodyTopMarginRows)
-  const vm = buildEditorViewModel(state, { width: Math.max(0, screenWidth - 4), bodyViewportLines })
+  const bodyViewportColumns = Math.max(1, screenWidth - 1)
+  const vm = buildEditorViewModel(state, { width: Math.max(0, screenWidth - 4), bodyViewportLines, bodyViewportColumns })
   const editorState = state.editor
   const root = new BoxRenderable(options.renderer, {
     id: "bluenote-editor-screen",
@@ -541,9 +588,19 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   })
   bodyContentRow.add(bodyLeftMargin)
   bodyContentRow.add(bodyDisplay)
+  if (vm.body.overflow.horizontal) {
+    bodyContentRow.add(new TextRenderable(options.renderer, {
+      id: "bluenote-editor-body-horizontal-overflow",
+      content: vm.body.overflow.horizontal.indicator,
+      width: 1,
+      height: "100%",
+      fg: tuiTheme[vm.body.placeholderIntent],
+    }))
+  }
   bodyPanel.add(bodyTopMargin)
   bodyPanel.add(bodyContentRow)
   bodyDisplay.scrollY = editorScrollTopFor(vm.body.lineCount, vm.body.cursor.line, bodyViewportLines)
+  bodyDisplay.scrollX = vm.body.overflow.horizontal?.scrollLeft ?? 0
 
   root.add(topbar)
   if (vm.find) {
