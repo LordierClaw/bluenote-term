@@ -697,12 +697,33 @@ describe("TUI render view models", () => {
     assert.equal(vm.find, null)
     assert.equal("row1" in vm.bottombar, false)
     assert.deepEqual(vm.bottombar.row2, {
-      shortcuts: ["[Ctrl+S] Save", "[Ctrl+F] Find", "[Alt+Z] Wrap", "[Ctrl+P] Search", "[Esc] Manager"],
-      visibleShortcuts: ["[Ctrl+S] Save", "[Ctrl+F] Find", "[Alt+Z] Wrap", "[Ctrl+P] Search", "[Esc] Manager"],
+      shortcuts: [
+        "[Ctrl+S] Save",
+        "[Ctrl+F] Find",
+        "[Alt+Z] Wrap",
+        "[Ctrl+Shift+C] Copy",
+        "[Ctrl+Shift+X] Cut",
+        "[Ctrl+Shift+V] Paste",
+        "[Ctrl+P] Search",
+        "[Esc] Manager",
+      ],
+      visibleShortcuts: [
+        "[Ctrl+S] Save",
+        "[Ctrl+F] Find",
+        "[Alt+Z] Wrap",
+        "[Ctrl+Shift+C] Copy",
+        "[Ctrl+Shift+X] Cut",
+        "[Ctrl+Shift+V] Paste",
+        "[Ctrl+P] Search",
+        "[Esc] Manager",
+      ],
       visibleShortcutHints: [
         { key: "Ctrl+S", action: "Save" },
         { key: "Ctrl+F", action: "Find" },
         { key: "Alt+Z", action: "Wrap" },
+        { key: "Ctrl+Shift+C", action: "Copy" },
+        { key: "Ctrl+Shift+X", action: "Cut" },
+        { key: "Ctrl+Shift+V", action: "Paste" },
         { key: "Ctrl+P", action: "Search" },
         { key: "Esc", action: "Manager" },
       ],
@@ -771,7 +792,7 @@ describe("TUI render view models", () => {
     assert.equal(vm.topbar.statusLabel, "Saved")
     assert.equal(vm.topbar.wrapLabel, "Wrap word")
     assert.deepEqual(vm.bottombar.row2.visibleShortcuts, ["[Ctrl+S] Save", "[Ctrl+F] Find", "[Alt+Z] Wrap"])
-    assert.equal(vm.bottombar.row2.hiddenShortcutCount, 2)
+    assert.equal(vm.bottombar.row2.hiddenShortcutCount, 5)
   })
 
   test("editor find prompt is a quiet task sheet with query, match count, and find-specific actions", () => {
@@ -826,7 +847,7 @@ describe("TUI render view models", () => {
       { key: "Ctrl+S", action: "Save" },
       { key: "Ctrl+F", action: "Find" },
     ])
-    assert.equal(narrowVm.bottombar.row2.hiddenShortcutCount, 3)
+    assert.equal(narrowVm.bottombar.row2.hiddenShortcutCount, 6)
     assert.doesNotMatch(narrowVm.bottombar.row2.shortcuts.join(" "), /\[\?\] More/u)
     assert.deepEqual(narrowVm.body.overflow, { above: false, below: true, indicator: "↓" })
 
