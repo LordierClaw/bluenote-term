@@ -359,7 +359,6 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       state.editor?.note.key !== noteToPersist.key
       || state.editor.body !== submittedBody
       || !state.editor.dirty
-      || state.editor.savedBody === submittedBody
     ) {
       return
     }
@@ -600,7 +599,8 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     }
     const editor = state.editor
     if (!editor) return
-    if (!editor.dirty) {
+    const hasConflictingInFlightSave = inFlightSave?.noteKey === editor.note.key && inFlightSave.body !== editor.body
+    if (!editor.dirty && !hasConflictingInFlightSave) {
       clearAutosaveTimer()
       state = {
         ...state,
@@ -613,12 +613,14 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       notifyAutosaveStateChange()
       return
     }
+    const editorBeforePending = state.editor
     state = markAutosavePending(state)
     if (state.editor) {
       state = {
         ...state,
         editor: {
           ...state.editor,
+          dirty: editorBeforePending?.dirty || hasConflictingInFlightSave,
           statusMessage: null,
         },
       }

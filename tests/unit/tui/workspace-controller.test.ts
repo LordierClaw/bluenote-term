@@ -2538,4 +2538,53 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(scheduler.activeTasks(), [])
     assert.deepEqual(persistedBodies, ["Original daily body updated"])
   })
+
+  test("undoing to a clean snapshot while autosave is in flight re-saves the restored body", async () => {
+    const scheduler = createFakeScheduler()
+    const pendingSaves: Array<{ body: string; resolve: (note: TuiNote) => void }> = []
+    const persistedBodies: string[] = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) =>
+        new Promise<TuiNote>((resolve) => {
+          persistedBodies.push(body)
+          pendingSaves.push({
+            body,
+            resolve: (savedNote) => resolve({ ...note, ...savedNote }),
+          })
+        }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText(" updated")
+    scheduler.runNext()
+    await Promise.resolve()
+    assert.deepEqual(persistedBodies, ["Original daily body updated"])
+
+    controller.undoEditor()
+    assert.equal(controller.getState().editor?.body, "Original daily body")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+    assert.deepEqual(scheduler.activeTasks().map((task) => task.delay), [750])
+
+    pendingSaves[0]?.resolve({ ...notesByKey["daily-plan"], body: "Original daily body updated" })
+    await Promise.resolve()
+    await Promise.resolve()
+    assert.equal(controller.getState().editor?.body, "Original daily body")
+    assert.equal(controller.getState().editor?.dirty, true)
+
+    scheduler.runNext()
+    await Promise.resolve()
+    await Promise.resolve()
+    pendingSaves[1]?.resolve({ ...notesByKey["daily-plan"], body: "Original daily body" })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    assert.deepEqual(persistedBodies, ["Original daily body updated", "Original daily body"])
+    assert.equal(controller.getState().editor?.body, "Original daily body")
+    assert.equal(controller.getState().editor?.savedBody, "Original daily body")
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+  })
 })
