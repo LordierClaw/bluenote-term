@@ -791,6 +791,7 @@ describe("TUI render view models", () => {
 
     assert.equal(atStart.body.value, longLine)
     assert.equal(atStart.body.wrapMode, "none")
+    assert.equal(atStart.topbar.wrapLabel, "Wrap off ›")
     assert.deepEqual(atStart.body.overflow.horizontal, { left: false, right: true, indicator: "›", indicatorIntent: "info", scrollLeft: 0 })
 
     const panned = buildEditorViewModel({
@@ -800,6 +801,7 @@ describe("TUI render view models", () => {
     }, { bodyViewportColumns: 10 })
 
     assert.deepEqual(panned.body.overflow.horizontal, { left: true, right: true, indicator: "↔", indicatorIntent: "info", scrollLeft: 6 })
+    assert.equal(panned.topbar.wrapLabel, "Wrap off ↔")
 
     const wrapped = buildEditorViewModel({
       ...baseState,
@@ -824,6 +826,7 @@ describe("TUI render view models", () => {
       scrollLeft: 0,
       indicatorIntent: "info",
     })
+    assert.equal(vm.topbar.wrapLabel, "Wrap off ›")
   })
 
   test("editor unwrap horizontal pan uses terminal display-cell widths for wide and combining characters", () => {

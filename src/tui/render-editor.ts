@@ -404,7 +404,7 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
   const findCountLabel = findMatchCount > 0 && activeFindIndex !== null ? `${activeFindIndex + 1}/${findMatchCount} matches` : `0/${findMatchCount} matches`
 
   const cursor = editor ? editorCursorPosition(editor, editorCursorOffset(editor)) : { line: 1, column: 1 }
-  const wrapLabel = (editor?.wrapMode ?? "word") === "word" ? "Wrap word" : "Wrap off"
+  const baseWrapLabel = (editor?.wrapMode ?? "word") === "word" ? "Wrap word" : "Wrap off"
   const shortcuts = editorShortcuts()
   const lineCount = countLines(body)
   const overflow = editorOverflowFor(lineCount, cursor.line, responsive.bodyViewportLines ?? Number.POSITIVE_INFINITY)
@@ -412,6 +412,7 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
   if (horizontalOverflow) {
     overflow.horizontal = horizontalOverflow
   }
+  const wrapLabel = horizontalOverflow?.indicator ? `${baseWrapLabel} ${horizontalOverflow.indicator}` : baseWrapLabel
   const { visibleShortcuts, visibleShortcutHints, hiddenShortcutCount } = visibleShortcutLabels(shortcuts, responsive.width ?? 0)
 
   return {

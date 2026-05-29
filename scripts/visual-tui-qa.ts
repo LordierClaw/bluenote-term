@@ -137,9 +137,8 @@ function wait(milliseconds: number): void {
 }
 
 export function buildGnomeTerminalGeometry(geometry: string, caseIndex: number): string {
-  const offsetX = 80 + (caseIndex % 8) * 60
-  const offsetY = 80 + (caseIndex % 8) * 40
-  return `${geometry}+${offsetX}+${offsetY}`
+  void caseIndex
+  return `${geometry}+40+40`
 }
 
 export function screenshotBridgeArgumentsFor(targetWindowId: number | null): ScreenshotBridgeArguments[] {

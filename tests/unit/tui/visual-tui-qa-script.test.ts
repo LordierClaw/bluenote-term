@@ -4,10 +4,10 @@ import assert from "node:assert/strict"
 import { buildGnomeTerminalGeometry, screenshotBridgeArgumentsFor } from "../../../scripts/visual-tui-qa"
 
 describe("visual TUI QA harness helpers", () => {
-  test("offsets launched terminal windows so small manager captures are not overlapped by previous cases", () => {
-    assert.equal(buildGnomeTerminalGeometry("80x24", 0), "80x24+80+80")
-    assert.equal(buildGnomeTerminalGeometry("80x24", 1), "80x24+140+120")
-    assert.equal(buildGnomeTerminalGeometry("80x24", 7), "80x24+500+360")
+  test("keeps launched terminal windows in one stable foreground position to avoid desktop overlap artifacts", () => {
+    assert.equal(buildGnomeTerminalGeometry("80x24", 0), "80x24+40+40")
+    assert.equal(buildGnomeTerminalGeometry("80x24", 1), "80x24+40+40")
+    assert.equal(buildGnomeTerminalGeometry("80x24", 7), "80x24+40+40")
   })
 
   test("prefers focused target-window screenshots and does not fall back to obstructable fullscreen when a window id is known", () => {
