@@ -23,7 +23,7 @@ The harness now seeds a disposable BlueNote root through CLI-created notes and r
 | 10 | `search-file-title-preview-100x30` | Search Everything file/title preview | Title + filename preview with highlighted title/filename match. |
 | 11 | `search-multi-content-results-100x30` | Search Everything multi-content results | Multiple result rows for repeated content matches. |
 | 5 | `editor-separator-100x30` | Editor separator | Calm visible separation between topbar/body/bottombar. |
-| 12 | `editor-find-replace-highlight-100x30` | Editor find-highlight state | Automated pane evidence opens find mode and confirms matching editor text is highlighted/selected; Task 15 live QA covers terminal delivery of `Ctrl+H` replace. |
+| 12 | `editor-find-replace-highlight-100x30` | Editor find-highlight state | Automated pane evidence opens find mode and confirms matching editor text is highlighted/selected; Task 15 live QA covers terminal delivery of `Ctrl+R` replace. |
 | 6, 14 | `editor-clipboard-attempt-100x30` | Clipboard shortcut attempt | Live QA records whether `Ctrl+Shift+C/X/V` are delivered or terminal-consumed and validates fallback. |
 | 13, 14 | `editor-undo-flow-100x30` | Undo flow | Recent edit can be undone; pane evidence requires inserted text to be absent after `Ctrl+Z`. |
 | 13, 14 | `editor-redo-flow-100x30` | Redo flow | Recent edit can be redone; pane evidence requires inserted text to return after `Ctrl+Y`. |

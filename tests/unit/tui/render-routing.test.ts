@@ -224,12 +224,21 @@ describe("TUI render keyboard routing", () => {
     assert.deepEqual(calls, ["openEditorFind:"])
   })
 
-  test("editor Ctrl+H enters editor replace mode from the body", () => {
+  test("editor Ctrl+R enters editor replace mode from the body", () => {
+    const { controller, calls } = createController("editor")
+    controller.getState().mode = "editor.body"
+
+    assert.equal(routeEditorKey("\u0012", controller), true)
+    assert.deepEqual(calls, ["openEditorReplace:"])
+  })
+
+  test("editor keeps Kitty Ctrl+H replace sequences as compatibility aliases", () => {
     const { controller, calls } = createController("editor")
     controller.getState().mode = "editor.body"
 
     assert.equal(routeEditorKey("\u001b[104;5u", controller), true)
-    assert.deepEqual(calls, ["openEditorReplace:"])
+    assert.equal(routeEditorKey("\u001b[72;5u", controller), true)
+    assert.deepEqual(calls, ["openEditorReplace:", "openEditorReplace:"])
   })
 
   test("editor Alt+Z toggles wrap mode from the body", () => {
@@ -699,6 +708,7 @@ describe("TUI render keyboard routing", () => {
 
       const topbar = findById(screen, "bluenote-editor-topbar")
       const topbarChildren = topbar?.getChildren?.() ?? []
+      const title = findById(screen, "bluenote-editor-topbar-title") as { content?: any; width?: number } | undefined
       const path = findById(screen, "bluenote-editor-topbar-path") as { content?: any; fg?: string } | undefined
       const updated = findById(screen, "bluenote-editor-topbar-updated") as { content?: any; fg?: string } | undefined
       const topbarSpacer = findById(screen, "bluenote-editor-topbar-spacer") as { yogaNode?: { getFlexGrow?: () => number } } | undefined
@@ -718,6 +728,9 @@ describe("TUI render keyboard routing", () => {
         "bluenote-editor-topbar-separator-status",
         "bluenote-editor-topbar-save-status",
       ])
+      assert.equal(title?.content?.chunks?.[0]?.text ?? title?.content, "Daily ")
+      assert.equal(title?.width, "Daily ".length)
+      assert.doesNotMatch(String(title?.content?.chunks?.[0]?.text ?? title?.content), /^\s/u)
       assert.equal(path?.content?.chunks?.[0]?.text ?? path?.content, "notes/inbox/daily.md")
       assert.deepEqual((path as any)?.fg?.toInts?.(), [148, 163, 184, 255])
       assert.equal(topbarSpacer?.yogaNode?.getFlexGrow?.(), 1)
@@ -732,7 +745,7 @@ describe("TUI render keyboard routing", () => {
       assert.equal(findById(screen, "bluenote-editor-bottombar-save-status"), undefined)
       const shortcutChunks = shortcutRow?.content?.chunks ?? []
       const shortcutText = shortcutChunks.map((chunk: { text?: string }) => chunk.text ?? "").join("") || shortcutRow?.content
-      assert.equal(shortcutText, "[Ctrl+S] Save  [Ctrl+F] Find  [Ctrl+P] Search  [Esc] Manager  [Ctrl+H] Replace  [Ctrl+Z] Undo  [Ctrl+Y] Redo  +4")
+      assert.equal(shortcutText, "[Ctrl+S] Save  [Ctrl+F] Find  [Ctrl+P] Search  [Esc] Manager  [Ctrl+R] Replace  [Ctrl+Z] Undo  [Ctrl+Y] Redo  +4")
       assert.deepEqual(shortcutChunks.filter((chunk: { text?: string }) => /^\[[^\]]+\]$/u.test(chunk.text ?? "")).at(0)?.fg?.toInts?.(), [56, 189, 248, 255])
     } finally {
       renderer.destroy()

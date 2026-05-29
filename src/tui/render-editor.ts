@@ -533,8 +533,8 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   })
   topbar.add(new TextRenderable(options.renderer, {
     id: "bluenote-editor-topbar-title",
-    content: ` ${vm.topbar.noteName} `,
-    width: vm.topbar.noteName.length + 2,
+    content: `${vm.topbar.noteName} `,
+    width: vm.topbar.noteName.length + 1,
     height: 1,
     fg: tuiTheme[vm.topbar.titleIntent],
   }))
@@ -814,6 +814,7 @@ export function routeEditorKey(sequence: string, controller: WorkspaceController
     case "\u001b[27;5;102~":
       controller.openEditorFind()
       return true
+    case "\u0012":
     case "\u001b[104;5u":
     case "\u001b[72;5u":
       if (state.mode !== "editor.body") return false

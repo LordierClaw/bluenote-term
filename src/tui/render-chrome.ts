@@ -24,7 +24,7 @@ export const TUI_SHORTCUTS = {
   editorBack: { key: "Esc", action: "Manager" },
   editorSave: { key: "Ctrl+S", action: "Save" },
   editorFind: { key: "Ctrl+F", action: "Find" },
-  editorReplace: { key: "Ctrl+H", action: "Replace" },
+  editorReplace: { key: "Ctrl+R", action: "Replace" },
   editorUndo: { key: "Ctrl+Z", action: "Undo" },
   editorRedo: { key: "Ctrl+Y", action: "Redo" },
   editorWrap: { key: "Alt+Z", action: "Wrap" },

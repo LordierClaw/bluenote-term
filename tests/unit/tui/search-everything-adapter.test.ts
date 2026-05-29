@@ -621,7 +621,7 @@ describe("TUI Search Everything adapter", () => {
         "/rebuild": null,
         "/migrate": null,
         "/find": "Ctrl+F",
-        "/replace": "Ctrl+H",
+        "/replace": "Ctrl+R",
         "/save": "Ctrl+S",
       },
     )

@@ -208,7 +208,7 @@ export const phase4JVisualCases: VisualCase[] = [
     requirementIds: [12],
     actions: ["Enter", "/", "text:editor-body", "Enter", "Enter", "C-f", "text:replace-target"],
     expected: ["Find", "replace-target", "1/2", "matches"],
-    ratingPrompt: "Verify find-highlight state opens and the found result is highlighted/selected in the editor body; live QA covers Ctrl+H replace delivery.",
+    ratingPrompt: "Verify find-highlight state opens and the found result is highlighted/selected in the editor body; live QA covers Ctrl+R replace delivery.",
   },
   {
     id: "editor-clipboard-attempt-100x30",

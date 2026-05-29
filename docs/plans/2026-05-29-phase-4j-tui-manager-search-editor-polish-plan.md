@@ -81,7 +81,7 @@ Treat this as a best-effort terminal-compatible binding cleanup, not a hard glob
 | Back/close transient mode | `Esc` / `Ctrl+[` | Keep. |
 | Save | `Ctrl+S` | Existing; keep. |
 | Find | `Ctrl+F` | Existing; keep. |
-| Find + replace | `Ctrl+H` | Existing command definition says `/replace` shortcut is `Ctrl+H`; wire visible flow. |
+| Find + replace | `Ctrl+R` | Primary terminal-deliverable replace shortcut; `/replace` command remains discoverable and Kitty-style `Ctrl+H` sequences stay compatibility aliases if delivered. |
 | Copy | `Ctrl+Shift+C` | Terminal often reserves it for copy. OpenTUI may or may not deliver it; plan includes detection/fallback evidence. |
 | Cut | `Ctrl+Shift+X` | Best-effort terminal event; fallback status if terminal swallows. |
 | Paste | `Ctrl+Shift+V` | Common terminal paste; use bracketed paste/input event if OpenTUI exposes it. |
@@ -477,7 +477,7 @@ git add src/tui/adapters/search-everything-adapter.ts src/tui/render-search-ever
 
 **RED tests:**
 
-1. `Ctrl+H` or chosen supported binding opens `editor.replace` mode from editor body.
+1. `Ctrl+R` or chosen supported binding opens `editor.replace` mode from editor body.
 2. Replace prompt shows find query and replacement input/action hints.
 3. After a find query is entered, active match range is represented as a selection/highlight in the rendered editor body.
 4. `Enter` in find mode advances or confirms; replace mode can replace current and replace all according to existing adapter capabilities.
@@ -563,7 +563,7 @@ git add src/tui/state.ts src/tui/workspace-controller.ts src/tui/adapters/editor
 
 1. Manager and editor both show persistent global `Ctrl+P Search` and `Esc Back/Manager` semantics where appropriate.
 2. Manager shows `/ Filter`.
-3. Editor shows `Ctrl+F Find`, `Ctrl+H Replace`, `Ctrl+S Save`, undo/redo, and clipboard shortcuts only if supported or with honest alternate labels.
+3. Editor shows `Ctrl+F Find`, `Ctrl+R Replace`, `Ctrl+S Save`, undo/redo, and clipboard shortcuts only if supported or with honest alternate labels.
 4. Search Everything command shortcut labels agree with visible editor/manager shortcuts.
 5. No shortcut row overflows badly at `80x24`; low-priority hints collapse via existing overflow count.
 
@@ -625,6 +625,46 @@ bun run qa:visual:tui -- --out-dir=/tmp/bluenote-4j-visual-final
 
 ```bash
 git add scripts/visual-tui-qa.ts tests/unit/tui/visual-tui-qa-script.test.ts docs/plans/2026-05-29-phase-4j-tui-manager-search-editor-polish-qa-results.md && git commit -m "test: extend visual qa for phase 4j"
+```
+
+---
+
+### Task 14A: Defect fix — replace shortcut must be terminal-deliverable and editor topbar starts flush
+
+**Discovered during Task 15 live QA:** `Ctrl+H` was advertised as `[Ctrl+H] Replace`, but focused GNOME Terminal + computer-use/ydotool delivery did not open replace mode. In common terminals `Ctrl+H` collides with Backspace/^H behavior, so the visible shortcut was not an honest working binding. User also requested a minor visual cleanup: remove the leading space at the start of the editor topbar.
+
+**Files:**
+
+- Update: `src/tui/render-chrome.ts`
+- Update: `src/tui/render-editor.ts`
+- Update: relevant TUI routing/render/docs tests
+- Update docs that mention the editor replace shortcut
+
+**RED tests:**
+
+1. A terminal-deliverable `Ctrl+R` sequence opens editor replace mode from the editor body.
+2. Editor shortcut rows advertise `[Ctrl+R] Replace`, not `[Ctrl+H] Replace`.
+3. Editor topbar text starts flush with the note title and does not begin with a blank space.
+4. Docs/help contracts describe `Ctrl+R` replace while noting `/replace` command access remains available.
+
+**Implementation:**
+
+- Keep existing Kitty-style `Ctrl+H` sequences as backwards-compatible aliases if they are delivered.
+- Add `Ctrl+R` (`\u0012`) as the primary replace shortcut.
+- Remove the editor topbar's leading blank padding so the first visible character is the note title.
+- Update shortcut labels and docs to the primary working binding.
+
+**Verification:**
+
+```bash
+bun test tests/unit/tui/render-routing.test.ts tests/unit/tui/render-view-models.test.ts tests/integration/docs-phase3-tui.test.ts
+bun run typecheck
+```
+
+**Commit:**
+
+```bash
+git add src/tui/render-chrome.ts src/tui/render-editor.ts tests docs && git commit -m "fix: use terminal-safe replace shortcut"
 ```
 
 ---

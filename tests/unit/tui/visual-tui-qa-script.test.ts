@@ -63,7 +63,7 @@ describe("visual TUI QA harness helpers", () => {
       requirementIds: [12],
       geometry: "100x30",
       zoom: "1.0",
-      actions: ["Enter", "C-h", "text:replace-target"],
+      actions: ["Enter", "C-r", "text:replace-target"],
       expected: ["Replace", "replace-target"],
       forbidden: ["stale-body"],
       panePath: "/tmp/qa/editor-find-replace-highlight-100x30/pane.txt",
