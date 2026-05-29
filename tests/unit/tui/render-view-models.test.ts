@@ -653,7 +653,12 @@ describe("TUI render view models", () => {
   test("editor view model exposes structured topbar, editor body metadata, and bottombar data", () => {
     const vm = buildEditorViewModel({ ...baseState, screen: "editor" })
 
-    assert.deepEqual(Object.keys(vm).sort(), ["body", "bottombar", "find", "topbar"])
+    assert.deepEqual(Object.keys(vm).sort(), ["body", "bottombar", "chrome", "find", "topbar"])
+    assert.deepEqual(vm.chrome, {
+      topBodySeparator: "─",
+      bodyBottomSeparator: "─",
+      separatorIntent: "borderSubtle",
+    })
     assert.deepEqual(vm.topbar, {
       noteName: "Daily Plan",
       directoryPath: "notes/inbox",

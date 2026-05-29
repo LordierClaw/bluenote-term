@@ -500,6 +500,8 @@ describe("TUI render keyboard routing", () => {
       renderer.root.add(screen as any)
 
       const bodyInput = findById(screen, "bluenote-editor-body-input") as { backgroundColor?: { toInts?: () => number[] }; border?: boolean; title?: unknown } | undefined
+      const bodyTopSeparator = findById(screen, "bluenote-editor-top-body-separator") as { content?: any; fg?: { toInts?: () => number[] }; backgroundColor?: { toInts?: () => number[] } } | undefined
+      const bodyBottomSeparator = findById(screen, "bluenote-editor-body-bottom-separator") as { content?: any; fg?: { toInts?: () => number[] }; backgroundColor?: { toInts?: () => number[] } } | undefined
       const bodyTopMargin = findById(screen, "bluenote-editor-body-margin-top") as { backgroundColor?: { toInts?: () => number[] } } | undefined
       const bodyContentRow = findById(screen, "bluenote-editor-body-content-row") as { backgroundColor?: { toInts?: () => number[] } } | undefined
       const bodyDisplay = findById(screen, "bluenote-editor-body") as { bg?: { toInts?: () => number[] }; content?: { chunks?: Array<{ text?: string }> } | string } | undefined
@@ -510,6 +512,14 @@ describe("TUI render keyboard routing", () => {
       const bodyText = typeof bodyDisplay?.content === "string" ? bodyDisplay.content : bodyDisplay?.content?.chunks?.[0]?.text ?? ""
 
       assert.equal(screen.border, false)
+      assert.notEqual(bodyTopSeparator, undefined)
+      assert.notEqual(bodyBottomSeparator, undefined)
+      assert.equal(bodyTopSeparator?.content?.chunks?.[0]?.text ?? bodyTopSeparator?.content, "─".repeat(80))
+      assert.equal(bodyBottomSeparator?.content?.chunks?.[0]?.text ?? bodyBottomSeparator?.content, "─".repeat(80))
+      assert.deepEqual(bodyTopSeparator?.fg?.toInts?.(), [51, 65, 85, 255])
+      assert.deepEqual(bodyBottomSeparator?.fg?.toInts?.(), [51, 65, 85, 255])
+      assertNoOpaqueBlackBackground(bodyTopSeparator?.backgroundColor, "editor top/body separator keeps terminal-default transparent background")
+      assertNoOpaqueBlackBackground(bodyBottomSeparator?.backgroundColor, "editor body/bottombar separator keeps terminal-default transparent background")
       assertTransparentBackground((screen as any).backgroundColor, "editor root keeps terminal-default transparent background")
       assert.ok(bodyInput && (bodyInput.border === false || bodyInput.title === undefined))
       assertNoOpaqueBlackBackground(bodyInput?.backgroundColor, "editor body input must not paint opaque black")
@@ -561,7 +571,7 @@ describe("TUI render keyboard routing", () => {
       renderer.root.add(screen)
 
       const bodyDisplay = findById(screen, "bluenote-editor-body") as { scrollY?: number } | undefined
-      assert.equal(bodyDisplay?.scrollY, 0)
+      assert.equal(bodyDisplay?.scrollY, 1)
     } finally {
       renderer.destroy()
     }

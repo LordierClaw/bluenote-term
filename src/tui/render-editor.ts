@@ -105,11 +105,18 @@ export interface EditorBottombarViewModel {
   }
 }
 
+export interface EditorChromeViewModel {
+  topBodySeparator: "─"
+  bodyBottomSeparator: "─"
+  separatorIntent: TuiColorIntent
+}
+
 export interface EditorViewModel {
   topbar: EditorTopbarViewModel
   find: EditorFindViewModel | null
   body: EditorBodyViewModel
   bottombar: EditorBottombarViewModel
+  chrome: EditorChromeViewModel
 }
 
 export interface EditorResponsiveOptions {
@@ -443,6 +450,11 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
         hiddenShortcutCount: findMode ? 0 : hiddenShortcutCount,
       },
     },
+    chrome: {
+      topBodySeparator: "─",
+      bodyBottomSeparator: "─",
+      separatorIntent: "borderSubtle",
+    },
   }
 }
 
@@ -462,7 +474,8 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   const topbarRows = 1
   const shortcutRows = 1
   const bodyTopMarginRows = 1
-  const bodyViewportLines = Math.max(1, screenHeight - topbarRows - findBarRows - shortcutRows - bodyTopMarginRows)
+  const bodyBottomSeparatorRows = 1
+  const bodyViewportLines = Math.max(1, screenHeight - topbarRows - findBarRows - shortcutRows - bodyTopMarginRows - bodyBottomSeparatorRows)
   const bodyViewportColumns = Math.max(1, screenWidth - 1)
   const vm = buildEditorViewModel(state, { width: Math.max(0, screenWidth - 4), bodyViewportLines, bodyViewportColumns })
   const editorState = state.editor
@@ -567,6 +580,13 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     width: "100%",
     height: vm.body.margin.top,
   })
+  bodyTopMargin.add(new TextRenderable(options.renderer, {
+    id: "bluenote-editor-top-body-separator",
+    content: vm.chrome.topBodySeparator.repeat(Math.max(1, screenWidth)),
+    width: "100%",
+    height: 1,
+    fg: tuiTheme[vm.chrome.separatorIntent],
+  }))
   const bodyContentRow = new BoxRenderable(options.renderer, {
     id: "bluenote-editor-body-content-row",
     flexDirection: "row",
@@ -661,6 +681,13 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     root.add(findBar)
   }
   root.add(bodyPanel)
+  root.add(new TextRenderable(options.renderer, {
+    id: "bluenote-editor-body-bottom-separator",
+    content: vm.chrome.bodyBottomSeparator.repeat(Math.max(1, screenWidth)),
+    width: "100%",
+    height: 1,
+    fg: tuiTheme[vm.chrome.separatorIntent],
+  }))
   const shortcutHints: ShortcutRenderableHint[] = [...vm.bottombar.row2.visibleShortcutHints, ...(vm.bottombar.row2.hiddenShortcutCount > 0 ? [{ text: `+${vm.bottombar.row2.hiddenShortcutCount}` }] : [])]
   root.add(new TextRenderable(options.renderer, {
     id: "bluenote-editor-bottombar-shortcuts",
