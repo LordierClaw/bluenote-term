@@ -122,6 +122,7 @@ export interface BuildManagerViewModelOptions {
 }
 
 export const MANAGER_PREVIEW_NARROW_WIDTH = 72
+const MANAGER_ROW_PRIMARY_WIDTH = 24
 
 export interface ManagerViewModel {
   title: string
@@ -243,11 +244,108 @@ function managerShortcutHints(state: TuiState, previewHidden: boolean, width?: n
   return [...primary, { key: "s", action: "Search", priority: "secondary" }]
 }
 
-function displaySegmentsFor(row: BrowserishRow): ManagerRowViewModel["displaySegments"] {
-  return {
+function isCombiningCodePoint(codePoint: number): boolean {
+  return (codePoint >= 0x0300 && codePoint <= 0x036F)
+    || (codePoint >= 0x1AB0 && codePoint <= 0x1AFF)
+    || (codePoint >= 0x1DC0 && codePoint <= 0x1DFF)
+    || (codePoint >= 0x20D0 && codePoint <= 0x20FF)
+    || (codePoint >= 0xFE20 && codePoint <= 0xFE2F)
+}
+
+function isWideCodePoint(codePoint: number): boolean {
+  return (codePoint >= 0x1100 && codePoint <= 0x115F)
+    || codePoint === 0x2329
+    || codePoint === 0x232A
+    || (codePoint >= 0x2E80 && codePoint <= 0xA4CF && codePoint !== 0x303F)
+    || (codePoint >= 0xAC00 && codePoint <= 0xD7A3)
+    || (codePoint >= 0xF900 && codePoint <= 0xFAFF)
+    || (codePoint >= 0xFE10 && codePoint <= 0xFE19)
+    || (codePoint >= 0xFE30 && codePoint <= 0xFE6F)
+    || (codePoint >= 0xFF00 && codePoint <= 0xFF60)
+    || (codePoint >= 0xFFE0 && codePoint <= 0xFFE6)
+    || (codePoint >= 0x1F300 && codePoint <= 0x1FAFF)
+}
+
+function displayCellWidth(value: string): number {
+  let width = 0
+  for (const char of Array.from(value)) {
+    const codePoint = char.codePointAt(0) ?? 0
+    if (codePoint === 0 || codePoint < 32 || (codePoint >= 0x7F && codePoint < 0xA0) || isCombiningCodePoint(codePoint)) {
+      continue
+    }
+    width += isWideCodePoint(codePoint) ? 2 : 1
+  }
+  return width
+}
+
+function truncateDisplayCells(value: string, maxCells: number): string {
+  if (maxCells <= 0) {
+    return ""
+  }
+  if (displayCellWidth(value) <= maxCells) {
+    return value
+  }
+  if (maxCells === 1) {
+    return "…"
+  }
+
+  const ellipsisWidth = 1
+  const contentMax = maxCells - ellipsisWidth
+  let result = ""
+  let width = 0
+  for (const char of Array.from(value)) {
+    const charWidth = displayCellWidth(char)
+    if (width + charWidth > contentMax) {
+      break
+    }
+    result += char
+    width += charWidth
+  }
+
+  return `${result}…`
+}
+
+function padEndDisplayCells(value: string, cells: number): string {
+  const padding = Math.max(0, cells - displayCellWidth(value))
+  return `${value}${" ".repeat(padding)}`
+}
+
+function managerRowTextWidth(width: number | undefined): number | undefined {
+  if (typeof width !== "number") {
+    return undefined
+  }
+  if (width < MANAGER_PREVIEW_NARROW_WIDTH) {
+    return Math.max(0, width - 2)
+  }
+  return Math.max(0, Math.floor((width - 1) / 2) - 2)
+}
+
+function rowSegmentWidthsForAvailable(available: number | undefined): { primary: number; secondary: number | undefined } {
+  if (typeof available !== "number") {
+    return { primary: MANAGER_ROW_PRIMARY_WIDTH, secondary: undefined }
+  }
+
+  const primary = Math.min(MANAGER_ROW_PRIMARY_WIDTH, available)
+  const secondary = Math.max(0, available - primary - 1)
+  return { primary, secondary }
+}
+
+function displaySegmentsFor(row: BrowserishRow, maxWidth?: number): ManagerRowViewModel["displaySegments"] {
+  const segments = {
     primary: row.type === "folder" ? row.title || basenameLabel(row.relativePath) || row.filename.replace(/\/+$/u, "") : row.title || row.filename,
     secondary: row.description,
     metadata: "",
+  }
+
+  if (typeof maxWidth !== "number") {
+    return segments
+  }
+
+  const widths = rowSegmentWidthsForAvailable(maxWidth)
+  return {
+    primary: truncateDisplayCells(segments.primary, widths.primary),
+    secondary: typeof widths.secondary === "number" ? truncateDisplayCells(segments.secondary, widths.secondary) : segments.secondary,
+    metadata: segments.metadata,
   }
 }
 
@@ -263,7 +361,7 @@ function columnsFor(row: BrowserishRow): ManagerRowViewModel["columns"] {
   }
 }
 
-function toRowViewModel(row: BrowserishRow, _index: number, focused: boolean, _openNoteKey: string | null): ManagerRowViewModel {
+function toRowViewModel(row: BrowserishRow, _index: number, focused: boolean, _openNoteKey: string | null, maxWidth?: number): ManagerRowViewModel {
   return {
     key: row.key,
     filename: row.filename,
@@ -276,7 +374,7 @@ function toRowViewModel(row: BrowserishRow, _index: number, focused: boolean, _o
     openMarker: "",
     icon: row.type === "folder" ? "📁" : "📄",
     columns: columnsFor(row),
-    displaySegments: displaySegmentsFor(row),
+    displaySegments: displaySegmentsFor(row, maxWidth),
     styleIntent: focused ? "focusedRow" : "panel",
     itemStyleIntent: "textPrimary",
     openStyleIntent: null,
@@ -319,7 +417,7 @@ function previewSectionsFor(preview: Extract<ManagerPreviewViewModel, { type: "n
   return sections
 }
 
-function previewViewModelFor(preview: ManagerPreviewModel | null | undefined, openNoteKey: string | null): ManagerPreviewViewModel {
+function previewViewModelFor(preview: ManagerPreviewModel | null | undefined, openNoteKey: string | null, maxWidth?: number): ManagerPreviewViewModel {
   if (!preview || preview.type === "empty") {
     return emptyPreview()
   }
@@ -332,12 +430,12 @@ function previewViewModelFor(preview: ManagerPreviewModel | null | undefined, op
     return {
       type: "folder",
       path: preview.path,
-      rows: preview.rows.map((row, index) => toRowViewModel(row, index, false, openNoteKey)),
+      rows: preview.rows.map((row, index) => toRowViewModel(row, index, false, openNoteKey, maxWidth)),
       title: basenameLabel(preview.path) || "Folder",
       message: `${preview.rows.length} ${preview.rows.length === 1 ? "item" : "items"}`,
       sections: [
         { label: "Path", lines: [preview.path] },
-        { label: "Contents", lines: preview.rows.map((row) => displaySegmentsFor(row).primary) },
+        { label: "Contents", lines: preview.rows.map((row) => displaySegmentsFor(row, maxWidth).primary) },
       ],
       styleIntent: "panel",
     }
@@ -371,18 +469,19 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
   const hoveredPath = browserModel?.hoveredPath ?? state.manager.hoveredPath ?? null
   const currentFolderPath = browserModel?.currentFolderPath ?? state.manager.currentFolderPath ?? ""
   const responsivePreviewHidden = typeof options.width === "number" && options.width < MANAGER_PREVIEW_NARROW_WIDTH
+  const rowTextWidth = managerRowTextWidth(options.width)
   const layout1SourceRows = browserModel?.layout1Rows ?? state.manager.items
   const rows = layout1SourceRows.map((item, index) => {
     const focused = browserModel ? item.relativePath === hoveredPath : index === state.manager.focusedIndex
-    return toRowViewModel(item, index, focused, openNoteKey)
+    return toRowViewModel(item, index, focused, openNoteKey, rowTextWidth)
   })
   const preview = responsivePreviewHidden
     ? hiddenPreview(hoveredPath, "responsive")
     : browserModel
-      ? previewViewModelFor(browserModel.preview, openNoteKey)
+      ? previewViewModelFor(browserModel.preview, openNoteKey, rowTextWidth)
       : state.manager.previewVisible === false
         ? hiddenPreview(hoveredPath, "manual")
-        : previewViewModelFor(undefined, openNoteKey)
+        : previewViewModelFor(undefined, openNoteKey, rowTextWidth)
   const itemCountLabel = `${rows.length} items${state.manager.filterQuery ? " (filtered)" : ""}`
   const appStatusLabel = state.manager.status?.trim() || "Ready"
   const rightLabel = `${itemCountLabel} | ${appStatusLabel}`
@@ -488,11 +587,12 @@ function effectiveRendererWidth(options: RenderManagerScreenOptions): number | u
   return rendererSize.width ?? rendererSize.terminalWidth
 }
 
-function rowSegment(options: RenderManagerScreenOptions, content: string, fg: string, bg: string | undefined, width?: number): TextRenderable {
+function rowSegment(options: RenderManagerScreenOptions, content: string, fg: string, bg: string | undefined, width?: number, flexShrink = 1): TextRenderable {
   return new TextRenderable(options.renderer, {
     content,
     height: 1,
     width,
+    flexShrink,
     fg,
     ...(bg ? { bg } : {}),
   })
@@ -505,12 +605,22 @@ function rowRenderable(options: RenderManagerScreenOptions, row: ManagerRowViewM
   const box = new BoxRenderable(options.renderer, {
     flexDirection: "row",
     width: "100%",
+    flexShrink: 1,
     height: 1,
     ...(bg ? { backgroundColor: bg } : {}),
   })
 
-  box.add(rowSegment(options, row.displaySegments.primary.padEnd(24), itemColor, bg, 24))
-  box.add(rowSegment(options, ` ${row.displaySegments.secondary}`, metadataColor, bg))
+  const rowTextWidth = managerRowTextWidth(effectiveRendererWidth(options))
+  const widths = rowSegmentWidthsForAvailable(rowTextWidth)
+  const primary = truncateDisplayCells(row.displaySegments.primary, widths.primary)
+  const secondaryContentWidth = typeof widths.secondary === "number" ? Math.max(0, widths.secondary - 1) : undefined
+  const secondary = typeof secondaryContentWidth === "number" ? truncateDisplayCells(row.displaySegments.secondary, secondaryContentWidth) : row.displaySegments.secondary
+  box.add(rowSegment(options, padEndDisplayCells(primary, widths.primary), itemColor, bg, widths.primary, 0))
+  if (typeof widths.secondary === "number") {
+    box.add(rowSegment(options, secondary ? ` ${secondary}` : "", metadataColor, bg, widths.secondary, 1))
+  } else {
+    box.add(rowSegment(options, ` ${secondary}`, metadataColor, bg, undefined, 1))
+  }
 
   return box
 }

@@ -984,6 +984,73 @@ describe("TUI render keyboard routing", () => {
     }
   })
 
+  test("manager renderer bounds row text segments so long labels cannot expand into the preview pane", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const { controller } = createController("manager")
+      const rows = [
+        {
+          type: "folder" as const,
+          key: "long-folder",
+          filename: `${"folder-".repeat(12)}/`,
+          title: "folder-".repeat(12),
+          description: "folder description ".repeat(8),
+          relativePath: `notes/${"folder-".repeat(12)}`,
+          index: 0,
+          focused: true,
+          selected: false,
+          columns: { filename: `${"folder-".repeat(12)}/`, title: "folder-".repeat(12), description: "folder description ".repeat(8) },
+          rowStyleIntent: "folder" as const,
+        },
+        {
+          type: "note" as const,
+          key: "long-note",
+          filename: "long-note.md",
+          title: `Launch notes ${"日本語".repeat(8)} ${"alpha ".repeat(10)}`,
+          description: "description ".repeat(20),
+          relativePath: "notes/long-note.md",
+          index: 1,
+          focused: false,
+          selected: false,
+          columns: { filename: "long-note.md", title: `Launch notes ${"日本語".repeat(8)} ${"alpha ".repeat(10)}`, description: "description ".repeat(20) },
+          rowStyleIntent: "note" as const,
+        },
+      ]
+      controller.getState().manager.items = rows
+      controller.getManagerBrowserModel = () => ({
+        layout1Rows: rows,
+        preview: { type: "empty", path: null },
+        currentFolderPath: "",
+        hoveredPath: rows[0]!.relativePath,
+        focusedIndex: 0,
+        empty: false,
+        state: controller.getState().manager,
+      })
+
+      const screen = renderManagerScreen({ renderer, controller, width: 80 })
+      renderer.root.add(screen)
+      const layout1 = findById(screen, "bluenote-manager-layout-1") as { getChildren: () => any[] } | undefined
+      const renderRows = layout1?.getChildren().filter((node: any) => node.getChildren?.().length === 2) ?? []
+
+      assert.equal(renderRows.length >= 2, true)
+      for (const row of renderRows.slice(0, 2)) {
+        assert.equal((row as any)._width, "100%")
+        assert.equal(row.yogaNode?.getFlexShrink?.(), 1)
+        const [primary, secondary] = row.getChildren()
+        assert.equal((primary as any)._width, 24)
+        assert.equal((secondary as any)._width, 12)
+        assert.equal(primary.yogaNode?.getFlexShrink?.(), 0)
+        assert.equal(secondary.yogaNode?.getFlexShrink?.(), 1)
+        const primaryText = primary.content?.chunks?.[0]?.text ?? primary.content ?? ""
+        const secondaryText = secondary.content?.chunks?.[0]?.text ?? secondary.content ?? ""
+        assert.equal(primaryText.length <= 24, true, primaryText)
+        assert.equal(secondaryText.length <= 12, true, secondaryText)
+      }
+    } finally {
+      renderer.destroy()
+    }
+  })
+
   test("manager renderer removes preview pane at narrow widths and keeps browser rows routable", async () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {

@@ -441,6 +441,49 @@ describe("TUI render view models", () => {
     )
   })
 
+  test("manager row display labels clamp long folder and note text at narrow manager widths", () => {
+    const longFolderName = "folder-".repeat(12)
+    const longNoteTitle = `Launch notes ${"日本語".repeat(8)} ${"alpha ".repeat(10)}`
+    const longDescription = `Description ${"detail ".repeat(20)}`
+    const vm = buildManagerViewModel({
+      ...baseState,
+      editor: null,
+      manager: {
+        items: [
+          {
+            type: "folder",
+            key: "notes/long-folder",
+            filename: `${longFolderName}/`,
+            title: longFolderName,
+            description: "42 notes in this very long folder description",
+            relativePath: `notes/${longFolderName}`,
+          },
+          {
+            type: "note",
+            key: "long-note",
+            filename: `${"filename-".repeat(10)}.md`,
+            title: longNoteTitle,
+            description: longDescription,
+            relativePath: "notes/long-note.md",
+          },
+        ],
+        focusedIndex: 0,
+        selectedNoteKey: null,
+      },
+    }, undefined, { width: 80 })
+
+    assert.equal(vm.layout1.rows.length, 2)
+    for (const row of vm.layout1.rows) {
+      assert.ok(row.displaySegments.primary.endsWith("…"), row.displaySegments.primary)
+      assert.ok(row.displaySegments.primary.length <= 24, row.displaySegments.primary)
+      assert.ok(row.displaySegments.secondary.length <= 12, row.displaySegments.secondary)
+    }
+    assert.match(vm.layout1.rows[0]!.displaySegments.primary, /^folder-/u)
+    assert.match(vm.layout1.rows[1]!.displaySegments.primary, /^Launch notes/u)
+    assert.doesNotMatch(vm.layout1.rows[1]!.displaySegments.primary, /�/u)
+    assert.ok(vm.layout1.rows[1]!.displaySegments.secondary.endsWith("…"), vm.layout1.rows[1]!.displaySegments.secondary)
+  })
+
   test("manager note preview exposes title, path, content lines, and focus background without open marker styling", () => {
     const browser = buildManagerBrowserModel([
       {
