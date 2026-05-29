@@ -116,8 +116,7 @@ describe("TUI Search Everything adapter", () => {
     ])
 
     assert.deepEqual(buildSearchEverythingPreview(folder)?.sections, [
-      { label: "Folder", lines: ["notes/archive"] },
-      { label: "Contents", lines: ["1 note in notes/archive"] },
+      { label: "Items", lines: ["archive-review.md"] },
     ])
 
     assert.deepEqual(buildSearchEverythingPreview(command)?.sections, [
@@ -153,7 +152,31 @@ describe("TUI Search Everything adapter", () => {
       text: "notes/archive",
       highlights: [{ start: 6, end: 13 }],
     })
-    assert.deepEqual(preview?.subtitleText, { text: "1 note in notes/archive", highlights: [{ start: 16, end: 23 }] })
+    assert.deepEqual(preview?.subtitleText, { text: "Folder contents" })
+  })
+
+  test("folder preview lists immediate child folders and files without metadata rows", () => {
+    const deps: SearchEverythingDependencies = {
+      noteSummaries: [
+        { key: "brief", title: "Brief", description: "", relativePath: "notes/projects/client/brief.md" },
+        { key: "todo", title: "Todo", description: "", relativePath: "notes/projects/client/todo.md" },
+        { key: "research-note", title: "Research", description: "", relativePath: "notes/projects/client/research/note.md" },
+        { key: "roadmap", title: "Roadmap", description: "", relativePath: "notes/projects/roadmap.md" },
+      ],
+      searchNotes: () => [],
+    }
+    const folder = buildSearchEverythingResults("client", deps).find((result) => result.kind === "folder" && result.path === "notes/projects/client")
+    const preview = buildSearchEverythingPreview(folder, "client")
+
+    assert.equal(preview?.title, "notes/projects/client")
+    assert.deepEqual(preview?.titleText, {
+      text: "notes/projects/client",
+      highlights: [{ start: 15, end: 21 }],
+    })
+    assert.deepEqual(preview?.lines, ["research", "brief.md", "todo.md"])
+    assert.deepEqual(preview?.sections, [{ label: "Items", lines: ["research", "brief.md", "todo.md"] }])
+    assert.equal(preview?.sections.some((section) => ["Folder", "Contents", "Path"].includes(section.label)), false)
+    assert.equal(preview?.lines.some((line) => /\bnote(?:s)?\b in notes\/projects\/client|notes\/projects\/client/u.test(line)), false)
   })
 
   test("file preview title combines note title and filename and highlights both", () => {
@@ -276,6 +299,7 @@ describe("TUI Search Everything adapter", () => {
       detail: "1 note in notes/archive",
       score: folder?.score,
       noteCount: 1,
+      previewLines: ["archive-review.md"],
     })
   })
 

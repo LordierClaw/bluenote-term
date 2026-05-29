@@ -1218,6 +1218,45 @@ describe("TUI render view models", () => {
     assert.equal(typingVm.emptyState?.title, "No matches yet")
   })
 
+  test("Search Everything folder preview view model carries item-only contents and title highlights", () => {
+    const results: SearchEverythingResult[] = [
+      {
+        kind: "folder",
+        typeLabel: "folder",
+        typeIcon: "folder",
+        id: "folder:notes/projects/client",
+        path: "notes/projects/client",
+        name: "client",
+        noteCount: 3,
+        previewLines: ["research", "brief.md", "todo.md"],
+        label: "client/",
+        detail: "3 notes in notes/projects/client",
+        score: 100,
+      },
+    ]
+    const vm = buildSearchEverythingViewModel(
+      {
+        ...baseState,
+        screen: "search",
+        search: { query: "client", selectedIndex: 0, previousScreen: "manager" },
+      },
+      results,
+    )
+
+    assert.equal(vm.preview?.visible, true)
+    if (vm.preview?.visible) {
+      assert.equal(vm.preview.title, "notes/projects/client")
+      assert.deepEqual(vm.preview.titleText, {
+        text: "notes/projects/client",
+        highlights: [{ start: 15, end: 21 }],
+      })
+      assert.equal(vm.preview.subtitle, "Folder contents")
+      assert.deepEqual(vm.preview.lines, ["research", "brief.md", "todo.md"])
+      assert.deepEqual(vm.preview.sections, [{ label: "Items", lines: ["research", "brief.md", "todo.md"] }])
+      assert.doesNotMatch(JSON.stringify(vm.preview.sections), /notes\/projects\/client|\bnotes?\b in/u)
+    }
+  })
+
   test("Search Everything slash commands expose compact semantic risk and availability tags", () => {
     const commands: SearchEverythingResult[] = [
       { kind: "command", id: "command:/save", typeLabel: "command", typeIcon: "command", label: "/save", detail: "Save the active editor buffer", score: 100, name: "/save", description: "Save the active editor buffer", usage: "/save", shortcut: "Ctrl+S" },

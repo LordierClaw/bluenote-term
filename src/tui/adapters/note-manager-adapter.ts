@@ -294,6 +294,39 @@ function folderPreview(items: readonly ManagerItem[], folderPath: string, select
   }
 }
 
+function compactFolderPreviewLabel(row: ManagerBrowserRow): string {
+  if (row.type === "folder") {
+    return row.title || filenameFor(row.relativePath) || row.filename.replace(/\/+$/u, "")
+  }
+
+  return row.filename || row.title || row.key
+}
+
+export function buildManagerFolderPreviewRows(
+  noteSummaries: readonly NoteManagerSummary[],
+  folderPath: string,
+  selectedNoteKey: string | null = null,
+): ManagerBrowserRow[] {
+  const items = allBrowserItems(noteSummaries)
+  const previewItems = immediateRowsForFolder(items, folderPath)
+
+  return browserRowsFor(previewItems, null, selectedNoteKey)
+}
+
+export function buildManagerFolderPreviewLines(
+  noteSummaries: readonly NoteManagerSummary[],
+  folderPath: string,
+  maxLines = 8,
+): string[] {
+  const rows = buildManagerFolderPreviewRows(noteSummaries, folderPath)
+  const lineLimit = Math.max(0, Math.trunc(maxLines))
+  const visibleRows = lineLimit > 0 ? rows.slice(0, lineLimit) : []
+  const lines = visibleRows.map(compactFolderPreviewLabel)
+  const hiddenCount = rows.length - visibleRows.length
+
+  return hiddenCount > 0 ? [...lines, `… ${hiddenCount} more`] : lines
+}
+
 function selectedNoteKeyFor(items: ManagerItem[], focusedIndex: number): string | null {
   const focused = items[focusedIndex]
   return focused?.type === "note" ? focused.key : null

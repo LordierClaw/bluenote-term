@@ -1,6 +1,6 @@
 import type { SearchNoteMatch } from "../../core/search-notes"
 import { collectContainsFieldMatches, scoreContainsMatch } from "../../search/contains-match"
-import type { NoteManagerSummary } from "./note-manager-adapter"
+import { buildManagerFolderPreviewLines, type NoteManagerSummary } from "./note-manager-adapter"
 import type { SearchEverythingState, TuiScreen } from "../state"
 
 export type SearchEverythingResultKind = "note" | "content" | "folder" | "command"
@@ -53,6 +53,7 @@ export interface SearchEverythingFolderResult extends SearchEverythingBaseResult
   path: string
   name: string
   noteCount: number
+  previewLines?: string[]
 }
 
 export interface SearchEverythingCommandResult extends SearchEverythingBaseResult, TuiCommandDefinition {
@@ -331,6 +332,7 @@ function collectFolders(noteSummaries: readonly NoteManagerSummary[]): SearchEve
       detail: `${noteCount} ${noteCount === 1 ? "note" : "notes"} in ${path}`,
       score: 0,
       noteCount,
+      previewLines: buildManagerFolderPreviewLines(noteSummaries, path),
     }
   })
 }
@@ -526,13 +528,13 @@ export function buildSearchEverythingPreview(result: SearchEverythingResult | nu
   }
 
   if (result.kind === "folder") {
+    const lines = result.previewLines && result.previewLines.length > 0 ? result.previewLines : []
     return withHighlightedPreviewText({
       title: result.path,
-      subtitle: result.detail,
-      lines: [result.detail],
+      subtitle: "Folder contents",
+      lines,
       sections: [
-        { label: "Folder", lines: [result.path] },
-        { label: "Contents", lines: [result.detail] },
+        { label: "Items", lines },
       ],
     }, query)
   }
