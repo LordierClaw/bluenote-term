@@ -1182,7 +1182,44 @@ describe("TUI render view models", () => {
     assert.equal(contentPreview?.visible, true)
     if (contentPreview?.visible) {
       assert.deepEqual(contentPreview.lines, ["Ship renderer screens with OpenTUI."])
-      assert.deepEqual(contentPreview.sections.map((section) => section.label), ["Match", "Excerpt"])
+      assert.deepEqual(contentPreview.sections.map((section) => section.label), ["Excerpt"])
+      assert.deepEqual(contentPreview.sectionsText, [
+        { label: "Excerpt", lines: [{ text: "Ship renderer screens with OpenTUI.", highlights: [{ start: 0, end: 4 }] }] },
+      ])
+    }
+  })
+
+  test("Search Everything preview view model highlights centered content excerpts", () => {
+    const results: SearchEverythingResult[] = [
+      {
+        kind: "content",
+        typeLabel: "content",
+        typeIcon: "content",
+        id: "content:daily-plan:deep",
+        key: "daily-plan",
+        title: "Daily Plan",
+        relativePath: "notes/inbox/daily-plan.md",
+        matchIndex: 0,
+        matchLabel: "body line 30",
+        excerpt: "...release checklist identifies launch blockers before handoff...",
+        label: "Daily Plan",
+        detail: "body line 30 — notes/inbox/daily-plan.md",
+        score: 100,
+      },
+    ]
+    const vm = buildSearchEverythingViewModel({ ...baseState, screen: "search", search: { query: "launch blockers", selectedIndex: 0, previousScreen: "manager" } }, results)
+
+    assert.equal(vm.preview?.visible, true)
+    if (vm.preview?.visible) {
+      assert.deepEqual(vm.preview.sections, [
+        { label: "Excerpt", lines: ["...release checklist identifies launch blockers before handoff..."] },
+      ])
+      assert.deepEqual(vm.preview.sectionsText, [
+        { label: "Excerpt", lines: [{ text: "...release checklist identifies launch blockers before handoff...", highlights: [{ start: 32, end: 47 }] }] },
+      ])
+      const rendered = renderPreviewText(vm.preview.sectionsText![0]!.lines[0]!, "mutedText")
+      const chunks = typeof rendered === "string" ? [{ text: rendered }] : rendered.chunks
+      assert.deepEqual(chunks.map((chunk: { text?: string }) => chunk.text), ["...release checklist identifies ", "launch blockers", " before handoff..."])
     }
   })
 

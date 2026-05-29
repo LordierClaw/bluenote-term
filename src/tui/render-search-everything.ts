@@ -456,6 +456,9 @@ export function renderSearchEverythingScreen(options: RenderSearchEverythingScre
     previewRegion.add(new TextRenderable(options.renderer, { content: prefixedPreviewText("Preview · ", vm.preview.titleText ?? vm.preview.title, "textSecondary"), height: 1, fg: tuiTheme.textSecondary }))
     previewRegion.add(new TextRenderable(options.renderer, { content: renderPreviewText(vm.preview.subtitleText ?? vm.preview.subtitle, "mutedText"), height: 1, fg: tuiTheme.mutedText }))
     for (const [sectionIndex, section] of vm.preview.sections.entries()) {
+      if (section.lines.length === 0) {
+        continue
+      }
       previewRegion.add(new TextRenderable(options.renderer, { content: section.label, height: 1, fg: tuiTheme.textPrimary }))
       const richLines = vm.preview.sectionsText?.[sectionIndex]?.lines
       for (const [lineIndex, line] of section.lines.entries()) {

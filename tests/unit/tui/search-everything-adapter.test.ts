@@ -111,7 +111,6 @@ describe("TUI Search Everything adapter", () => {
     assert.deepEqual(buildSearchEverythingPreview(note)?.lines, ["Today priorities and project focus."])
 
     assert.deepEqual(buildSearchEverythingPreview(content)?.sections, [
-      { label: "Match", lines: ["content line 7"] },
       { label: "Excerpt", lines: ["...Launch blockers: legal review and design QA..."] },
     ])
 
@@ -204,6 +203,88 @@ describe("TUI Search Everything adapter", () => {
       text: "Daily Plan · daily-plan.md",
       highlights: [{ start: 6, end: 10 }, { start: 19, end: 23 }],
     })
+  })
+
+  test("content preview centers a deep body match and highlights query text in context", () => {
+    const deepBody = [
+      "# Launch Notes",
+      "Introductory material that should stay out of a deep search preview.",
+      "Architecture notes and setup details.",
+      "Operational checklist and release owners.",
+      "The legal review creates launch blockers for the client rollout this week.",
+      "Follow-up actions after the launch blocker is cleared.",
+    ].join("\n")
+    const deps: SearchEverythingDependencies = {
+      noteSummaries: noteSummaries.map((summary) => summary.key === "project-brief" ? { ...summary, body: deepBody } : summary),
+      searchNotes: () => [
+        {
+          key: "project-brief",
+          title: "Client Launch Brief",
+          relativePath: "notes/projects/client/brief.md",
+          match: {
+            source: "content",
+            label: "content line 5",
+            excerpt: "...launch blockers...",
+          },
+        },
+      ],
+    }
+
+    const content = buildSearchEverythingResults("launch blockers", deps).find((result) => result.kind === "content")
+    const preview = buildSearchEverythingPreview(content, "launch blockers")
+    const line = preview?.lines[0] ?? ""
+    const matchStart = line.toLowerCase().indexOf("launch blockers")
+
+    assert.equal(preview?.title, "Client Launch Brief")
+    assert.equal(preview?.lines.length, 1)
+    assert.match(line, /legal review creates launch blockers for the client rollout/u)
+    assert.doesNotMatch(line, /Introductory material|Architecture notes/u)
+    assert.deepEqual(preview?.sections, [{ label: "Excerpt", lines: [line] }])
+    assert.deepEqual(preview?.sectionsText, [
+      {
+        label: "Excerpt",
+        lines: [
+          {
+            text: line,
+            highlights: [{ start: matchStart, end: matchStart + "launch blockers".length }],
+          },
+        ],
+      },
+    ])
+  })
+
+  test("content preview uses supplied excerpt when no full body is available and omits match metadata rows", () => {
+    const content = buildSearchEverythingResults("launch blockers", createDeps()).find((result) => result.kind === "content")
+    const preview = buildSearchEverythingPreview(content, "launch blockers")
+
+    assert.deepEqual(preview?.lines, ["...Launch blockers: legal review and design QA..."])
+    assert.deepEqual(preview?.sections, [
+      { label: "Excerpt", lines: ["...Launch blockers: legal review and design QA..."] },
+    ])
+    assert.equal(preview?.sections.some((section) => ["Match", "Path", "Description"].includes(section.label)), false)
+  })
+
+  test("empty file preview keeps a calm content fallback without metadata rows", () => {
+    const preview = buildSearchEverythingPreview({
+      kind: "note",
+      typeLabel: "note",
+      typeIcon: "note",
+      id: "note:empty",
+      key: "empty",
+      filename: "empty.md",
+      title: "Empty Note",
+      description: "",
+      relativePath: "notes/empty.md",
+      matchedFields: ["filename"],
+      label: "Empty Note",
+      detail: "empty.md — notes/empty.md",
+      score: 100,
+    }, "empty")
+
+    assert.equal(preview?.title, "Empty Note · empty.md")
+    assert.deepEqual(preview?.lines, [])
+    assert.deepEqual(preview?.sections, [])
+    assert.equal(JSON.stringify(preview?.sections), "[]")
   })
 
   test("highlight ranges stay aligned with original Unicode text when case folding changes length", () => {
@@ -453,7 +534,6 @@ describe("TUI Search Everything adapter", () => {
       subtitle: "content line 7 — notes/projects/client/brief.md",
       lines: ["...Launch blockers: legal review and design QA..."],
       sections: [
-        { label: "Match", lines: ["content line 7"] },
         { label: "Excerpt", lines: ["...Launch blockers: legal review and design QA..."] },
       ],
     })

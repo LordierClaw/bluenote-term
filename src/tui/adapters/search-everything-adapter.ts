@@ -52,6 +52,7 @@ export interface SearchEverythingContentResult extends SearchEverythingBaseResul
   matchEnd?: number
   matchLabel: string
   excerpt: string
+  previewExcerpt?: string
 }
 
 export interface SearchEverythingFolderResult extends SearchEverythingBaseResult {
@@ -438,6 +439,45 @@ function contentResultId(match: SearchNoteMatch, occurrenceIndex: number, contex
   return idParts.join(":")
 }
 
+const CONTENT_PREVIEW_CONTEXT_CHARS = 140
+
+function summaryForContentMatch(match: SearchNoteMatch, noteSummaries: readonly NoteManagerSummary[]): NoteManagerSummary | undefined {
+  const relativePath = normalizePath(match.relativePath)
+  return noteSummaries.find((summary) => summary.key === match.key || normalizePath(summary.relativePath) === relativePath)
+}
+
+function centeredBodyContext(body: string | undefined, query: string, matchStart?: number, matchEnd?: number): string | undefined {
+  if (!body || body.trim().length === 0) {
+    return undefined
+  }
+
+  const bodyLength = body.length
+  const queryRange = collectCaseInsensitiveContainsRanges(body, query)[0]
+  const start = queryRange?.start ?? (matchStart !== undefined && matchStart >= 0 && matchStart < bodyLength ? matchStart : undefined)
+  const end = queryRange?.end ?? (matchEnd !== undefined && matchEnd > (start ?? -1) && matchEnd <= bodyLength ? matchEnd : undefined)
+  if (start === undefined || end === undefined) {
+    return undefined
+  }
+
+  const lineStart = body.lastIndexOf("\n", start - 1) + 1
+  const nextLineBreak = body.indexOf("\n", end)
+  const lineEnd = nextLineBreak === -1 ? bodyLength : nextLineBreak
+  const matchedLine = body.slice(lineStart, lineEnd).trim()
+  if (matchedLine.length > 0 && matchedLine.length <= CONTENT_PREVIEW_CONTEXT_CHARS) {
+    return matchedLine
+  }
+
+  const desiredStart = Math.max(0, start - Math.floor((CONTENT_PREVIEW_CONTEXT_CHARS - (end - start)) / 2))
+  const desiredEnd = Math.min(bodyLength, desiredStart + CONTENT_PREVIEW_CONTEXT_CHARS)
+  const contextStart = Math.max(0, Math.min(desiredStart, Math.max(0, desiredEnd - CONTENT_PREVIEW_CONTEXT_CHARS)))
+  const rawContext = body.slice(contextStart, desiredEnd).replace(/\s+/gu, " ").trim()
+  if (rawContext.length === 0) {
+    return undefined
+  }
+
+  return `${contextStart > 0 ? "..." : ""}${rawContext}${desiredEnd < bodyLength ? "..." : ""}`
+}
+
 function buildContentResults(query: string, deps: SearchEverythingDependencies): SearchEverythingContentResult[] {
   if (query.trim().length === 0) {
     return []
@@ -452,6 +492,8 @@ function buildContentResults(query: string, deps: SearchEverythingDependencies):
       const offset = finiteInteger(context.offset) ?? finiteInteger(context.start)
       const matchStart = finiteInteger(context.start)
       const matchEnd = finiteInteger(context.end)
+      const summary = summaryForContentMatch(match, deps.noteSummaries)
+      const previewExcerpt = centeredBodyContext(summary?.body, query, matchStart, matchEnd)
 
       return {
         kind: "content",
@@ -471,6 +513,7 @@ function buildContentResults(query: string, deps: SearchEverythingDependencies):
         ...(matchEnd !== undefined ? { matchEnd } : {}),
         matchLabel: match.match.label,
         excerpt: match.match.excerpt ?? match.match.label,
+        ...(previewExcerpt ? { previewExcerpt } : {}),
       }
     })
 }
@@ -588,14 +631,13 @@ export function buildSearchEverythingPreview(result: SearchEverythingResult | nu
   }
 
   if (result.kind === "content") {
+    const excerpt = result.previewExcerpt ?? result.excerpt
+    const excerptLines = excerpt.trim().length > 0 ? [excerpt] : []
     return withHighlightedPreviewText({
       title: result.title,
       subtitle: `${result.matchLabel} — ${result.relativePath}`,
-      lines: [result.excerpt],
-      sections: [
-        { label: "Match", lines: [result.matchLabel] },
-        { label: "Excerpt", lines: [result.excerpt] },
-      ],
+      lines: excerptLines,
+      sections: excerptLines.length > 0 ? [{ label: "Excerpt", lines: excerptLines }] : [],
     }, query)
   }
 
@@ -611,13 +653,12 @@ export function buildSearchEverythingPreview(result: SearchEverythingResult | nu
     }, query)
   }
 
+  const noteLines = result.description.trim().length > 0 ? [result.description] : []
   return withHighlightedPreviewText({
     title: `${result.title} · ${result.filename}`,
     subtitle: result.relativePath,
-    lines: [result.description],
-    sections: [
-      { label: "Summary", lines: [result.description] },
-    ],
+    lines: noteLines,
+    sections: noteLines.length > 0 ? [{ label: "Summary", lines: noteLines }] : [],
   }, query)
 }
 
