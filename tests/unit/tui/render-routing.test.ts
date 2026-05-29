@@ -615,12 +615,12 @@ describe("TUI render keyboard routing", () => {
         "bluenote-editor-topbar-title",
         "bluenote-editor-topbar-separator-path",
         "bluenote-editor-topbar-path",
+        "bluenote-editor-topbar-separator-wrap",
+        "bluenote-editor-topbar-wrap",
         "bluenote-editor-topbar-spacer",
         "bluenote-editor-topbar-separator-updated",
         "bluenote-editor-topbar-updated",
         "bluenote-editor-topbar-separator-status",
-        "bluenote-editor-topbar-wrap",
-        "bluenote-editor-topbar-separator-save",
         "bluenote-editor-topbar-save-status",
       ])
       assert.equal(path?.content?.chunks?.[0]?.text ?? path?.content, "notes/inbox/daily.md")
