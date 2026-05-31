@@ -18,7 +18,6 @@ BlueNote keeps note bodies as plain `.md` files under `notes/`. App metadata liv
 - Bun 1.3 or newer
 - Node.js 20 or newer for shared TypeScript/runtime compatibility
 - A terminal with standard keyboard input
-- `tmux` only if you want to run the interactive smoke test
 
 ## Install from source
 
