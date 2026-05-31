@@ -164,8 +164,8 @@ test("migrateLegacyStorage converts legacy frontmatter notes into plain notes, s
 
     const inboxKey = createNoteKey("Alpha Launch Plan", { randomSource: () => 0x12345678 })
     const archiveKey = createNoteKey("Archived Rollback Checklist", { randomSource: () => 0x12345678 })
-    const migratedInboxRelativePath = path.join("notes", "inbox", `${inboxKey}.md`)
-    const migratedArchiveRelativePath = path.join("notes", "archive", `${archiveKey}.md`)
+    const migratedInboxRelativePath = `notes/inbox/${inboxKey}.md`
+    const migratedArchiveRelativePath = `notes/archive/${archiveKey}.md`
 
     assert.equal(migrated.status, "migrated")
     assert.equal(migrated.migratedNoteCount, 2)
@@ -277,7 +277,7 @@ test("migrateLegacyStorage removes partial derived indexes and restores legacy n
   const rootPath = await createRoot("bluenote-migration-rollback-")
   const randomSource = () => 0.1234
   const legacyKey = createNoteKey("Rollback Recovery Note", { randomSource })
-  const migratedRelativePath = path.join("notes", "inbox", `${legacyKey}.md`)
+  const migratedRelativePath = `notes/inbox/${legacyKey}.md`
   const legacyRelativePath = "notes/inbox/legacy-rollback-uuid.md"
   const legacyPath = path.join(rootPath, legacyRelativePath)
   const migratedPath = path.join(rootPath, migratedRelativePath)

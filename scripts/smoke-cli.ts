@@ -5,6 +5,8 @@ import { mkdtemp, readFile, rm, stat, access } from "node:fs/promises"
 
 import { assertManagedRootLayout, runBinCli } from "../tests/helpers/cli"
 
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+
 const managedRoot = process.env.BLUENOTE_ROOT ?? (await mkdtemp(path.join(os.tmpdir(), "bluenote-smoke-cli-")))
 const shouldCleanup = process.env.BLUENOTE_ROOT === undefined
 
@@ -19,7 +21,7 @@ try {
   const initResult = runBinCli(["init"], { rootPath: managedRoot })
   assert.equal(initResult.exitCode, 0)
   assert.equal(initResult.stderr, "")
-  assert.match(initResult.stdout, new RegExp(`Initialized BlueNote root: ${managedRoot.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}`))
+  assert.match(initResult.stdout, new RegExp(`Initialized BlueNote root: ${escapeRegExp(managedRoot)}`))
 
   await assertManagedRootLayout(managedRoot)
 

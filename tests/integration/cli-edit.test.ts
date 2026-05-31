@@ -141,7 +141,7 @@ test("bn edit renames the note key, file, and sidecar when the markdown heading 
     assert.ok(renamedKeyMatch)
 
     const newKey = renamedKeyMatch[1]
-    const newRelativePath = path.join("notes", "inbox", `${newKey}.md`)
+    const newRelativePath = `notes/inbox/${newKey}.md`
 
     await assert.rejects(() => access(path.join(harness.rootPath, relativePath)))
     await assert.rejects(() => access(path.join(harness.rootPath, ".data", "notes", "original-note.json")))
