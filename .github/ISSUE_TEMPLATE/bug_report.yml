@@ -1,0 +1,84 @@
+name: Bug report
+description: Report a reproducible problem with the BlueNote CLI or terminal UI.
+title: "bug: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve BlueNote. Please do not include private note content; use a small synthetic example when possible.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: Briefly describe the problem.
+      placeholder: BlueNote fails when...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Where did you notice the issue?
+      options:
+        - CLI
+        - Terminal UI - Manager
+        - Terminal UI - Editor
+        - Terminal UI - Search Everything
+        - Storage or indexing
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Provide the smallest set of commands or TUI actions that reproduces the problem.
+      placeholder: |
+        1. Run `bn init`
+        2. Run `bn new --title "Example"`
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead? Include relevant output, logs, or screenshots.
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Please include versions and terminal details.
+      value: |
+        - OS:
+        - Terminal:
+        - Bun version (`bun --version`):
+        - Node.js version (`node --version`):
+        - BlueNote command or TUI screen:
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Add anything else that may help. Avoid private note content.
+    validations:
+      required: false

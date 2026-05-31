@@ -1,0 +1,1139 @@
+import { describe, test, beforeEach, afterEach } from "bun:test"
+import assert from "node:assert/strict"
+import os from "node:os"
+import path from "node:path"
+import { mkdtemp, rm, readFile, access, readdir, writeFile, mkdir } from "node:fs/promises"
+
+import { createNote } from "../../src/core/create-note"
+import { initRoot } from "../../src/core/init-root"
+import { listNotes } from "../../src/core/list-notes"
+import { rebuildIndexes } from "../../src/core/rebuild-indexes"
+import { showNote } from "../../src/core/show-note"
+import { buildSearchEverythingPreview, type SearchEverythingContentResult } from "../../src/tui/adapters/search-everything-adapter"
+import { createDefaultWorkspaceController, createDesktopClipboardModel, routeWorkspaceKey } from "../../src/tui/app"
+import { buildEditorViewModel } from "../../src/tui/render-editor"
+import { routeManagerKey } from "../../src/tui/render-manager"
+import { createWorkspaceController, type WorkspaceCommandContext } from "../../src/tui/workspace-controller"
+import { ATOMIC_NOTE_WRITER_TEMP_PREFIX } from "../../src/storage/atomic-note-writer"
+import { getStateTmpPath } from "../../src/storage/root-layout"
+
+function fixedClock(iso: string) {
+  return { now: () => new Date(iso) }
+}
+
+type DefaultWorkspaceController = ReturnType<typeof createDefaultWorkspaceController>
+
+function openManagerNoteByKey(controller: DefaultWorkspaceController, key: string): void {
+  const rootFolderIndex = controller
+    .getState()
+    .manager.items.findIndex((item) => item.type === "folder" && item.relativePath === "notes/inbox")
+
+  assert.notEqual(rootFolderIndex, -1)
+  controller.focusManagerItem(rootFolderIndex)
+  assert.equal(controller.openFocusedManagerItem().blocked, false)
+  assert.equal(controller.getState().screen, "manager")
+  assert.equal(controller.getState().manager.currentFolderPath, "notes/inbox")
+
+  const noteIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === key)
+  assert.notEqual(noteIndex, -1)
+  controller.focusManagerItem(noteIndex)
+  assert.equal(controller.openFocusedManagerItem().blocked, false)
+}
+
+async function countNoteSidecars(rootPath: string): Promise<number> {
+  const entries = await readdir(path.join(rootPath, ".data", "notes"), { withFileTypes: true })
+  return entries.filter((entry) => entry.isFile() && entry.name.endsWith(".json")).length
+}
+
+async function waitForAutosave(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 900))
+}
+
+function openManagerFolderPath(controller: DefaultWorkspaceController, folderPath: string): void {
+  const directFolderIndex = controller.getState().manager.items.findIndex((item) => item.type === "folder" && item.relativePath === folderPath)
+  if (directFolderIndex !== -1) {
+    controller.focusManagerItem(directFolderIndex)
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    return
+  }
+
+  const parts = folderPath.split("/").filter(Boolean)
+  let prefix = ""
+
+  for (const part of parts) {
+    prefix = prefix ? `${prefix}/${part}` : part
+    const folderIndex = controller.getState().manager.items.findIndex((item) => item.type === "folder" && item.relativePath === prefix)
+    assert.notEqual(folderIndex, -1, `missing manager folder ${prefix}`)
+    controller.focusManagerItem(folderIndex)
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+  }
+}
+
+describe("TUI workspace workflows", () => {
+  let rootPath: string
+
+  beforeEach(async () => {
+    rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-tui-workflow-"))
+    initRoot({ override: rootPath })
+  })
+
+  afterEach(async () => {
+    await rm(rootPath, { recursive: true, force: true })
+  })
+
+  test("loads manager rows after creating derived indexes for a freshly initialized root", async () => {
+    const freshRootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-tui-fresh-root-"))
+
+    try {
+      initRoot({ override: freshRootPath })
+
+      const controller = createDefaultWorkspaceController({ rootPath: freshRootPath })
+
+      assert.equal(controller.getState().screen, "manager")
+      assert.deepEqual(
+        controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`),
+        ["folder:notes/archive", "folder:notes/inbox", "folder:notes/journal"],
+      )
+    } finally {
+      await rm(freshRootPath, { recursive: true, force: true })
+    }
+  })
+
+  test("manager shows filesystem-seeded empty user folders while hiding internal note folders", async () => {
+    await mkdir(path.join(rootPath, "notes", "projects", "empty-client"), { recursive: true })
+    await mkdir(path.join(rootPath, "notes", ".data", "shadow"), { recursive: true })
+    await mkdir(path.join(rootPath, "notes", ".cache", "scratch"), { recursive: true })
+    await mkdir(path.join(rootPath, "notes", "projects", ".hidden-child"), { recursive: true })
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    assert.deepEqual(
+      controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`),
+      [
+        "folder:notes/archive",
+        "folder:notes/inbox",
+        "folder:notes/journal",
+        "folder:notes/projects",
+      ],
+    )
+
+    openManagerFolderPath(controller, "notes/projects")
+    assert.deepEqual(controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`), [
+      "folder:notes/projects/empty-client",
+    ])
+
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    assert.equal(controller.getState().manager.currentFolderPath, "notes/projects/empty-client")
+    assert.equal(controller.getManagerBrowserModel().empty, true)
+  })
+
+  test("manager filter navigation routes to rows filtered by visible filename and opens the focused note", () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Alpha Filter Target",
+      body: "alpha body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    const second = createNote({
+      override: rootPath,
+      title: "Beta Filter Target",
+      body: "beta body",
+      clock: fixedClock("2026-05-26T10:01:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createDefaultWorkspaceController({ rootPath })
+    openManagerFolderPath(controller, path.dirname(first.relativePath))
+    assert.equal(path.dirname(second.relativePath), path.dirname(first.relativePath))
+
+    controller.openManagerFilter()
+    for (const key of "filter-target") {
+      assert.equal(routeManagerKey(key, controller), true)
+    }
+    assert.deepEqual(controller.getState().manager.items.map((item) => item.key), [first.key, second.key])
+
+    assert.equal(routeManagerKey("\u001b[B", controller), true)
+    assert.equal(controller.getState().manager.focusedIndex, 1)
+    assert.equal(routeManagerKey("\u001b[C", controller), true)
+
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, second.key)
+
+    assert.equal(controller.showManager().blocked, false)
+    controller.openManagerFilter()
+    controller.updateManagerFilter("beta-filter")
+    assert.equal(routeManagerKey("\u001b[D", controller), true)
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().manager.filterQuery, "")
+  })
+
+  test("TUI controller bootstrap removes only stale BlueNote atomic writer temps", async () => {
+    const tempPath = getStateTmpPath(rootPath)
+    const staleWriterTemp = path.join(tempPath, `${ATOMIC_NOTE_WRITER_TEMP_PREFIX}tui-stale.tmp`)
+    const unrelatedTemp = path.join(tempPath, "editor-swap.tmp")
+    const normalNote = createNote({
+      override: rootPath,
+      title: "Normal Note",
+      body: "normal note body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+
+    await writeFile(staleWriterTemp, "stale temp", "utf8")
+    await writeFile(unrelatedTemp, "unrelated temp", "utf8")
+
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    assert.equal(controller.getState().screen, "manager")
+    await assert.rejects(() => access(staleWriterTemp))
+    assert.equal(await readFile(unrelatedTemp, "utf8"), "unrelated temp")
+    assert.equal(await readFile(path.join(rootPath, normalNote.relativePath), "utf8"), "normal note body")
+  })
+
+  test("TUI controller bootstrap surfaces atomic temp cleanup failures", () => {
+    assert.throws(
+      () => createDefaultWorkspaceController({
+        rootPath,
+        cleanupStaleAtomicTemps: () => {
+          throw new Error("injected cleanup failure")
+        },
+      }),
+      /injected cleanup failure/,
+    )
+  })
+
+  test("loads manager rows, opens a note, edits body, saves, and persists the plain note file", async () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Daily Ideas",
+      body: "Initial body with café",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    createNote({
+      override: rootPath,
+      title: "Second Note",
+      body: "Another note",
+      clock: fixedClock("2026-05-26T10:01:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerNoteByKey(controller, first.key)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.body, "Initial body with café")
+
+    const changedBody = "Updated TUI body ✨\n続きの行"
+    controller.updateEditorBody(changedBody)
+    assert.equal(controller.getState().editor?.dirty, true)
+
+    assert.equal(controller.runCommand("/save").blocked, false)
+
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(showNote({ override: rootPath, selector: first.key }).body, changedBody)
+    assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), changedBody)
+  })
+
+  test("unwrapped long-line navigation pans cursor logically and saves exact note body", async () => {
+    const longLine = "0123456789abcdefghijklmnopqrstuvwxyz日本語"
+    const note = createNote({
+      override: rootPath,
+      title: "Long Line",
+      body: longLine,
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerNoteByKey(controller, note.key)
+    const route = (sequence: string) => routeWorkspaceKey(sequence, controller, () => {})
+    assert.equal(route("\u001bz").handled, true)
+    assert.equal(controller.getState().editor?.wrapMode, "none")
+    assert.equal(route("\u001b[H").handled, true)
+    for (let index = 0; index < 18; index += 1) {
+      assert.equal(route("\u001b[C").handled, true)
+    }
+    assert.equal(controller.getState().editor?.cursorOffset, 18)
+    assert.equal(route("\u001b[D").handled, true)
+    assert.equal(controller.getState().editor?.cursorOffset, 17)
+    assert.equal(route("\u001b[F").handled, true)
+    assert.equal(controller.getState().editor?.cursorOffset, Array.from(longLine).length)
+    assert.equal(route("\u001bz").handled, true)
+    assert.equal(controller.getState().editor?.wrapMode, "word")
+
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+    assert.equal(await readFile(path.join(rootPath, note.relativePath), "utf8"), longLine)
+    assert.equal(showNote({ override: rootPath, selector: note.key }).body, longLine)
+  })
+
+  test("edit-save-switch-quit workflow persists both edited files", async () => {
+    const alphaSummary = createNote({
+      override: rootPath,
+      title: "Alpha Summary",
+      body: "summary",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    const alphaSource = createNote({
+      override: rootPath,
+      title: "Alpha Source",
+      body: "source",
+      clock: fixedClock("2026-05-26T10:01:00.000Z"),
+    })
+    const beta = createNote({
+      override: rootPath,
+      title: "Beta",
+      body: "beta",
+      clock: fixedClock("2026-05-26T10:02:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerFolderPath(controller, path.dirname(alphaSummary.relativePath))
+    controller.openManagerFilter()
+    controller.updateManagerFilter("Alpha Summary")
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "note" && item.key === alphaSummary.key), true)
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    assert.equal(controller.getState().editor?.note.key, alphaSummary.key)
+    controller.insertEditorText(" saved")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+
+    assert.equal(controller.goBack().blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    controller.openManagerFilter()
+    controller.updateManagerFilter("Alpha Source")
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    assert.equal(controller.getState().editor?.note.key, alphaSource.key)
+    assert.equal(controller.getState().editor?.body, "source")
+
+    assert.equal(controller.goBack().blocked, false)
+    controller.openManagerFilter()
+    controller.updateManagerFilter("Beta")
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    assert.equal(controller.getState().editor?.note.key, beta.key)
+    controller.insertEditorText(" saved")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+
+    assert.equal(controller.requestQuit().blocked, false)
+    assert.equal(await readFile(path.join(rootPath, alphaSummary.relativePath), "utf8"), "summary saved")
+    assert.equal(await readFile(path.join(rootPath, alphaSource.relativePath), "utf8"), "source")
+    assert.equal(await readFile(path.join(rootPath, beta.relativePath), "utf8"), "beta saved")
+    assert.equal(showNote({ override: rootPath, selector: alphaSummary.key }).body, "summary saved")
+    assert.equal(showNote({ override: rootPath, selector: beta.key }).body, "beta saved")
+  })
+
+  test("editor Mode A clipboard uses terminal paste plus /copy-all and /replace-all", async () => {
+    const note = createNote({
+      override: rootPath,
+      title: "Clipboard Flow",
+      body: "Alpha Beta Gamma",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    let clipboardText = ""
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clipboard: {
+        name: "test desktop clipboard",
+        canRead: true,
+        canWrite: true,
+        readText: () => clipboardText,
+        writeText: (text) => {
+          clipboardText = text
+        },
+      },
+    })
+
+    openManagerNoteByKey(controller, note.key)
+    const editorShortcuts = buildEditorViewModel(controller.getState()).bottombar.row2.shortcuts
+    assert.equal(editorShortcuts.some((shortcut) => /copy|paste|copy-all|replace-all|select all|Ctrl\+A|Alt\+A/iu.test(shortcut)), false)
+    assert.equal(editorShortcuts.some((shortcut) => /Alt\+[CX]|\[F[6-9]\]/u.test(shortcut)), false)
+
+    assert.equal(clipboardText, "")
+
+    assert.deepEqual(controller.runCommand("/copy-all"), { blocked: false })
+    assert.equal(clipboardText, "Alpha Beta Gamma")
+    assert.match(controller.getState().editor?.statusMessage ?? "", /Copied 16 chars/)
+
+    clipboardText = "Replacement from clipboard"
+    assert.deepEqual(controller.runCommand("/replace-all"), { blocked: false })
+    assert.equal(controller.getState().editor?.body, "Replacement from clipboard")
+    assert.equal(controller.getState().editor?.statusMessage, "Replaced note body with 26 chars from test desktop clipboard")
+
+    assert.deepEqual(routeWorkspaceKey("\u001b[200~ via terminal paste\u001b[201~", controller, () => {}), { handled: true })
+    assert.equal(controller.getState().editor?.body, "Replacement from via terminal paste clipboard")
+
+    await waitForAutosave()
+    assert.equal(await readFile(path.join(rootPath, note.relativePath), "utf8"), "Replacement from via terminal paste clipboard")
+  })
+
+  test("desktop clipboard adapter reads CLI paste data and falls back to OSC52 writes", () => {
+    const commands: Array<{ command: string; input?: string }> = []
+    const clipboard = createDesktopClipboardModel({
+      platform: "linux",
+      env: { WAYLAND_DISPLAY: "wayland-0" },
+      stdout: { write: (text: string) => {
+        commands.push({ command: "stdout", input: text })
+        return true
+      }, isTTY: true },
+      commandExists: (command) => command === "wl-paste",
+      run: (run) => {
+        commands.push({ command: [run.command, ...run.args].join(" "), input: run.input })
+        return run.command === "wl-paste" ? { ok: true, stdout: "External text" } : { ok: false, stdout: "" }
+      },
+    })
+
+    assert.equal(clipboard.canRead, true)
+    assert.equal(clipboard.canWrite, true)
+    assert.equal(clipboard.readText(), "External text")
+    const write = clipboard.writeText("BlueNote text")
+    assert.equal(write.category, "terminal")
+    assert.equal(commands.some((entry) => entry.command === "stdout" && entry.input?.includes("\u001b]52;c;")), true)
+  })
+
+  test("desktop clipboard adapter reports internal-only paste when no desktop CLI exists", () => {
+    const clipboard = createDesktopClipboardModel({
+      platform: "linux",
+      env: { WAYLAND_DISPLAY: "wayland-0" },
+      stdout: { write: () => true, isTTY: false },
+      enableOsc52: false,
+      commandExists: () => false,
+      run: () => ({ ok: false, stdout: "" }),
+    })
+
+    assert.equal(clipboard.canRead, true)
+    assert.equal(clipboard.canWrite, true)
+    assert.equal(clipboard.clipboardStatus().desktopReadAvailable, false)
+    assert.equal(clipboard.readText(), "")
+  })
+
+  test("desktop clipboard adapter selects cross-platform command providers without GTK fallback", () => {
+    const commands: string[] = []
+    const clipboard = createDesktopClipboardModel({
+      platform: "darwin",
+      stdout: { write: () => true },
+      commandExists: (command) => command === "python3" || command === "pbpaste" || command === "pbcopy",
+      run: (run) => {
+        commands.push([run.command, ...run.args, run.input ?? ""].join(" "))
+        if (run.command === "pbpaste") return { ok: true, stdout: "mac paste" }
+        if (run.command === "pbcopy") return { ok: true, stdout: "" }
+        return { ok: false, stdout: "" }
+      },
+    })
+
+    assert.equal(clipboard.canRead, true)
+    assert.equal(clipboard.readText(), "mac paste")
+    clipboard.writeText("mac copy")
+    assert.equal(commands.some((command) => command.startsWith("python3 ")), false)
+    assert.equal(commands.some((command) => command.startsWith("pbpaste")), true)
+    assert.equal(commands.some((command) => command.startsWith("pbcopy") && command.endsWith("mac copy")), true)
+  })
+
+  test("default TUI controller wires a desktop-capable clipboard adapter", () => {
+    const note = createNote({
+      override: rootPath,
+      title: "Default Desktop Clipboard",
+      body: "Alpha Beta Gamma",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      createClipboard: () => ({
+        name: "factory desktop clipboard",
+        canRead: true,
+        canWrite: true,
+        readText: () => "Factory paste",
+        writeText: () => undefined,
+      }),
+    })
+    openManagerNoteByKey(controller, note.key)
+
+    assert.deepEqual(controller.runCommand("/paste"), { blocked: false })
+    assert.equal(controller.getState().editor?.body, "Alpha Beta GammaFactory paste")
+    assert.equal(controller.getState().editor?.statusMessage, "Pasted 13 chars from factory desktop clipboard")
+  })
+
+  test("editor undo redo shortcuts restore body and shortcut labels are honest", () => {
+    const note = createNote({
+      override: rootPath,
+      title: "Undo Shortcut Flow",
+      body: "start",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerNoteByKey(controller, note.key)
+    const shortcutLabels = buildEditorViewModel(controller.getState()).bottombar.row2.shortcuts
+    assert.ok(shortcutLabels.includes("[Ctrl+Z] Undo"))
+    assert.ok(shortcutLabels.includes("[Ctrl+Y] Redo"))
+
+    controller.insertEditorText(" one")
+    assert.equal(controller.getState().editor?.body, "start one")
+
+    assert.deepEqual(routeWorkspaceKey("\u001a", controller, () => {}), { handled: true })
+    assert.equal(controller.getState().editor?.body, "start")
+    assert.equal(controller.getState().editor?.dirty, false)
+
+    assert.deepEqual(routeWorkspaceKey("\u0019", controller, () => {}), { handled: true })
+    assert.equal(controller.getState().editor?.body, "start one")
+    assert.equal(controller.getState().editor?.dirty, true)
+
+    assert.deepEqual(routeWorkspaceKey("\u001a", controller, () => {}), { handled: true })
+    assert.deepEqual(routeWorkspaceKey("\u001a", controller, () => {}), { handled: true })
+    assert.equal(controller.getState().editor?.body, "start")
+  })
+
+  test("editor replace shortcut highlights the active match and replacement flow autosaves to disk", async () => {
+    const note = createNote({
+      override: rootPath,
+      title: "Replace Flow",
+      body: "alpha beta alpha",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerNoteByKey(controller, note.key)
+    controller.openEditorFind()
+    controller.updateEditorFindQuery("alpha")
+    controller.goBack()
+    assert.equal(controller.getState().mode, "editor.body")
+
+    assert.deepEqual(routeWorkspaceKey("\u001b[104;5u", controller, () => {}), { handled: true })
+    assert.equal(controller.getState().editor?.findQuery, "")
+    assert.equal(controller.getState().editor?.replaceField, "find")
+    controller.updateEditorFindQuery("alpha")
+    controller.setEditorReplaceField("replacement")
+    controller.updateEditorReplacement("omega")
+
+    let state = controller.getState()
+    assert.equal(state.mode, "editor.replace")
+    assert.equal(state.editor?.findMatchCount, 2)
+    assert.deepEqual(buildEditorViewModel(state).body.activeFindRange, { start: 0, end: 5, intent: "activeItem" })
+
+    controller.replaceCurrentEditorMatch()
+    state = controller.getState()
+    assert.equal(state.editor?.body, "omega beta alpha")
+    assert.equal(state.editor?.dirty, true)
+    assert.equal(state.editor?.autosaveStatus, "pending")
+    assert.deepEqual(buildEditorViewModel(state).body.activeFindRange, { start: 11, end: 16, intent: "activeItem" })
+
+    controller.updateEditorReplacement("done")
+    controller.replaceAllEditorMatches()
+    assert.equal(controller.getState().editor?.body, "omega beta done")
+    await waitForAutosave()
+    assert.equal(await readFile(path.join(rootPath, note.relativePath), "utf8"), "omega beta done")
+  })
+
+  test("editor replace shortcut starts on find field, accepts needle Tab thread Enter, and autosaves to disk", async () => {
+    const note = createNote({
+      override: rootPath,
+      title: "Replace Focus Flow",
+      body: "alpha needle alpha",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+    const route = (sequence: string) => routeWorkspaceKey(sequence, controller, () => {})
+
+    openManagerNoteByKey(controller, note.key)
+    controller.openEditorFind()
+    controller.updateEditorFindQuery("alpha")
+    controller.goBack()
+    assert.equal(controller.getState().editor?.findQuery, "alpha")
+
+    assert.deepEqual(route("\u0012"), { handled: true })
+    assert.equal(controller.getState().mode, "editor.replace")
+    assert.equal(controller.getState().editor?.findQuery, "")
+    assert.equal(controller.getState().editor?.replaceField, "find")
+
+    for (const key of "needle") {
+      assert.deepEqual(route(key), { handled: false })
+      controller.updateEditorFindQuery(`${controller.getState().editor?.findQuery ?? ""}${key}`)
+    }
+    assert.equal(controller.getState().editor?.findQuery, "needle")
+    assert.equal(controller.getState().editor?.replacementText, "")
+    assert.equal(controller.getState().editor?.findMatchCount, 1)
+
+    assert.deepEqual(route("\t"), { handled: true })
+    assert.equal(controller.getState().editor?.replaceField, "replacement")
+    for (const key of "thread") {
+      assert.deepEqual(route(key), { handled: false })
+      controller.updateEditorReplacement(`${controller.getState().editor?.replacementText ?? ""}${key}`)
+    }
+    assert.equal(controller.getState().editor?.replacementText, "thread")
+
+    const replaceVm = buildEditorViewModel(controller.getState())
+    assert.equal(replaceVm.find?.activeField, "replacement")
+    assert.equal(replaceVm.find?.findFocused, false)
+    assert.equal(replaceVm.find?.replacementFocused, true)
+    assert.deepEqual(replaceVm.find?.shortcutHints, [
+      { text: "1/1 matches" },
+      { key: "Tab", action: "Find field" },
+      { key: "Enter", action: "Replace" },
+      { key: "Alt+Enter", action: "All" },
+      { key: "Esc", action: "Close" },
+    ])
+
+    assert.deepEqual(route("\r"), { handled: true })
+    assert.equal(controller.getState().editor?.body, "alpha thread alpha")
+    await waitForAutosave()
+    assert.equal(await readFile(path.join(rootPath, note.relativePath), "utf8"), "alpha thread alpha")
+  })
+
+  test("autosave after editor input persists and manager can switch notes without blocking", async () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Autosave Source",
+      body: "Source body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    const second = createNote({
+      override: rootPath,
+      title: "Autosave Switch Target",
+      body: "Target body",
+      clock: fixedClock("2026-05-26T10:01:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerNoteByKey(controller, first.key)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, first.key)
+
+    controller.insertEditorText(" + autosaved through controller")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+
+    await waitForAutosave()
+
+    assert.equal(controller.getState().editor?.note.key, first.key)
+    assert.equal(controller.getState().editor?.note.relativePath, first.relativePath)
+    assert.equal(controller.getState().editor?.body, "Source body + autosaved through controller")
+    assert.equal(controller.getState().editor?.savedBody, "Source body + autosaved through controller")
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+    assert.notEqual(controller.getState().editor?.autosaveStatus, "error")
+    assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), "Source body + autosaved through controller")
+
+    assert.equal(controller.goBack().blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.requestQuit().blocked, false)
+
+    const secondIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === second.key)
+    assert.notEqual(secondIndex, -1)
+    controller.focusManagerItem(secondIndex)
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, second.key)
+    assert.equal(controller.getState().editor?.body, "Target body")
+
+    assert.equal(controller.goBack().blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    const firstIndexForArrow = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === first.key)
+    assert.notEqual(firstIndexForArrow, -1)
+    controller.focusManagerItem(firstIndexForArrow)
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    controller.insertEditorText(" again")
+    await waitForAutosave()
+    assert.equal(controller.goBack().blocked, false)
+    const secondIndexForArrow = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === second.key)
+    assert.notEqual(secondIndexForArrow, -1)
+    controller.focusManagerItem(secondIndexForArrow)
+    assert.equal(routeManagerKey("\u001b[C", controller), true)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, second.key)
+  })
+
+  test("autosave keeps saved state when derived-index rebuild fails after note persistence", async () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Post Write Rebuild Failure",
+      body: "Original body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+    openManagerNoteByKey(controller, first.key)
+
+    await rm(path.join(rootPath, ".data", "metadata.sqlite"), { force: true })
+    await mkdir(path.join(rootPath, ".data", "metadata.sqlite"))
+
+    controller.insertEditorText(" autosaved despite rebuild failure")
+    await waitForAutosave()
+
+    const expectedBody = "Original body autosaved despite rebuild failure"
+    assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), expectedBody)
+    assert.equal(showNote({ override: rootPath, selector: first.key }).body, expectedBody)
+    assert.equal(controller.getState().editor?.body, expectedBody)
+    assert.equal(controller.getState().editor?.savedBody, expectedBody)
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+  })
+
+  test("dirty editor state still routes Esc, q, and Ctrl+C from manager", () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Dirty Routing Source",
+      body: "Source body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+    openManagerNoteByKey(controller, first.key)
+    controller.insertEditorText(" unsaved")
+
+    assert.deepEqual(routeWorkspaceKey("\u001b", controller, () => assert.fail("Esc must not exit")), { handled: true })
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().editor?.dirty, true)
+
+    let exitCount = 0
+    assert.deepEqual(routeWorkspaceKey("q", controller, () => { exitCount += 1 }), { handled: true, exit: undefined })
+    assert.equal(exitCount, 0)
+    assert.equal(controller.getState().screen, "manager")
+
+    assert.deepEqual(routeWorkspaceKey("\u0003", controller, () => { exitCount += 1 }), { handled: true, exit: undefined })
+    assert.equal(exitCount, 0)
+    assert.equal(controller.getState().screen, "manager")
+  })
+
+  test("dirty manager note switch is blocked with a visible status instead of reopening only the same note", () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Dirty Switch Source",
+      body: "Source body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    const second = createNote({
+      override: rootPath,
+      title: "Dirty Switch Target",
+      body: "Target body",
+      clock: fixedClock("2026-05-26T10:01:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerNoteByKey(controller, first.key)
+    controller.insertEditorText(" unsaved")
+    assert.equal(controller.goBack().blocked, false)
+
+    const sameIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === first.key)
+    assert.notEqual(sameIndex, -1)
+    controller.focusManagerItem(sameIndex)
+    assert.equal(routeManagerKey("\r", controller), true)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, first.key)
+
+    assert.equal(controller.goBack().blocked, false)
+    const secondIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === second.key)
+    assert.notEqual(secondIndex, -1)
+    controller.focusManagerItem(secondIndex)
+    assert.equal(routeManagerKey("\r", controller), true)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().editor?.note.key, first.key)
+    assert.equal(controller.getState().manager.status, "Save or discard current note first")
+
+    assert.equal(controller.openFocusedManagerItem({ confirmed: true }).blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, second.key)
+  })
+
+  test("manual save after cursor-aware editor input persists through core services", async () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Cursor Save",
+      body: "Alpha omega",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerNoteByKey(controller, first.key)
+    controller.moveEditorCursor("left")
+    controller.moveEditorCursor("left")
+    controller.moveEditorCursor("left")
+    controller.moveEditorCursor("left")
+    controller.moveEditorCursor("left")
+    controller.insertEditorText("β ")
+    controller.insertEditorText("line\n")
+
+    const changedBody = "Alpha β line\nomega"
+    assert.equal(controller.getState().editor?.body, changedBody)
+    assert.equal(controller.getState().editor?.dirty, true)
+
+    const saveResult = await controller.saveEditor()
+    assert.equal(saveResult.blocked, false)
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(showNote({ override: rootPath, selector: first.key }).body, changedBody)
+    assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), changedBody)
+  })
+
+  test("manual save refreshes search indexes for the saved note without requiring a full rebuild", async () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Incremental Save Source",
+      body: "Original searchable body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    await writeFile(path.join(rootPath, ".data", "notes", "dangling-save-validation.json"), JSON.stringify({
+      key: "dangling-save-validation",
+      title: "Dangling validation sidecar",
+      description: "This sidecar deliberately points at a missing note.",
+      relativePath: "notes/missing/dangling-save-validation.md",
+      createdAt: "2026-05-26T10:01:00.000Z",
+      updatedAt: "2026-05-26T10:01:00.000Z",
+      archivedAt: null,
+      namingVersion: 1,
+    }), "utf8")
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerNoteByKey(controller, first.key)
+    controller.updateEditorBody("Summary line without token\nSaved body contains lag regression token")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+
+    controller.openSearch("lag")
+    const savedResult = controller.getSearchResults().find((result) => (result.kind === "content" || result.kind === "note") && result.key === first.key)
+
+    assert.ok(savedResult)
+    assert.equal(showNote({ override: rootPath, selector: first.key }).body, "Summary line without token\nSaved body contains lag regression token")
+  })
+
+  test("manual save atomic pre-write failure keeps TUI editor dirty and leaves note file unchanged", async () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Atomic Failure Save",
+      body: "Original body before writer failure",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerNoteByKey(controller, first.key)
+    controller.updateEditorBody("Unsaved body after atomic failure")
+
+    const tempPath = getStateTmpPath(rootPath)
+    await rm(tempPath, { recursive: true, force: true })
+    await writeFile(tempPath, "not a temp directory", "utf8")
+
+    const saveResult = await controller.saveEditor()
+
+    assert.deepEqual(saveResult, { blocked: true, reason: "dirty-editor" })
+    assert.equal(controller.getState().editor?.body, "Unsaved body after atomic failure")
+    assert.equal(controller.getState().editor?.savedBody, "Original body before writer failure")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "error")
+    assert.equal(showNote({ override: rootPath, selector: first.key }).body, "Original body before writer failure")
+    assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), "Original body before writer failure")
+  })
+
+  test("manager create prompt creates a real plain Markdown note through core services", async () => {
+    const controller = createDefaultWorkspaceController({ rootPath, clock: fixedClock("2026-05-26T10:02:00.000Z") })
+
+    controller.openManagerCreate()
+    controller.updateManagerCreateTitle("TUI Created Note")
+    const result = await controller.submitManagerCreate()
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.title, "TUI Created Note")
+    assert.equal(controller.getState().editor?.body, "")
+
+    const created = controller.getState().editor!.note
+    const noteText = await readFile(path.join(rootPath, created.relativePath), "utf8")
+    assert.equal(noteText, "")
+    assert.doesNotMatch(noteText, /^---/)
+    await access(path.join(rootPath, ".data", "notes", `${created.key}.json`))
+    assert.equal(showNote({ override: rootPath, selector: created.key }).title, "TUI Created Note")
+    assert.equal(showNote({ override: rootPath, selector: created.key }).body, "")
+  })
+
+  test("manager create prompt stays recoverable and creates no note when hidden preview dirty guard blocks", async () => {
+    const existing = createNote({
+      override: rootPath,
+      title: "Dirty Guard Existing",
+      body: "Original guard body",
+      clock: fixedClock("2026-05-26T10:02:30.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath, clock: fixedClock("2026-05-26T10:02:31.000Z") })
+    const sidecarCountBefore = await countNoteSidecars(rootPath)
+
+    openManagerNoteByKey(controller, existing.key)
+    controller.updateEditorBody("Unsaved guard body")
+    controller.showManager()
+    controller.setManagerPreviewVisible(false)
+    controller.openManagerCreate()
+    controller.updateManagerCreateTitle("Blocked Dirty Create")
+
+    const result = await controller.submitManagerCreate()
+
+    assert.deepEqual(result, { blocked: true, reason: "dirty-editor" })
+    assert.equal(controller.getState().mode, "manager.create")
+    assert.equal(controller.getState().manager.previewVisible, false)
+    assert.equal(controller.getState().manager.createDraft?.title, "Blocked Dirty Create")
+    assert.equal(controller.getState().manager.createDraft?.status, "Save or discard current note first")
+    assert.equal(controller.getState().editor?.body, "Unsaved guard body")
+    assert.equal(await countNoteSidecars(rootPath), sidecarCountBefore)
+  })
+
+  test("manager delete confirmation removes a real note file and sidecar through core services", async () => {
+    const created = createNote({
+      override: rootPath,
+      title: "TUI Delete Target",
+      body: "Delete me",
+      clock: fixedClock("2026-05-26T10:03:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+    const notePath = path.join(rootPath, created.relativePath)
+    const sidecarPath = path.join(rootPath, ".data", "notes", `${created.key}.json`)
+
+    assert.equal(await readFile(notePath, "utf8"), "Delete me")
+    await access(sidecarPath)
+
+    openManagerNoteByKey(controller, created.key)
+    controller.showManager()
+    controller.openManagerDeleteConfirmation()
+    assert.equal(controller.getState().mode, "manager.deleteConfirm")
+
+    const result = await controller.confirmManagerDelete()
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().editor, null)
+    assert.equal(controller.getState().manager.items.some((item) => item.key === created.key), false)
+    await assert.rejects(() => access(notePath))
+    await assert.rejects(() => access(sidecarPath))
+  })
+
+  test("opens Search Everything from editor, selects a content match, and returns to editor", () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Daily Ideas",
+      body: "Needle phrase lives here",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    const second = createNote({
+      override: rootPath,
+      title: "Research Log",
+      body: "Alpha beta gamma delta epsilon quokka zeta eta theta iota",
+      clock: fixedClock("2026-05-26T10:01:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    openManagerNoteByKey(controller, first.key)
+    assert.equal(controller.getState().screen, "editor")
+
+    controller.openSearch("quokka")
+
+    assert.equal(controller.getState().screen, "search")
+    assert.equal(controller.getState().search?.previousScreen, "editor")
+
+    const contentResult = controller.getSearchResults().find((result) => result.kind === "content" && result.key === second.key)
+    assert.ok(contentResult)
+    assert.match(buildSearchEverythingPreview(contentResult)?.lines.join("\n") ?? "", /quokka/i)
+
+    assert.equal(controller.selectSearchResult(contentResult).blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, second.key)
+    assert.equal(controller.getState().editor?.body, "Alpha beta gamma delta epsilon quokka zeta eta theta iota")
+  })
+
+  test("Search Everything exposes and selects every content occurrence for the same note", () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Current Note",
+      body: "current body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    const repeated = createNote({
+      override: rootPath,
+      title: "Repeated Occurrences",
+      body: "needle on line one\nneedle on line two",
+      clock: fixedClock("2026-05-26T10:01:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createWorkspaceController({
+      listNotes: () => listNotes({ override: rootPath }),
+      showNote: (selector) => showNote({ override: rootPath, selector }),
+      searchNotes: () => [
+        {
+          key: repeated.key,
+          title: repeated.title,
+          relativePath: repeated.relativePath,
+          match: { source: "content", label: "content line 1", excerpt: "...needle on line one..." },
+        },
+        {
+          key: repeated.key,
+          title: repeated.title,
+          relativePath: repeated.relativePath,
+          match: { source: "content", label: "content line 2", excerpt: "...needle on line two..." },
+        },
+      ],
+    })
+
+    openManagerNoteByKey(controller, first.key)
+    controller.openSearch("needle")
+
+    const contentResults = controller.getSearchResults().filter((result): result is SearchEverythingContentResult => result.kind === "content" && result.key === repeated.key)
+    assert.equal(contentResults.length, 2)
+    assert.deepEqual(contentResults.map((result) => result.id), [
+      `content:${repeated.key}:content%20line%201:0`,
+      `content:${repeated.key}:content%20line%202:1`,
+    ])
+    assert.deepEqual(contentResults.map((result) => result.matchIndex), [0, 1])
+    assert.match(buildSearchEverythingPreview(contentResults[0])?.lines.join("\n") ?? "", /line one/)
+    assert.match(buildSearchEverythingPreview(contentResults[1])?.lines.join("\n") ?? "", /line two/)
+
+    assert.equal(controller.selectSearchResult(contentResults[0]).blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, repeated.key)
+
+    controller.openSearch("needle")
+    const secondResult = controller.getSearchResults().filter((result) => result.kind === "content" && result.key === repeated.key)[1]
+    assert.ok(secondResult)
+    assert.equal(controller.selectSearchResult(secondResult).blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, repeated.key)
+  })
+
+  test("Search Everything navigates deeply through many matches and Enter opens the selected visible result", () => {
+    const created = Array.from({ length: 16 }, (_, index) => createNote({
+      override: rootPath,
+      title: `Many Match ${index.toString().padStart(2, "0")}`,
+      body: `sharedtoken body ${index}`,
+      clock: fixedClock(`2026-05-26T10:${index.toString().padStart(2, "0")}:00.000Z`),
+    }))
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createDefaultWorkspaceController({ rootPath })
+    controller.openSearch("sharedtoken")
+    for (let index = 0; index < 11; index += 1) {
+      routeWorkspaceKey("\u001b[B", controller, () => {})
+    }
+
+    const selected = controller.getSearchResults()[controller.getState().search?.selectedIndex ?? 0]
+    assert.ok(selected)
+    assert.equal(controller.getState().search?.selectedIndex, 11)
+    routeWorkspaceKey("\r", controller, () => {})
+
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, (selected as { key?: string }).key)
+    assert.equal(created.some((note) => note.key === controller.getState().editor?.note.key), true)
+  })
+
+  test("Search Everything can select summary results and cancel when content search index is unavailable", () => {
+    const first = createNote({
+      override: rootPath,
+      title: "Fallback Daily",
+      body: "Body text that should not be needed for summary fallback",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    createNote({
+      override: rootPath,
+      title: "Folder Target",
+      body: "Another body",
+      clock: fixedClock("2026-05-26T10:01:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createWorkspaceController({
+      listNotes: () => listNotes({ override: rootPath }),
+      showNote: (selector) => showNote({ override: rootPath, selector }),
+      searchNotes: () => {
+        throw new Error("simulated index failure")
+      },
+    })
+
+    controller.openSearch("")
+    controller.updateSearchQuery("fallback")
+    assert.equal(controller.getState().screen, "search")
+    assert.equal(controller.getState().search?.status, "Search index unavailable; showing notes, folders, and commands only")
+
+    const noteResult = controller.getSearchResults().find((result) => result.kind === "note" && result.key === first.key)
+    assert.ok(noteResult)
+    assert.equal(controller.selectSearchResult(noteResult).blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, first.key)
+
+    controller.openSearch("")
+    controller.updateSearchQuery("inbox")
+    assert.equal(controller.getSearchResults().some((result) => result.kind === "folder" && result.path === "notes/inbox"), true)
+    controller.cancelSearch()
+    assert.equal(controller.getState().screen, "editor")
+  })
+
+  test("default Search Everything hides unusable commands and runs shown editor commands", () => {
+    createNote({
+      override: rootPath,
+      title: "Default Command Note",
+      body: "Command body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    controller.openSearch("/archive")
+    assert.equal(controller.getSearchResults().some((result) => result.kind === "command"), false)
+
+    controller.openSearch("Default Command")
+    const noteResult = controller.getSearchResults().find((result) => result.kind === "note")
+    assert.ok(noteResult)
+    assert.equal(controller.selectSearchResult(noteResult).blocked, false)
+
+    controller.openSearch("/find Command")
+    const commandResult = controller.getSearchResults().find((result) => result.kind === "command" && result.name === "/find")
+
+    assert.ok(commandResult)
+    assert.equal(controller.selectSearchResult(commandResult).blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().mode, "editor.find")
+    assert.equal(controller.getState().editor?.findQuery, "Command")
+  })
+
+  test("manager Search Everything shows applicable manager commands and runs new/delete prompts", async () => {
+    createNote({
+      override: rootPath,
+      title: "Command Note",
+      body: "Command body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath })
+
+    controller.openSearch("/")
+    assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/new"])
+
+    const newResult = controller.getSearchResults().find((result) => result.kind === "command" && result.name === "/new")
+    assert.ok(newResult)
+    assert.equal(controller.selectSearchResult(newResult).blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().mode, "manager.create")
+
+    controller.updateManagerCreateTitle("Created From Search")
+    assert.equal((await controller.submitManagerCreate()).blocked, false)
+    assert.equal(controller.getState().editor?.note.title, "Created From Search")
+
+    controller.showManager()
+    if (controller.getState().manager.currentFolderPath !== "") controller.goBack()
+    controller.openSearch("/")
+    assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/new", "/delete"])
+    const deleteResult = controller.getSearchResults().find((result) => result.kind === "command" && result.name === "/delete")
+
+    assert.ok(deleteResult)
+    assert.match(buildSearchEverythingPreview(deleteResult)?.lines.join("\n") ?? "", /^\/delete/m)
+    assert.equal(controller.selectSearchResult(deleteResult).blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().mode, "manager.deleteConfirm")
+    assert.equal((await controller.confirmManagerDelete()).blocked, false)
+    assert.equal(listNotes({ override: rootPath }).some((note) => note.title === "Created From Search"), false)
+  })
+})

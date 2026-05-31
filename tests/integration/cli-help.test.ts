@@ -1,0 +1,63 @@
+import { test } from "bun:test"
+import assert from "node:assert/strict"
+import path from "node:path"
+import { readFile } from "node:fs/promises"
+
+import { assertManagedRootLayout, createManagedRootHarness, runCli } from "../helpers/cli"
+
+const workspaceRoot = path.resolve(import.meta.dir, "../..")
+const packageJsonPath = path.join(workspaceRoot, "package.json")
+const interactiveSmokePath = path.join(workspaceRoot, "scripts/smoke-opentui-interactive.ts")
+
+test("bn --help prints the visible command surface without removed command or release-stage wording", () => {
+  const result = runCli(["--help"])
+
+  assert.equal(result.exitCode, 0)
+  assert.equal(result.stderr.toString(), "")
+
+  const output = result.stdout.toString()
+  for (const command of ["init", "new", "list", "show", "search", "edit", "archive", "delete", "rebuild", "migrate", "tui"]) {
+    assert.match(output, new RegExp(`(^|\\n)  ${command}(\\s|$)`, "m"))
+  }
+
+  assert.match(output, /tui\s+Launch the terminal UI workspace/)
+  assert.doesNotMatch(output, new RegExp("completion|Pha" + "se\\s+[0-9]", "i"))
+})
+
+test("project verification commands cover CLI plus import-only and interactive OpenTUI checks", async () => {
+  const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as {
+    scripts?: Record<string, string>
+  }
+  assert.equal(packageJson.scripts?.["smoke:cli"], "bun run ./scripts/smoke-cli.ts")
+  assert.equal(packageJson.scripts?.["smoke:opentui"], "bun run ./scripts/smoke-opentui.ts")
+  assert.equal(packageJson.scripts?.["smoke:opentui:interactive"], "bun run ./scripts/smoke-opentui-interactive.ts")
+  assert.match(packageJson.scripts?.check ?? "", /bun run smoke:opentui:interactive/)
+})
+
+test("interactive OpenTUI smoke covers live manager create and delete flows", async () => {
+  const smokeScript = await readFile(interactiveSmokePath, "utf8")
+
+  assert.match(smokeScript, /expectPaneContains\(managerPane, "BlueNote"/)
+  assert.match(smokeScript, /expectPaneExcludes\(returnedManagerPane, "BlueNote Manager"/)
+  assert.match(smokeScript, /Live Smoke Manager Note/)
+  assert.match(smokeScript, /manager create opens editor/)
+  assert.match(smokeScript, /manager delete confirmation/)
+  assert.match(smokeScript, /manager delete cancellation/)
+  assert.match(smokeScript, /expectNoteArtifactsDeleted/)
+})
+
+test("smoke-cli script exercises --help and init against a temporary root", async () => {
+  const harness = await createManagedRootHarness("bluenote-smoke-cli-")
+
+  try {
+    const result = harness.runScript("scripts/smoke-cli.ts")
+
+    assert.equal(result.exitCode, 0)
+    assert.equal(result.stderr, "")
+    assert.match(result.stdout, /CLI smoke check passed\./)
+
+    await assertManagedRootLayout(harness.rootPath)
+  } finally {
+    await harness.cleanup()
+  }
+})

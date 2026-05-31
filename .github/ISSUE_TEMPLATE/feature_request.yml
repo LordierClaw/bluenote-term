@@ -1,0 +1,68 @@
+name: Feature request
+description: Suggest an improvement to BlueNote.
+title: "feat: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement. BlueNote is currently scoped as local/offline CLI and terminal UI software for plain Markdown notes.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem should this solve?
+      placeholder: I want to...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior or workflow you would like BlueNote to support.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - CLI
+        - Terminal UI - Manager
+        - Terminal UI - Editor
+        - Terminal UI - Search Everything
+        - Storage or indexing
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      description: Please confirm how this fits BlueNote's current project scope.
+      options:
+        - label: Preserves local/offline use.
+        - label: Preserves plain Markdown note bodies under `notes/`.
+        - label: Preserves sidecar metadata under `.data/notes/`.
+        - label: Does not require accounts, hosted backends, sync services, or cloud storage.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What alternatives, workarounds, or related tools have you considered?
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Additional context
+      description: Add screenshots, examples, or related issues if helpful.
+    validations:
+      required: false

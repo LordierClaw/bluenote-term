@@ -1,0 +1,2776 @@
+import { describe, test } from "bun:test"
+import assert from "node:assert/strict"
+
+import {
+  createWorkspaceController,
+  editorRequiresDestructiveConfirmation,
+  type WorkspaceControllerDependencies,
+} from "../../../src/tui/workspace-controller"
+import { buildManagerViewModel, routeManagerKey } from "../../../src/tui/render-manager"
+import type { NoteManagerSummary } from "../../../src/tui/adapters/note-manager-adapter"
+import { buildSearchEverythingPreview, type SearchEverythingResult } from "../../../src/tui/adapters/search-everything-adapter"
+import { createInitialTuiState, type TuiNote } from "../../../src/tui/state"
+
+function createFakeScheduler() {
+  type ScheduledTask = { id: number; callback: () => void; delay: number; cleared: boolean }
+  const tasks: ScheduledTask[] = []
+  let nextId = 1
+
+  return {
+    tasks,
+    setTimeout(callback: () => void, delay: number) {
+      const task = { id: nextId++, callback, delay, cleared: false }
+      tasks.push(task)
+      return task.id
+    },
+    clearTimeout(handle: unknown) {
+      const task = tasks.find((candidate) => candidate.id === handle)
+      if (task) {
+        task.cleared = true
+      }
+    },
+    runNext() {
+      const task = tasks.find((candidate) => !candidate.cleared)
+      if (!task) {
+        throw new Error("No scheduled task to run")
+      }
+      task.cleared = true
+      task.callback()
+    },
+    activeTasks() {
+      return tasks.filter((task) => !task.cleared)
+    },
+  }
+}
+
+const noteSummaries: NoteManagerSummary[] = [
+  {
+    key: "daily-plan",
+    title: "Daily Plan",
+    description: "Today priorities.",
+    relativePath: "notes/inbox/daily-plan.md",
+    body: "Original daily body",
+  },
+  {
+    key: "archive-review",
+    title: "Archive Review",
+    description: "Old ideas.",
+    relativePath: "notes/archive/archive-review.md",
+    body: "Archive body",
+  },
+]
+
+const notesByKey: Record<string, TuiNote> = {
+  "daily-plan": {
+    key: "daily-plan",
+    title: "Daily Plan",
+    description: "Today priorities.",
+    relativePath: "notes/inbox/daily-plan.md",
+    body: "Original daily body",
+  },
+  "archive-review": {
+    key: "archive-review",
+    title: "Archive Review",
+    description: "Old ideas.",
+    relativePath: "notes/archive/archive-review.md",
+    body: "Archive body",
+  },
+}
+
+function createDeps(overrides: Partial<WorkspaceControllerDependencies> = {}) {
+  const calls: string[] = []
+  const deps: WorkspaceControllerDependencies = {
+    listNotes: () => {
+      calls.push("list")
+      return noteSummaries
+    },
+    showNote: (selector) => {
+      calls.push(`show:${selector}`)
+      return notesByKey[selector]
+    },
+    searchNotes: (query) => {
+      calls.push(`search:${query}`)
+      return []
+    },
+    commandHandlers: {
+      "/new": () => {
+        calls.push("command:/new")
+      },
+      "/archive": () => {
+        calls.push("command:/archive")
+      },
+      "/delete": () => {
+        calls.push("command:/delete")
+      },
+      "/rebuild": () => {
+        calls.push("command:/rebuild")
+      },
+    },
+    ...overrides,
+  }
+
+  return { deps, calls }
+}
+
+function commandResult(name: "/new" | "/archive" | "/delete" | "/rebuild" | "/quit" | "/find" | "/replace" | "/save"): SearchEverythingResult {
+  return {
+    kind: "command",
+    id: `command:${name}`,
+    label: name,
+    detail: `Run ${name}`,
+    score: 120,
+    name,
+    description: `Run ${name}`,
+    usage: name,
+  }
+}
+
+function openInboxDaily(controller: ReturnType<typeof createWorkspaceController>): void {
+  controller.focusManagerItem(1)
+  controller.openFocusedManagerItem()
+  controller.focusManagerItem(0)
+  controller.openFocusedManagerItem()
+}
+
+function openArchiveReview(controller: ReturnType<typeof createWorkspaceController>, options?: { confirmed?: boolean }) {
+  controller.showManager()
+  if (controller.getState().manager.currentFolderPath !== "") {
+    controller.goBack()
+  }
+  controller.focusManagerItem(0)
+  controller.openFocusedManagerItem()
+  controller.focusManagerItem(0)
+  return controller.openFocusedManagerItem(options)
+}
+
+describe("TUI workspace controller", () => {
+  test("initial TUI manager preview visibility defaults to visible", () => {
+    assert.equal(createInitialTuiState().manager.previewVisible, true)
+  })
+
+  test("starts on manager and loads manager items from the adapter", () => {
+    const { deps, calls } = createDeps()
+    const controller = createWorkspaceController(deps)
+
+    assert.equal(controller.getState().screen, "manager")
+    assert.deepEqual(
+      controller.getState().manager.items.map((item) => `${item.type}:${item.key}`),
+      ["folder:notes/archive", "folder:notes/inbox"],
+    )
+    assert.deepEqual(calls, ["list"])
+  })
+
+  test("loads empty user folders through the workspace discovery boundary without leaking hidden internal folders", () => {
+    const { deps, calls } = createDeps({
+      listNoteFolders: () => {
+        calls.push("folders")
+        return [
+          "notes/projects/empty-client",
+          "notes/.data",
+          "notes/.cache/scratch",
+          "notes/projects/.hidden-child",
+        ]
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    assert.deepEqual(
+      controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`),
+      [
+        "folder:notes/archive",
+        "folder:notes/inbox",
+        "folder:notes/projects",
+      ],
+    )
+    assert.deepEqual(calls, ["list", "folders"])
+
+    controller.focusManagerItem(2)
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    assert.deepEqual(controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`), [
+      "folder:notes/projects/empty-client",
+    ])
+  })
+
+  test("opening a note preserves updatedAt metadata for editor chrome", () => {
+    const controller = createWorkspaceController({
+      listNotes: () => [
+        {
+          key: "daily-plan",
+          title: "Daily Plan",
+          description: "Today priorities.",
+          relativePath: "notes/inbox/daily-plan.md",
+        },
+      ],
+      showNote: () => ({
+        key: "daily-plan",
+        title: "Daily Plan",
+        description: "Today priorities.",
+        relativePath: "notes/inbox/daily-plan.md",
+        body: "# Daily Plan",
+        updatedAt: "2026-05-28T10:30:00.000Z",
+      }),
+      searchNotes: () => [],
+    })
+
+    controller.refreshManager()
+    controller.openFocusedManagerItem()
+    controller.openFocusedManagerItem()
+
+    assert.equal(controller.getState().editor?.note.updatedAt, "2026-05-28T10:30:00.000Z")
+  })
+
+  test("whole-note clipboard commands copy all and replace all from desktop clipboard", () => {
+    let clipboardText = "Replacement from clipboard\nSecond replacement line"
+    const { deps } = createDeps({
+      clipboard: {
+        name: "test desktop clipboard",
+        canRead: true,
+        canWrite: true,
+        readText: () => clipboardText,
+        readTextWithResult: () => ({
+          ok: true,
+          text: clipboardText,
+          providerName: "test desktop clipboard",
+          category: "desktop",
+        }),
+        writeText: (text) => {
+          clipboardText = text
+          return {
+            ok: true,
+            providerName: "test desktop clipboard",
+            category: "desktop",
+          }
+        },
+      },
+    })
+    const controller = createWorkspaceController(deps)
+    openInboxDaily(controller)
+
+    const copied = controller.runCommand("/copy-all")
+    assert.deepEqual(copied, { blocked: false })
+    assert.equal(clipboardText, "Original daily body")
+    assert.match(controller.getState().editor?.statusMessage ?? "", /Copied 19 chars to desktop clipboard/i)
+
+    clipboardText = "Replacement from clipboard\nSecond replacement line"
+    const replaced = controller.runCommand("/replace-all")
+    assert.deepEqual(replaced, { blocked: false })
+    assert.equal(controller.getState().editor?.body, "Replacement from clipboard\nSecond replacement line")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.match(controller.getState().editor?.statusMessage ?? "", /Replaced note body with 50 chars from desktop clipboard/i)
+
+    clipboardText = ""
+    const bodyBeforeEmptyReplace = controller.getState().editor?.body
+    const emptyReplace = controller.runCommand("/replace-all")
+    assert.deepEqual(emptyReplace, { blocked: false })
+    assert.equal(controller.getState().editor?.body, bodyBeforeEmptyReplace)
+    assert.match(controller.getState().editor?.statusMessage ?? "", /replace-all skipped/i)
+  })
+
+  test("replace-all refuses internal clipboard fallback so unavailable desktop read cannot overwrite the note", () => {
+    const { deps } = createDeps({
+      clipboard: {
+        name: "BlueNote internal clipboard",
+        canRead: true,
+        canWrite: true,
+        readText: () => "stale internal text",
+        readTextWithResult: () => ({
+          ok: true,
+          text: "stale internal text",
+          providerName: "BlueNote internal clipboard",
+          category: "internal",
+        }),
+        writeText: () => ({
+          ok: true,
+          providerName: "BlueNote internal clipboard",
+          category: "internal",
+        }),
+      },
+    })
+    const controller = createWorkspaceController(deps)
+    openInboxDaily(controller)
+
+    const before = controller.getState().editor?.body
+    assert.deepEqual(controller.runCommand("/replace-all"), { blocked: false })
+
+    assert.equal(controller.getState().editor?.body, before)
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.match(controller.getState().editor?.statusMessage ?? "", /desktop clipboard cannot be read/i)
+  })
+
+  test("toggles manager preview visibility without changing manager selection, filter, folder, or editor", () => {
+    const { deps } = createDeps()
+    const controller = createWorkspaceController(deps)
+    openInboxDaily(controller)
+    controller.updateEditorBody("Dirty daily body")
+    controller.showManager()
+    controller.openManagerFilter()
+    controller.updateManagerFilter("daily")
+
+    const before = controller.getState()
+    controller.toggleManagerPreview()
+    const after = controller.getState()
+
+    assert.equal(after.manager.previewVisible, false)
+    assert.equal(after.manager.focusedIndex, before.manager.focusedIndex)
+    assert.equal(after.manager.currentFolderPath, before.manager.currentFolderPath)
+    assert.equal(after.manager.filterQuery, before.manager.filterQuery)
+    assert.deepEqual(after.editor, before.editor)
+    assert.equal(after.manager.selectedNoteKey, before.manager.selectedNoteKey)
+  })
+
+  test("responsive manager preview visibility setter does not dirty/open/close notes", () => {
+    const { deps, calls } = createDeps()
+    const controller = createWorkspaceController(deps)
+    openInboxDaily(controller)
+    controller.showManager()
+
+    const before = controller.getState()
+    controller.setManagerPreviewVisible(false)
+    const hidden = controller.getState()
+    controller.setManagerPreviewVisible(false)
+    const hiddenAgain = controller.getState()
+    controller.setManagerPreviewVisible(true)
+    const shown = controller.getState()
+
+    assert.equal(hidden.manager.previewVisible, false)
+    assert.equal(hiddenAgain.manager.previewVisible, false)
+    assert.equal(shown.manager.previewVisible, true)
+    assert.deepEqual(hidden.editor, before.editor)
+    assert.equal(hidden.editor?.dirty, false)
+    assert.equal(hidden.screen, before.screen)
+    assert.equal(hidden.manager.selectedNoteKey, before.manager.selectedNoteKey)
+    assert.deepEqual(calls, ["list", "show:daily-plan"])
+  })
+
+  test("toggles Search Everything preview visibility independently from manager preview visibility", () => {
+    const { deps } = createDeps()
+    const controller = createWorkspaceController(deps)
+
+    controller.setManagerPreviewVisible(false)
+    controller.openSearch("daily")
+    assert.equal(controller.getState().search?.previewVisible, true)
+    assert.equal(controller.getState().manager.previewVisible, false)
+
+    controller.toggleSearchPreview()
+    assert.equal(controller.getState().search?.previewVisible, false)
+    assert.equal(controller.getState().manager.previewVisible, false)
+
+    controller.setSearchPreviewVisible(true)
+    assert.equal(controller.getState().search?.previewVisible, true)
+    assert.equal(controller.getState().manager.previewVisible, false)
+  })
+
+  test("Search Everything focus keeps selection clamped while leaving result count unchanged for viewport rendering", () => {
+    const notes = Array.from({ length: 18 }, (_, index) => ({
+      key: `daily-${index.toString().padStart(2, "0")}`,
+      title: `Daily ${index.toString().padStart(2, "0")}`,
+      description: `Daily match ${index}`,
+      relativePath: `notes/daily-${index.toString().padStart(2, "0")}.md`,
+      body: `Daily match ${index}`,
+    }))
+    const controller = createWorkspaceController({
+      listNotes: () => notes,
+      showNote: (selector) => notes.find((note) => note.key === selector || note.relativePath === selector) ?? notes[0]!,
+      searchNotes: () => [],
+    })
+
+    controller.openSearch("daily")
+    assert.equal(controller.getSearchResults().length, 18)
+    assert.equal(controller.getState().search?.selectedIndex, 0)
+    assert.equal(controller.getState().search?.resultScrollOffset, 0)
+
+    controller.focusSearchResult(12)
+    assert.equal(controller.getSearchResults().length, 18)
+    assert.equal(controller.getState().search?.selectedIndex, 12)
+
+    controller.focusSearchResult(99)
+    assert.equal(controller.getState().search?.selectedIndex, 17)
+
+    controller.updateSearchQuery("daily 01")
+    assert.equal(controller.getState().search?.selectedIndex, 0)
+    assert.equal(controller.getState().search?.resultScrollOffset, 0)
+  })
+
+  test("Search Everything note previews hydrate raw note bodies when list summaries omit body text", () => {
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const { deps, calls } = createDeps({
+      listNotes: () => {
+        calls.push("list")
+        return summariesWithoutBodies
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    controller.openSearch("daily")
+    const noteResult = controller.getSearchResults().find((result) => result.kind === "note" && result.key === "daily-plan")
+    const preview = buildSearchEverythingPreview(noteResult, "daily")
+
+    assert.deepEqual(preview?.lines, ["Original daily body"])
+    assert.deepEqual(calls, ["list", "search:daily", "show:daily-plan"])
+  })
+
+  test("hidden manager previews do not hydrate the focused note body", () => {
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const calls: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => {
+        calls.push("list")
+        return summariesWithoutBodies
+      },
+      showNote: (selector) => {
+        calls.push(`show:${selector}`)
+        return notesByKey[selector]
+      },
+    }).deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    controller.setManagerPreviewVisible(false)
+    const model = controller.getManagerBrowserModel()
+
+    assert.deepEqual(calls, ["list"])
+    assert.deepEqual(model.preview, { type: "hidden", path: "notes/inbox/daily-plan.md", reason: "manual" })
+  })
+
+  test("manager preview hydrates a focused note at most once per note during a session", () => {
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const calls: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => {
+        calls.push("list")
+        return summariesWithoutBodies
+      },
+      showNote: (selector) => {
+        calls.push(`show:${selector}`)
+        return notesByKey[selector]
+      },
+    }).deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    const first = controller.getManagerBrowserModel().preview
+    const second = controller.getManagerBrowserModel().preview
+    const third = controller.getManagerBrowserModel().preview
+
+    assert.equal(first.type, "note-content")
+    assert.deepEqual(first, second)
+    assert.deepEqual(second, third)
+    assert.deepEqual(calls, ["list", "show:daily-plan"])
+  })
+
+  test("moving between folder rows never hydrates manager preview note bodies", () => {
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const calls: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => {
+        calls.push("list")
+        return summariesWithoutBodies
+      },
+      showNote: (selector) => {
+        calls.push(`show:${selector}`)
+        return notesByKey[selector]
+      },
+    }).deps)
+
+    controller.focusManagerItem(0)
+    controller.getManagerBrowserModel()
+    controller.focusManagerItem(1)
+    controller.getManagerBrowserModel()
+    controller.moveManagerSelection("up")
+    controller.getManagerBrowserModel()
+
+    assert.deepEqual(calls, ["list"])
+  })
+
+  test("refreshing manager invalidates cached hydrated previews", () => {
+    let currentBody = "Original cached body"
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const calls: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => {
+        calls.push("list")
+        return summariesWithoutBodies
+      },
+      showNote: (selector) => {
+        calls.push(`show:${selector}`)
+        return { ...notesByKey[selector], body: currentBody }
+      },
+    }).deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Original cached body"])
+
+    currentBody = "Changed body after refresh"
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Original cached body"])
+    controller.refreshManager()
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Changed body after refresh"])
+    assert.deepEqual(calls, ["list", "show:daily-plan", "list", "show:daily-plan"])
+  })
+
+  test("failed manager refresh still drops stale hydrated preview cache before the next successful refresh", () => {
+    let currentBody = "Original cached body"
+    let failNextList = false
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => {
+        if (failNextList) {
+          failNextList = false
+          throw new Error("list failed after storage changed")
+        }
+        return summariesWithoutBodies
+      },
+      showNote: (selector) => ({ ...notesByKey[selector], body: currentBody }),
+    }).deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Original cached body"])
+
+    currentBody = "Changed body after failed refresh"
+    failNextList = true
+    assert.throws(() => controller.refreshManager(), /list failed/)
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Changed body after failed refresh"])
+    controller.refreshManager()
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Changed body after failed refresh"])
+  })
+
+  test("failed editor saves clear stale hydrated manager preview cache after pre-write failure", async () => {
+    const currentBody = "Cached body before failed save"
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => summariesWithoutBodies,
+      showNote: (selector) => ({ ...notesByKey[selector], body: currentBody }),
+      persistEditorBody: () => {
+        throw new Error("atomic writer temp write failed")
+      },
+    }).deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Cached body before failed save"])
+
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    controller.updateEditorBody("Unpersisted body after failed save")
+    const result = await controller.saveEditor()
+
+    assert.deepEqual(result, { blocked: true, reason: "dirty-editor" })
+    controller.showManager()
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Cached body before failed save"])
+  })
+
+  test("failed editor save keeps buffer dirty and retry can save later", async () => {
+    let shouldFail = true
+    const controller = createWorkspaceController({
+      listNotes: () => [
+        { key: "beta", title: "Beta", description: "Beta", relativePath: "notes/inbox/beta.md" },
+      ],
+      showNote: () => ({
+        key: "beta",
+        title: "Beta",
+        description: "Beta",
+        relativePath: "notes/inbox/beta.md",
+        body: "Beta body",
+      }),
+      searchNotes: () => [],
+      persistEditorBody: async (note, body) => {
+        if (shouldFail) {
+          throw new Error("EACCES: permission denied")
+        }
+        return { ...note, body, description: body }
+      },
+    })
+
+    controller.refreshManager()
+    controller.openFocusedManagerItem()
+    controller.openFocusedManagerItem()
+    controller.insertEditorText(" unsaved")
+
+    const failed = await controller.saveEditor()
+    assert.deepEqual(failed, { blocked: true, reason: "dirty-editor" })
+    assert.equal(controller.getState().editor?.body, "Beta body unsaved")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "error")
+
+    shouldFail = false
+    const retried = await controller.saveEditor()
+    assert.deepEqual(retried, { blocked: false })
+    assert.equal(controller.getState().editor?.body, "Beta body unsaved")
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+  })
+
+  test("successful editor saves update the hydrated manager preview cache for the saved note", async () => {
+    let currentBody = "Cached body before save"
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const calls: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => {
+        calls.push("list")
+        return summariesWithoutBodies
+      },
+      showNote: (selector) => {
+        calls.push(`show:${selector}`)
+        return { ...notesByKey[selector], body: currentBody }
+      },
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    }).deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Cached body before save"])
+
+    const openResult = controller.openFocusedManagerItem()
+    assert.equal(openResult.blocked, false)
+    controller.updateEditorBody("Saved body should replace cached preview")
+    await controller.saveEditor()
+
+    currentBody = "Stale body from showNote should not be needed"
+    controller.showManager()
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Saved body should replace cached preview"])
+    assert.deepEqual(calls, ["list", "show:daily-plan", "show:daily-plan"])
+  })
+
+  test("failed autosaves clear stale hydrated manager preview cache after pre-write failure", async () => {
+    const scheduler = createFakeScheduler()
+    const currentBody = "Cached body before failed autosave"
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const controller = createWorkspaceController(createDeps({
+      autosaveScheduler: scheduler,
+      listNotes: () => summariesWithoutBodies,
+      showNote: (selector) => ({ ...notesByKey[selector], body: currentBody }),
+      persistEditorBody: () => {
+        throw new Error("atomic writer temp write failed")
+      },
+    }).deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Cached body before failed autosave"])
+
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    controller.updateEditorBody("Unpersisted body after failed autosave")
+    scheduler.runNext()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    assert.equal(controller.getState().editor?.autosaveStatus, "error")
+    controller.showManager()
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Cached body before failed autosave"])
+  })
+
+  test("successful autosaves update the hydrated manager preview cache for the saved note", async () => {
+    const scheduler = createFakeScheduler()
+    let currentBody = "Cached body before autosave"
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const calls: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      autosaveScheduler: scheduler,
+      listNotes: () => {
+        calls.push("list")
+        return summariesWithoutBodies
+      },
+      showNote: (selector) => {
+        calls.push(`show:${selector}`)
+        return { ...notesByKey[selector], body: currentBody }
+      },
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    }).deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Cached body before autosave"])
+
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    controller.updateEditorBody("Autosaved body should replace cached preview")
+    scheduler.runNext()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    currentBody = "Stale body from showNote should not be needed"
+    controller.showManager()
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Autosaved body should replace cached preview"])
+    assert.deepEqual(calls, ["list", "show:daily-plan", "show:daily-plan"])
+  })
+
+  test("autosaved editor no longer blocks manager switching to a different note", async () => {
+    const scheduler = createFakeScheduler()
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText(" autosaved")
+    scheduler.runNext()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+    assert.equal(editorRequiresDestructiveConfirmation(controller.getState().editor), false)
+
+    controller.showManager()
+    const enterResult = openArchiveReview(controller)
+    assert.equal(enterResult.blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, "archive-review")
+    assert.notEqual(controller.getState().editor?.note.key, "daily-plan")
+  })
+
+  test("saved editor can switch to other notes and still quit", async () => {
+    const notes = new Map<string, TuiNote>([
+      [
+        "alpha-summary",
+        {
+          key: "alpha-summary",
+          title: "Alpha Summary",
+          description: "Summary",
+          relativePath: "notes/similar/alpha-summary.md",
+          body: "summary",
+        },
+      ],
+      [
+        "alpha-source",
+        {
+          key: "alpha-source",
+          title: "Alpha Source",
+          description: "Source",
+          relativePath: "notes/similar/alpha-source.md",
+          body: "source",
+        },
+      ],
+      [
+        "beta",
+        {
+          key: "beta",
+          title: "Beta",
+          description: "Beta",
+          relativePath: "notes/inbox/beta.md",
+          body: "beta",
+        },
+      ],
+    ])
+    const persisted: string[] = []
+    const controller = createWorkspaceController({
+      listNotes: () => [...notes.values()].map(({ body: _body, ...summary }) => summary),
+      showNote: (selector) => notes.get(selector)!,
+      searchNotes: () => [],
+      persistEditorBody: async (note, body) => {
+        persisted.push(`${note.key}:${body}`)
+        const next = { ...note, body, description: body.split("\n")[0] ?? "" }
+        notes.set(note.key, next)
+        return next
+      },
+      autosaveScheduler: {
+        setTimeout: () => 0,
+        clearTimeout: () => undefined,
+      },
+    })
+
+    controller.refreshManager()
+    const openFolder = (relativePath: string) => {
+      const folderIndex = controller.getState().manager.items.findIndex(
+        (item) => item.type === "folder" && item.relativePath === relativePath,
+      )
+      assert.notEqual(folderIndex, -1)
+      controller.focusManagerItem(folderIndex)
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+    }
+
+    openFolder("notes/similar")
+    controller.openManagerFilter()
+    controller.updateManagerFilter("alpha-summary")
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    controller.insertEditorText(" saved")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+    assert.equal(controller.showManager().blocked, false)
+
+    controller.openManagerFilter()
+    controller.updateManagerFilter("alpha-source")
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    assert.equal(controller.getState().editor?.note.key, "alpha-source")
+
+    assert.equal(controller.showManager().blocked, false)
+    controller.clearManagerFilter()
+    assert.equal(controller.goBack().blocked, false)
+    openFolder("notes/inbox")
+    controller.openManagerFilter()
+    controller.updateManagerFilter("beta")
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    assert.equal(controller.getState().editor?.note.key, "beta")
+    controller.insertEditorText(" saved")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+
+    assert.equal(controller.requestQuit().blocked, false)
+    assert.deepEqual(persisted, ["alpha-summary:summary saved", "beta:beta saved"])
+  })
+
+  test("dirty manager note switch is blocked with visible manager status until confirmed", () => {
+    const { deps } = createDeps()
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText(" unsaved")
+    controller.showManager()
+
+    const blocked = openArchiveReview(controller)
+    assert.deepEqual(blocked, { blocked: true, reason: "dirty-editor" })
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().editor?.note.key, "daily-plan")
+    assert.equal(controller.getState().manager.status, "Save or discard current note first")
+
+    const vm = buildManagerViewModel(controller.getState(), controller.getManagerBrowserModel())
+    assert.match(vm.status, /Save or discard current note first/u)
+
+    const confirmed = controller.openFocusedManagerItem({ confirmed: true })
+    assert.equal(confirmed.blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, "archive-review")
+  })
+
+  test("successful saves update manager preview summaries that already include note bodies", async () => {
+    const { deps } = createDeps({ persistEditorBody: (note, body) => ({ ...note, body }) })
+    const controller = createWorkspaceController(deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Original daily body"])
+
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    controller.updateEditorBody("Saved body should replace summary body")
+    await controller.saveEditor()
+
+    controller.showManager()
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Saved body should replace summary body"])
+  })
+
+  test("switches manager to editor by opening the selected note", () => {
+    const { deps, calls } = createDeps()
+    const controller = createWorkspaceController(deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().manager.currentFolderPath, "notes/inbox")
+    controller.focusManagerItem(0)
+    const result = controller.openFocusedManagerItem()
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, "daily-plan")
+    assert.equal(controller.getState().editor?.body, "Original daily body")
+    assert.deepEqual(calls, ["list", "show:daily-plan"])
+  })
+
+  test("controlled editor input mutates at cursor and preserves autosave behavior", () => {
+    const scheduler = createFakeScheduler()
+    const { deps } = createDeps({ autosaveScheduler: scheduler })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText("!")
+    assert.equal(controller.getState().editor?.body, "Original daily body!")
+    controller.moveEditorCursor("left")
+    controller.insertEditorText(" before bang")
+    assert.equal(controller.getState().editor?.body, "Original daily body before bang!")
+    controller.backspaceEditor()
+    assert.equal(controller.getState().editor?.body, "Original daily body before ban!")
+    controller.deleteEditor()
+    assert.equal(controller.getState().editor?.body, "Original daily body before ban")
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+    assert.deepEqual(scheduler.activeTasks().map((task) => task.delay), [750])
+  })
+
+  test("cursor-aware no-op edits do not reschedule autosave for unchanged dirty body", () => {
+    const scheduler = createFakeScheduler()
+    const invalidations: string[] = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      onAutosaveStateChange: () => invalidations.push(controller.getState().editor?.autosaveStatus ?? "none"),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText("!")
+    const pendingBeforeNoop = scheduler.activeTasks()[0]
+    assert.ok(pendingBeforeNoop)
+    assert.deepEqual(invalidations, ["pending"])
+
+    controller.moveEditorCursor("home")
+    controller.backspaceEditor()
+
+    assert.equal(controller.getState().editor?.body, "Original daily body!")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+    assert.deepEqual(scheduler.activeTasks(), [pendingBeforeNoop])
+    assert.deepEqual(invalidations, ["pending"])
+  })
+
+  test("manual save preserves controlled cursor metadata", async () => {
+    const { deps } = createDeps({
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText("!")
+    controller.moveEditorCursor("left")
+    controller.insertEditorText(" before bang")
+    const beforeSave = controller.getState().editor
+    assert.equal(beforeSave?.cursorOffset, Array.from("Original daily body before bang").length)
+
+    await controller.saveEditor()
+
+    const afterSave = controller.getState().editor
+    assert.equal(afterSave?.dirty, false)
+    assert.equal(afterSave?.autosaveStatus, "saved")
+    assert.equal(afterSave?.cursorOffset, beforeSave?.cursorOffset)
+    assert.equal(afterSave?.selectionStart, beforeSave?.selectionStart)
+    assert.equal(afterSave?.selectionEnd, beforeSave?.selectionEnd)
+    assert.equal(afterSave?.preferredColumn, beforeSave?.preferredColumn)
+    assert.equal(afterSave?.wrapMode, beforeSave?.wrapMode)
+  })
+
+  test("workspace controller does not expose editor select-all UX", () => {
+    const { deps } = createDeps()
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+
+    assert.equal("selectAllEditorBody" in controller, false)
+    assert.equal(controller.getState().editor?.selectionStart, Array.from("Original daily body").length)
+    assert.equal(controller.getState().editor?.selectionEnd, Array.from("Original daily body").length)
+  })
+
+  test("pastes injected clipboard or paste event text over current selection and schedules autosave", () => {
+    let clipboardText = "clipboard"
+    const scheduler = createFakeScheduler()
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      clipboard: {
+        name: "unit desktop clipboard",
+        canRead: true,
+        canWrite: true,
+        readText: () => clipboardText,
+        writeText: (text) => {
+          clipboardText = text
+        },
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.setEditorSelection(9, 14)
+
+    controller.pasteEditorClipboard()
+    assert.equal(controller.getState().editor?.body, "Original clipboard body")
+    assert.equal(controller.getState().editor?.cursorOffset, 18)
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+    assert.equal(controller.getState().editor?.statusMessage, "Pasted 9 chars from unit desktop clipboard")
+
+    controller.setEditorSelection(9, 18)
+    controller.pasteEditorClipboard("event text")
+
+    assert.equal(controller.getState().editor?.body, "Original event text body")
+    assert.equal(controller.getState().editor?.cursorOffset, 19)
+    assert.equal(scheduler.activeTasks().length, 1)
+  })
+
+  test("paste with unavailable desktop clipboard reports visible status without mutating editor", () => {
+    const { deps } = createDeps({
+      clipboard: {
+        name: "terminal OSC52 clipboard",
+        canRead: false,
+        canWrite: true,
+        readText: () => "",
+        writeText: () => undefined,
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.pasteEditorClipboard()
+
+    assert.equal(controller.getState().editor?.body, "Original daily body")
+    assert.equal(controller.getState().editor?.statusMessage, "Clipboard paste unavailable; use terminal paste instead")
+  })
+
+  test("toggles editor wrap mode without marking the editor dirty", () => {
+    const { deps } = createDeps()
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    assert.equal(controller.getState().editor?.wrapMode, "word")
+
+    controller.toggleEditorWrapMode()
+    assert.equal(controller.getState().editor?.wrapMode, "none")
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "idle")
+
+    controller.toggleEditorWrapMode()
+    assert.equal(controller.getState().editor?.wrapMode, "word")
+    assert.equal(controller.getState().editor?.dirty, false)
+  })
+
+  test("moves across a long unwrapped editor line and returns to normal wrapping without mutating text", () => {
+    const { deps } = createDeps()
+    const controller = createWorkspaceController(deps)
+    openInboxDaily(controller)
+    const longBody = "abcdefghijklmnopqrstuvwxyz"
+    controller.updateEditorBody(longBody)
+    controller.moveEditorCursor("home")
+    controller.toggleEditorWrapMode()
+
+    for (let index = 0; index < 20; index += 1) {
+      controller.moveEditorCursor("right")
+    }
+    assert.equal(controller.getState().editor?.cursorOffset, 20)
+    assert.equal(controller.getState().editor?.body, longBody)
+    assert.equal(controller.getState().editor?.wrapMode, "none")
+
+    controller.moveEditorCursor("left")
+    assert.equal(controller.getState().editor?.cursorOffset, 19)
+    controller.moveEditorCursor("end")
+    assert.equal(controller.getState().editor?.cursorOffset, Array.from(longBody).length)
+    controller.moveEditorCursor("home")
+    assert.equal(controller.getState().editor?.cursorOffset, 0)
+
+    controller.toggleEditorWrapMode()
+    assert.equal(controller.getState().editor?.wrapMode, "word")
+    assert.equal(controller.getState().editor?.body, longBody)
+  })
+
+  test("switches editor and manager with shortcut actions while preserving dirty editor state", () => {
+    const { deps } = createDeps()
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Dirty daily body")
+
+    controller.showManager()
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().editor?.dirty, true)
+
+    controller.showEditor()
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.body, "Dirty daily body")
+    assert.equal(controller.getState().editor?.dirty, true)
+  })
+
+  test("opens Search Everything from manager or editor and cancels back to the invoking screen", () => {
+    const { deps } = createDeps()
+    const controller = createWorkspaceController(deps)
+
+    controller.openSearch("daily")
+    assert.equal(controller.getState().screen, "search")
+    assert.equal(controller.getState().search?.previousScreen, "manager")
+    controller.cancelSearch()
+    assert.equal(controller.getState().screen, "manager")
+
+    openInboxDaily(controller)
+    controller.openSearch("archive")
+    assert.equal(controller.getState().screen, "search")
+    assert.equal(controller.getState().search?.previousScreen, "editor")
+    controller.cancelSearch()
+    assert.equal(controller.getState().screen, "editor")
+  })
+
+  test("routes selected Search Everything note results to editor, folder results to manager, and command results to handlers", () => {
+    const { deps, calls } = createDeps()
+    const controller = createWorkspaceController(deps)
+
+    controller.openSearch("archive")
+    controller.selectSearchResult({
+      kind: "note",
+      id: "note:archive-review",
+      key: "archive-review",
+      filename: "archive-review.md",
+      title: "Archive Review",
+      description: "Old ideas.",
+      relativePath: "notes/archive/archive-review.md",
+      label: "Archive Review",
+      detail: "archive-review.md — notes/archive/archive-review.md",
+      score: 100,
+      matchedFields: ["title"],
+    })
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, "archive-review")
+
+    controller.openSearch("inbox")
+    controller.selectSearchResult({
+      kind: "folder",
+      id: "folder:notes/inbox",
+      path: "notes/inbox",
+      name: "inbox",
+      label: "inbox/",
+      detail: "1 note in notes/inbox",
+      score: 90,
+      noteCount: 1,
+    })
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().manager.currentFolderPath, "notes/inbox")
+
+    controller.openSearch("/new")
+    controller.selectSearchResult(commandResult("/new"))
+    assert.deepEqual(calls, ["list", "search:archive", "show:archive-review", "search:inbox", "search:/new", "command:/new"])
+  })
+
+  test("blocks destructive actions or screen switches that would lose dirty editor content unless confirmed", () => {
+    const { deps, calls } = createDeps()
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Unsaved daily body")
+    controller.showManager()
+    controller.goBack()
+    controller.focusManagerItem(0)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+
+    const blockedSwitch = controller.openFocusedManagerItem()
+    assert.equal(blockedSwitch.blocked, true)
+    assert.equal(blockedSwitch.reason, "dirty-editor")
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().editor?.note.key, "daily-plan")
+    assert.equal(controller.getState().editor?.dirty, true)
+
+    const confirmedSwitch = controller.openFocusedManagerItem({ confirmed: true })
+    assert.equal(confirmedSwitch.blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, "archive-review")
+
+    controller.updateEditorBody("Unsaved archive body")
+    const blockedDelete = controller.runCommand("/delete")
+    assert.equal(blockedDelete.blocked, true)
+    assert.equal(blockedDelete.reason, "dirty-editor")
+    assert.equal(calls.includes("command:/delete"), false)
+
+    const blockedDeleteWithArgument = controller.runCommand("/delete archive-review")
+    assert.equal(blockedDeleteWithArgument.blocked, true)
+    assert.equal(blockedDeleteWithArgument.reason, "dirty-editor")
+    assert.equal(calls.includes("command:/delete"), false)
+
+    const confirmedDelete = controller.runCommand("/delete archive-review", { confirmed: true })
+    assert.equal(confirmedDelete.blocked, false)
+    assert.equal(calls.includes("command:/delete"), true)
+  })
+
+  test("does not discard dirty content when reopening the same note without confirmation", () => {
+    const { deps, calls } = createDeps()
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Unsaved daily body")
+    controller.showManager()
+    controller.focusManagerItem(0)
+
+    const result = controller.openFocusedManagerItem()
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, "daily-plan")
+    assert.equal(controller.getState().editor?.body, "Unsaved daily body")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.deepEqual(calls, ["list", "show:daily-plan"])
+
+    controller.showManager()
+    const confirmedSameNoteResult = controller.openFocusedManagerItem({ confirmed: true })
+    assert.equal(confirmedSameNoteResult.blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.body, "Unsaved daily body")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.deepEqual(calls, ["list", "show:daily-plan"])
+  })
+
+  test("async save completion does not replace a different active editor", async () => {
+    let finishPersist!: (note: TuiNote) => void
+    const { deps } = createDeps({
+      persistEditorBody: (note, body) =>
+        new Promise<TuiNote>((resolve) => {
+          finishPersist = resolve
+          return { ...note, body }
+        }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Async daily body")
+    const savePromise = controller.saveEditor()
+
+    controller.showManager()
+    openArchiveReview(controller, { confirmed: true })
+    assert.equal(controller.getState().editor?.note.key, "archive-review")
+
+    finishPersist({ ...notesByKey["daily-plan"], body: "Async daily body" })
+    await savePromise
+
+    assert.equal(controller.getState().editor?.note.key, "archive-review")
+    assert.equal(controller.getState().editor?.body, "Archive body")
+  })
+
+  test("Search Everything command results are filtered by invoking context", () => {
+    const { deps } = createDeps({ commandHandlers: {} })
+    const controller = createWorkspaceController(deps)
+
+    controller.openSearch("/")
+    assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/new"])
+    assert.equal(controller.getSearchResults().some((result) => result.kind === "command" && ["/archive", "/rebuild", "/migrate"].includes(result.name)), false)
+
+    openInboxDaily(controller)
+    controller.openSearch("/")
+    assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/find", "/replace", "/save", "/copy-all", "/replace-all", "/paste"])
+  })
+
+  test("selecting shown editor commands opens the expected editor prompt or mode", () => {
+    const { deps } = createDeps({ commandHandlers: {} })
+    const controller = createWorkspaceController(deps)
+    openInboxDaily(controller)
+
+    controller.openSearch("/find daily")
+    const findResult = controller.getSearchResults().find((result) => result.kind === "command" && result.name === "/find")
+    assert.ok(findResult)
+    assert.equal(controller.selectSearchResult(findResult).blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().mode, "editor.find")
+    assert.equal(controller.getState().editor?.findQuery, "daily")
+
+    controller.openSearch("/replace body")
+    const replaceResult = controller.getSearchResults().find((result) => result.kind === "command" && result.name === "/replace")
+    assert.ok(replaceResult)
+    assert.equal(controller.selectSearchResult(replaceResult).blocked, false)
+    assert.equal(controller.getState().mode, "editor.replace")
+    assert.equal(controller.getState().editor?.findQuery, "body")
+
+    controller.openSearch("/copy-all")
+    const copyAllResult = controller.getSearchResults().find((result) => result.kind === "command" && result.name === "/copy-all")
+    assert.ok(copyAllResult)
+    assert.equal(controller.selectSearchResult(copyAllResult).blocked, false)
+    assert.match(controller.getState().editor?.statusMessage ?? "", /Copied/u)
+  })
+
+  test("unwired commands are not returned from Search Everything", () => {
+    const { deps, calls } = createDeps({ commandHandlers: {} })
+    const controller = createWorkspaceController(deps)
+
+    controller.openSearch("/archive")
+    assert.equal(controller.getSearchResults().some((searchResult) => searchResult.kind === "command"), false)
+    const result = controller.selectSearchResult(commandResult("/archive"))
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().screen, "search")
+    assert.equal(controller.getState().search?.status, "Command unavailable: /archive")
+    assert.deepEqual(calls, ["list", "search:/archive"])
+
+    const backResult = controller.goBack()
+    assert.equal(backResult.blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().search, null)
+  })
+
+  test("Search Everything stays usable with partial summary, folder, and command results when the search index is unavailable", () => {
+    const { deps, calls } = createDeps({
+      searchNotes: (query) => {
+        calls.push(`search:${query}`)
+        throw new Error("simulated corrupt search index")
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    controller.openSearch("")
+    assert.doesNotThrow(() => controller.updateSearchQuery("daily"))
+
+    assert.equal(controller.getState().screen, "search")
+    assert.equal(controller.getState().search?.query, "daily")
+    assert.equal(controller.getState().search?.status, "Search index unavailable; showing notes, folders, and commands only")
+    assert.equal(controller.getSearchResults().some((result) => result.kind === "note" && result.key === "daily-plan"), true)
+    assert.equal(controller.getSearchResults().some((result) => result.kind === "content"), false)
+
+    assert.doesNotThrow(() => controller.updateSearchQuery("inbox"))
+    assert.equal(controller.getState().search?.query, "inbox")
+    assert.equal(controller.getState().search?.status, "Search index unavailable; showing notes, folders, and commands only")
+    assert.equal(controller.getSearchResults().some((result) => result.kind === "folder" && result.path === "notes/inbox"), true)
+
+    assert.doesNotThrow(() => controller.updateSearchQuery("/new"))
+    assert.equal(controller.getState().search?.query, "/new")
+    assert.equal(controller.getSearchResults().some((result) => result.kind === "command" && result.name === "/new"), true)
+
+    const backResult = controller.goBack()
+    assert.equal(backResult.blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().search, null)
+  })
+
+  test("selecting a command search result closes search and dispatches by command name", () => {
+    const commandContexts: string[] = []
+    const { deps } = createDeps({
+      commandHandlers: {
+        "/new": ({ state, command }) => {
+          commandContexts.push(`${state.screen}:${command}`)
+        },
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    controller.openSearch("/new Project Plan")
+    const result = controller.selectSearchResult(commandResult("/new"))
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().search, null)
+    assert.deepEqual(commandContexts, ["manager:/new Project Plan"])
+  })
+
+  test("dirty destructive command search result blocks before unavailable status or handler dispatch", () => {
+    const { deps, calls } = createDeps({ commandHandlers: {} })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Unsaved daily body")
+    controller.openSearch("/archive")
+    const result = controller.selectSearchResult(commandResult("/archive"))
+
+    assert.deepEqual(result, { blocked: true, reason: "dirty-editor" })
+    assert.equal(controller.getState().screen, "search")
+    assert.equal(controller.getState().search?.status, null)
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.deepEqual(calls, ["list", "show:daily-plan", "search:/archive"])
+  })
+
+  test("returns immutable snapshots for state, search results, and command handler context", () => {
+    let handlerStateScreen = ""
+    const { deps } = createDeps({
+      commandHandlers: {
+        "/new": ({ state }) => {
+          handlerStateScreen = state.screen
+          state.screen = "editor"
+        },
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    const snapshot = controller.getState()
+    snapshot.screen = "editor"
+    snapshot.manager.items.length = 0
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().manager.items.length, 2)
+
+    controller.openSearch("daily")
+    const results = controller.getSearchResults() as SearchEverythingResult[]
+    assert.equal(results.length > 0, true)
+    const noteResult = results.find((result) => result.kind === "note")
+    assert.equal(noteResult?.kind, "note")
+    if (noteResult?.kind === "note") {
+      noteResult.matchedFields.length = 0
+    }
+    results.length = 0
+    assert.equal(controller.getSearchResults().length > 0, true)
+    const freshNoteResult = controller.getSearchResults().find((result) => result.kind === "note")
+    assert.equal(freshNoteResult?.kind, "note")
+    if (freshNoteResult?.kind === "note") {
+      assert.equal(freshNoteResult.matchedFields.length > 0, true)
+    }
+
+    controller.selectSearchResult(commandResult("/new"))
+    assert.equal(handlerStateScreen, "manager")
+    assert.equal(controller.getState().screen, "manager")
+  })
+
+  test("stale folder results and refreshes do not preserve impossible selected note keys", () => {
+    let currentSummaries = noteSummaries
+    const { deps } = createDeps({
+      listNotes: () => currentSummaries,
+    })
+    const controller = createWorkspaceController(deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    assert.equal(controller.getState().manager.selectedNoteKey, "daily-plan")
+
+    controller.openSearch("missing")
+    controller.selectSearchResult({
+      kind: "folder",
+      id: "folder:notes/missing",
+      path: "notes/missing",
+      name: "missing",
+      label: "missing/",
+      detail: "0 notes in notes/missing",
+      score: 90,
+      noteCount: 0,
+    })
+    assert.equal(controller.getState().manager.selectedNoteKey, "daily-plan")
+
+    currentSummaries = []
+    controller.refreshManager()
+    assert.deepEqual(controller.getState().manager.items, [])
+    assert.equal(controller.getState().manager.selectedNoteKey, null)
+  })
+
+  test("opens focused manager folders and notes through the browser adapter", () => {
+    const { deps, calls } = createDeps()
+    const controller = createWorkspaceController(deps)
+
+    assert.equal(controller.getState().manager.currentFolderPath, "")
+    controller.focusManagerItem(1)
+    const folderResult = controller.openFocusedManagerItem()
+
+    assert.equal(folderResult.blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().manager.currentFolderPath, "notes/inbox")
+    assert.deepEqual(controller.getState().manager.items.map((item) => item.key), ["daily-plan"])
+
+    const noteResult = controller.openFocusedManagerItem()
+
+    assert.equal(noteResult.blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().mode, "editor.body")
+    assert.equal(controller.getState().editor?.note.key, "daily-plan")
+    assert.deepEqual(calls, ["list", "show:daily-plan"])
+  })
+
+  test("editor replace mode replaces current match and all matches while preserving autosave semantics", () => {
+    const scheduler = createFakeScheduler()
+    const { deps } = createDeps({ autosaveScheduler: scheduler })
+    const controller = createWorkspaceController(deps)
+    openInboxDaily(controller)
+
+    controller.updateEditorBody("alpha beta alpha")
+    controller.openEditorReplace("alpha")
+    controller.updateEditorReplacement("omega")
+    assert.equal(controller.getState().mode, "editor.replace")
+    assert.equal(controller.getState().editor?.findMatchCount, 2)
+    assert.equal(controller.getState().editor?.activeFindIndex, 0)
+
+    controller.replaceCurrentEditorMatch()
+    assert.equal(controller.getState().editor?.body, "omega beta alpha")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+    assert.equal(controller.getState().editor?.findQuery, "alpha")
+    assert.equal(controller.getState().editor?.replacementText, "omega")
+    assert.equal(controller.getState().editor?.activeFindIndex, 0)
+    assert.equal(scheduler.tasks.length > 0, true)
+
+    controller.updateEditorReplacement("done")
+    controller.replaceAllEditorMatches()
+    assert.equal(controller.getState().editor?.body, "omega beta done")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.findMatchCount, 0)
+    assert.equal(controller.getState().editor?.activeFindIndex, null)
+  })
+
+  test("goBack closes transient modes and navigates manager folders to their parent", () => {
+    const { deps } = createDeps()
+    const controller = createWorkspaceController(deps)
+
+    controller.openSearch("daily")
+    assert.equal(controller.getState().screen, "search")
+    controller.goBack()
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().mode, "manager.browse")
+
+    openInboxDaily(controller)
+    controller.openEditorFind("daily")
+    assert.equal(controller.getState().mode, "editor.find")
+    controller.goBack()
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().mode, "editor.body")
+    controller.openEditorReplace("daily")
+    assert.equal(controller.getState().mode, "editor.replace")
+    controller.goBack()
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().mode, "editor.body")
+    assert.equal(controller.getState().editor?.note.key, "daily-plan")
+
+    controller.showManager()
+    controller.openManagerFilter()
+    controller.updateManagerFilter("daily")
+    assert.equal(controller.getState().mode, "manager.filter")
+    controller.goBack()
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().manager.filterQuery, "")
+
+    assert.equal(controller.getState().manager.currentFolderPath, "notes/inbox")
+    controller.goBack()
+    assert.equal(controller.getState().manager.currentFolderPath, "")
+  })
+
+  test("manager create submits a new note title, refreshes indexes, and opens the created note", async () => {
+    let currentSummaries = noteSummaries
+    const createdNote: TuiNote = {
+      key: "project-plan",
+      title: "q Project Plan",
+      description: "",
+      relativePath: "notes/project-plan.md",
+      body: "",
+    }
+    const { deps, calls } = createDeps({
+      listNotes: () => {
+        calls.push("list")
+        return currentSummaries
+      },
+      createNote: (title, body) => {
+        calls.push(`create:${title}:${body}`)
+        currentSummaries = [...noteSummaries, createdNote]
+        return createdNote
+      },
+      rebuildIndexes: () => {
+        calls.push("rebuild")
+      },
+      showNote: (selector) => {
+        calls.push(`show:${selector}`)
+        return selector === createdNote.key ? createdNote : notesByKey[selector]
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    controller.openManagerCreate()
+    assert.equal(controller.getState().mode, "manager.create")
+    const createVm = buildManagerViewModel(controller.getState())
+    assert.equal(createVm.createPrompt?.inputId, "bluenote-manager-create-title")
+    assert.equal(createVm.createPrompt?.focused, true)
+    assert.equal(createVm.deletePrompt, undefined)
+    assert.equal(routeManagerKey("q", controller), true)
+    assert.equal(controller.getState().manager.createDraft?.title, "q")
+    controller.updateManagerCreateTitle("q Project Plan")
+    const result = await controller.submitManagerCreate()
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().mode, "editor.body")
+    assert.equal(controller.getState().editor?.note.key, "project-plan")
+    assert.equal(controller.getState().editor?.note.title, "q Project Plan")
+    assert.equal(controller.getState().editor?.body, "")
+    assert.equal(controller.getState().manager.items.some((item) => item.key === "project-plan"), true)
+    assert.deepEqual(calls, ["list", "create:q Project Plan:", "rebuild", "list", "show:project-plan"])
+  })
+
+  test("manager create blocks before creating when it would replace dirty editor content while preview is hidden", async () => {
+    let currentSummaries = noteSummaries
+    const { deps, calls } = createDeps({
+      listNotes: () => {
+        calls.push("list")
+        return currentSummaries
+      },
+      createNote: (title, body) => {
+        calls.push(`create:${title}:${body}`)
+        currentSummaries = [...currentSummaries, { ...notesByKey["archive-review"], key: "stray-note", title }]
+        return { key: "daily-plan" }
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    controller.openFocusedManagerItem()
+    assert.equal(controller.getState().screen, "editor")
+    controller.updateEditorBody("Unsaved draft")
+    controller.showManager()
+    controller.setManagerPreviewVisible(false)
+    controller.openManagerCreate()
+    controller.updateManagerCreateTitle("New Note")
+
+    const result = await controller.submitManagerCreate()
+
+    assert.deepEqual(result, { blocked: true, reason: "dirty-editor" })
+    assert.equal(controller.getState().mode, "manager.create")
+    assert.equal(controller.getState().manager.previewVisible, false)
+    assert.equal(controller.getState().manager.createDraft?.title, "New Note")
+    assert.equal(controller.getState().manager.createDraft?.status, "Save or discard current note first")
+    assert.match(buildManagerViewModel(controller.getState()).createPrompt?.status ?? "", /Save or discard/)
+    assert.equal(controller.getState().editor?.body, "Unsaved draft")
+    assert.equal(calls.some((call) => call.startsWith("create:")), false)
+    assert.deepEqual(currentSummaries, noteSummaries)
+  })
+
+  test("manager create keeps prompt recoverable when create or refresh fails", async () => {
+    const failingCreateController = createWorkspaceController(createDeps({
+      createNote: () => {
+        throw new Error("create failed")
+      },
+    }).deps)
+    failingCreateController.openManagerCreate()
+    failingCreateController.updateManagerCreateTitle("Broken Note")
+
+    await failingCreateController.submitManagerCreate()
+
+    assert.equal(failingCreateController.getState().mode, "manager.create")
+    assert.equal(failingCreateController.getState().manager.createDraft?.status, "Create failed")
+
+    const failingRefreshController = createWorkspaceController(createDeps({
+      createNote: () => ({ key: "daily-plan" }),
+      rebuildIndexes: () => {
+        throw new Error("rebuild failed")
+      },
+    }).deps)
+    failingRefreshController.openManagerCreate()
+    failingRefreshController.updateManagerCreateTitle("Broken Rebuild")
+
+    await failingRefreshController.submitManagerCreate()
+
+    assert.equal(failingRefreshController.getState().mode, "manager.create")
+    assert.equal(failingRefreshController.getState().manager.createDraft?.status, "Create failed")
+  })
+
+  test("manager create clears stale preview cache when a partial mutation fails", async () => {
+    let currentBody = "Cached body before failed create"
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => summariesWithoutBodies,
+      showNote: (selector) => ({ ...notesByKey[selector], body: currentBody }),
+      createNote: () => {
+        currentBody = "Body changed by partial create mutation"
+        throw new Error("create failed after partial mutation")
+      },
+    }).deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Cached body before failed create"])
+
+    controller.openManagerCreate()
+    controller.updateManagerCreateTitle("Broken Partial Create")
+    await controller.submitManagerCreate()
+
+    assert.equal(controller.getState().mode, "manager.create")
+    assert.equal(controller.getState().manager.createDraft?.status, "Create failed")
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Body changed by partial create mutation"])
+  })
+
+  test("empty manager create title stays in the prompt with calm validation and does not create", async () => {
+    const { deps, calls } = createDeps({
+      createNote: (title, body) => {
+        calls.push(`create:${title}:${body}`)
+        return notesByKey["daily-plan"]
+      },
+      rebuildIndexes: () => calls.push("rebuild"),
+    })
+    const controller = createWorkspaceController(deps)
+
+    controller.openManagerCreate()
+    assert.equal(controller.getState().mode, "manager.create")
+    controller.updateManagerCreateTitle("   ")
+    const result = await controller.submitManagerCreate()
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().mode, "manager.create")
+    assert.equal(controller.getState().manager.createDraft?.status, "Title required")
+    assert.deepEqual(calls, ["list"])
+  })
+
+  test("cancel manager create exits without creating", () => {
+    const { deps, calls } = createDeps({
+      createNote: (title, body) => {
+        calls.push(`create:${title}:${body}`)
+        return notesByKey["daily-plan"]
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    controller.openManagerCreate()
+    controller.updateManagerCreateTitle("Ignored")
+    controller.cancelManagerCreate()
+
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().manager.createDraft, null)
+    assert.deepEqual(calls, ["list"])
+  })
+
+  test("goBack cancels manager create mode and clears the draft", () => {
+    const controller = createWorkspaceController(createDeps().deps)
+
+    controller.openManagerCreate()
+    controller.updateManagerCreateTitle("Draft Title")
+    const result = controller.goBack()
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().manager.createDraft, null)
+  })
+
+  test("manager delete confirmation deletes a note, refreshes, and clears an open editor", async () => {
+    let currentSummaries = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    let currentDailyBody = "Original daily body"
+    const { deps, calls } = createDeps({
+      listNotes: () => {
+        calls.push("list")
+        return currentSummaries
+      },
+      showNote: (selector) => {
+        calls.push(`show:${selector}`)
+        return selector === "daily-plan" ? { ...notesByKey["daily-plan"], body: currentDailyBody } : notesByKey[selector]
+      },
+      deleteNote: (selector) => {
+        calls.push(`delete:${selector}`)
+        currentSummaries = currentSummaries.filter((summary) => summary.key !== selector)
+      },
+      rebuildIndexes: () => calls.push("rebuild"),
+    })
+    const controller = createWorkspaceController(deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Original daily body"])
+    controller.openFocusedManagerItem()
+    controller.showManager()
+    controller.openManagerDeleteConfirmation()
+
+    assert.equal(controller.getState().mode, "manager.deleteConfirm")
+    assert.equal(controller.getState().manager.deleteDraft?.key, "daily-plan")
+
+    controller.cancelManagerDelete()
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().manager.deleteDraft, null)
+    assert.equal(controller.getState().editor?.note.key, "daily-plan")
+    assert.equal(controller.getState().manager.items.some((item) => item.key === "daily-plan"), true)
+    assert.equal(calls.some((call) => call.startsWith("delete:")), false)
+
+    controller.openManagerDeleteConfirmation()
+    assert.equal(controller.getState().mode, "manager.deleteConfirm")
+    assert.equal(controller.getState().manager.deleteDraft?.key, "daily-plan")
+
+    const result = await controller.confirmManagerDelete()
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().editor, null)
+    assert.equal(controller.getState().manager.deleteDraft, null)
+    assert.equal(controller.getState().manager.items.some((item) => item.key === "daily-plan"), false)
+    assert.deepEqual(calls, ["list", "show:daily-plan", "show:daily-plan", "delete:daily-plan", "rebuild", "list"])
+
+    currentDailyBody = "Recreated daily body must not use deleted-note preview cache"
+    currentSummaries = [{
+      key: "daily-plan",
+      title: "Daily Plan",
+      description: "Today priorities.",
+      relativePath: "notes/inbox/daily-plan.md",
+    }]
+    controller.refreshManager()
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Recreated daily body must not use deleted-note preview cache"])
+  })
+
+  test("manager delete confirmation is blocked while the open editor is dirty or autosave failed", async () => {
+    const scheduler = createFakeScheduler()
+    let currentSummaries = [...noteSummaries]
+    const { deps, calls } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: () => Promise.reject(new Error("disk full")),
+      listNotes: () => {
+        calls.push("list")
+        return currentSummaries
+      },
+      deleteNote: (selector) => {
+        calls.push(`delete:${selector}`)
+        currentSummaries = currentSummaries.filter((summary) => summary.key !== selector)
+      },
+      rebuildIndexes: () => calls.push("rebuild"),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText(" dirty")
+    controller.showManager()
+    controller.toggleManagerPreview()
+    controller.openManagerDeleteConfirmation()
+
+    const dirtyResult = await controller.confirmManagerDelete()
+    assert.deepEqual(dirtyResult, { blocked: true, reason: "dirty-editor" })
+    assert.equal(controller.getState().mode, "manager.deleteConfirm")
+    assert.equal(controller.getState().manager.previewVisible, false)
+    assert.equal(controller.getState().manager.deleteDraft?.status, "Save or discard current note first")
+    assert.match(buildManagerViewModel(controller.getState()).deletePrompt?.status ?? "", /Save or discard/)
+    assert.equal(controller.getState().editor?.body, "Original daily body dirty")
+    assert.equal(calls.some((call) => call.startsWith("delete:")), false)
+
+    controller.cancelManagerDelete()
+    controller.showEditor()
+    scheduler.runNext()
+    await Promise.resolve()
+    await Promise.resolve()
+    assert.equal(controller.getState().editor?.autosaveStatus, "error")
+
+    controller.showManager()
+    controller.openManagerDeleteConfirmation()
+    const failedAutosaveResult = await controller.confirmManagerDelete()
+    assert.deepEqual(failedAutosaveResult, { blocked: true, reason: "dirty-editor" })
+    assert.equal(controller.getState().mode, "manager.deleteConfirm")
+    assert.equal(calls.some((call) => call.startsWith("delete:")), false)
+  })
+
+  test("manager delete confirmation cancels and refuses folders without deletion", async () => {
+    const { deps, calls } = createDeps({
+      deleteNote: (selector) => calls.push(`delete:${selector}`),
+    })
+    const controller = createWorkspaceController(deps)
+
+    controller.openManagerDeleteConfirmation()
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().manager.status, "Folders cannot be deleted here")
+    assert.equal(controller.getState().manager.deleteDraft, null)
+
+    controller.focusManagerItem(1)
+    assert.equal(controller.getState().manager.status, null)
+    controller.openFocusedManagerItem()
+    controller.openManagerDeleteConfirmation()
+    assert.equal(controller.getState().mode, "manager.deleteConfirm")
+    controller.cancelManagerDelete()
+
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().manager.deleteDraft, null)
+    assert.equal(calls.some((call) => call.startsWith("delete:")), false)
+  })
+
+  test("manager delete confirmation keeps prompt recoverable when delete is unavailable or fails", async () => {
+    const noDeleteController = createWorkspaceController(createDeps().deps)
+    noDeleteController.focusManagerItem(1)
+    noDeleteController.openFocusedManagerItem()
+    noDeleteController.openManagerDeleteConfirmation()
+
+    await noDeleteController.confirmManagerDelete()
+
+    assert.equal(noDeleteController.getState().mode, "manager.deleteConfirm")
+    assert.equal(noDeleteController.getState().manager.deleteDraft?.status, "Delete unavailable")
+
+    const failingController = createWorkspaceController(createDeps({
+      deleteNote: () => {
+        throw new Error("delete failed")
+      },
+    }).deps)
+    failingController.focusManagerItem(1)
+    failingController.openFocusedManagerItem()
+    failingController.openManagerDeleteConfirmation()
+
+    await failingController.confirmManagerDelete()
+
+    assert.equal(failingController.getState().mode, "manager.deleteConfirm")
+    assert.equal(failingController.getState().manager.deleteDraft?.status, "Delete failed")
+  })
+
+  test("manager delete clears stale preview cache when a partial mutation fails", async () => {
+    let currentBody = "Cached body before failed delete"
+    const summariesWithoutBodies = noteSummaries.map(({ body: _body, ...summary }) => summary)
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => summariesWithoutBodies,
+      showNote: (selector) => ({ ...notesByKey[selector], body: currentBody }),
+      deleteNote: () => {
+        currentBody = "Body changed by partial delete mutation"
+        throw new Error("delete failed after partial mutation")
+      },
+    }).deps)
+
+    controller.focusManagerItem(1)
+    controller.openFocusedManagerItem()
+    controller.focusManagerItem(0)
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Cached body before failed delete"])
+
+    controller.openManagerDeleteConfirmation()
+    await controller.confirmManagerDelete()
+
+    assert.equal(controller.getState().mode, "manager.deleteConfirm")
+    assert.equal(controller.getState().manager.deleteDraft?.status, "Delete failed")
+    assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Body changed by partial delete mutation"])
+  })
+
+  test("manager filter updates visible manager state and preview, and clear restores browsing", () => {
+    const { deps } = createDeps()
+    const controller = createWorkspaceController(deps)
+
+    controller.openManagerFilter()
+    controller.setManagerFilter("inbox")
+
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().mode, "manager.filter")
+    assert.equal(controller.getState().manager.filterQuery, "inbox")
+    assert.deepEqual(controller.getState().manager.items.map((item) => item.key), ["notes/inbox"])
+    assert.equal(controller.getState().manager.hoveredPath, "notes/inbox")
+
+    controller.clearManagerFilter()
+
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().manager.filterQuery, "")
+    assert.deepEqual(controller.getState().manager.items.map((item) => item.key), ["notes/archive", "notes/inbox"])
+
+    controller.openManagerFilter()
+    controller.updateManagerFilter("inbox")
+    assert.equal(routeManagerKey("\r", controller), true)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().manager.currentFolderPath, "notes/inbox")
+    assert.equal(controller.getState().manager.filterQuery, "")
+  })
+
+  test("manager filter routing moves filtered focus, opens the focused note, and clears on Arrow Left", () => {
+    const { deps } = createDeps({
+      listNotes: () => [
+        {
+          key: "daily-plan",
+          title: "Daily Plan",
+          description: "Today priorities.",
+          relativePath: "notes/inbox/daily-plan.md",
+          body: "Original daily body",
+        },
+        {
+          key: "daily-retro",
+          title: "Daily Retro",
+          description: "Today retrospective.",
+          relativePath: "notes/inbox/daily-retro.md",
+          body: "Retro body",
+        },
+      ],
+      showNote: (selector) => ({
+        key: selector,
+        title: selector,
+        description: "",
+        relativePath: `notes/inbox/${selector}.md`,
+        body: `${selector} body`,
+      }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    controller.focusManagerItem(0)
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    controller.openManagerFilter()
+    assert.equal(routeManagerKey("d", controller), true)
+    assert.equal(routeManagerKey("a", controller), true)
+    assert.deepEqual(controller.getState().manager.items.map((item) => item.key), ["daily-plan", "daily-retro"])
+
+    assert.equal(routeManagerKey("\u001b[B", controller), true)
+    assert.equal(controller.getState().manager.focusedIndex, 1)
+    assert.equal(controller.getState().manager.filterQuery, "da")
+
+    assert.equal(routeManagerKey("\r", controller), true)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, "daily-retro")
+    assert.equal(controller.getState().manager.filterQuery, "")
+    assert.equal(controller.getState().mode, "editor.body")
+
+    assert.equal(controller.showManager().blocked, false)
+    controller.openManagerFilter()
+    controller.updateManagerFilter("retro")
+    assert.equal(routeManagerKey("\u001b[D", controller), true)
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().manager.filterQuery, "")
+  })
+
+  test("manager filter Enter and Arrow Right open the visible filtered note when full-list index points at a folder", () => {
+    const rootSummaries: NoteManagerSummary[] = [
+      {
+        key: "project-plan",
+        title: "Project Plan",
+        description: "Nested note that creates a root folder row.",
+        relativePath: "notes/projects/project-plan.md",
+        body: "Project body",
+      },
+      {
+        key: "target-note",
+        title: "Target Note",
+        description: "Top-level note visible after filtering.",
+        relativePath: "notes/target-note.md",
+        body: "Target body",
+      },
+    ]
+    const notes = Object.fromEntries(rootSummaries.map((note) => [note.key, note])) as Record<string, TuiNote>
+    const openWith = (sequence: "\r" | "\u001b[C") => {
+      const { deps } = createDeps({
+        listNotes: () => rootSummaries,
+        showNote: (selector) => notes[selector],
+      })
+      const controller = createWorkspaceController(deps)
+
+      assert.equal(controller.getState().manager.items[0]?.type, "folder")
+      assert.equal(controller.getState().manager.items[0]?.relativePath, "notes/projects")
+      controller.openManagerFilter()
+      controller.updateManagerFilter("target")
+      assert.deepEqual(controller.getManagerBrowserModel().layout1Rows.map((row) => row.relativePath), ["notes/target-note.md"])
+
+      assert.equal(routeManagerKey(sequence, controller), true)
+      assert.equal(controller.getState().screen, "editor")
+      assert.equal(controller.getState().editor?.note.key, "target-note")
+    }
+
+    openWith("\r")
+    openWith("\u001b[C")
+  })
+
+  test("toggleSearch records previous mode and toggles back when search is already active", () => {
+    const { deps } = createDeps()
+    const controller = createWorkspaceController(deps)
+
+    controller.openManagerFilter()
+    controller.updateManagerFilter("archive")
+    controller.toggleSearch("arc")
+
+    assert.equal(controller.getState().screen, "search")
+    assert.equal(controller.getState().mode, "search.input")
+    assert.equal(controller.getState().search?.previousScreen, "manager")
+    assert.equal(controller.getState().search?.previousMode, "manager.filter")
+
+    controller.toggleSearch()
+
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().mode, "manager.filter")
+    assert.equal(controller.getState().manager.filterQuery, "archive")
+  })
+
+  test("selecting the current dirty note from search restores editor body mode without discarding edits", () => {
+    const { deps } = createDeps()
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Unsaved daily body")
+    controller.openSearch("daily")
+
+    const result = controller.selectSearchResult({
+      kind: "note",
+      id: "note:daily-plan",
+      key: "daily-plan",
+      filename: "daily-plan.md",
+      title: "Daily Plan",
+      description: "Today priorities.",
+      relativePath: "notes/inbox/daily-plan.md",
+      label: "Daily Plan",
+      detail: "daily-plan.md — notes/inbox/daily-plan.md",
+      score: 100,
+      matchedFields: ["title"],
+    })
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().mode, "editor.body")
+    assert.equal(controller.getState().search, null)
+    assert.equal(controller.getState().editor?.body, "Unsaved daily body")
+    assert.equal(controller.getState().editor?.dirty, true)
+  })
+
+  test("dirty, autosave pending, saving, and error editor states require destructive confirmation", () => {
+    const { deps, calls } = createDeps({
+      commandHandlers: {
+        "/quit": () => calls.push("command:/quit"),
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Unsaved daily body")
+
+    const blockedQuit = controller.runCommand("/quit")
+    assert.equal(blockedQuit.blocked, true)
+    assert.equal(blockedQuit.reason, "dirty-editor")
+    assert.equal(calls.includes("command:/quit"), false)
+
+    const blockedDirectQuit = controller.requestQuit()
+    assert.equal(blockedDirectQuit.blocked, true)
+    assert.equal(blockedDirectQuit.reason, "dirty-editor")
+    assert.equal(controller.requestQuit({ confirmed: true }).blocked, false)
+
+    const cleanEditor = {
+      note: notesByKey["daily-plan"],
+      body: "Original daily body",
+      savedBody: "Original daily body",
+      dirty: false,
+      autosaveStatus: "saved" as const,
+    }
+
+    assert.equal(editorRequiresDestructiveConfirmation(cleanEditor), false)
+    assert.equal(editorRequiresDestructiveConfirmation({ ...cleanEditor, dirty: true }), true)
+    assert.equal(editorRequiresDestructiveConfirmation({ ...cleanEditor, autosaveStatus: "pending" }), true)
+    assert.equal(editorRequiresDestructiveConfirmation({ ...cleanEditor, autosaveStatus: "saving" }), true)
+    assert.equal(editorRequiresDestructiveConfirmation({ ...cleanEditor, autosaveStatus: "error" }), true)
+  })
+
+  test("changing editor body marks dirty, sets autosave pending, and debounces persistence for 750ms", async () => {
+    const scheduler = createFakeScheduler()
+    const persistedBodies: string[] = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) => {
+        persistedBodies.push(`${note.key}:${body}`)
+        return { ...note, body }
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Draft one")
+
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+    assert.deepEqual(scheduler.activeTasks().map((task) => task.delay), [750])
+    assert.deepEqual(persistedBodies, [])
+
+    controller.updateEditorBody("Draft two")
+    assert.equal(scheduler.tasks[0]?.cleared, true)
+    assert.deepEqual(scheduler.activeTasks().map((task) => task.delay), [750])
+
+    scheduler.runNext()
+    await Promise.resolve()
+
+    assert.deepEqual(persistedBodies, ["daily-plan:Draft two"])
+    assert.equal(controller.getState().editor?.body, "Draft two")
+    assert.equal(controller.getState().editor?.savedBody, "Draft two")
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+  })
+
+  test("successful autosave after controlled typing saves the submitted snapshot without error", async () => {
+    const scheduler = createFakeScheduler()
+    const persistedSnapshots: Array<{ key: string; relativePath: string; body: string }> = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) => {
+        persistedSnapshots.push({ key: note.key, relativePath: note.relativePath, body })
+        return { ...note, body }
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText(" typed autosave token")
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().mode, "editor.body")
+    assert.equal(controller.getState().editor?.body, "Original daily body typed autosave token")
+    assert.equal(controller.getState().editor?.savedBody, "Original daily body")
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+
+    scheduler.runNext()
+    await Promise.resolve()
+
+    assert.deepEqual(persistedSnapshots, [
+      {
+        key: "daily-plan",
+        relativePath: "notes/inbox/daily-plan.md",
+        body: "Original daily body typed autosave token",
+      },
+    ])
+    assert.equal(controller.getState().editor?.note.key, "daily-plan")
+    assert.equal(controller.getState().editor?.note.relativePath, "notes/inbox/daily-plan.md")
+    assert.equal(controller.getState().editor?.body, "Original daily body typed autosave token")
+    assert.equal(controller.getState().editor?.savedBody, "Original daily body typed autosave token")
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+  })
+
+  test("autosave after controlled typing reports failure only when persistence throws", async () => {
+    const scheduler = createFakeScheduler()
+    const persistenceErrors: string[] = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) => {
+        persistenceErrors.push(`Error: atomic writer temp write failed for ${note.key} ${note.relativePath} ${body}`)
+        throw new Error("atomic writer temp write failed")
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText(" typed failing autosave token")
+    scheduler.runNext()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    assert.deepEqual(persistenceErrors, [
+      "Error: atomic writer temp write failed for daily-plan notes/inbox/daily-plan.md Original daily body typed failing autosave token",
+    ])
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().mode, "editor.body")
+    assert.equal(controller.getState().editor?.body, "Original daily body typed failing autosave token")
+    assert.equal(controller.getState().editor?.savedBody, "Original daily body")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "error")
+  })
+
+  test("autosave uses the same persistence dependency as manual save", async () => {
+    const scheduler = createFakeScheduler()
+    const persistedBodies: string[] = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) => {
+        persistedBodies.push(`${note.key}:${body}`)
+        return { ...note, body }
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Manual body")
+    await controller.saveEditor()
+    controller.updateEditorBody("Autosaved body")
+    scheduler.runNext()
+    await Promise.resolve()
+
+    assert.deepEqual(persistedBodies, ["daily-plan:Manual body", "daily-plan:Autosaved body"])
+  })
+
+  test("updating editor body to saved content does not schedule autosave or mark pending", () => {
+    const scheduler = createFakeScheduler()
+    const { deps } = createDeps({ autosaveScheduler: scheduler })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Original daily body")
+
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+    assert.deepEqual(scheduler.activeTasks(), [])
+  })
+
+  test("newer manual save waits behind an older autosave so disk side effects cannot complete out of order", async () => {
+    const scheduler = createFakeScheduler()
+    const startedSaves: Array<{ body: string; resolve: (note: TuiNote) => void }> = []
+    const completedDiskWrites: string[] = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) =>
+        new Promise<TuiNote>((resolve) => {
+          startedSaves.push({
+            body,
+            resolve: (savedNote) => {
+              completedDiskWrites.push(body)
+              resolve({ ...note, ...savedNote })
+            },
+          })
+        }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Older autosave body")
+    scheduler.runNext()
+    await Promise.resolve()
+    assert.deepEqual(startedSaves.map((save) => save.body), ["Older autosave body"])
+
+    controller.updateEditorBody("Newer manual body")
+    const manualSave = controller.saveEditor()
+    await Promise.resolve()
+    assert.deepEqual(startedSaves.map((save) => save.body), ["Older autosave body"])
+
+    startedSaves[0]?.resolve({ ...notesByKey["daily-plan"], body: "Older autosave body" })
+    await Promise.resolve()
+    await Promise.resolve()
+    assert.deepEqual(startedSaves.map((save) => save.body), ["Older autosave body", "Newer manual body"])
+    startedSaves[1]?.resolve({ ...notesByKey["daily-plan"], body: "Newer manual body" })
+    assert.deepEqual(await manualSave, { blocked: false })
+    await Promise.resolve()
+
+    assert.deepEqual(completedDiskWrites, ["Older autosave body", "Newer manual body"])
+    assert.equal(controller.getState().editor?.body, "Newer manual body")
+    assert.equal(controller.getState().editor?.savedBody, "Newer manual body")
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+  })
+
+  test("manual save coalesces with an in-flight autosave for the same editor snapshot", async () => {
+    const scheduler = createFakeScheduler()
+    const persistedBodies: string[] = []
+    let finishPersist!: (note: TuiNote) => void
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) =>
+        new Promise<TuiNote>((resolve) => {
+          persistedBodies.push(`${note.key}:${body}`)
+          finishPersist = (savedNote) => resolve({ ...note, ...savedNote, body })
+        }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Shared autosave manual body")
+    scheduler.runNext()
+    await Promise.resolve()
+    assert.equal(controller.getState().editor?.autosaveStatus, "saving")
+
+    const manualSave = controller.saveEditor()
+    await Promise.resolve()
+
+    assert.deepEqual(persistedBodies, ["daily-plan:Shared autosave manual body"])
+    finishPersist({ ...notesByKey["daily-plan"], body: "Shared autosave manual body" })
+    assert.deepEqual(await manualSave, { blocked: false })
+    await Promise.resolve()
+
+    assert.deepEqual(persistedBodies, ["daily-plan:Shared autosave manual body"])
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+  })
+
+  test("rapid repeated manual saves keep only one persistence operation in flight", async () => {
+    const scheduler = createFakeScheduler()
+    const persistedBodies: string[] = []
+    let finishPersist!: (note: TuiNote) => void
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) =>
+        new Promise<TuiNote>((resolve) => {
+          persistedBodies.push(`${note.key}:${body}`)
+          finishPersist = (savedNote) => resolve({ ...note, ...savedNote, body })
+        }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Rapid manual body")
+    const firstSave = controller.saveEditor()
+    const secondSave = controller.saveEditor()
+    const thirdSave = controller.saveEditor()
+    await Promise.resolve()
+
+    assert.deepEqual(persistedBodies, ["daily-plan:Rapid manual body"])
+    assert.deepEqual(scheduler.activeTasks(), [])
+
+    finishPersist({ ...notesByKey["daily-plan"], body: "Rapid manual body" })
+    assert.deepEqual(await firstSave, { blocked: false })
+    assert.deepEqual(await secondSave, { blocked: false })
+    assert.deepEqual(await thirdSave, { blocked: false })
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+  })
+
+  test("typing immediately after a save request is accepted without waiting for persistence", async () => {
+    const persistedBodies: string[] = []
+    let finishPersist!: (note: TuiNote) => void
+    const { deps } = createDeps({
+      persistEditorBody: (note, body) =>
+        new Promise<TuiNote>((resolve) => {
+          persistedBodies.push(`${note.key}:${body}`)
+          finishPersist = (savedNote) => resolve({ ...note, ...savedNote, body })
+        }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("First saved body")
+    const save = controller.saveEditor()
+    controller.insertEditorText(" plus immediate typing")
+
+    assert.equal(controller.getState().editor?.body, "First saved body plus immediate typing")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+    assert.deepEqual(persistedBodies, ["daily-plan:First saved body"])
+
+    finishPersist({ ...notesByKey["daily-plan"], body: "First saved body" })
+    await save
+
+    assert.equal(controller.getState().editor?.body, "First saved body plus immediate typing")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+  })
+
+  test("dispose clears pending autosave timers", () => {
+    const scheduler = createFakeScheduler()
+    const { deps } = createDeps({ autosaveScheduler: scheduler })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Pending before destroy")
+    assert.equal(scheduler.activeTasks().length, 1)
+
+    controller.dispose()
+
+    assert.deepEqual(scheduler.activeTasks(), [])
+  })
+
+  test("dispose detaches autosave state change handlers so stale saves cannot keep render callbacks live", async () => {
+    const scheduler = createFakeScheduler()
+    const invalidations: string[] = []
+    let resolvePersist!: (note: TuiNote) => void
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      onAutosaveStateChange: () => invalidations.push(controller.getState().editor?.autosaveStatus ?? "none"),
+      persistEditorBody: (note, body) => new Promise<TuiNote>((resolve) => {
+        resolvePersist = (savedNote) => resolve({ ...note, ...savedNote, body })
+      }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Pending before destroy")
+    scheduler.runNext()
+    assert.deepEqual(invalidations, ["pending", "saving"])
+
+    controller.dispose()
+    resolvePersist({ ...notesByKey["daily-plan"], body: "Pending before destroy" })
+    await Promise.resolve()
+
+    assert.deepEqual(invalidations, ["pending", "saving"])
+  })
+
+  test("autosave status changes notify the renderer to rerender", async () => {
+    const scheduler = createFakeScheduler()
+    const invalidations: string[] = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      onAutosaveStateChange: () => invalidations.push(controller.getState().editor?.autosaveStatus ?? "none"),
+      persistEditorBody: (note, body) => Promise.resolve({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Autosave status body")
+    scheduler.runNext()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    assert.deepEqual(invalidations, ["pending", "saving", "saved"])
+  })
+
+  test("stale autosave completion for an older body does not overwrite a newer dirty body", async () => {
+    const scheduler = createFakeScheduler()
+    const pendingSaves: Array<{ body: string; resolve: (note: TuiNote) => void }> = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) =>
+        new Promise<TuiNote>((resolve) => {
+          pendingSaves.push({ body, resolve: (savedNote) => resolve({ ...note, ...savedNote }) })
+        }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Older autosave body")
+    scheduler.runNext()
+    await Promise.resolve()
+    assert.equal(controller.getState().editor?.autosaveStatus, "saving")
+
+    controller.updateEditorBody("Newer unsaved body")
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+    pendingSaves[0]?.resolve({ ...notesByKey["daily-plan"], body: "Older autosave body" })
+    await Promise.resolve()
+
+    assert.equal(controller.getState().editor?.body, "Newer unsaved body")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+  })
+
+  test("stale autosave completion for a different active note is ignored", async () => {
+    const scheduler = createFakeScheduler()
+    let finishPersist!: (note: TuiNote) => void
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) =>
+        new Promise<TuiNote>((resolve) => {
+          finishPersist = (savedNote) => resolve({ ...note, ...savedNote, body })
+        }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Autosaving daily")
+    scheduler.runNext()
+    await Promise.resolve()
+    openArchiveReview(controller, { confirmed: true })
+
+    finishPersist({ ...notesByKey["daily-plan"], body: "Autosaving daily" })
+    await Promise.resolve()
+
+    assert.equal(controller.getState().editor?.note.key, "archive-review")
+    assert.equal(controller.getState().editor?.body, "Archive body")
+    assert.equal(controller.getState().editor?.autosaveStatus, "idle")
+  })
+
+  test("stale autosave failure after a newer manual save does not mark clean editor as failed", async () => {
+    const scheduler = createFakeScheduler()
+    const pendingSaves: Array<{ body: string; resolve: (note: TuiNote) => void; reject: (error: Error) => void }> = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) =>
+        new Promise<TuiNote>((resolve, reject) => {
+          pendingSaves.push({ body, resolve: (savedNote) => resolve({ ...note, ...savedNote }), reject })
+        }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Shared body")
+    scheduler.runNext()
+    await Promise.resolve()
+    const manualSave = controller.saveEditor()
+    pendingSaves[0]?.reject(new Error("late autosave failure"))
+    await Promise.resolve()
+    pendingSaves[1]?.resolve({ ...notesByKey["daily-plan"], body: "Shared body" })
+    await manualSave
+
+    await Promise.resolve()
+    await Promise.resolve()
+
+    assert.equal(controller.getState().editor?.body, "Shared body")
+    assert.equal(controller.getState().editor?.savedBody, "Shared body")
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+  })
+
+  test("manual save pre-write failure keeps editor dirty, marks visible failure status, and leaves saved source unchanged", async () => {
+    const storedBody = "Original daily body"
+    const { deps } = createDeps({
+      showNote: (selector) => ({ ...notesByKey[selector], body: storedBody }),
+      persistEditorBody: () => {
+        throw new Error("atomic writer temp write failed")
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Dirty body after manual failure")
+    const result = await controller.saveEditor()
+
+    assert.deepEqual(result, { blocked: true, reason: "dirty-editor" })
+    assert.equal(storedBody, "Original daily body")
+    assert.equal(controller.getState().editor?.body, "Dirty body after manual failure")
+    assert.equal(controller.getState().editor?.savedBody, "Original daily body")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "error")
+  })
+
+  test("autosave pre-write failure changes status to error, preserves dirty body, and leaves saved source unchanged", async () => {
+    const scheduler = createFakeScheduler()
+    const storedBody = "Original daily body"
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      showNote: (selector) => ({ ...notesByKey[selector], body: storedBody }),
+      persistEditorBody: () => Promise.reject(new Error("atomic writer temp write failed")),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Dirty body after failure")
+    scheduler.runNext()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    assert.equal(storedBody, "Original daily body")
+    assert.equal(controller.getState().editor?.body, "Dirty body after failure")
+    assert.equal(controller.getState().editor?.savedBody, "Original daily body")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "error")
+  })
+
+  test("successful retry after autosave failure marks the current buffer clean", async () => {
+    const scheduler = createFakeScheduler()
+    let storedBody = "Original daily body"
+    let failNextPersist = true
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      showNote: (selector) => ({ ...notesByKey[selector], body: storedBody }),
+      persistEditorBody: (note, body) => {
+        if (failNextPersist) {
+          failNextPersist = false
+          return Promise.reject(new Error("atomic writer temp write failed"))
+        }
+        storedBody = body
+        return Promise.resolve({ ...note, body })
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("Body that initially fails")
+    scheduler.runNext()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "error")
+    assert.equal(storedBody, "Original daily body")
+
+    const retryResult = await controller.saveEditor()
+
+    assert.deepEqual(retryResult, { blocked: false })
+    assert.equal(storedBody, "Body that initially fails")
+    assert.equal(controller.getState().editor?.body, "Body that initially fails")
+    assert.equal(controller.getState().editor?.savedBody, "Body that initially fails")
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+  })
+
+  test("editor undo and redo restore snapshots, clear redo on new edits, and keep autosave semantics", async () => {
+    const scheduler = createFakeScheduler()
+    const persistedBodies: string[] = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) => {
+        persistedBodies.push(body)
+        return { ...note, body }
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.openEditorFind("daily")
+    controller.updateEditorFindQuery("daily")
+    controller.goBack()
+    controller.setEditorSelection(8, 8)
+    controller.insertEditorText(" edited")
+
+    let editor = controller.getState().editor
+    assert.equal(editor?.body, "Original edited daily body")
+    assert.equal(editor?.dirty, true)
+    assert.equal(editor?.autosaveStatus, "pending")
+    assert.equal(editor?.undoStack?.length, 1)
+    assert.equal(editor?.redoStack?.length, 0)
+
+    controller.undoEditor()
+
+    editor = controller.getState().editor
+    assert.equal(editor?.body, "Original daily body")
+    assert.equal(editor?.cursorOffset, 8)
+    assert.equal(editor?.selectionStart, 8)
+    assert.equal(editor?.selectionEnd, 8)
+    assert.equal(editor?.dirty, false)
+    assert.equal(editor?.autosaveStatus, "saved")
+    assert.equal(editor?.findQuery, "daily")
+    assert.equal(editor?.findMatchCount, 1)
+    assert.equal(editor?.activeFindIndex, 0)
+    assert.equal(editor?.undoStack?.length, 0)
+    assert.equal(editor?.redoStack?.length, 1)
+    assert.equal(scheduler.activeTasks().length, 0)
+
+    controller.redoEditor()
+
+    editor = controller.getState().editor
+    assert.equal(editor?.body, "Original edited daily body")
+    assert.equal(editor?.dirty, true)
+    assert.equal(editor?.autosaveStatus, "pending")
+    assert.equal(editor?.redoStack?.length, 0)
+    assert.equal(scheduler.activeTasks().length, 1)
+
+    scheduler.runNext()
+    await Promise.resolve()
+    assert.deepEqual(persistedBodies, ["Original edited daily body"])
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.savedBody, "Original edited daily body")
+
+    controller.undoEditor()
+    editor = controller.getState().editor
+    assert.equal(editor?.body, "Original daily body")
+    assert.equal(editor?.savedBody, "Original edited daily body")
+    assert.equal(editor?.dirty, true)
+    assert.equal(editor?.autosaveStatus, "pending")
+    assert.equal(scheduler.activeTasks().length, 1)
+
+    controller.insertEditorText(" fresh")
+    editor = controller.getState().editor
+    assert.equal(editor?.body, "Original fresh daily body")
+    assert.equal(editor?.redoStack?.length, 0)
+  })
+
+  test("editor undo history is bounded and empty undo redo are safe", () => {
+    const scheduler = createFakeScheduler()
+    const { deps } = createDeps({ autosaveScheduler: scheduler })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.undoEditor()
+    assert.equal(controller.getState().editor?.statusMessage, "Nothing to undo")
+    controller.redoEditor()
+    assert.equal(controller.getState().editor?.statusMessage, "Nothing to redo")
+    assert.equal(controller.getState().editor?.body, "Original daily body")
+
+    for (let index = 0; index < 60; index += 1) {
+      controller.insertEditorText(String(index % 10))
+    }
+
+    const editor = controller.getState().editor
+    assert.ok((editor?.undoStack?.length ?? 0) <= 50)
+    assert.equal(editor?.redoStack?.length, 0)
+    assert.equal(editor?.statusMessage, null)
+  })
+
+  test("stale autosave timer skips persistence after an in-flight save already made restored redo body clean", async () => {
+    const scheduler = createFakeScheduler()
+    const pendingSaves: Array<{ body: string; resolve: (note: TuiNote) => void }> = []
+    const persistedBodies: string[] = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) =>
+        new Promise<TuiNote>((resolve) => {
+          persistedBodies.push(body)
+          pendingSaves.push({
+            body,
+            resolve: (savedNote) => resolve({ ...note, ...savedNote }),
+          })
+        }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText(" updated")
+    scheduler.runNext()
+    await Promise.resolve()
+    assert.deepEqual(persistedBodies, ["Original daily body updated"])
+
+    controller.undoEditor()
+    assert.equal(controller.getState().editor?.body, "Original daily body")
+    controller.redoEditor()
+    assert.equal(controller.getState().editor?.body, "Original daily body updated")
+    assert.deepEqual(scheduler.activeTasks().map((task) => task.delay), [750])
+
+    pendingSaves[0]?.resolve({ ...notesByKey["daily-plan"], body: "Original daily body updated" })
+    await Promise.resolve()
+    await Promise.resolve()
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+    assert.deepEqual(scheduler.activeTasks(), [])
+    assert.deepEqual(persistedBodies, ["Original daily body updated"])
+  })
+
+  test("undoing to a clean snapshot while autosave is in flight re-saves the restored body", async () => {
+    const scheduler = createFakeScheduler()
+    const pendingSaves: Array<{ body: string; resolve: (note: TuiNote) => void }> = []
+    const persistedBodies: string[] = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      persistEditorBody: (note, body) =>
+        new Promise<TuiNote>((resolve) => {
+          persistedBodies.push(body)
+          pendingSaves.push({
+            body,
+            resolve: (savedNote) => resolve({ ...note, ...savedNote }),
+          })
+        }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText(" updated")
+    scheduler.runNext()
+    await Promise.resolve()
+    assert.deepEqual(persistedBodies, ["Original daily body updated"])
+
+    controller.undoEditor()
+    assert.equal(controller.getState().editor?.body, "Original daily body")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+    assert.deepEqual(scheduler.activeTasks().map((task) => task.delay), [750])
+
+    pendingSaves[0]?.resolve({ ...notesByKey["daily-plan"], body: "Original daily body updated" })
+    await Promise.resolve()
+    await Promise.resolve()
+    assert.equal(controller.getState().editor?.body, "Original daily body")
+    assert.equal(controller.getState().editor?.dirty, true)
+
+    scheduler.runNext()
+    await Promise.resolve()
+    await Promise.resolve()
+    pendingSaves[1]?.resolve({ ...notesByKey["daily-plan"], body: "Original daily body" })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    assert.deepEqual(persistedBodies, ["Original daily body updated", "Original daily body"])
+    assert.equal(controller.getState().editor?.body, "Original daily body")
+    assert.equal(controller.getState().editor?.savedBody, "Original daily body")
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+  })
+})
