@@ -35,11 +35,11 @@
     "check": "bun run typecheck && bun run test && bun run smoke:opentui && bun run smoke:opentui:interactive && bun run smoke:cli"
   },
   "dependencies": {
-    "@opentui/core": "0.2.14",
+    "@opentui/core": "0.3.0",
     "clipboardy": "5.3.1",
     "js-yaml": "4.1.1",
-    "minisearch": "6.3.0",
-    "sql.js": "1.10.3"
+    "minisearch": "7.2.0",
+    "sql.js": "1.14.1"
   },
   "devDependencies": {
     "@types/bun": "1.2.18",
