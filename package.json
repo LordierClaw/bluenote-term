@@ -27,6 +27,8 @@
     "check:env": "bun run ./scripts/check-env.ts",
     "smoke:opentui": "bun run ./scripts/smoke-opentui.ts",
     "smoke:cli": "bun run ./scripts/smoke-cli.ts",
+    "build:release": "bun run ./scripts/package-release.ts",
+    "package:release": "bun run ./scripts/package-release.ts",
     "lint": "biome lint --diagnostic-level=error .",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
