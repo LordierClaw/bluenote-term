@@ -3,11 +3,11 @@ import { existsSync, readdirSync } from "node:fs"
 
 import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions, STATE_NOTES_DIRECTORY } from "../config/root"
 import { UsageError } from "./errors"
-import { rebuildIndexStore, type IndexedNoteRecord, type RebuildIndexStoreResult } from "../index/index-store"
+import { rebuildIndexStore, type IndexedNoteRecord } from "../index/index-store"
 import { parseNoteFile } from "../storage/frontmatter"
 import { parsePlainNote } from "../storage/plain-note"
 import { createSidecarRepository } from "../storage/sidecar-repository"
-import { createNoteRepository } from "../storage/note-repository"
+import { createNoteRepository, type StoredNoteRecord } from "../storage/note-repository"
 import type { ParsedNote } from "../storage/note-schema"
 import { ensureManagedRoot } from "../storage/root-layout"
 import { migrateLegacyAppStateToData } from "../storage/app-state-migration"
@@ -100,7 +100,7 @@ export function rebuildIndexes(options: RebuildIndexesOptions = {}): RebuildInde
   const sidecars = createSidecarRepository(rootPath)
   const notes: Array<IndexedNoteRecord | ParsedNote> = []
   const validationErrors: string[] = []
-  let noteRecords
+  let noteRecords: StoredNoteRecord[]
 
   try {
     noteRecords = repository.listNotePaths()

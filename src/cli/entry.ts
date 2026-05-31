@@ -14,7 +14,6 @@ import { migrateStorage, type MigrateStorageOptions } from "../core/migrate-stor
 import { rebuildIndexes, type RebuildIndexesOptions } from "../core/rebuild-indexes"
 import { searchNotes, type SearchNoteMatch } from "../core/search-notes"
 import { showNote } from "../core/show-note"
-import type { Clock } from "../platform/clock"
 import { runTuiCli } from "../tui/app"
 
 export interface CliRuntimeOptions {

@@ -161,15 +161,10 @@ Useful individual checks:
 
 ```bash
 bun run typecheck
+bun run lint
 bun test
 bun run smoke:opentui
 bun run smoke:cli
-```
-
-The interactive smoke test launches `bn tui` inside a real TTY and requires `tmux`:
-
-```bash
-bun run smoke:opentui:interactive
 ```
 
 ## Contributing

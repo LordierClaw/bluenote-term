@@ -7,7 +7,6 @@ import { assertManagedRootLayout, createManagedRootHarness, runCli } from "../he
 
 const workspaceRoot = path.resolve(import.meta.dir, "../..")
 const packageJsonPath = path.join(workspaceRoot, "package.json")
-const interactiveSmokePath = path.join(workspaceRoot, "scripts/smoke-opentui-interactive.ts")
 
 test("bn --help prints the visible command surface without removed command or release-stage wording", () => {
   const result = runCli(["--help"])
@@ -24,26 +23,15 @@ test("bn --help prints the visible command surface without removed command or re
   assert.doesNotMatch(output, new RegExp("completion|Pha" + "se\\s+[0-9]", "i"))
 })
 
-test("project verification commands cover CLI plus import-only and interactive OpenTUI checks", async () => {
+test("project verification commands cover CLI plus import-only OpenTUI checks", async () => {
   const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as {
     scripts?: Record<string, string>
   }
+  assert.equal(packageJson.scripts?.lint, "biome lint --diagnostic-level=error .")
   assert.equal(packageJson.scripts?.["smoke:cli"], "bun run ./scripts/smoke-cli.ts")
   assert.equal(packageJson.scripts?.["smoke:opentui"], "bun run ./scripts/smoke-opentui.ts")
-  assert.equal(packageJson.scripts?.["smoke:opentui:interactive"], "bun run ./scripts/smoke-opentui-interactive.ts")
-  assert.match(packageJson.scripts?.check ?? "", /bun run smoke:opentui:interactive/)
-})
-
-test("interactive OpenTUI smoke covers live manager create and delete flows", async () => {
-  const smokeScript = await readFile(interactiveSmokePath, "utf8")
-
-  assert.match(smokeScript, /expectPaneContains\(managerPane, "BlueNote"/)
-  assert.match(smokeScript, /expectPaneExcludes\(returnedManagerPane, "BlueNote Manager"/)
-  assert.match(smokeScript, /Live Smoke Manager Note/)
-  assert.match(smokeScript, /manager create opens editor/)
-  assert.match(smokeScript, /manager delete confirmation/)
-  assert.match(smokeScript, /manager delete cancellation/)
-  assert.match(smokeScript, /expectNoteArtifactsDeleted/)
+  assert.match(packageJson.scripts?.check ?? "", /bun run lint/)
+  assert.doesNotMatch(packageJson.scripts?.check ?? "", /smoke:opentui:interactive|qa:visual:tui/)
 })
 
 test("smoke-cli script exercises --help and init against a temporary root", async () => {

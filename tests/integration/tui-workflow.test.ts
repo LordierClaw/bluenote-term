@@ -13,7 +13,7 @@ import { buildSearchEverythingPreview, type SearchEverythingContentResult } from
 import { createDefaultWorkspaceController, createDesktopClipboardModel, routeWorkspaceKey } from "../../src/tui/app"
 import { buildEditorViewModel } from "../../src/tui/render-editor"
 import { routeManagerKey } from "../../src/tui/render-manager"
-import { createWorkspaceController, type WorkspaceCommandContext } from "../../src/tui/workspace-controller"
+import { createWorkspaceController } from "../../src/tui/workspace-controller"
 import { ATOMIC_NOTE_WRITER_TEMP_PREFIX } from "../../src/storage/atomic-note-writer"
 import { getStateTmpPath } from "../../src/storage/root-layout"
 
