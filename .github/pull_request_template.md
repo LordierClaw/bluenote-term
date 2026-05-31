@@ -30,10 +30,10 @@
 <!-- Check every command you ran. If a check was skipped, explain why. -->
 
 - [ ] `bun run typecheck`
+- [ ] `bun run lint`
 - [ ] `bun test`
 - [ ] `bun run smoke:opentui`
 - [ ] `bun run smoke:cli`
-- [ ] `bun run smoke:opentui:interactive` (for TUI behavior changes, when `tmux` is available)
 
 ## Checklist
 

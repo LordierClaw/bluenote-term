@@ -40,6 +40,9 @@ jobs:
       - name: Check runtime environment
         run: bun run check:env
 
+      - name: Lint
+        run: bun run lint
+
       - name: Typecheck
         run: bun run typecheck
 
