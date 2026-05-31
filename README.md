@@ -36,6 +36,10 @@ bun run ./bin/bn.ts --help
 
 You can also link or wrap `bin/bn.ts` as `bn` if you want it on your `PATH`.
 
+## Releases
+
+Portable GitHub Release archives are available for Windows and Linux users as ready-to-run packages. See [Release Workflow](docs/workflow/releases.md) for artifact names, extraction steps, checksum verification, and the maintainer tag flow.
+
 ## Quick start
 
 ```bash
