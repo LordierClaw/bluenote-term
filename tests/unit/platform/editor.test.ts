@@ -2,7 +2,7 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 
 import { EditorLaunchError } from "../../../src/core/errors"
-import { launchEditor, resolveEditorCommand } from "../../../src/platform/editor"
+import { launchEditor, parseEditorCommand, resolveEditorCommand } from "../../../src/platform/editor"
 
 test("resolveEditorCommand returns the configured $EDITOR value", () => {
   assert.equal(resolveEditorCommand({ EDITOR: "/tmp/fake-editor" }), "/tmp/fake-editor")
@@ -17,6 +17,10 @@ test("resolveEditorCommand raises EditorLaunchError when $EDITOR is missing", ()
       return true
     },
   )
+})
+
+test("parseEditorCommand supports editor commands with quoted arguments", () => {
+  assert.deepEqual(parseEditorCommand('bun "/tmp/fake editor.ts" --flag'), ["bun", "/tmp/fake editor.ts", "--flag"])
 })
 
 test("launchEditor invokes the launcher with the resolved editor command and note path", () => {

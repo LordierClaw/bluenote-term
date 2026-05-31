@@ -130,11 +130,10 @@ export async function createManagedRootHarness(prefix = "bluenote-test-"): Promi
       await mkdir(path.dirname(absolutePath), { recursive: true })
       await Bun.write(absolutePath, markdown)
     },
-    async writeFakeEditorScript(markdown, fileName = "fake-editor.sh") {
+    async writeFakeEditorScript(markdown, fileName = "fake-editor.ts") {
       const editorScriptPath = path.join(rootPath, fileName)
-      await writeFile(editorScriptPath, `#!/bin/sh\ncat <<'EOF' > "$1"\n${markdown}EOF\n`, "utf8")
-      await Bun.$`chmod 755 ${editorScriptPath}`.quiet()
-      return editorScriptPath
+      await writeFile(editorScriptPath, `await Bun.write(Bun.argv[2], ${JSON.stringify(markdown)})\n`, "utf8")
+      return `bun "${editorScriptPath}"`
     },
     cleanup() {
       return rm(rootPath, { recursive: true, force: true })

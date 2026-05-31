@@ -25,6 +25,18 @@ export function resolveEditorCommand(env: NodeJS.ProcessEnv = process.env): stri
   return editor
 }
 
+export function parseEditorCommand(editor: string): string[] {
+  const parts = editor.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? []
+
+  return parts.map((part) => {
+    if ((part.startsWith('"') && part.endsWith('"')) || (part.startsWith("'") && part.endsWith("'"))) {
+      return part.slice(1, -1)
+    }
+
+    return part
+  })
+}
+
 function defaultLauncher(command: string[]): EditorLaunchResult {
   const result = spawnSync(command[0], command.slice(1), { stdio: "inherit" })
 
@@ -43,7 +55,7 @@ function defaultLauncher(command: string[]): EditorLaunchResult {
 export function launchEditor(notePath: string, options: LaunchEditorOptions = {}): void {
   const editor = resolveEditorCommand(options.env)
   const launcher = options.launcher ?? defaultLauncher
-  const command = [editor, notePath]
+  const command = [...parseEditorCommand(editor), notePath]
   const result = launcher(command)
 
   if (result.exitCode !== 0) {
