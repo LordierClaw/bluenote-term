@@ -62,14 +62,14 @@ test("bn list shows title, key, description, and path for active notes only", as
       key: "alpha-note",
       title: "Alpha Note",
       description: "Alpha summary",
-      relativePath: path.join("notes", "inbox", "alpha-note.md"),
+      relativePath: "notes/inbox/alpha-note.md",
       body: "Alpha body.\n",
     })
     await writePlainNoteWithSidecar(harness.rootPath, {
       key: "beta-note",
       title: "Beta Note",
       description: "Nebula planning note",
-      relativePath: path.join("notes", "journal", "beta-note.md"),
+      relativePath: "notes/journal/beta-note.md",
       body: "Beta body.\n",
       createdAt: "2026-05-21T11:15:00.000Z",
     })
@@ -77,7 +77,7 @@ test("bn list shows title, key, description, and path for active notes only", as
       key: "archived-note",
       title: "Archived Note",
       description: "Should not appear in list",
-      relativePath: path.join("notes", "archive", "archived-note.md"),
+      relativePath: "notes/archive/archived-note.md",
       body: "Archived body.\n",
       archivedAt: "2026-05-22T09:30:00.000Z",
     })
@@ -113,7 +113,7 @@ test("bn show <selector> prints title, key, path, description, and body", async 
       key: "show-note",
       title: "Example Show Note",
       description: "Visible body. More detail.",
-      relativePath: path.join("notes", "inbox", "show-note.md"),
+      relativePath: "notes/inbox/show-note.md",
       body: "Visible body.\nSecond line.\n",
     })
 
@@ -141,7 +141,7 @@ test("bn show <selector> prints title, key, path, description, and body", async 
 
 test("bn show falls back to legacy frontmatter notes without sidecars", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-show-legacy-")
-  const relativePath = path.join("notes", "inbox", "legacy-show.md")
+  const relativePath = "notes/inbox/legacy-show.md"
 
   try {
     await harness.writeNote(
@@ -183,7 +183,7 @@ test("bn show rejects a title-derived slug selector", async () => {
       key: "slug-note",
       title: "Example Show Note",
       description: "Visible body.",
-      relativePath: path.join("notes", "inbox", "slug-note.md"),
+      relativePath: "notes/inbox/slug-note.md",
       body: "Visible body.\n",
     })
 
@@ -200,7 +200,7 @@ test("bn show rejects a title-derived slug selector", async () => {
 
 test("bn show resolves a managed-root-relative path selector", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-show-path-")
-  const relativePath = path.join("notes", "journal", "show-path.md")
+  const relativePath = "notes/journal/show-path.md"
 
   try {
     await writePlainNoteWithSidecar(harness.rootPath, {
@@ -223,7 +223,7 @@ test("bn show resolves a managed-root-relative path selector", async () => {
 
 test("bn show rejects non-canonical normalized path aliases", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-show-path-alias-")
-  const relativePath = path.join("notes", "journal", "show-path.md")
+  const relativePath = "notes/journal/show-path.md"
 
   try {
     await writePlainNoteWithSidecar(harness.rootPath, {
@@ -253,11 +253,11 @@ test("bn show still resolves an exact key match when a legacy frontmatter id col
       key: "shared-title",
       title: "Canonical Key Note",
       description: "Canonical key body.",
-      relativePath: path.join("notes", "inbox", "shared-title.md"),
+      relativePath: "notes/inbox/shared-title.md",
       body: "Canonical key body.\n",
     })
     await harness.writeNote(
-      path.join("notes", "journal", "legacy-human-key.md"),
+      "notes/journal/legacy-human-key.md",
       noteMarkdown({
         id: "shared-title",
         title: "Legacy Collision Note",
@@ -294,7 +294,7 @@ test("bn show reports selector-not-found errors", async () => {
       key: "present",
       title: "Present Note",
       description: "Visible body.",
-      relativePath: path.join("notes", "inbox", "present.md"),
+      relativePath: "notes/inbox/present.md",
       body: "Visible body.\n",
     })
 
@@ -317,14 +317,14 @@ test("bn show suggests close note keys when a selector is missing", async () => 
       key: "show-note",
       title: "Show Note",
       description: "Visible body.",
-      relativePath: path.join("notes", "inbox", "show-note.md"),
+      relativePath: "notes/inbox/show-note.md",
       body: "Visible body.\n",
     })
     await writePlainNoteWithSidecar(harness.rootPath, {
       key: "slow-note",
       title: "Slow Note",
       description: "Slow body.",
-      relativePath: path.join("notes", "journal", "slow-note.md"),
+      relativePath: "notes/journal/slow-note.md",
       body: "Slow body.\n",
     })
 
@@ -359,7 +359,7 @@ test("bn show rejects legacy frontmatter ids when they do not match the canonica
 
   try {
     await harness.writeNote(
-      path.join("notes", "inbox", "human-key.md"),
+      "notes/inbox/human-key.md",
       noteMarkdown({
         id: "legacy-id-123",
         title: "Legacy Selector Note",

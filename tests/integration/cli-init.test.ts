@@ -49,7 +49,7 @@ test("bn init migrates existing .state metadata into .data without rewriting not
   const harness = await createManagedRootHarness("bluenote-cli-init-state-migration-")
 
   try {
-    const relativePath = path.join("notes", "inbox", "plain.md")
+    const relativePath = "notes/inbox/plain.md"
     const noteBody = "Plain note body must remain byte-for-byte unchanged.\n"
     const sidecarJson = `${JSON.stringify(
       {

@@ -51,7 +51,7 @@ async function writePlainNoteWithSidecar(
 
 test("renameNote renames the key, file, and sidecar and reports the previous and new key", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-rename-note-"))
-  const relativePath = path.join("notes", "inbox", "original-note.md")
+  const relativePath = "notes/inbox/original-note.md"
 
   try {
     await writePlainNoteWithSidecar(rootPath, {
@@ -74,7 +74,7 @@ test("renameNote renames the key, file, and sidecar and reports the previous and
     assert.equal(summary.previousKey, "original-note")
     assert.equal(summary.key, "renamed-title-00000a")
     assert.equal(summary.previousRelativePath, relativePath)
-    assert.equal(summary.relativePath, path.join("notes", "inbox", "renamed-title-00000a.md"))
+    assert.equal(summary.relativePath, "notes/inbox/renamed-title-00000a.md")
 
     await assert.rejects(() => access(path.join(rootPath, relativePath)))
     await assert.rejects(() => access(path.join(rootPath, ".data", "notes", "original-note.json")))
@@ -91,7 +91,7 @@ test("renameNote renames the key, file, and sidecar and reports the previous and
 
     assert.equal(sidecar.key, "renamed-title-00000a")
     assert.equal(sidecar.title, "Renamed Title")
-    assert.equal(sidecar.relativePath, path.join("notes", "inbox", "renamed-title-00000a.md"))
+    assert.equal(sidecar.relativePath, "notes/inbox/renamed-title-00000a.md")
     assert.equal(sidecar.description, "# Renamed Title Body after rename.")
     assert.equal(sidecar.updatedAt, "2026-05-21T12:45:00.000Z")
   } finally {
@@ -107,14 +107,14 @@ test("renameNote fails cleanly when the generated target key collides", async ()
       key: "original-note",
       title: "Original Title",
       description: "Original Title Body before rename.",
-      relativePath: path.join("notes", "inbox", "original-note.md"),
+      relativePath: "notes/inbox/original-note.md",
       body: "# Original Title\n\nBody before rename.\n",
     })
     await writePlainNoteWithSidecar(rootPath, {
       key: "renamed-title-00000a",
       title: "Occupied Title",
       description: "Occupied body.",
-      relativePath: path.join("notes", "journal", "renamed-title-00000a.md"),
+      relativePath: "notes/journal/renamed-title-00000a.md",
       body: "Occupied body.\n",
     })
 
@@ -148,7 +148,7 @@ test("renameNote leaves a recovery artifact behind when rename staging fails", a
       key: "original-note",
       title: "Original Title",
       description: "Original Title Body before rename.",
-      relativePath: path.join("notes", "inbox", "original-note.md"),
+      relativePath: "notes/inbox/original-note.md",
       body: "# Original Title\n\nBody before rename.\n",
     })
 

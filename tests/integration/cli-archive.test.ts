@@ -62,14 +62,14 @@ test("bn archive <selector> moves the plain note to notes/archive, preserves the
       key: "archive-target",
       title: "Archive Target",
       description: "Searchable before archive.",
-      relativePath: path.join("notes", "inbox", "archive-target.md"),
+      relativePath: "notes/inbox/archive-target.md",
       body: "Searchable before archive.\n",
     })
     await writePlainNoteWithSidecar(harness.rootPath, {
       key: "still-active",
       title: "Still Active",
       description: "Remains visible.",
-      relativePath: path.join("notes", "inbox", "still-active.md"),
+      relativePath: "notes/inbox/still-active.md",
       body: "Remains visible.\n",
       createdAt: "2026-05-21T10:16:00.000Z",
     })
@@ -81,7 +81,7 @@ test("bn archive <selector> moves the plain note to notes/archive, preserves the
 
     await assert.rejects(() => access(path.join(harness.rootPath, "notes", "inbox", "archive-target.md")))
 
-    const archivedRelativePath = path.join("notes", "archive", "archive-target.md")
+    const archivedRelativePath = "notes/archive/archive-target.md"
     const showResult = harness.run(["show", archivedRelativePath])
     assert.equal(showResult.exitCode, 0)
     assert.equal(
@@ -128,7 +128,7 @@ test("bn archive rejects notes that are already archived", async () => {
       key: "already-archived",
       title: "Already Archived",
       description: "Already archived.",
-      relativePath: path.join("notes", "archive", "already-archived.md"),
+      relativePath: "notes/archive/already-archived.md",
       body: "Already archived.\n",
       archivedAt: "2026-05-21T11:00:00.000Z",
     })
@@ -138,7 +138,7 @@ test("bn archive rejects notes that are already archived", async () => {
     assert.equal(archiveResult.stdout, "")
     assert.match(archiveResult.stderr, /Note 'notes[\\/]archive[\\/]already-archived\.md' is already archived\./)
 
-    const showResult = harness.run(["show", path.join("notes", "archive", "already-archived.md")])
+    const showResult = harness.run(["show", "notes/archive/already-archived.md"])
     assert.equal(showResult.exitCode, 0)
     assert.equal(
       showResult.stdout,

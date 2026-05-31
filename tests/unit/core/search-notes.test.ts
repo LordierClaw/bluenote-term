@@ -15,7 +15,7 @@ const MATCH_NOTES: IndexedNoteRecord[] = [
     title: "Moonbeam Launch",
     description: "Status review",
     body: "Quiet body text.\n",
-    relativePath: path.join("notes", "inbox", "moonbeam-title.md"),
+    relativePath: "notes/inbox/moonbeam-title.md",
     createdAt: "2026-05-21T10:15:00.000Z",
     updatedAt: "2026-05-21T10:15:00.000Z",
     archivedAt: null,
@@ -25,7 +25,7 @@ const MATCH_NOTES: IndexedNoteRecord[] = [
     title: "Status Review",
     description: "Moonbeam rollout checklist",
     body: "General body text.\n",
-    relativePath: path.join("notes", "inbox", "description-match.md"),
+    relativePath: "notes/inbox/description-match.md",
     createdAt: "2026-05-21T10:16:00.000Z",
     updatedAt: "2026-05-21T10:16:00.000Z",
     archivedAt: null,
@@ -35,7 +35,7 @@ const MATCH_NOTES: IndexedNoteRecord[] = [
     title: "Incident Notes",
     description: "Body-only reference",
     body: "First line stays quiet.\nSecond line mentions moonbeam during deployment.\nThird line closes out.\n",
-    relativePath: path.join("notes", "journal", "content-match.md"),
+    relativePath: "notes/journal/content-match.md",
     createdAt: "2026-05-21T10:17:00.000Z",
     updatedAt: "2026-05-21T10:17:00.000Z",
     archivedAt: null,
@@ -45,7 +45,7 @@ const MATCH_NOTES: IndexedNoteRecord[] = [
     title: "Utility Note",
     description: "Helper index",
     body: "Plain helper text only.\n",
-    relativePath: path.join("notes", "archive", "moonbeam-utility.md"),
+    relativePath: "notes/archive/moonbeam-utility.md",
     createdAt: "2026-05-21T10:18:00.000Z",
     updatedAt: "2026-05-21T10:18:00.000Z",
     archivedAt: null,
@@ -73,7 +73,7 @@ test("searchNotes returns one grouped match per note with ranked source labels",
       "key/path",
     ])
     assert.equal(results[2]?.match.excerpt, "...Second line mentions moonbeam during deployment....")
-    assert.equal(results[0]?.relativePath, path.join("notes", "inbox", "moonbeam-title.md"))
+    assert.equal(results[0]?.relativePath, "notes/inbox/moonbeam-title.md")
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }
@@ -91,7 +91,7 @@ test("searchNotes does not include fuzzy subsequence-only matches", async () => 
           title: "A Big Cat",
           description: "Feline reference",
           body: "This line mentions a-big-cat but not the compact query.\n",
-          relativePath: path.join("notes", "inbox", "a-big-cat.md"),
+          relativePath: "notes/inbox/a-big-cat.md",
           createdAt: "2026-05-21T10:19:00.000Z",
           updatedAt: "2026-05-21T10:19:00.000Z",
           archivedAt: null,
@@ -117,7 +117,7 @@ test("searchNotes includes title, path, and body matches that contain numeric qu
           title: "Receipt 123",
           description: "Purchase record",
           body: "No numeric content here.\n",
-          relativePath: path.join("notes", "inbox", "receipt-title.md"),
+          relativePath: "notes/inbox/receipt-title.md",
           createdAt: "2026-05-21T10:19:00.000Z",
           updatedAt: "2026-05-21T10:19:00.000Z",
           archivedAt: null,
@@ -127,7 +127,7 @@ test("searchNotes includes title, path, and body matches that contain numeric qu
           title: "Meeting Notes",
           description: "Planning notes",
           body: "No numeric content here.\n",
-          relativePath: path.join("notes", "meetings", "meeting-123.md"),
+          relativePath: "notes/meetings/meeting-123.md",
           createdAt: "2026-05-21T10:20:00.000Z",
           updatedAt: "2026-05-21T10:20:00.000Z",
           archivedAt: null,
@@ -137,7 +137,7 @@ test("searchNotes includes title, path, and body matches that contain numeric qu
           title: "Body Only",
           description: "Reference note",
           body: "First line stays quiet.\nTracking code 123 appears here.\n",
-          relativePath: path.join("notes", "inbox", "body-match.md"),
+          relativePath: "notes/inbox/body-match.md",
           createdAt: "2026-05-21T10:21:00.000Z",
           updatedAt: "2026-05-21T10:21:00.000Z",
           archivedAt: null,
@@ -167,7 +167,7 @@ test("searchNotes finds arbitrary substring contains matches that MiniSearch tok
           title: "Alpha Project",
           description: "Substring fixture",
           body: "Body contains foobar for substring search.\n",
-          relativePath: path.join("notes", "inbox", "alpha-project.md"),
+          relativePath: "notes/inbox/alpha-project.md",
           createdAt: "2026-05-21T10:22:00.000Z",
           updatedAt: "2026-05-21T10:22:00.000Z",
           archivedAt: null,
@@ -197,7 +197,7 @@ test("listNotes prefers derived index summaries when available", async () => {
         key: "moonbeam-title",
         title: "Moonbeam Launch",
         description: "Status review",
-        relativePath: path.join("notes", "inbox", "moonbeam-title.md"),
+        relativePath: "notes/inbox/moonbeam-title.md",
       },
     ])
   } finally {

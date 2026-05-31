@@ -32,7 +32,7 @@ test("CLI workflow stays consistent across init, create, rebuild, list, search, 
     const createdMarkdown = await readFile(createdAbsolutePath, "utf8")
     assert.equal(createdMarkdown, "")
 
-    const secondNoteRelativePath = path.join("notes", "journal", "reference-note.md")
+    const secondNoteRelativePath = "notes/journal/reference-note.md"
     await harness.writeNote(secondNoteRelativePath, noteMarkdown({
       id: "reference-note",
       title: "Reference Note",
@@ -95,7 +95,7 @@ test("CLI workflow stays consistent across init, create, rebuild, list, search, 
     const archiveResult = runOk("bn archive reference-note", ["archive", "reference-note"])
     assert.match(archiveResult.stdout, /Archived note: notes[\\/]archive[\\/]reference-note\.md/)
 
-    const archivedRelativePath = path.join("notes", "archive", "reference-note.md")
+    const archivedRelativePath = "notes/archive/reference-note.md"
     assert.equal(await Bun.file(path.join(harness.rootPath, secondNoteRelativePath)).exists(), false)
     const archivedMarkdown = await readFile(path.join(harness.rootPath, archivedRelativePath), "utf8")
     assert.equal(archivedMarkdown, editedMarkdown)

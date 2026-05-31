@@ -30,7 +30,7 @@ test("repository writes a new note to notes/inbox", async () => {
       body: "Hello from BlueNote.\n",
     })
 
-    assert.equal(created.relativePath, path.join("notes", "inbox", "note-123.md"))
+    assert.equal(created.relativePath, "notes/inbox/note-123.md")
     assert.equal(created.notePath, path.join(rootPath, "notes", "inbox", "note-123.md"))
 
     const loaded = repository.read(created.notePath)

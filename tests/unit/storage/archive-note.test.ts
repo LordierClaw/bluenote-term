@@ -23,7 +23,7 @@ async function writeSidecar(rootPath: string, key: string, json: string) {
 test("archiveNote moves a selected note into notes/archive and stamps archivedAt", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-archive-note-"))
   const archivedAt = "2026-05-21T12:30:00.000Z"
-  const originalRelativePath = path.join("notes", "inbox", "archive-me.md")
+  const originalRelativePath = "notes/inbox/archive-me.md"
 
   try {
     await writeNote(
@@ -44,7 +44,7 @@ test("archiveNote moves a selected note into notes/archive and stamps archivedAt
 
     assert.equal(summary.rootPath, rootPath)
     assert.equal(summary.archivedAt, archivedAt)
-    assert.equal(summary.relativePath, path.join("notes", "archive", "archive-me.md"))
+    assert.equal(summary.relativePath, "notes/archive/archive-me.md")
     assert.equal(summary.notePath, path.join(rootPath, "notes", "archive", "archive-me.md"))
 
     await assert.rejects(() => access(path.join(rootPath, originalRelativePath)))
@@ -54,7 +54,7 @@ test("archiveNote moves a selected note into notes/archive and stamps archivedAt
     const archivedNote = repository.read(summary.notePath)
     assert.equal(archivedNote.frontmatter.archivedAt, archivedAt)
     assert.equal(archivedNote.frontmatter.id, "archive-me")
-    assert.equal(archivedNote.sourcePath, path.join("notes", "archive", "archive-me.md"))
+    assert.equal(archivedNote.sourcePath, "notes/archive/archive-me.md")
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }
@@ -66,10 +66,10 @@ test("archiveNote refuses to select a target when another note already has inval
   try {
     await writeNote(
       rootPath,
-      path.join("notes", "inbox", "archive-me.md"),
+      "notes/inbox/archive-me.md",
       `---\nid: archive-me\nschemaVersion: 1\ntitle: Archive Me\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:15:00.000Z\nupdatedAt: 2026-05-21T10:15:00.000Z\n---\nReady to archive.\n`,
     )
-    await writeNote(rootPath, path.join("notes", "journal", "invalid-sidecar.md"), "Plain body with mismatched metadata.\n")
+    await writeNote(rootPath, "notes/journal/invalid-sidecar.md", "Plain body with mismatched metadata.\n")
     await writeSidecar(
       rootPath,
       "invalid-sidecar",
@@ -77,7 +77,7 @@ test("archiveNote refuses to select a target when another note already has inval
         key: "other-key",
         title: "Invalid Sidecar",
         description: "Broken metadata",
-        relativePath: path.join("notes", "inbox", "invalid-sidecar.md"),
+        relativePath: "notes/inbox/invalid-sidecar.md",
       }),
     )
 
@@ -93,7 +93,7 @@ test("archiveNote refuses to select a target when another note already has inval
     const repository = createNoteRepository(rootPath)
     const original = repository.read(path.join(rootPath, "notes", "inbox", "archive-me.md"))
     assert.equal(original.frontmatter.archivedAt, undefined)
-    assert.equal(original.sourcePath, path.join("notes", "inbox", "archive-me.md"))
+    assert.equal(original.sourcePath, "notes/inbox/archive-me.md")
     await assert.rejects(() => access(path.join(rootPath, "notes", "archive", "archive-me.md")))
   } finally {
     await rm(rootPath, { recursive: true, force: true })
@@ -106,7 +106,7 @@ test("archiveNote rejects notes that are already stored under notes/archive", as
   try {
     await writeNote(
       rootPath,
-      path.join("notes", "archive", "already-archived.md"),
+      "notes/archive/already-archived.md",
       `---\nid: already-archived\nschemaVersion: 1\ntitle: Already Archived\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:15:00.000Z\nupdatedAt: 2026-05-21T10:15:00.000Z\narchivedAt: 2026-05-21T11:00:00.000Z\n---\nAlready archived.\n`,
     )
 
@@ -133,7 +133,7 @@ test("archiveNote rejects notes whose frontmatter already has archivedAt", async
   try {
     await writeNote(
       rootPath,
-      path.join("notes", "inbox", "archived-flag.md"),
+      "notes/inbox/archived-flag.md",
       `---\nid: archived-flag\nschemaVersion: 1\ntitle: Archived Flag\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:15:00.000Z\nupdatedAt: 2026-05-21T10:15:00.000Z\narchivedAt: 2026-05-21T11:00:00.000Z\n---\nAlready archived in metadata.\n`,
     )
 
@@ -161,12 +161,12 @@ test("archiveNote fails when notes/archive already contains the same basename", 
   try {
     await writeNote(
       rootPath,
-      path.join("notes", "inbox", "duplicate.md"),
+      "notes/inbox/duplicate.md",
       `---\nid: duplicate-source\nschemaVersion: 1\ntitle: Duplicate Source\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:15:00.000Z\nupdatedAt: 2026-05-21T10:15:00.000Z\n---\nSource note.\n`,
     )
     await writeNote(
       rootPath,
-      path.join("notes", "archive", "duplicate.md"),
+      "notes/archive/duplicate.md",
       `---\nid: duplicate-archived\nschemaVersion: 1\ntitle: Existing Archived Note\nmode: plain\ntags: []\ncreatedAt: 2026-05-20T10:15:00.000Z\nupdatedAt: 2026-05-20T10:15:00.000Z\narchivedAt: 2026-05-20T11:00:00.000Z\n---\nArchived first.\n`,
     )
 

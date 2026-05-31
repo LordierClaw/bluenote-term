@@ -36,7 +36,7 @@ test("creating a note writes a plain markdown file and matching sidecar", async 
     })
 
     assert.equal(created.notePath, getInboxNotePath(rootPath, "note-123"))
-    assert.equal(created.relativePath, path.join("notes", "inbox", "note-123.md"))
+    assert.equal(created.relativePath, "notes/inbox/note-123.md")
 
     const markdown = await readFile(created.notePath, "utf8")
     assert.equal(markdown, "Hello from BlueNote.\n")
@@ -49,7 +49,7 @@ test("creating a note writes a plain markdown file and matching sidecar", async 
       key: "note-123",
       title: "Example title",
       description: "Hello from BlueNote.",
-      relativePath: path.join("notes", "inbox", "note-123.md"),
+      relativePath: "notes/inbox/note-123.md",
       createdAt: "2026-05-21T10:15:00.000Z",
       updatedAt: "2026-05-21T10:15:00.000Z",
       archivedAt: null,
@@ -74,7 +74,7 @@ test("creating a note succeeds from a fresh root without pre-created notes direc
     assert.equal(await readFile(created.notePath, "utf8"), "Hello from a fresh root.\n")
 
     const sidecarPath = path.join(getStateNotesPath(rootPath), "note-123.json")
-    assert.equal(JSON.parse(await readFile(sidecarPath, "utf8")).relativePath, path.join("notes", "inbox", "note-123.md"))
+    assert.equal(JSON.parse(await readFile(sidecarPath, "utf8")).relativePath, "notes/inbox/note-123.md")
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }
@@ -108,7 +108,7 @@ test("syncEditedNote updates the plain markdown body and aligned sidecar metadat
       key: "note-123",
       title: "Updated title",
       description: "Updated body. Second line.",
-      relativePath: path.join("notes", "inbox", "note-123.md"),
+      relativePath: "notes/inbox/note-123.md",
       createdAt: "2026-05-21T10:15:00.000Z",
       updatedAt: "2026-05-21T12:30:00.000Z",
       archivedAt: null,
@@ -141,7 +141,7 @@ test("reading and listing notes joins plain file bodies with sidecar metadata", 
           key: "manual-note",
           title: "Manual Note",
           description: "Manual body line.",
-          relativePath: path.join("notes", "inbox", "manual-note.md"),
+          relativePath: "notes/inbox/manual-note.md",
           createdAt: "2026-05-21T10:15:00.000Z",
           updatedAt: "2026-05-21T11:15:00.000Z",
           archivedAt: null,
@@ -155,7 +155,7 @@ test("reading and listing notes joins plain file bodies with sidecar metadata", 
 
     const loaded = repository.read(notePath)
     assert.equal(loaded.body, "Manual body line.\nSecond line.\n")
-    assert.equal(loaded.sourcePath, path.join("notes", "inbox", "manual-note.md"))
+    assert.equal(loaded.sourcePath, "notes/inbox/manual-note.md")
     assert.deepEqual(loaded.frontmatter, {
       id: "manual-note",
       schemaVersion: 1,
@@ -212,7 +212,7 @@ test("create rejects an existing note key without mutating the existing note", a
         key: FIXED_FRONTMATTER.id,
         title: "Existing title",
         description: "Existing body.",
-        relativePath: path.join("notes", "inbox", "note-123.md"),
+        relativePath: "notes/inbox/note-123.md",
         createdAt: FIXED_FRONTMATTER.createdAt,
         updatedAt: FIXED_FRONTMATTER.updatedAt,
         archivedAt: null,
@@ -365,7 +365,7 @@ test("archive migrates a legacy frontmatter note without an existing sidecar", a
     const archived = repository.archive(legacyNotePath, "2026-05-21T12:30:00.000Z")
 
     assert.equal(archived.notePath, getArchiveNotePath(rootPath, "legacy-note"))
-    assert.equal(archived.relativePath, path.join("notes", "archive", "legacy-note.md"))
+    assert.equal(archived.relativePath, "notes/archive/legacy-note.md")
     await assert.rejects(() => access(legacyNotePath))
 
     const archivedMarkdown = await readFile(archived.notePath, "utf8")
@@ -376,7 +376,7 @@ test("archive migrates a legacy frontmatter note without an existing sidecar", a
       key: "legacy-note",
       title: "Legacy Note",
       description: "Legacy body.",
-      relativePath: path.join("notes", "archive", "legacy-note.md"),
+      relativePath: "notes/archive/legacy-note.md",
       createdAt: "2026-05-21T10:15:00.000Z",
       updatedAt: "2026-05-21T10:15:00.000Z",
       archivedAt: "2026-05-21T12:30:00.000Z",
@@ -395,7 +395,7 @@ test("archive migrates a legacy frontmatter note without an existing sidecar", a
       archivedAt: "2026-05-21T12:30:00.000Z",
     })
     assert.equal(loaded.body, "Legacy body.\n")
-    assert.equal(loaded.sourcePath, path.join("notes", "archive", "legacy-note.md"))
+    assert.equal(loaded.sourcePath, "notes/archive/legacy-note.md")
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }
@@ -415,20 +415,20 @@ test("archived notes preserve the key while moving the note path", async () => {
     const archived = repository.archive(created.notePath, "2026-05-21T12:30:00.000Z")
 
     assert.equal(archived.notePath, getArchiveNotePath(rootPath, "note-123"))
-    assert.equal(archived.relativePath, path.join("notes", "archive", "note-123.md"))
+    assert.equal(archived.relativePath, "notes/archive/note-123.md")
     await assert.rejects(() => access(created.notePath))
 
     const sidecarPath = path.join(getStateNotesPath(rootPath), "note-123.json")
     const sidecar = JSON.parse(await readFile(sidecarPath, "utf8"))
 
     assert.equal(sidecar.key, "note-123")
-    assert.equal(sidecar.relativePath, path.join("notes", "archive", "note-123.md"))
+    assert.equal(sidecar.relativePath, "notes/archive/note-123.md")
     assert.equal(sidecar.archivedAt, "2026-05-21T12:30:00.000Z")
 
     const loaded = repository.read(archived.notePath)
     assert.equal(loaded.frontmatter.id, "note-123")
     assert.equal(loaded.frontmatter.archivedAt, "2026-05-21T12:30:00.000Z")
-    assert.equal(loaded.sourcePath, path.join("notes", "archive", "note-123.md"))
+    assert.equal(loaded.sourcePath, "notes/archive/note-123.md")
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }
@@ -476,7 +476,7 @@ test("archive keeps sidecar metadata on the source note when source removal fail
     await assert.rejects(() => access(getArchiveNotePath(rootPath, "note-123")))
 
     const sidecar = JSON.parse(await readFile(sidecarPath, "utf8"))
-    assert.equal(sidecar.relativePath, path.join("notes", "inbox", "note-123.md"))
+    assert.equal(sidecar.relativePath, "notes/inbox/note-123.md")
     assert.equal(sidecar.archivedAt, null)
   } finally {
     await rm(rootPath, { recursive: true, force: true })

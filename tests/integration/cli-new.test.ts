@@ -43,7 +43,7 @@ test("bn new --title \"Example\" creates a plain note plus sidecar and prints ke
       key: "example-51u7i0",
       title: "Example",
       description: "",
-      relativePath: path.join("notes", "inbox", "example-51u7i0.md"),
+      relativePath: "notes/inbox/example-51u7i0.md",
       createdAt: FIXED_TIMESTAMP,
       updatedAt: FIXED_TIMESTAMP,
       archivedAt: null,
@@ -84,7 +84,7 @@ test("bn new reports auto-rebuild validation failures after creating the note", 
   const harness = await createManagedRootHarness("bluenote-cli-new-rebuild-error-")
 
   try {
-    await harness.writeNote(path.join("notes", "inbox", "orphaned.md"), "Orphaned note body.\n")
+    await harness.writeNote("notes/inbox/orphaned.md", "Orphaned note body.\n")
 
     const result = harness.run(["new", "--title", "Fresh Note"], {
       BLUENOTE_TEST_NOW: FIXED_TIMESTAMP,

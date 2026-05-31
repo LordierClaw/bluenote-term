@@ -57,7 +57,7 @@ test("bn delete <key|path> --force removes the note file and sidecar and rebuild
   const harness = await createManagedRootHarness("bluenote-cli-delete-")
 
   try {
-    const relativePath = path.join("notes", "inbox", "delete-target.md")
+    const relativePath = "notes/inbox/delete-target.md"
     await writePlainNoteWithSidecar(harness.rootPath, {
       key: "delete-target",
       title: "Delete Target",
@@ -69,7 +69,7 @@ test("bn delete <key|path> --force removes the note file and sidecar and rebuild
       key: "still-active",
       title: "Still Active",
       description: "Still visible.",
-      relativePath: path.join("notes", "inbox", "still-active.md"),
+      relativePath: "notes/inbox/still-active.md",
       body: "Still visible.\n",
       createdAt: "2026-05-21T10:16:00.000Z",
     })
@@ -104,7 +104,7 @@ test("bn delete requires --force", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-delete-")
 
   try {
-    const relativePath = path.join("notes", "inbox", "delete-target.md")
+    const relativePath = "notes/inbox/delete-target.md"
     await writePlainNoteWithSidecar(harness.rootPath, {
       key: "delete-target",
       title: "Delete Target",

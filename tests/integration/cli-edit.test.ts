@@ -50,7 +50,7 @@ async function writePlainNoteWithSidecar(
 
 test("bn edit <selector> updates sidecar metadata and rebuilds derived state after a body edit", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-edit-")
-  const relativePath = path.join("notes", "journal", "edit-with-key.md")
+  const relativePath = "notes/journal/edit-with-key.md"
   const sidecarPath = path.join(harness.rootPath, ".data", "notes", "edit-with-key.json")
   const updatedBody = "Updated sidecar body with zebra tokens.\n"
 
@@ -115,7 +115,7 @@ test("bn edit <selector> updates sidecar metadata and rebuilds derived state aft
 
 test("bn edit renames the note key, file, and sidecar when the markdown heading title changes", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-edit-rename-")
-  const relativePath = path.join("notes", "inbox", "original-note.md")
+  const relativePath = "notes/inbox/original-note.md"
   const updatedBody = "# Renamed Title\n\nBody after rename with nebula tokens.\n"
 
   try {
@@ -176,7 +176,7 @@ test("bn edit fails when $EDITOR is unset even if the parent environment defines
 
   try {
     await harness.writeNote(
-      path.join("notes", "inbox", "present.md"),
+      "notes/inbox/present.md",
       noteMarkdown({ id: "present-note", title: "Present Note", body: "Visible body.\n" }),
     )
 

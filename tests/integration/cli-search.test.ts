@@ -11,11 +11,11 @@ test("bn search <query> returns grouped note blocks with ranked match details", 
 
   try {
     await harness.writeNote(
-      path.join("notes", "inbox", "project-comet.md"),
+      "notes/inbox/project-comet.md",
       noteMarkdown({ id: "note-comet", title: "Project Comet", body: "Project comet planning notes.\n", tags: ["space"] }),
     )
     await harness.writeNote(
-      path.join("notes", "journal", "nebula.md"),
+      "notes/journal/nebula.md",
       noteMarkdown({
         id: "note-nebula",
         title: "Nebula Retrospective",
@@ -46,7 +46,7 @@ test("bn list and bn search prefer derived index data when available", async () 
 
   try {
     await harness.writeNote(
-      path.join("notes", "inbox", "alpha.md"),
+      "notes/inbox/alpha.md",
       noteMarkdown({ id: "note-alpha", title: "Alpha Note", body: "Alpha body mentions comet.\n" }),
     )
 
@@ -72,7 +72,7 @@ test("bn search returns a calm no-result message when nothing matches", async ()
 
   try {
     await harness.writeNote(
-      path.join("notes", "inbox", "alpha.md"),
+      "notes/inbox/alpha.md",
       noteMarkdown({ id: "note-alpha", title: "Alpha Note", body: "Alpha body mentions comet.\n" }),
     )
 
@@ -94,19 +94,19 @@ test("bn search 123 only prints notes with fields containing 123", async () => {
 
   try {
     await harness.writeNote(
-      path.join("notes", "inbox", "receipt.md"),
+      "notes/inbox/receipt.md",
       noteMarkdown({ id: "note-receipt", title: "Receipt 123", body: "Purchase details.\n" }),
     )
     await harness.writeNote(
-      path.join("notes", "meetings", "meeting-123.md"),
+      "notes/meetings/meeting-123.md",
       noteMarkdown({ id: "note-meeting", title: "Meeting Notes", body: "Planning details.\n" }),
     )
     await harness.writeNote(
-      path.join("notes", "inbox", "body-only.md"),
+      "notes/inbox/body-only.md",
       noteMarkdown({ id: "note-body", title: "Body Only", body: "First line.\nTracking code 123 appears here.\n" }),
     )
     await harness.writeNote(
-      path.join("notes", "inbox", "a-big-cat.md"),
+      "notes/inbox/a-big-cat.md",
       noteMarkdown({ id: "note-cat", title: "a-big-cat", body: "a-big-cat reference.\n" }),
     )
 
@@ -136,7 +136,7 @@ test("bn search finds arbitrary substring contains matches through the real inde
 
   try {
     await harness.writeNote(
-      path.join("notes", "inbox", "alpha.md"),
+      "notes/inbox/alpha.md",
       noteMarkdown({ id: "note-alpha", title: "Alpha Project", body: "Opening line.\nBody contains foobar for substring search.\n" }),
     )
 
@@ -162,7 +162,7 @@ test("bn search returns actionable rebuild guidance when derived indexes are mis
 
   try {
     await harness.writeNote(
-      path.join("notes", "inbox", "alpha.md"),
+      "notes/inbox/alpha.md",
       noteMarkdown({ id: "note-alpha", title: "Alpha Note", body: "Alpha body mentions comet.\n" }),
     )
 

@@ -106,13 +106,13 @@ test("selectNote resolves an exact sidecar key before considering slug matches",
       await writePlainNoteWithSidecar(rootPath, {
         key: "project-retrospective",
         title: "Direct Key Match",
-        relativePath: path.join("notes", "inbox", "project-retrospective.md"),
+        relativePath: "notes/inbox/project-retrospective.md",
         body: "Direct key body.\n",
       })
       await writePlainNoteWithSidecar(rootPath, {
         key: "different-key",
         title: "Project Retrospective",
-        relativePath: path.join("notes", "journal", "different-key.md"),
+        relativePath: "notes/journal/different-key.md",
         body: "Slug body.\n",
       })
     },
@@ -120,7 +120,7 @@ test("selectNote resolves an exact sidecar key before considering slug matches",
       const selected = selectNote({ repository, selector: "project-retrospective" })
 
       assert.equal(selected.frontmatter.id, "project-retrospective")
-      assert.equal(selected.sourcePath, path.join("notes", "inbox", "project-retrospective.md"))
+      assert.equal(selected.sourcePath, "notes/inbox/project-retrospective.md")
       assert.equal(selected.frontmatter.title, "Direct Key Match")
     },
   )
@@ -132,15 +132,15 @@ test("selectNote resolves an exact managed-root-relative path as a fallback", as
       await writePlainNoteWithSidecar(rootPath, {
         key: "archive-key",
         title: "Archive Note",
-        relativePath: path.join("notes", "archive", "archive-key.md"),
+        relativePath: "notes/archive/archive-key.md",
         body: "Archive body.\n",
       })
     },
     (repository) => {
-      const selected = selectNote({ repository, selector: path.join("notes", "archive", "archive-key.md") })
+      const selected = selectNote({ repository, selector: "notes/archive/archive-key.md" })
 
       assert.equal(selected.frontmatter.id, "archive-key")
-      assert.equal(selected.sourcePath, path.join("notes", "archive", "archive-key.md"))
+      assert.equal(selected.sourcePath, "notes/archive/archive-key.md")
     },
   )
 })
@@ -151,7 +151,7 @@ test("selectNote rejects non-canonical normalized path aliases", async () => {
       await writePlainNoteWithSidecar(rootPath, {
         key: "archive-key",
         title: "Archive Note",
-        relativePath: path.join("notes", "archive", "archive-key.md"),
+        relativePath: "notes/archive/archive-key.md",
         body: "Archive body.\n",
       })
     },
@@ -178,7 +178,7 @@ test("selectNote resolves a legacy frontmatter note by basename instead of UUID 
       await writeLegacyFrontmatterNote(rootPath, {
         frontmatterId: "123e4567-e89b-12d3-a456-426614174000",
         title: "Legacy UUID Note",
-        relativePath: path.join("notes", "inbox", "human-key.md"),
+        relativePath: "notes/inbox/human-key.md",
         body: "Legacy body.\n",
       })
     },
@@ -186,7 +186,7 @@ test("selectNote resolves a legacy frontmatter note by basename instead of UUID 
       const selected = selectNote({ repository, selector: "human-key" })
 
       assert.equal(selected.frontmatter.id, "123e4567-e89b-12d3-a456-426614174000")
-      assert.equal(selected.sourcePath, path.join("notes", "inbox", "human-key.md"))
+      assert.equal(selected.sourcePath, "notes/inbox/human-key.md")
     },
   )
 })
@@ -197,7 +197,7 @@ test("selectNote rejects legacy frontmatter ids as user-facing selectors", async
       await writeLegacyFrontmatterNote(rootPath, {
         frontmatterId: "legacy-id-123",
         title: "Legacy ID Note",
-        relativePath: path.join("notes", "inbox", "human-key.md"),
+        relativePath: "notes/inbox/human-key.md",
         body: "Legacy body.\n",
       })
     },
@@ -220,13 +220,13 @@ test("selectNote resolves an exact key match even when a legacy frontmatter id c
       await writePlainNoteWithSidecar(rootPath, {
         key: "foo",
         title: "Key Foo Note",
-        relativePath: path.join("notes", "inbox", "foo.md"),
+        relativePath: "notes/inbox/foo.md",
         body: "Key body.\n",
       })
       await writeLegacyFrontmatterNote(rootPath, {
         frontmatterId: "foo",
         title: "Legacy ID Foo Note",
-        relativePath: path.join("notes", "journal", "legacy-human-key.md"),
+        relativePath: "notes/journal/legacy-human-key.md",
         body: "Legacy body.\n",
       })
     },
@@ -234,7 +234,7 @@ test("selectNote resolves an exact key match even when a legacy frontmatter id c
       const selected = selectNote({ repository, selector: "foo" })
 
       assert.equal(selected.frontmatter.id, "foo")
-      assert.equal(selected.sourcePath, path.join("notes", "inbox", "foo.md"))
+      assert.equal(selected.sourcePath, "notes/inbox/foo.md")
     },
   )
 })
@@ -245,7 +245,7 @@ test("selectNote rejects title-derived slug selectors", async () => {
       await writePlainNoteWithSidecar(rootPath, {
         key: "project-retro",
         title: "Project Retrospective",
-        relativePath: path.join("notes", "journal", "project-retro.md"),
+        relativePath: "notes/journal/project-retro.md",
         body: "Project body.\n",
       })
     },
@@ -268,13 +268,13 @@ test("selectNote suggests close note keys when a selector does not match", async
       await writePlainNoteWithSidecar(rootPath, {
         key: "show-note",
         title: "Show Note",
-        relativePath: path.join("notes", "inbox", "show-note.md"),
+        relativePath: "notes/inbox/show-note.md",
         body: "Show body.\n",
       })
       await writePlainNoteWithSidecar(rootPath, {
         key: "slow-note",
         title: "Slow Note",
-        relativePath: path.join("notes", "journal", "slow-note.md"),
+        relativePath: "notes/journal/slow-note.md",
         body: "Slow body.\n",
       })
     },

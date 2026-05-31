@@ -39,7 +39,7 @@ test("detectStorageFormat classifies empty, old, new, and mixed managed roots", 
       "utf8",
     )
 
-    const newRelativePath = path.join("notes", "inbox", "new-note-abcd12.md")
+    const newRelativePath = "notes/inbox/new-note-abcd12.md"
     await writeFile(path.join(newRoot, newRelativePath), "Plain note body.\n", "utf8")
     await writeFile(
       path.join(newRoot, ".data", "notes", "new-note-abcd12.json"),
@@ -61,7 +61,7 @@ test("detectStorageFormat classifies empty, old, new, and mixed managed roots", 
       }),
       "utf8",
     )
-    const mixedRelativePath = path.join("notes", "inbox", "already-new-qwerty.md")
+    const mixedRelativePath = "notes/inbox/already-new-qwerty.md"
     await writeFile(path.join(mixedRoot, mixedRelativePath), "Already migrated body.\n", "utf8")
     await writeFile(
       path.join(mixedRoot, ".data", "notes", "already-new-qwerty.json"),
@@ -212,13 +212,13 @@ test("migrateLegacyStorage converts legacy frontmatter notes into plain notes, s
         {
           previousId: "123e4567-e89b-12d3-a456-426614174000",
           nextKey: inboxKey,
-          previousRelativePath: path.join("notes", "inbox", "123e4567-e89b-12d3-a456-426614174000.md"),
+          previousRelativePath: "notes/inbox/123e4567-e89b-12d3-a456-426614174000.md",
           nextRelativePath: migratedInboxRelativePath,
         },
         {
           previousId: "123e4567-e89b-12d3-a456-426614174001",
           nextKey: archiveKey,
-          previousRelativePath: path.join("notes", "archive", "123e4567-e89b-12d3-a456-426614174001.md"),
+          previousRelativePath: "notes/archive/123e4567-e89b-12d3-a456-426614174001.md",
           nextRelativePath: migratedArchiveRelativePath,
         },
       ],
@@ -278,7 +278,7 @@ test("migrateLegacyStorage removes partial derived indexes and restores legacy n
   const randomSource = () => 0.1234
   const legacyKey = createNoteKey("Rollback Recovery Note", { randomSource })
   const migratedRelativePath = path.join("notes", "inbox", `${legacyKey}.md`)
-  const legacyRelativePath = path.join("notes", "inbox", "legacy-rollback-uuid.md")
+  const legacyRelativePath = "notes/inbox/legacy-rollback-uuid.md"
   const legacyPath = path.join(rootPath, legacyRelativePath)
   const migratedPath = path.join(rootPath, migratedRelativePath)
   const sidecarPath = path.join(rootPath, ".data", "notes", `${legacyKey}.json`)
@@ -327,7 +327,7 @@ test("migrateLegacyStorage is a calm no-op for already migrated roots and reject
   const mixedRoot = await createRoot("bluenote-migration-mixed-error-")
 
   try {
-    const relativePath = path.join("notes", "inbox", "already-new-51u7i0.md")
+    const relativePath = "notes/inbox/already-new-51u7i0.md"
     await writeFile(path.join(newRoot, relativePath), "Already migrated body.\n", "utf8")
     await writeFile(
       path.join(newRoot, ".data", "notes", "already-new-51u7i0.json"),
