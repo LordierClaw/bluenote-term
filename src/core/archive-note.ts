@@ -1,7 +1,6 @@
-import path from "node:path"
-
 import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions } from "../config/root"
 import { IndexValidationFailedError, UsageError } from "./errors"
+import { joinPortableRelativePath } from "../platform/path-safety"
 import { systemClock, type Clock } from "../platform/clock"
 import { createNoteRepository } from "../storage/note-repository"
 import type { ParsedNote } from "../storage/note-schema"
@@ -22,7 +21,7 @@ export interface ArchiveNoteSummary {
 }
 
 function isArchivedNote(note: ParsedNote): boolean {
-  return note.frontmatter.archivedAt !== undefined || note.sourcePath.startsWith(`notes${path.sep}archive${path.sep}`)
+  return note.frontmatter.archivedAt !== undefined || note.sourcePath.startsWith(joinPortableRelativePath("notes", "archive") + "/")
 }
 
 function throwArchiveValidationError(stage: "before" | "after", sourcePath: string, validationErrors: string[]): never {

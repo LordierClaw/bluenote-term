@@ -22,9 +22,17 @@ export function assertPathInsideRoot(rootPath: string, targetPath: string): stri
   throw new UsageError(`Target path '${normalizedTargetPath}' is outside the managed root '${normalizedRootPath}'.`)
 }
 
+export function toPortableRelativePath(relativePath: string): string {
+  return relativePath.replace(/\\/g, "/")
+}
+
+export function joinPortableRelativePath(...segments: string[]): string {
+  return path.posix.join(...segments.map(toPortableRelativePath))
+}
+
 export function toRootRelativePath(rootPath: string, targetPath: string): string {
   const normalizedTargetPath = assertPathInsideRoot(rootPath, targetPath)
   const relativePath = path.relative(path.resolve(rootPath), normalizedTargetPath)
 
-  return relativePath.split(path.sep).join("/")
+  return toPortableRelativePath(relativePath)
 }

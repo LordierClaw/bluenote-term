@@ -1,3 +1,4 @@
+import { toPortableRelativePath } from "../platform/path-safety"
 import { InvalidFrontmatterError } from "../core/errors"
 import {
   assertKnownFields,
@@ -64,7 +65,7 @@ export function validateNoteSidecar(sidecar: unknown, sourcePath: string): NoteS
     key: assertStringField(sidecar, "key", sourcePath, validationKind),
     title: assertStringField(sidecar, "title", sourcePath, validationKind),
     description: assertDescriptionField(sidecar, sourcePath),
-    relativePath: assertStringField(sidecar, "relativePath", sourcePath, validationKind),
+    relativePath: toPortableRelativePath(assertStringField(sidecar, "relativePath", sourcePath, validationKind)),
     createdAt: assertTimestampField(sidecar, "createdAt", sourcePath, validationKind),
     updatedAt: assertTimestampField(sidecar, "updatedAt", sourcePath, validationKind),
     archivedAt: assertArchivedAtField(sidecar, sourcePath),

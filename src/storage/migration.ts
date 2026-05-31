@@ -14,7 +14,7 @@ import { AppError, IndexValidationFailedError, UsageError } from "../core/errors
 import { createNoteDescription } from "../domain/note-description"
 import { createNoteKey } from "../domain/note-key"
 import { rebuildIndexes, type RebuildIndexesSummary } from "../core/rebuild-indexes"
-import { assertPathInsideRoot } from "../platform/path-safety"
+import { assertPathInsideRoot, joinPortableRelativePath, toPortableRelativePath } from "../platform/path-safety"
 import { parseNoteFile } from "./frontmatter"
 import { createNoteRepository } from "./note-repository"
 import { normalizePlainNoteBody } from "./plain-note"
@@ -137,7 +137,7 @@ function hasSafeNewFormatState(rootPath: string): boolean {
       const key = path.basename(record.relativePath, ".md")
       const sidecar = sidecars.read(key)
 
-      if (sidecar.relativePath !== record.relativePath || seenKeys.has(key)) {
+      if (toPortableRelativePath(sidecar.relativePath) !== record.relativePath || seenKeys.has(key)) {
         return false
       }
 
@@ -214,7 +214,7 @@ function writeRecoverySnapshot(rootPath: string, migratedAt: string, candidates:
 }
 
 function buildMigratedRelativePath(previousRelativePath: string, key: string): string {
-  return path.join(path.dirname(previousRelativePath), `${key}.md`)
+  return joinPortableRelativePath(path.posix.dirname(toPortableRelativePath(previousRelativePath)), `${key}.md`)
 }
 
 function writeRecoveryKeyMap(

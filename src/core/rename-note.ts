@@ -5,6 +5,7 @@ import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions, STATE_RECOVERY_DI
 import { createNoteKey } from "../domain/note-key"
 import { createNoteRepository } from "../storage/note-repository"
 import { selectNote } from "./select-note"
+import { joinPortableRelativePath } from "../platform/path-safety"
 import { UsageError } from "./errors"
 
 export interface RenameNoteHooks {
@@ -60,7 +61,7 @@ export function renameNote(options: RenameNoteOptions): RenameNoteSummary {
     previousKey: currentKey,
     nextKey,
     previousRelativePath: selected.sourcePath,
-    nextRelativePath: path.join(path.dirname(selected.sourcePath), `${nextKey}.md`),
+    nextRelativePath: joinPortableRelativePath(path.posix.dirname(selected.sourcePath), `${nextKey}.md`),
     stagedAt: options.updatedAt,
   }
 

@@ -1,5 +1,6 @@
 import path from "node:path"
 
+import { toPortableRelativePath } from "../platform/path-safety"
 import { AmbiguousSelectorError, SelectorNotFoundError } from "./errors"
 import type { ParsedNote } from "../storage/note-schema"
 import type { NoteRepository } from "../storage/note-repository"
@@ -80,7 +81,8 @@ export function selectNote(options: SelectNoteOptions): ParsedNote {
     return assertSingleMatch(trimmedSelector, exactKeyMatches)
   }
 
-  const exactPathMatches = notes.filter((note) => note.sourcePath === trimmedSelector)
+  const exactPathSelector = toPortableRelativePath(trimmedSelector)
+  const exactPathMatches = notes.filter((note) => note.sourcePath === exactPathSelector)
   if (exactPathMatches.length > 0) {
     return assertSingleMatch(trimmedSelector, exactPathMatches)
   }

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync
 
 import { UsageError } from "../core/errors"
 import { createNoteDescription } from "../domain/note-description"
-import { assertPathInsideRoot, toRootRelativePath } from "../platform/path-safety"
+import { assertPathInsideRoot, joinPortableRelativePath, toRootRelativePath } from "../platform/path-safety"
 import { parseNoteFile } from "./frontmatter"
 import { type PlainNote, validateNoteFrontmatter } from "./note-schema"
 import type { NoteFrontmatter, ParsedNote } from "./note-schema"
@@ -80,11 +80,11 @@ function getCreateValidationSourcePath(frontmatter: unknown): string {
     const candidateId = (frontmatter as { id?: unknown }).id
 
     if (typeof candidateId === "string" && candidateId.length > 0) {
-      return path.join("notes", "inbox", `${candidateId}.md`)
+      return joinPortableRelativePath("notes", "inbox", `${candidateId}.md`)
     }
   }
 
-  return path.join("notes", "inbox", "<unknown>.md")
+  return joinPortableRelativePath("notes", "inbox", "<unknown>.md")
 }
 
 function wrapRepositoryError(action: "create" | "read" | "list" | "archive" | "delete", relativePath: string, error: unknown): never {
@@ -381,7 +381,7 @@ export function createNoteRepository(rootPath: string): NoteRepository {
       const previousRelativePath = toRootRelativePath(normalizedRootPath, normalizedNotePath)
       const existing = this.read(normalizedNotePath)
       const previousKey = existing.frontmatter.id
-      const nextRelativePath = path.join(path.dirname(previousRelativePath), `${input.nextKey}.md`)
+      const nextRelativePath = joinPortableRelativePath(path.posix.dirname(previousRelativePath), `${input.nextKey}.md`)
       const nextNotePath = notePathFromRelativePath(normalizedRootPath, nextRelativePath)
       const previousSidecarPath = sidecars.getSidecarPath(previousKey)
       const nextSidecarPath = sidecars.getSidecarPath(input.nextKey)
