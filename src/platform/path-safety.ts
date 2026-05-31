@@ -24,6 +24,7 @@ export function assertPathInsideRoot(rootPath: string, targetPath: string): stri
 
 export function toRootRelativePath(rootPath: string, targetPath: string): string {
   const normalizedTargetPath = assertPathInsideRoot(rootPath, targetPath)
+  const relativePath = path.relative(path.resolve(rootPath), normalizedTargetPath)
 
-  return path.relative(path.resolve(rootPath), normalizedTargetPath)
+  return relativePath.split(path.sep).join("/")
 }
