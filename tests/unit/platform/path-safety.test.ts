@@ -27,7 +27,7 @@ test("path safety helper accepts paths inside the managed root", () => {
   const targetPath = path.resolve(rootPath, "notes/inbox/note.md")
 
   assert.equal(assertPathInsideRoot(rootPath, targetPath), targetPath)
-  assert.equal(toRootRelativePath(rootPath, targetPath), path.join("notes", "inbox", "note.md"))
+  assert.equal(toRootRelativePath(rootPath, targetPath), "notes/inbox/note.md")
 })
 
 test("path safety helper rejects an empty managed root path", () => {
