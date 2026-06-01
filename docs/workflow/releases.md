@@ -9,7 +9,8 @@ The release workflow publishes:
 - `bn.exe` — Windows x64 standalone executable.
 - `bluenote-windows-x64.zip` — Windows x64 portable ZIP containing `bn.exe`.
 - `bluenote-linux-x64.tar.gz` — Linux x64 portable tarball containing `bn`.
-- `SHA256SUMS.txt` — SHA-256 checksums for the release assets.
+
+SHA-256 checksums are printed directly in the GitHub Release notes.
 
 macOS, Linux arm64, installers, package-manager recipes, and code signing are future follow-ups.
 
@@ -42,21 +43,15 @@ cd bluenote
 
 ## Checksum verification
 
-Download `SHA256SUMS.txt` next to the release archive.
+Copy the matching SHA-256 checksum from the GitHub Release notes.
 
-To verify every downloaded asset in the current directory, run:
-
-```bash
-sha256sum -c SHA256SUMS.txt
-```
-
-If you downloaded only the Linux archive, verify just that line:
+To verify a downloaded Linux archive, compare the release-note checksum with:
 
 ```bash
-grep 'bluenote-linux-x64.tar.gz$' SHA256SUMS.txt | sha256sum -c -
+sha256sum bluenote-linux-x64.tar.gz
 ```
 
-On Windows PowerShell, compare the printed hash with the matching line in `SHA256SUMS.txt`:
+On Windows PowerShell, compare the printed hash with the matching checksum in the GitHub Release notes:
 
 ```powershell
 Get-FileHash .\bluenote-windows-x64.zip -Algorithm SHA256
@@ -73,6 +68,6 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-The GitHub Actions release workflow builds Windows and Linux assets on matching runners, generates checksums, and attaches them to a real GitHub Release for the pushed tag.
+The GitHub Actions release workflow builds Windows and Linux assets on matching runners, prints checksums in the GitHub Release notes, and attaches the binaries/archives to a real GitHub Release for the pushed tag.
 
 For a manual dry run from GitHub, use the `workflow_dispatch` trigger on the release workflow. A dispatch run builds and uploads workflow artifacts; publishing a GitHub Release still requires pushing a `v*` tag.

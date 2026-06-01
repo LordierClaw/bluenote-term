@@ -81,7 +81,7 @@ jobs:
         with:
           path: dist/release-assets
 
-      - name: Generate SHA256SUMS.txt
+      - name: Generate release checksums
         shell: bash
         run: |
           set -euo pipefail
@@ -93,13 +93,20 @@ jobs:
             | sed 's#bluenote-windows-x64/##; s#bluenote-linux-x64/##' \
             > SHA256SUMS.txt
           cat SHA256SUMS.txt
+          {
+            echo "## SHA-256 checksums"
+            echo
+            echo '```text'
+            cat SHA256SUMS.txt
+            echo '```'
+          } > RELEASE_NOTES.md
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          body_path: dist/release-assets/RELEASE_NOTES.md
           files: |
             dist/release-assets/bluenote-windows-x64/bn.exe
             dist/release-assets/bluenote-windows-x64/bluenote-windows-x64.zip
             dist/release-assets/bluenote-linux-x64/bluenote-linux-x64.tar.gz
-            dist/release-assets/SHA256SUMS.txt
