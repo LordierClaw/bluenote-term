@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process"
-import { chmodSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 
 const releaseRoot = path.resolve("dist", "release")
@@ -10,7 +10,7 @@ const packageRoot = path.join(workRoot, "bluenote")
 interface PlatformRelease {
   platformId: "windows-x64" | "linux-x64"
   executableName: "bn.exe" | "bn"
-  archiveName: "bluenote-windows-x64.zip" | "bluenote-linux-x64.tar.gz"
+  archiveNames: readonly [string, ...string[]]
 }
 
 function getPlatformRelease(): PlatformRelease {
@@ -20,7 +20,7 @@ function getPlatformRelease(): PlatformRelease {
     return {
       platformId: "windows-x64",
       executableName: "bn.exe",
-      archiveName: "bluenote-windows-x64.zip",
+      archiveNames: ["bluenote.zip", "bluenote-windows-x64.zip"],
     }
   }
 
@@ -28,7 +28,7 @@ function getPlatformRelease(): PlatformRelease {
     return {
       platformId: "linux-x64",
       executableName: "bn",
-      archiveName: "bluenote-linux-x64.tar.gz",
+      archiveNames: ["bluenote-linux-x64.tar.gz"],
     }
   }
 
@@ -81,24 +81,34 @@ function powershellSingleQuoted(value: string): string {
 }
 
 function archivePackage(release: PlatformRelease): void {
-  const archivePath = path.join(releaseRoot, release.archiveName)
+  for (const archiveName of release.archiveNames) {
+    const archivePath = path.join(releaseRoot, archiveName)
 
-  if (process.platform === "win32") {
-    run("powershell", [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-Command",
-      `Compress-Archive -LiteralPath ${powershellSingleQuoted(packageRoot)} -DestinationPath ${powershellSingleQuoted(archivePath)} -Force`,
-    ])
+    if (process.platform === "win32") {
+      run("powershell", [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        `Compress-Archive -LiteralPath ${powershellSingleQuoted(packageRoot)} -DestinationPath ${powershellSingleQuoted(archivePath)} -Force`,
+      ])
+      continue
+    }
+
+    run("tar", ["-czf", archivePath, "-C", workRoot, "bluenote"])
+  }
+}
+
+function publishStandaloneExecutable(release: PlatformRelease, executablePath: string): void {
+  if (release.platformId !== "windows-x64") {
     return
   }
 
-  run("tar", ["-czf", archivePath, "-C", workRoot, "bluenote"])
+  copyFileSync(executablePath, path.join(releaseRoot, release.executableName))
 }
 
-function validateArchive(release: PlatformRelease): void {
-  const archivePath = path.join(releaseRoot, release.archiveName)
+function validateArchive(release: PlatformRelease, archiveName: string): void {
+  const archivePath = path.join(releaseRoot, archiveName)
   const extractedRoot = path.join(verifyRoot, release.platformId)
   const extractedPackageRoot = path.join(extractedRoot, "bluenote")
   const extractedExecutable = path.join(extractedPackageRoot, release.executableName)
@@ -136,7 +146,7 @@ function validateArchive(release: PlatformRelease): void {
 function main(): void {
   const release = getPlatformRelease()
   const executablePath = path.join(packageRoot, release.executableName)
-  const archivePath = path.join(releaseRoot, release.archiveName)
+  const archivePaths = release.archiveNames.map((archiveName) => path.join(releaseRoot, archiveName))
 
   console.log(`Packaging BlueNote for ${release.platformId}`)
 
@@ -157,15 +167,20 @@ function main(): void {
     throw new Error("Packaged executable smoke check failed: --help output did not contain 'BlueNote v'.")
   }
 
+  publishStandaloneExecutable(release, executablePath)
   archivePackage(release)
 
-  if (!existsSync(archivePath)) {
-    throw new Error(`Release archive was not created: ${archivePath}`)
+  for (const archivePath of archivePaths) {
+    if (!existsSync(archivePath)) {
+      throw new Error(`Release archive was not created: ${archivePath}`)
+    }
   }
 
-  validateArchive(release)
+  for (const archiveName of release.archiveNames) {
+    validateArchive(release, archiveName)
+  }
 
-  console.log(`Created ${archivePath}`)
+  console.log(`Created ${archivePaths.join(", ")}`)
 }
 
 main()
