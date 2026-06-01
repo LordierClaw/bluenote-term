@@ -37,7 +37,7 @@ jobs:
           name: bluenote-windows-x64
           path: |
             dist/release/bn.exe
-            dist/release/bluenote.zip
+            dist/release/bluenote-term-main.zip
             dist/release/bluenote-windows-x64.zip
           if-no-files-found: error
 
@@ -89,7 +89,7 @@ jobs:
           cd dist/release-assets
           sha256sum \
             bluenote-windows-x64/bn.exe \
-            bluenote-windows-x64/bluenote.zip \
+            bluenote-windows-x64/bluenote-term-main.zip \
             bluenote-windows-x64/bluenote-windows-x64.zip \
             bluenote-linux-x64/bluenote-linux-x64.tar.gz \
             | sed 's#bluenote-windows-x64/##; s#bluenote-linux-x64/##' \
@@ -102,7 +102,7 @@ jobs:
           generate_release_notes: true
           files: |
             dist/release-assets/bluenote-windows-x64/bn.exe
-            dist/release-assets/bluenote-windows-x64/bluenote.zip
+            dist/release-assets/bluenote-windows-x64/bluenote-term-main.zip
             dist/release-assets/bluenote-windows-x64/bluenote-windows-x64.zip
             dist/release-assets/bluenote-linux-x64/bluenote-linux-x64.tar.gz
             dist/release-assets/SHA256SUMS.txt

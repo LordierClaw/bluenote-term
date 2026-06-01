@@ -7,8 +7,8 @@ BlueNote publishes portable archives from GitHub Releases. These archives are bu
 The release workflow publishes:
 
 - `bn.exe` — Windows x64 standalone executable.
-- `bluenote.zip` — Windows x64 portable ZIP containing `bn.exe`; short name for restricted environments.
-- `bluenote-windows-x64.zip` — same Windows x64 ZIP contents as `bluenote.zip`, with the platform in the filename.
+- `bluenote-term-main.zip` — Windows x64 portable ZIP containing `bn.exe`; short name for restricted environments.
+- `bluenote-windows-x64.zip` — same Windows x64 ZIP contents as `bluenote-term-main.zip`, with the platform in the filename.
 - `bluenote-linux-x64.tar.gz` — Linux x64 portable tarball containing `bn`.
 - `SHA256SUMS.txt` — SHA-256 checksums for the release assets.
 
@@ -16,7 +16,7 @@ macOS, Linux arm64, installers, package-manager recipes, and code signing are fu
 
 ## Windows usage
 
-1. For restricted environments, download `bluenote.zip` from the GitHub Release. For platform-explicit naming, download `bluenote-windows-x64.zip`; it contains the same files.
+1. For restricted environments, download `bluenote-term-main.zip` from the GitHub Release. For platform-explicit naming, download `bluenote-windows-x64.zip`; it contains the same files.
 2. Extract the ZIP.
 3. Open a terminal in the extracted `bluenote` folder.
 4. Run:
@@ -60,7 +60,7 @@ grep 'bluenote-linux-x64.tar.gz$' SHA256SUMS.txt | sha256sum -c -
 On Windows PowerShell, compare the printed hash with the matching line in `SHA256SUMS.txt`:
 
 ```powershell
-Get-FileHash .\bluenote.zip -Algorithm SHA256
+Get-FileHash .\bluenote-term-main.zip -Algorithm SHA256
 Get-FileHash .\bluenote-windows-x64.zip -Algorithm SHA256
 Get-FileHash .\bn.exe -Algorithm SHA256
 ```

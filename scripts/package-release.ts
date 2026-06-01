@@ -20,7 +20,7 @@ function getPlatformRelease(): PlatformRelease {
     return {
       platformId: "windows-x64",
       executableName: "bn.exe",
-      archiveNames: ["bluenote.zip", "bluenote-windows-x64.zip"],
+      archiveNames: ["bluenote-term-main.zip", "bluenote-windows-x64.zip"],
     }
   }
 
