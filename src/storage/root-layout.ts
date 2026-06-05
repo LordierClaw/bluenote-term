@@ -2,6 +2,11 @@ import path from "node:path"
 import { lstatSync, mkdirSync } from "node:fs"
 
 import {
+  APP_STATE_AI_CONFIG_FILENAME,
+  APP_STATE_AI_DIRECTORY,
+  APP_STATE_AI_LOGS_DIRECTORY,
+  APP_STATE_AI_PROMPTS_DIRECTORY,
+  APP_STATE_AI_QUEUE_FILENAME,
   LEGACY_STATE_DIRECTORY,
   STATE_DIRECTORY,
   STATE_LOGS_DIRECTORY,
@@ -23,6 +28,9 @@ export const MANAGED_ROOT_LAYOUT = [
   STATE_RECOVERY_DIRECTORY,
   STATE_TMP_DIRECTORY,
   STATE_LOGS_DIRECTORY,
+  APP_STATE_AI_DIRECTORY,
+  APP_STATE_AI_PROMPTS_DIRECTORY,
+  APP_STATE_AI_LOGS_DIRECTORY,
 ] as const
 
 const NOTES_DIRECTORY = "notes"
@@ -51,6 +59,26 @@ export function getStatePath(rootPath: string): string {
 
 export function getStateTmpPath(rootPath: string): string {
   return assertPathInsideRoot(rootPath, path.join(path.resolve(rootPath), STATE_TMP_DIRECTORY))
+}
+
+export function getAiStatePath(rootPath: string): string {
+  return assertPathInsideRoot(rootPath, path.join(path.resolve(rootPath), APP_STATE_AI_DIRECTORY))
+}
+
+export function getAiPromptsPath(rootPath: string): string {
+  return assertPathInsideRoot(rootPath, path.join(path.resolve(rootPath), APP_STATE_AI_PROMPTS_DIRECTORY))
+}
+
+export function getAiLogsPath(rootPath: string): string {
+  return assertPathInsideRoot(rootPath, path.join(path.resolve(rootPath), APP_STATE_AI_LOGS_DIRECTORY))
+}
+
+export function getAiConfigPath(rootPath: string): string {
+  return assertPathInsideRoot(rootPath, path.join(getAiStatePath(rootPath), APP_STATE_AI_CONFIG_FILENAME))
+}
+
+export function getAiQueuePath(rootPath: string): string {
+  return assertPathInsideRoot(rootPath, path.join(getAiStatePath(rootPath), APP_STATE_AI_QUEUE_FILENAME))
 }
 
 export function getLegacyStatePath(rootPath: string): string {
