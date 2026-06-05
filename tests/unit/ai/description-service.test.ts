@@ -137,7 +137,7 @@ test("generating for a selected note auto-applies a valid description, preserves
     assert.equal(updatedSidecar.key, initialSidecar.key)
     assert.equal(updatedSidecar.relativePath, initialSidecar.relativePath)
     assert.equal(updatedSidecar.createdAt, initialSidecar.createdAt)
-    assert.equal(updatedSidecar.updatedAt, "2026-06-01T10:05:00.000Z")
+    assert.equal(updatedSidecar.updatedAt, initialSidecar.updatedAt)
     assert.equal(updatedSidecar.ai?.description?.lastProcessedAt, "2026-06-01T10:05:00.000Z")
 
     assert.equal(await readFile(created.notePath, "utf8"), originalMarkdown)
