@@ -922,7 +922,7 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     id: "bluenote-manager-ai-status",
     content: vm.aiStatus.renderedText,
     height: 1,
-    flexShrink: 0,
+    flexShrink: 1,
     fg: tuiTheme[vm.aiStatus.styleIntent],
   }))
   root.add(footerStatusRow)

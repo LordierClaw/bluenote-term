@@ -1,7 +1,8 @@
 import path from "node:path"
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 
 import { UsageError } from "../core/errors"
+import { replaceFileAtomically } from "../storage/atomic-replace"
 import { getAiStatePath } from "../storage/root-layout"
 import { sanitizeCodexAuthErrorMessage } from "./error-redaction"
 
@@ -208,7 +209,7 @@ export function createCodexAuthRepository(rootPath: string, options: CodexAuthRe
           encoding: "utf8",
           mode: 0o600,
         })
-        renameSync(temporaryAuthPath, authPath)
+        replaceFileAtomically(temporaryAuthPath, authPath)
         try {
           chmodSync(authPath, 0o600)
         } catch {

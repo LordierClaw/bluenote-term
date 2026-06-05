@@ -1,7 +1,8 @@
 import path from "node:path"
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 
 import { UsageError } from "../core/errors"
+import { replaceFileAtomically } from "../storage/atomic-replace"
 import { getAiQueuePath } from "../storage/root-layout"
 
 export type AiQueueJobStatus = "pending" | "running" | "failed"
@@ -35,6 +36,64 @@ export interface AiQueueRepository {
 }
 
 const EMPTY_QUEUE: AiQueue = { version: 1, jobs: [] }
+const LOCK_STALE_AFTER_MS = 10 * 60 * 1000
+
+interface QueueLockMetadata {
+  pid: number
+  acquiredAt: string
+}
+
+function getQueueLockMetadataPath(lockPath: string): string {
+  return path.join(lockPath, "lock.json")
+}
+
+function isProcessAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) {
+    return false
+  }
+
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    const code = error instanceof Error && "code" in error ? (error as NodeJS.ErrnoException).code : undefined
+    return code === "EPERM"
+  }
+}
+
+function readQueueLockMetadata(lockPath: string): QueueLockMetadata | null {
+  try {
+    const parsed = JSON.parse(readFileSync(getQueueLockMetadataPath(lockPath), "utf8")) as Partial<QueueLockMetadata>
+    if (typeof parsed.pid === "number" && typeof parsed.acquiredAt === "string") {
+      return { pid: parsed.pid, acquiredAt: parsed.acquiredAt }
+    }
+  } catch {
+    // Missing or malformed metadata is handled by the directory mtime fallback.
+  }
+
+  return null
+}
+
+function isStaleQueueLock(lockPath: string, now = Date.now()): boolean {
+  const metadata = readQueueLockMetadata(lockPath)
+  if (metadata) {
+    const acquiredAt = Date.parse(metadata.acquiredAt)
+    return !isProcessAlive(metadata.pid) || (!Number.isNaN(acquiredAt) && now - acquiredAt > LOCK_STALE_AFTER_MS)
+  }
+
+  try {
+    return now - statSync(lockPath).mtimeMs > LOCK_STALE_AFTER_MS
+  } catch {
+    return false
+  }
+}
+
+function writeQueueLockMetadata(lockPath: string): void {
+  writeFileSync(getQueueLockMetadataPath(lockPath), `${JSON.stringify({
+    pid: process.pid,
+    acquiredAt: new Date().toISOString(),
+  }, null, 2)}\n`, "utf8")
+}
 
 function getTemporaryQueuePath(queuePath: string): string {
   return `${queuePath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
@@ -52,19 +111,31 @@ function acquireQueueLock(lockPath: string, relativePath: string): () => void {
   try {
     mkdirSync(path.dirname(lockPath), { recursive: true })
     mkdirSync(lockPath)
+    writeQueueLockMetadata(lockPath)
   } catch (error) {
     const code = error instanceof Error && "code" in error ? (error as NodeJS.ErrnoException).code : undefined
-    if (code === "EEXIST") {
+    if (code === "EEXIST" && isStaleQueueLock(lockPath)) {
+      try {
+        rmSync(lockPath, { recursive: true, force: true })
+        mkdirSync(lockPath)
+        writeQueueLockMetadata(lockPath)
+      } catch (recoveryError) {
+        throw new UsageError(`Could not recover stale AI queue lock '${relativePath}'.`, {
+          hint: "Retry after any other BlueNote AI queue operation finishes, or remove the stale .data/ai/queue.json.lock directory if no BlueNote process is running.",
+          cause: recoveryError,
+        })
+      }
+    } else if (code === "EEXIST") {
       throw new UsageError(`AI queue '${relativePath}' is busy.`, {
         hint: "Retry after any other BlueNote AI queue operation finishes.",
         cause: error,
       })
+    } else {
+      throw new UsageError(`Could not lock AI queue '${relativePath}'.`, {
+        hint: "Ensure BLUENOTE_ROOT points to a writable directory path.",
+        cause: error,
+      })
     }
-
-    throw new UsageError(`Could not lock AI queue '${relativePath}'.`, {
-      hint: "Ensure BLUENOTE_ROOT points to a writable directory path.",
-      cause: error,
-    })
   }
 
   return () => {
@@ -239,7 +310,7 @@ export function createAiQueueRepository(rootPath: string): AiQueueRepository {
       try {
         mkdirSync(path.dirname(queuePath), { recursive: true })
         writeFileSync(temporaryQueuePath, `${JSON.stringify(canonicalQueue, null, 2)}\n`, "utf8")
-        renameSync(temporaryQueuePath, queuePath)
+        replaceFileAtomically(temporaryQueuePath, queuePath)
       } catch (error) {
         removeTemporaryQueue(temporaryQueuePath)
         throw new UsageError(`Could not write AI queue '${relativePath}'.`, {

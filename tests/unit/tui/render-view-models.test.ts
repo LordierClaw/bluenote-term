@@ -1716,7 +1716,9 @@ describe("TUI render view models", () => {
       assert.equal(statusRowIndex, footerHintIndex - 1)
       assert.equal(statusRowIndex, wideRootChildren.length - 2)
       assert.equal(statusRowChildren.some((node) => node.id === "bluenote-manager-current-open"), true)
-      assert.match((statusRowChildren[aiStatusIndex] as any)?.content?.chunks?.map?.((chunk: { text?: string }) => chunk.text ?? "").join("") ?? (statusRowChildren[aiStatusIndex] as any)?.content, /AI: not configured$/u)
+      const aiStatusNode = statusRowChildren[aiStatusIndex] as any
+      assert.match(aiStatusNode?.content?.chunks?.map?.((chunk: { text?: string }) => chunk.text ?? "").join("") ?? aiStatusNode?.content, /AI: not configured$/u)
+      assert.equal(aiStatusNode?.flexShrink ?? aiStatusNode?._flexShrink, 1)
 
       renderer.root.remove(wideScreen.id)
       wideScreen.destroyRecursively()

@@ -1,7 +1,8 @@
 import path from "node:path"
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 
 import { UsageError } from "../core/errors"
+import { replaceFileAtomically } from "../storage/atomic-replace"
 import { getAiConfigPath } from "../storage/root-layout"
 import type { AiConfig } from "./config-schema"
 import { validateAiConfig } from "./config-schema"
@@ -73,7 +74,7 @@ export function createAiConfigRepository(rootPath: string): AiConfigRepository {
           encoding: "utf8",
           mode: 0o600,
         })
-        renameSync(temporaryConfigPath, configPath)
+        replaceFileAtomically(temporaryConfigPath, configPath)
         chmodSync(configPath, 0o600)
       } catch (error) {
         removeTemporaryConfig(temporaryConfigPath)

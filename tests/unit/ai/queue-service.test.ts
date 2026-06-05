@@ -177,12 +177,31 @@ test("busy queue lock fails fast instead of blocking the event loop", async () =
   })
 })
 
+test("stale queue lock metadata is recovered before enqueueing", async () => {
+  await withRoot("bluenote-ai-queue-stale-lock-", async (rootPath) => {
+    const lockPath = `${getAiQueuePath(rootPath)}.lock`
+    await mkdir(lockPath, { recursive: true })
+    await writeFile(path.join(lockPath, "lock.json"), JSON.stringify({
+      pid: -1,
+      acquiredAt: "2026-06-01T00:00:00.000Z",
+    }), "utf8")
+
+    const job = enqueueDescribeNoteJob(rootPath, baseDescribeInput, {
+      clock: fixedClock("2026-06-01T00:00:00.000Z"),
+    })
+
+    assert.equal(job.key, baseDescribeInput.key)
+    assert.equal(existsSync(lockPath), false)
+    assert.deepEqual(createAiQueueRepository(rootPath).read().jobs.map((queuedJob) => queuedJob.key), [baseDescribeInput.key])
+  })
+})
+
 test("concurrent describe-note enqueues fail fast while another process holds the queue lock", async () => {
   await withRoot("bluenote-ai-queue-concurrent-busy-", async (rootPath) => {
     const markerPath = path.join(rootPath, ".data", "ai", "first-ready")
     const firstEnqueue = enqueueInChildProcess(rootPath, baseDescribeInput, "2026-06-01T00:00:00.000Z", {
       markerPath,
-      delayBeforeWriteMs: 300,
+      delayBeforeWriteMs: 2_000,
     })
 
     await waitForFile(markerPath)
