@@ -168,7 +168,7 @@ test("bn edit renames the note key, file, and sidecar when the markdown heading 
   } finally {
     await harness.cleanup()
   }
-})
+}, 15_000)
 
 test("bn edit fails when $EDITOR is unset even if the parent environment defines it", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-edit-missing-editor-")

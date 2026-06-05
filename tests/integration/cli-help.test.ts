@@ -59,14 +59,14 @@ test("bn ai help and config commands describe opt-in provider behavior without n
 }, 15_000)
 
 test("current docs document the Phase 6 opt-in AI description workflow", async () => {
-  const [readme, overview, rootLayout, noteFormat, runtime, phaseDoc, codexAuthDesign] = await Promise.all([
+  const [readme, overview, rootLayout, noteFormat, runtime, phaseDoc, consolidatedPlan] = await Promise.all([
     readWorkspaceFile("README.md"),
     readWorkspaceFile("docs/product/overview.md"),
     readWorkspaceFile("docs/architecture/managed-root-layout.md"),
     readWorkspaceFile("docs/architecture/note-format-and-indexing.md"),
     readWorkspaceFile("docs/architecture/runtime-and-dependencies.md"),
     readWorkspaceFile("docs/phases/phase-6-ai-suggestion.md"),
-    readWorkspaceFile("docs/plans/2026-06-04-bluenote-codex-auth-design.md"),
+    readWorkspaceFile("docs/plans/2026-06-05-phase-6-ai-suggestion-consolidated-plan.md"),
   ])
 
   assert.match(readme, /`ai config set --base-url <url> --api-key <key> --model <model>`/)
@@ -144,8 +144,12 @@ test("current docs document the Phase 6 opt-in AI description workflow", async (
   assert.match(runtime, /queue processing starts as soon as possible without blocking input/)
   assert.doesNotMatch(runtime, /setup-required provider\/auth seam before real manual auth validation/)
 
-  assert.match(codexAuthDesign, /Manual validation uses a `\.tmp\/` BlueNote root/)
-  assert.match(codexAuthDesign, /Do not commit `\.tmp\/` roots, `\.data\/ai\/codex-auth\.json`, OAuth codes, bearer tokens, refresh tokens, or API keys/)
+  assert.match(consolidatedPlan, /Manual QA artifacts belong in ignored `\.tmp\/` locations and must not commit secrets/)
+  assert.match(consolidatedPlan, /Do not commit secrets, auth caches, device codes, API keys, bearer tokens, JWT-like strings/)
+  assert.match(consolidatedPlan, /Codex auth follows stable official\/OpenAI\/Codex contracts where practical/)
+  assert.match(consolidatedPlan, /If a required real Codex generation\/auth contract cannot be verified from official\/stable sources, stop and document the blocker/)
+  assert.match(consolidatedPlan, /OpenAI-compatible API-key provider remains supported/)
+  assert.match(consolidatedPlan, /TUI startup, rendering, input, typing, navigation, note switching, Manager opening, save, autosave, quit, and dispose do not await provider calls/)
 
   assert.match(phaseDoc, /Phase 6 — AI Suggestion/)
   assert.match(phaseDoc, /plaintext/)

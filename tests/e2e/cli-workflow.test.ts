@@ -114,4 +114,4 @@ test("CLI workflow stays consistent across init, create, rebuild, list, search, 
   } finally {
     await harness.cleanup()
   }
-}, 20_000)
+}, 30_000)

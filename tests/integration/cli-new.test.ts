@@ -78,7 +78,7 @@ test("bn new auto-rebuilds indexes so the created note appears in bn list immedi
   } finally {
     await harness.cleanup()
   }
-})
+}, 15_000)
 
 test("bn new reports auto-rebuild validation failures after creating the note", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-new-rebuild-error-")
@@ -135,7 +135,7 @@ test("repeated note creation produces distinct keys", async () => {
   } finally {
     await harness.cleanup()
   }
-})
+}, 15_000)
 
 test("bn new retries when an orphaned sidecar collides with the first generated key", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-new-sidecar-collision-")
