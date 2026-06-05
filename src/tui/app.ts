@@ -250,13 +250,16 @@ function markTuiAiQueueJobFailed(rootPath: string, job: ReturnType<typeof listPe
   })
 }
 
-function failPendingTuiAiQueueJobs(rootPath: string, error: unknown): { applied: number; failed: number; queued: number; remaining: number } {
+function failPendingTuiAiQueueJobs(rootPath: string, error: unknown): { applied: number; failed: number; failedThisRun: number; queued: number; remaining: number } {
+  let failedThisRun = 0
   for (const job of listPendingAiJobs(rootPath)) {
-    markTuiAiQueueJobFailed(rootPath, job, error)
+    if (markTuiAiQueueJobFailed(rootPath, job, error)) {
+      failedThisRun += 1
+    }
   }
 
   const summary = readTuiAiQueueSummary(rootPath)
-  return { applied: 0, failed: summary.failed, queued: summary.queued, remaining: summary.queued }
+  return { applied: 0, failed: summary.failed, failedThisRun, queued: summary.queued, remaining: summary.queued }
 }
 
 function dropMissingTuiAiQueueJobs(rootPath: string): void {
@@ -270,11 +273,12 @@ function dropMissingTuiAiQueueJobs(rootPath: string): void {
   }
 }
 
-async function processTuiAiQueue(rootPath: string, client: AiTextGenerationClient, onProgress?: (progress: { processed: number; total: number }) => void): Promise<{ applied: number; failed: number; queued: number; remaining: number }> {
+async function processTuiAiQueue(rootPath: string, client: AiTextGenerationClient, onProgress?: (progress: { processed: number; total: number }) => void): Promise<{ applied: number; failed: number; failedThisRun: number; queued: number; remaining: number }> {
   const config = createAiConfigRepository(rootPath).exists() ? createAiConfigRepository(rootPath).read() : null
   const jobs = listRetryableAiJobs(rootPath, config?.maxAttempts ?? 3)
   const secrets = config?.provider === "openai-compatible" ? [config.apiKey] : []
   let applied = 0
+  let failedThisRun = 0
   let processed = 0
 
   onProgress?.({ processed, total: jobs.length })
@@ -291,10 +295,14 @@ async function processTuiAiQueue(rootPath: string, client: AiTextGenerationClien
         // A newer autosave/queue refresh superseded this provider response.
         // Leave the refreshed pending job untouched for a later run.
       } else {
-        markTuiAiQueueJobFailed(rootPath, job, result.error ?? "invalid description", secrets)
+        if (markTuiAiQueueJobFailed(rootPath, job, result.error ?? "invalid description", secrets)) {
+          failedThisRun += 1
+        }
       }
     } catch (error) {
-      markTuiAiQueueJobFailed(rootPath, job, error, secrets)
+      if (markTuiAiQueueJobFailed(rootPath, job, error, secrets)) {
+        failedThisRun += 1
+      }
     } finally {
       processed += 1
       onProgress?.({ processed, total: jobs.length })
@@ -302,7 +310,7 @@ async function processTuiAiQueue(rootPath: string, client: AiTextGenerationClien
   }
 
   const summary = readTuiAiQueueSummary(rootPath)
-  return { applied, failed: summary.failed, queued: summary.queued, remaining: summary.queued }
+  return { applied, failed: summary.failed, failedThisRun, queued: summary.queued, remaining: summary.queued }
 }
 
 export function createDefaultWorkspaceController(options: DefaultWorkspaceControllerOptions = {}): WorkspaceController {

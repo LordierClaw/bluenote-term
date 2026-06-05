@@ -240,7 +240,6 @@ export async function generateNoteDescription(options: GenerateNoteDescriptionOp
   sidecars.write({
     ...sidecar,
     description,
-    updatedAt: timestamp,
     ai: {
       ...sidecar.ai,
       description: {

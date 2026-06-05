@@ -75,6 +75,7 @@ export interface WorkspaceAiDescribeResult {
 export interface WorkspaceAiQueueResult {
   applied?: number
   failed?: number
+  failedThisRun?: number
   queued?: number
   remaining?: number
 }
@@ -944,7 +945,6 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       return
     }
 
-    const failedBeforeProcessing = currentQueueStatus()?.failed ?? 0
     const initialQueue = currentQueueStatus()
     const totalForRun = nonNegativeInteger(initialQueue?.queued ?? 0)
     const runningStatus: AiStatusState = totalForRun > 0
@@ -970,7 +970,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
           return
         }
         const queue = queueStatusFromResult(result)
-        const newlyFailed = Math.max(0, (result?.failed ?? 0) - failedBeforeProcessing)
+        const newlyFailed = Math.max(0, result?.failedThisRun ?? result?.failed ?? 0)
         if (newlyFailed > 0) {
           setLatestAiStatus(operationId, withQueueStatus({ kind: "error", reason: `${newlyFailed} failed` }, queue))
           return

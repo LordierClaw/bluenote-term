@@ -613,6 +613,21 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(controller.getState().ai, { kind: "updated", count: 2, queue: { queued: 0, failed: 0 } })
   })
 
+  test("/ai-process-queue reports retry failures even when cumulative failed count stays unchanged", async () => {
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini", queue: { queued: 1, failed: 1 } },
+      aiActions: {
+        processQueue: async () => ({ applied: 0, failed: 1, remaining: 1 }),
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    assert.deepEqual(controller.runCommand("/ai-process-queue"), { blocked: false })
+    await flushBackgroundAi()
+
+    assert.deepEqual(controller.getState().ai, { kind: "error", reason: "1 failed", queue: { queued: 1, failed: 1 } })
+  })
+
   test("/ai-process-queue does not start duplicate queue processing while one run is in flight", async () => {
     let resolveQueue!: (value: { applied: number; failed: number; remaining: number }) => void
     const queuePromise = new Promise<{ applied: number; failed: number; remaining: number }>((resolve) => {
