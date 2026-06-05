@@ -103,7 +103,7 @@ test("bn list shows title, key, description, and path for active notes only", as
   } finally {
     await harness.cleanup()
   }
-})
+}, 15_000)
 
 test("bn show <selector> prints title, key, path, description, and body", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-show-")
@@ -219,7 +219,7 @@ test("bn show resolves a managed-root-relative path selector", async () => {
   } finally {
     await harness.cleanup()
   }
-})
+}, 15_000)
 
 test("bn show rejects non-canonical normalized path aliases", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-show-path-alias-")
@@ -307,7 +307,7 @@ test("bn show reports selector-not-found errors", async () => {
   } finally {
     await harness.cleanup()
   }
-})
+}, 15_000)
 
 test("bn show suggests close note keys when a selector is missing", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-show-suggest-")

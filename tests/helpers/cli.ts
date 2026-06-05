@@ -18,6 +18,7 @@ export type CliEnvOverrides = Record<string, string | undefined>
 export type ManagedRootHarness = {
   rootPath: string
   run(args: string[], extraEnv?: CliEnvOverrides): CliRunResult
+  runAsync(args: string[], extraEnv?: CliEnvOverrides): Promise<CliRunResult>
   runBin(args: string[], extraEnv?: CliEnvOverrides): CliRunResult
   runScript(relativeScriptPath: string, extraEnv?: CliEnvOverrides): CliRunResult
   writeNote(relativePath: string, markdown: string): Promise<void>
@@ -71,8 +72,31 @@ function runWorkspaceCommand(command: string[], { rootPath, extraEnv = {} }: Run
   }
 }
 
+async function runWorkspaceCommandAsync(
+  command: string[],
+  { rootPath, extraEnv = {} }: RunWorkspaceCommandOptions = {},
+): Promise<CliRunResult> {
+  const process = Bun.spawn(command, {
+    cwd: workspaceRoot,
+    env: buildCommandEnv(rootPath, extraEnv),
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(process.stdout).text(),
+    new Response(process.stderr).text(),
+    process.exited,
+  ])
+
+  return { exitCode, stdout, stderr }
+}
+
 export function runCli(args: string[], options: RunWorkspaceCommandOptions = {}): CliRunResult {
   return runWorkspaceCommand(["bun", "run", cliPath, ...args], options)
+}
+
+export function runCliAsync(args: string[], options: RunWorkspaceCommandOptions = {}): Promise<CliRunResult> {
+  return runWorkspaceCommandAsync(["bun", "run", cliPath, ...args], options)
 }
 
 export function runBinCli(args: string[], options: RunWorkspaceCommandOptions = {}): CliRunResult {
@@ -118,6 +142,9 @@ export async function createManagedRootHarness(prefix = "bluenote-test-"): Promi
     rootPath,
     run(args, extraEnv = {}) {
       return runCli(args, { rootPath, extraEnv })
+    },
+    runAsync(args, extraEnv = {}) {
+      return runCliAsync(args, { rootPath, extraEnv })
     },
     runBin(args, extraEnv = {}) {
       return runBinCli(args, { rootPath, extraEnv })

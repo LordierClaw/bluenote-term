@@ -2,6 +2,7 @@ import path from "node:path"
 import { existsSync, readdirSync } from "node:fs"
 
 import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions } from "../config/root"
+import { enqueueDescribeNoteIfAiEnabled } from "../ai/enqueue-describe-note"
 import { IndexValidationFailedError } from "./errors"
 import { createNoteDescription } from "../domain/note-description"
 import { createNoteKey } from "../domain/note-key"
@@ -41,9 +42,22 @@ function listExistingCreateKeys(rootPath: string, repository: ReturnType<typeof 
 
     existingKeys.add(path.basename(entry.name, ".json"))
   }
-
   return existingKeys
 }
+
+function enqueueAiDescriptionAfterCreate(
+  rootPath: string,
+  input: { key: string; title: string; description: string; body: string; relativePath: string; clock: Clock },
+): void {
+  enqueueDescribeNoteIfAiEnabled(rootPath, {
+    key: input.key,
+    relativePath: input.relativePath,
+    title: input.title,
+    body: input.body,
+    currentDescription: input.description,
+  }, { clock: input.clock, warn: (message) => console.warn(message) })
+}
+
 
 export function createNote(options: CreateNoteOptions): CreateNoteSummary {
   const rootPath = ensureManagedRoot(resolveBlueNoteRoot(options))
@@ -79,6 +93,15 @@ export function createNote(options: CreateNoteOptions): CreateNoteSummary {
       },
     )
   }
+
+  enqueueAiDescriptionAfterCreate(rootPath, {
+    key,
+    title: options.title,
+    description,
+    body: options.body ?? "",
+    relativePath: created.relativePath,
+    clock,
+  })
 
   return {
     key,

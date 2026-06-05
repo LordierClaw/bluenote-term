@@ -17,6 +17,28 @@ try {
   assert.match(helpResult.stdout, /BlueNote v/)
   assert.match(helpResult.stdout, /archive/)
   assert.match(helpResult.stdout, /tui\s+Launch the terminal UI workspace/)
+  assert.match(helpResult.stdout, /ai\s+Configure and run opt-in AI description generation/)
+
+  const aiHelpResult = runBinCli(["ai", "--help"], { rootPath: managedRoot })
+  assert.equal(aiHelpResult.exitCode, 0)
+  assert.equal(aiHelpResult.stderr, "")
+  assert.match(aiHelpResult.stdout, /bn ai <command> \[options\]/)
+  assert.match(aiHelpResult.stdout, /config set\s+\[--provider openai-compatible\] --base-url <url> --api-key <key> --model <model>/)
+  assert.match(aiHelpResult.stdout, /config set\s+--provider codex --model <model>/)
+  assert.match(aiHelpResult.stdout, /codex auth login\s+Authenticate Codex with device-code OAuth/)
+  assert.match(aiHelpResult.stdout, /codex auth status\s+Show Codex auth status without secrets/)
+  assert.match(aiHelpResult.stdout, /codex auth logout\s+Remove stored Codex auth while keeping AI config/)
+  assert.match(aiHelpResult.stdout, /process-queue\s+\[--limit <n>\]/)
+
+  const aiQueueResult = runBinCli(["ai", "queue"], { rootPath: managedRoot })
+  assert.equal(aiQueueResult.exitCode, 0)
+  assert.equal(aiQueueResult.stderr, "")
+  assert.equal(aiQueueResult.stdout, "Pending AI jobs: 0\n")
+
+  const aiConfigShowResult = runBinCli(["ai", "config", "show"], { rootPath: managedRoot })
+  assert.equal(aiConfigShowResult.exitCode, 1)
+  assert.equal(aiConfigShowResult.stdout, "")
+  assert.match(aiConfigShowResult.stderr, /AI is not configured\./)
 
   const initResult = runBinCli(["init"], { rootPath: managedRoot })
   assert.equal(initResult.exitCode, 0)
