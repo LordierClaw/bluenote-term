@@ -8,10 +8,10 @@ BlueNote keeps note bodies as plain `.md` files under `notes/`. App metadata liv
 
 - Stores notes as plain Markdown files, without required frontmatter.
 - Keeps titles, descriptions, timestamps, and paths in sidecar JSON files.
-- Provides CLI commands for creating, listing, showing, searching, editing, archiving, deleting, rebuilding, and migrating notes.
+- Provides CLI commands for creating, listing, showing, searching, editing, archiving, deleting, rebuilding, migrating, and opt-in AI description generation.
 - Includes a terminal UI with a Manager, Editor, and Search Everything palette.
 - Uses contains-style search, so queries match real substrings in titles, paths, descriptions, and note bodies.
-- Runs locally. BlueNote does not require accounts, sync services, hosted backends, or cloud storage.
+- Runs locally. BlueNote does not require accounts, sync services, hosted backends, or cloud storage for core note workflows. Optional AI commands require a configured provider and network access; OpenAI-compatible API-key providers remain supported, and the Codex provider now has root-local CLI auth commands.
 
 ## Requirements
 
@@ -59,6 +59,17 @@ EDITOR="$EDITOR" bun run ./bin/bn.ts edit <key|path>
 
 # Open the terminal workspace.
 bun run ./bin/bn.ts tui
+
+# Optional: configure AI description generation, then process note descriptions.
+bun run ./bin/bn.ts ai config set --base-url https://api.openai.com/v1 --api-key "$OPENAI_API_KEY" --model gpt-4o-mini
+bun run ./bin/bn.ts ai describe <key|path>
+bun run ./bin/bn.ts ai process-queue
+
+# Optional: configure Codex, authenticate root-locally, then use AI commands.
+bun run ./bin/bn.ts ai config set --provider codex --model <model>
+bun run ./bin/bn.ts ai codex auth login
+bun run ./bin/bn.ts ai codex auth status
+bun run ./bin/bn.ts ai codex auth logout
 ```
 
 When installed on your `PATH`, use `bn` or `bluenote` instead of `bun run ./bin/bn.ts`.
@@ -78,6 +89,42 @@ When installed on your `PATH`, use `bn` or `bluenote` instead of `bun run ./bin/
 | `rebuild` | Rebuild derived metadata and search indexes. |
 | `migrate` | Convert frontmatter-based notes into plain files plus sidecars. |
 | `tui` | Launch the terminal UI workspace. |
+| `ai config set --base-url <url> --api-key <key> --model <model>` | Opt in to AI by configuring an OpenAI-compatible provider. |
+| `ai config set --provider codex --model <model>` | Select the Codex provider. |
+| `ai config show` | Show AI provider settings with the API key masked. |
+| `ai codex auth login` | Authenticate Codex with root-local device-code OAuth. |
+| `ai codex auth status` | Show Codex auth status without secrets. |
+| `ai codex auth logout` | Remove stored Codex auth while keeping AI config. |
+| `ai describe <key|path>` | Generate and automatically apply a description for one note. |
+| `ai queue` | Show pending AI description refresh jobs. |
+| `ai process-queue [--limit <n>]` | Manually process queued description refreshes. |
+
+## Optional AI descriptions
+
+BlueNote's AI feature is opt-in. Core CLI, storage, search, and TUI workflows continue to work offline without a provider. AI description generation only runs when you configure a provider and invoke an AI command or TUI background AI action; provider calls require network access.
+
+Configure the current OpenAI-compatible provider with:
+
+```bash
+bn ai config set --base-url <url> --api-key <key> --model <model>
+```
+
+Warning: the API key is stored in plaintext under `.data/ai/config.json`. Do not commit or share a BlueNote managed root that contains secrets. `bn ai config show` masks the key for display, but the local config file remains plaintext in this phase. AI config also supports `--max-attempts <n>` for failed queue-job retries (default `3`) and `--output-language <text>` for the default generated description language (default `English`).
+
+Codex provider auth is also available:
+
+```bash
+bn ai config set --provider codex --model <model>
+bn ai codex auth login
+bn ai codex auth status
+bn ai codex auth logout
+```
+
+Codex provider now supports root-local `bn ai codex auth login`, `bn ai codex auth status`, and `bn ai codex auth logout`. Codex auth state is stored root-locally at `.data/ai/codex-auth.json` and is sensitive app state. Do not commit or share a managed root containing this file, OAuth codes, bearer tokens, refresh tokens, or API keys.
+
+After note changes, BlueNote records cheap local queue updates under `.data/ai/queue.json`; normal create/edit/autosave paths do not perform network calls. Manual save and autosave never call the configured provider API. TUI editor changes schedule queue processing after the note is safely saved and the editor reaches a 10-second editor idle timer. Switching from Editor to Manager re-arms the same pending note on a 5-second manager idle timer, and opening another note from Manager queues the previous note immediately. All TUI AI work runs in the background: startup scans, idle queue processing, explicit TUI AI commands, provider calls, retries, status refreshes, and auth/setup checks do not block startup, rendering, typing, editing, navigation, note switching, saves, autosave, or quit. The TUI never starts `bn ai codex auth login` automatically; login is an explicit CLI action. CLI AI commands such as `bn ai describe` and `bn ai process-queue` remain foreground command executions; the non-blocking guarantee applies to the interactive TUI path.
+
+Pending AI work is durable in `.data/ai/queue.json` and is recovered on TUI startup by scanning note sidecars for stale descriptions. Run `bn ai describe <key|path>` to refresh one note immediately, or `bn ai process-queue [--limit <n>]` to process queued stale descriptions. Failed queue jobs are retried until their configured maximum attempts, then left failed with sanitized error details. Generated descriptions must be one short sentence under 10 words and are automatically written to the note sidecar; there is no approval/reject flow in Phase 6. The default prompt asks for a direct description or summary description in the configured output language. Manager shows the AI status on the right side of the current-open row, omits normal queued-count wording, and colors status intent; Editor hides AI status and keeps editor shortcuts visible. Freshness is tracked with `ai.description.lastProcessedAt` timestamp metadata in the note sidecar for this phase.
 
 ## Storage layout
 
@@ -92,6 +139,13 @@ scratches/
 templates/
 .data/
   notes/              # sidecar metadata JSON
+  ai/                 # opt-in AI config, prompts, queue, and logs
+    config.json       # plaintext provider settings when configured
+    codex-auth.json   # sensitive root-local Codex auth state when authenticated
+    prompts/
+      describe-note.md
+    queue.json
+    logs/
   recovery/
   tmp/
   logs/
