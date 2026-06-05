@@ -12,6 +12,24 @@ export type TuiMode =
 export type AutosaveStatus = "idle" | "pending" | "saving" | "saved" | "error"
 export type EditorReplaceField = "find" | "replacement"
 
+export interface AiQueueStatusState {
+  queued: number
+  failed?: number
+}
+
+export interface AiQueueProgressState {
+  processed: number
+  total: number
+}
+
+export type AiStatusState =
+  | { kind: "not-configured" }
+  | { kind: "auth-required"; reason: string; queue?: AiQueueStatusState }
+  | { kind: "connected"; model: string; queue?: AiQueueStatusState }
+  | { kind: "running"; key?: string; count?: number; progress?: AiQueueProgressState; queue?: AiQueueStatusState }
+  | { kind: "updated"; key?: string; count?: number; queue?: AiQueueStatusState }
+  | { kind: "error"; reason: string; queue?: AiQueueStatusState }
+
 export interface ManagerItem {
   type: "note" | "folder"
   key: string
@@ -110,10 +128,12 @@ export interface TuiState {
   manager: ManagerState
   editor: EditorBufferState | null
   search: SearchEverythingState | null
+  ai?: AiStatusState
 }
 
 export interface CreateInitialTuiStateOptions {
   manager?: Partial<ManagerState>
+  ai?: AiStatusState
 }
 
 export interface OpenSearchEverythingOptions {
@@ -136,6 +156,13 @@ function cloneManagerItems(items: ManagerItem[]): ManagerItem[] {
 
 function cloneNote(note: TuiNote): TuiNote {
   return { ...note }
+}
+
+function cloneAiStatus(ai: AiStatusState | null | undefined): AiStatusState {
+  if (!ai) {
+    return { kind: "not-configured" }
+  }
+  return { ...ai }
 }
 
 function normalizeManagerPath(path: string | null | undefined): string {
@@ -214,6 +241,7 @@ export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}
     manager: cloneManagerState(manager),
     editor: null,
     search: null,
+    ai: cloneAiStatus(options.ai),
   }
 }
 

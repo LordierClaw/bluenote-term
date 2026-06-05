@@ -3,7 +3,10 @@ import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
 import { mkdtemp, rm, readFile, access, readdir, writeFile, mkdir } from "node:fs/promises"
+import { existsSync } from "node:fs"
 
+import { createAiConfigRepository } from "../../src/ai/config-repository"
+import { enqueueDescribeNoteJob, hashDescribeNoteContent, markDescribeNoteJobFailedIfContentHashMatches } from "../../src/ai/queue-service"
 import { createNote } from "../../src/core/create-note"
 import { initRoot } from "../../src/core/init-root"
 import { listNotes } from "../../src/core/list-notes"
@@ -47,6 +50,89 @@ async function countNoteSidecars(rootPath: string): Promise<number> {
 
 async function waitForAutosave(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 900))
+}
+
+async function waitForCondition(predicate: () => boolean, timeoutMs = 1000): Promise<void> {
+  const startedAt = Date.now()
+  while (!predicate()) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error("condition was not met before timeout")
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+}
+
+function configureAiForTui(rootPath: string): void {
+  createAiConfigRepository(rootPath).write({
+    version: 1,
+    enabled: true,
+    provider: "openai-compatible",
+    baseUrl: "http://127.0.0.1:4321/v1",
+    apiKey: "test-token",
+    model: "test-model",
+    logging: {
+      usage: true,
+      conversations: false,
+      results: true,
+    },
+  })
+}
+
+function configureCodexForTui(rootPath: string): void {
+  createAiConfigRepository(rootPath).write({
+    version: 1,
+    enabled: true,
+    provider: "codex",
+    model: "codex-test-model",
+    logging: {
+      usage: true,
+      conversations: false,
+      results: true,
+    },
+  })
+}
+
+function createFakeScheduler() {
+  type ScheduledTask = { id: number; callback: () => void; delay: number; cleared: boolean }
+  const tasks: ScheduledTask[] = []
+  let nextId = 1
+
+  return {
+    tasks,
+    setTimeout(callback: () => void, delay: number) {
+      const task = { id: nextId++, callback, delay, cleared: false }
+      tasks.push(task)
+      return task.id
+    },
+    clearTimeout(handle: unknown) {
+      const task = tasks.find((candidate) => candidate.id === handle)
+      if (task) {
+        task.cleared = true
+      }
+    },
+    runNext() {
+      const task = tasks.find((candidate) => !candidate.cleared)
+      if (!task) {
+        throw new Error("No scheduled task to run")
+      }
+      task.cleared = true
+      task.callback()
+    },
+    activeTasks() {
+      return tasks.filter((task) => !task.cleared)
+    },
+  }
+}
+
+async function readAiQueue(rootPath: string) {
+  return JSON.parse(await readFile(path.join(rootPath, ".data", "ai", "queue.json"), "utf8"))
+}
+
+async function markDescriptionProcessedAt(rootPath: string, key: string, lastProcessedAt: string): Promise<void> {
+  const sidecarPath = path.join(rootPath, ".data", "notes", `${key}.json`)
+  const sidecar = JSON.parse(await readFile(sidecarPath, "utf8"))
+  sidecar.ai = { description: { lastProcessedAt } }
+  await writeFile(sidecarPath, JSON.stringify(sidecar, null, 2) + "\n", "utf8")
 }
 
 function openManagerFolderPath(controller: DefaultWorkspaceController, folderPath: string): void {
@@ -219,7 +305,6 @@ describe("TUI workspace workflows", () => {
     rebuildIndexes({ override: rootPath })
 
     const controller = createDefaultWorkspaceController({ rootPath })
-
     openManagerNoteByKey(controller, first.key)
     assert.equal(controller.getState().screen, "editor")
     assert.equal(controller.getState().editor?.body, "Initial body with café")
@@ -233,6 +318,653 @@ describe("TUI workspace workflows", () => {
     assert.equal(controller.getState().editor?.dirty, false)
     assert.equal(showNote({ override: rootPath, selector: first.key }).body, changedBody)
     assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), changedBody)
+  })
+
+  test("AI idle TUI save enqueues and processes the queue in the background after save returns", async () => {
+    const aiIdleScheduler = createFakeScheduler()
+    const first = createNote({
+      override: rootPath,
+      title: "TUI Queued Save",
+      body: "Initial TUI body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    configureAiForTui(rootPath)
+    assert.equal(existsSync(path.join(rootPath, ".data", "ai", "queue.json")), false)
+    rebuildIndexes({ override: rootPath })
+    let providerCalls = 0
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      aiIdleScheduler,
+      aiClient: {
+        createChatCompletion: async () => {
+          providerCalls += 1
+          return { text: "Updated TUI idle summary." }
+        },
+      },
+    })
+    openManagerNoteByKey(controller, first.key)
+
+    const changedBody = "Updated TUI body that should be queued."
+    controller.updateEditorBody(changedBody)
+    assert.equal(controller.runCommand("/save").blocked, false)
+
+    assert.equal(showNote({ override: rootPath, selector: first.key }).body, changedBody)
+    assert.equal(providerCalls, 0)
+    assert.equal(existsSync(path.join(rootPath, ".data", "ai", "queue.json")), false)
+    assert.deepEqual(aiIdleScheduler.activeTasks().map((task) => task.delay), [10_000])
+
+    aiIdleScheduler.runNext()
+    await waitForCondition(() => providerCalls === 1)
+    await waitForCondition(() => controller.getState().ai?.kind === "updated")
+
+    const queue = await readAiQueue(rootPath)
+    assert.equal(queue.jobs.length, 0)
+    assert.deepEqual(controller.getState().ai, { kind: "updated", count: 1, queue: { queued: 0, failed: 0 } })
+    assert.equal(showNote({ override: rootPath, selector: first.key }).description, "Updated TUI idle summary.")
+    assert.equal(listNotes({ override: rootPath }).some((summary) => summary.key === first.key && summary.description === "Updated TUI idle summary."), true)
+  })
+
+  test("TUI autosave refreshes an existing describe-note job on AI idle when AI is configured", async () => {
+    const aiIdleScheduler = createFakeScheduler()
+    const first = createNote({
+      override: rootPath,
+      title: "TUI Queued Autosave",
+      body: "Initial autosave body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    await markDescriptionProcessedAt(rootPath, first.key, "2026-05-26T10:00:00.000Z")
+    configureAiForTui(rootPath)
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createDefaultWorkspaceController({ rootPath, aiIdleScheduler })
+    openManagerNoteByKey(controller, first.key)
+
+    const firstBody = "First autosaved body."
+    controller.updateEditorBody(firstBody)
+    await waitForAutosave()
+    assert.equal(existsSync(path.join(rootPath, ".data", "ai", "queue.json")), false)
+    assert.deepEqual(aiIdleScheduler.activeTasks().map((task) => task.delay), [10_000])
+    aiIdleScheduler.runNext()
+    const initialQueue = await readAiQueue(rootPath)
+    assert.equal(initialQueue.jobs.length, 1)
+    const initialHash = initialQueue.jobs[0].contentHash
+
+    const secondBody = "Second autosaved body with latest content."
+    controller.updateEditorBody(secondBody)
+    await waitForAutosave()
+    assert.deepEqual(aiIdleScheduler.activeTasks().map((task) => task.delay), [10_000])
+    aiIdleScheduler.runNext()
+
+    const refreshedQueue = await readAiQueue(rootPath)
+    assert.equal(refreshedQueue.jobs.length, 1)
+    assert.equal(refreshedQueue.jobs[0].key, first.key)
+    assert.notEqual(refreshedQueue.jobs[0].contentHash, initialHash)
+    const saved = showNote({ override: rootPath, selector: first.key })
+    assert.equal(refreshedQueue.jobs[0].contentHash, hashDescribeNoteContent({ title: saved.title, body: secondBody, currentDescription: saved.description }))
+    assert.equal(saved.body, secondBody)
+  })
+
+  test("TUI save does not enqueue when body is unchanged", async () => {
+    const first = createNote({
+      override: rootPath,
+      title: "TUI Unchanged Save",
+      body: "Stable TUI body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    configureAiForTui(rootPath)
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createDefaultWorkspaceController({ rootPath })
+    openManagerNoteByKey(controller, first.key)
+    assert.equal(controller.runCommand("/save").blocked, false)
+
+    assert.equal(existsSync(path.join(rootPath, ".data", "ai", "queue.json")), false)
+    assert.equal(controller.getState().editor?.statusMessage, null)
+  })
+
+  test("no AI config leaves TUI save and autosave workflows without queue.json", async () => {
+    const first = createNote({
+      override: rootPath,
+      title: "TUI No AI Save",
+      body: "Initial no AI body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createDefaultWorkspaceController({ rootPath })
+    openManagerNoteByKey(controller, first.key)
+    controller.updateEditorBody("Manual save without AI")
+    assert.equal(controller.runCommand("/save").blocked, false)
+    controller.updateEditorBody("Autosave without AI")
+    await waitForAutosave()
+
+    assert.equal(existsSync(path.join(rootPath, ".data", "ai", "queue.json")), false)
+    assert.equal(showNote({ override: rootPath, selector: first.key }).body, "Autosave without AI")
+  })
+
+  test("TUI save idle queue failure is visible and does not roll back note persistence", async () => {
+    const aiIdleScheduler = createFakeScheduler()
+    const first = createNote({
+      override: rootPath,
+      title: "TUI Queue Failure Save",
+      body: "Initial failure body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    configureAiForTui(rootPath)
+    await rm(path.join(rootPath, ".data", "ai", "queue.json"), { force: true })
+    await mkdir(path.join(rootPath, ".data", "ai", "queue.json"))
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createDefaultWorkspaceController({ rootPath, aiIdleScheduler })
+    openManagerNoteByKey(controller, first.key)
+    controller.updateEditorBody("Saved despite TUI queue failure")
+    assert.equal(controller.runCommand("/save").blocked, false)
+
+    assert.equal(controller.getState().editor?.statusMessage, null)
+    assert.equal(showNote({ override: rootPath, selector: first.key }).body, "Saved despite TUI queue failure")
+    aiIdleScheduler.runNext()
+    await waitForCondition(() => controller.getState().ai?.kind === "error")
+    assert.equal(controller.getState().ai?.kind, "error")
+  })
+
+  test("TUI autosave idle queue failure is visible and does not roll back note persistence", async () => {
+    const aiIdleScheduler = createFakeScheduler()
+    const first = createNote({
+      override: rootPath,
+      title: "TUI Queue Failure Autosave",
+      body: "Initial autosave failure body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    configureAiForTui(rootPath)
+    await rm(path.join(rootPath, ".data", "ai", "queue.json"), { force: true })
+    await mkdir(path.join(rootPath, ".data", "ai", "queue.json"))
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createDefaultWorkspaceController({ rootPath, aiIdleScheduler })
+    openManagerNoteByKey(controller, first.key)
+    controller.updateEditorBody("Autosaved despite TUI queue failure")
+    await waitForAutosave()
+
+    assert.equal(controller.getState().editor?.statusMessage, null)
+    assert.equal(showNote({ override: rootPath, selector: first.key }).body, "Autosaved despite TUI queue failure")
+    aiIdleScheduler.runNext()
+    await waitForCondition(() => controller.getState().ai?.kind === "error")
+    assert.equal(controller.getState().ai?.kind, "error")
+  })
+
+  test("AI startup scan starts default controller without blocking and enqueues only stale notes", async () => {
+    const stale = createNote({
+      override: rootPath,
+      title: "Startup Stale Description",
+      body: "Stale startup body should be queued.",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    const fresh = createNote({
+      override: rootPath,
+      title: "Startup Fresh Description",
+      body: "Fresh startup body should not be queued.",
+      clock: fixedClock("2026-05-26T10:01:00.000Z"),
+    })
+    await markDescriptionProcessedAt(rootPath, fresh.key, "2026-05-26T10:01:00.000Z")
+    configureAiForTui(rootPath)
+    assert.equal(existsSync(path.join(rootPath, ".data", "ai", "queue.json")), false)
+    rebuildIndexes({ override: rootPath })
+
+    const aiStartupScheduler = createFakeScheduler()
+    const neverSettledCompletion = new Promise<never>(() => {})
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      aiStartupScheduler,
+      aiClient: {
+        createChatCompletion: () => neverSettledCompletion,
+      },
+    })
+
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().ai?.kind, "connected")
+    assert.equal(existsSync(path.join(rootPath, ".data", "ai", "queue.json")), false)
+    assert.equal(aiStartupScheduler.activeTasks().length, 1)
+    assert.equal(aiStartupScheduler.activeTasks()[0].delay, 0)
+    aiStartupScheduler.runNext()
+
+    await waitForCondition(() => existsSync(path.join(rootPath, ".data", "ai", "queue.json")))
+    const queue = await readAiQueue(rootPath)
+    assert.deepEqual(queue.jobs.map((job: { key: string }) => job.key), [stale.key])
+    assert.equal(queue.jobs[0].relativePath, stale.relativePath)
+    assert.ok(["pending", "running"].includes(queue.jobs[0].status))
+    const startupStatus = controller.getState().ai
+    assert.deepEqual(startupStatus, { kind: "running", progress: { processed: 0, total: 1 }, queue: { queued: 1, failed: 0 } })
+  })
+
+  test("AI startup scan preserves existing failed queue counts when no stale work is enqueued", async () => {
+    const note = createNote({
+      override: rootPath,
+      title: "Startup Failed Queue Count",
+      body: "Already processed startup body.",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    await markDescriptionProcessedAt(rootPath, note.key, "2026-05-26T10:00:00.000Z")
+    configureAiForTui(rootPath)
+    const savedNote = showNote({ override: rootPath, selector: note.key })
+    const contentHash = hashDescribeNoteContent({ title: savedNote.title, body: savedNote.body, currentDescription: savedNote.description })
+    enqueueDescribeNoteJob(rootPath, {
+      key: note.key,
+      relativePath: note.relativePath,
+      title: savedNote.title,
+      body: savedNote.body,
+      currentDescription: savedNote.description,
+      promptHash: "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    })
+    assert.equal(markDescribeNoteJobFailedIfContentHashMatches({
+      rootPath,
+      key: note.key,
+      contentHash,
+      lastError: "synthetic startup failure",
+    }), true)
+    rebuildIndexes({ override: rootPath })
+
+    const aiStartupScheduler = createFakeScheduler()
+    const controller = createDefaultWorkspaceController({ rootPath, aiStartupScheduler })
+
+    assert.deepEqual(controller.getState().ai, { kind: "connected", model: "test-model", queue: { queued: 0, failed: 1 } })
+    aiStartupScheduler.runNext()
+    await waitForCondition(() => {
+      const status = controller.getState().ai
+      return status?.kind === "connected" && status.queue?.failed === 1
+    })
+
+    assert.deepEqual(controller.getState().ai, { kind: "connected", model: "test-model", queue: { queued: 0, failed: 1 } })
+    const queue = await readAiQueue(rootPath)
+    assert.deepEqual(queue.jobs.map((job: { status: string }) => job.status), ["failed"])
+  })
+
+  test("AI startup scan processes already pending queue work when no stale work is enqueued", async () => {
+    const note = createNote({
+      override: rootPath,
+      title: "Startup Pending Queue",
+      body: "Already queued startup body.",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    await markDescriptionProcessedAt(rootPath, note.key, "2026-05-26T10:00:00.000Z")
+    configureAiForTui(rootPath)
+    const savedNote = showNote({ override: rootPath, selector: note.key })
+    enqueueDescribeNoteJob(rootPath, {
+      key: note.key,
+      relativePath: note.relativePath,
+      title: savedNote.title,
+      body: savedNote.body,
+      currentDescription: savedNote.description,
+      promptHash: "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    })
+    rebuildIndexes({ override: rootPath })
+
+    const aiStartupScheduler = createFakeScheduler()
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      aiStartupScheduler,
+      aiClient: {
+        createChatCompletion: async () => ({ text: "Pending startup summary." }),
+      },
+    })
+
+    assert.deepEqual(controller.getState().ai, { kind: "connected", model: "test-model", queue: { queued: 1, failed: 0 } })
+    aiStartupScheduler.runNext()
+    await waitForCondition(() => controller.getState().ai?.kind === "updated")
+
+    assert.deepEqual(controller.getState().ai, { kind: "updated", count: 1, queue: { queued: 0, failed: 0 } })
+    assert.equal(showNote({ override: rootPath, selector: note.key }).description, "Pending startup summary.")
+  })
+
+  test("AI startup scan timer is cleared when the default controller is disposed before idle", async () => {
+    const stale = createNote({
+      override: rootPath,
+      title: "Disposed Startup Scan",
+      body: "Disposed startup scan should not leave a pending timer.",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    configureAiForTui(rootPath)
+    rebuildIndexes({ override: rootPath })
+    const aiStartupScheduler = createFakeScheduler()
+
+    const controller = createDefaultWorkspaceController({ rootPath, aiStartupScheduler })
+
+    assert.equal(aiStartupScheduler.activeTasks().length, 1)
+    controller.dispose()
+    assert.equal(aiStartupScheduler.activeTasks().length, 0)
+    assert.equal(existsSync(path.join(rootPath, ".data", "ai", "queue.json")), false)
+  })
+
+  test("AI startup queued stale notes can still be processed explicitly", async () => {
+    const note = createNote({
+      override: rootPath,
+      title: "Startup Explicit Process Queue",
+      body: "Startup queued body should be processed on command.",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    configureAiForTui(rootPath)
+    rebuildIndexes({ override: rootPath })
+    const aiStartupScheduler = createFakeScheduler()
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      aiStartupScheduler,
+      aiClient: {
+        createChatCompletion: async () => ({ text: "Startup processed summary." }),
+      },
+    })
+
+    assert.equal(existsSync(path.join(rootPath, ".data", "ai", "queue.json")), false)
+    aiStartupScheduler.runNext()
+    await waitForCondition(() => existsSync(path.join(rootPath, ".data", "ai", "queue.json")))
+    assert.equal(controller.getState().ai?.kind, "running")
+
+    await waitForCondition(() => controller.getState().ai?.kind === "updated")
+
+    assert.deepEqual(controller.getState().ai, { kind: "updated", count: 1, queue: { queued: 0, failed: 0 } })
+    assert.equal(showNote({ override: rootPath, selector: note.key }).description, "Startup processed summary.")
+    assert.equal(listNotes({ override: rootPath }).some((summary) => summary.key === note.key && summary.description === "Startup processed summary."), true)
+  })
+
+  test("AI process queue leaves refreshed newer jobs pending when an older provider call fails", async () => {
+    const note = createNote({
+      override: rootPath,
+      title: "TUI Stale Failure Queue",
+      body: "Original queued body.",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    configureAiForTui(rootPath)
+    rebuildIndexes({ override: rootPath })
+    const aiStartupScheduler = createFakeScheduler()
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      aiStartupScheduler,
+      aiClient: {
+        createChatCompletion: async () => {
+          const refreshedBody = "Fresh body queued while an older TUI provider call fails."
+          await writeFile(path.join(rootPath, note.relativePath), refreshedBody, "utf8")
+          rebuildIndexes({ override: rootPath })
+          enqueueDescribeNoteJob(rootPath, {
+            key: note.key,
+            relativePath: note.relativePath,
+            title: "TUI Stale Failure Queue",
+            body: refreshedBody,
+            currentDescription: "",
+            promptHash: "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          })
+          throw new Error("old tui provider failed")
+        },
+      },
+    })
+
+    aiStartupScheduler.runNext()
+    await waitForCondition(() => existsSync(path.join(rootPath, ".data", "ai", "queue.json")))
+    assert.deepEqual(controller.runCommand("/ai-process-queue"), { blocked: false })
+    assert.equal(controller.getState().ai?.kind, "running")
+
+    await waitForCondition(() => controller.getState().ai?.kind !== "running")
+
+    assert.deepEqual(controller.getState().ai, { kind: "updated", count: 0, queue: { queued: 1, failed: 0 } })
+    const queue = await readAiQueue(rootPath)
+    assert.equal(queue.jobs.length, 1)
+    assert.equal(queue.jobs[0].key, note.key)
+    assert.equal(queue.jobs[0].status, "pending")
+    assert.equal(queue.jobs[0].attempts, 0)
+    assert.equal(queue.jobs[0].lastError, null)
+  })
+
+  test("AI process queue cleans up deleted-note work without blocking TUI interaction", async () => {
+    const deletedNote = createNote({
+      override: rootPath,
+      title: "Deleted TUI Queue",
+      body: "Deleted stale queue body.",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    const existingNote = createNote({
+      override: rootPath,
+      title: "Existing TUI Queue",
+      body: "Existing queue body.",
+      clock: fixedClock("2026-05-26T10:01:00.000Z"),
+    })
+    configureAiForTui(rootPath)
+    for (const note of [deletedNote, existingNote]) {
+      const savedNote = showNote({ override: rootPath, selector: note.key })
+      enqueueDescribeNoteJob(rootPath, {
+        key: note.key,
+        relativePath: note.relativePath,
+        title: savedNote.title,
+        body: savedNote.body,
+        currentDescription: savedNote.description,
+        promptHash: "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      })
+    }
+    await rm(path.join(rootPath, deletedNote.relativePath), { force: true })
+    await rm(path.join(rootPath, ".data", "notes", `${deletedNote.key}.json`), { force: true })
+    rebuildIndexes({ override: rootPath })
+
+    let providerCalls = 0
+    let releaseProviderCall = () => {}
+    const providerCall = new Promise<void>((resolve) => {
+      releaseProviderCall = resolve
+    })
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      aiStartupScheduler: createFakeScheduler(),
+      aiClient: {
+        createChatCompletion: async () => {
+          providerCalls += 1
+          await providerCall
+          return { text: "Existing TUI summary." }
+        },
+      },
+    })
+
+    assert.deepEqual(controller.runCommand("/ai-process-queue"), { blocked: false })
+    assert.equal(controller.getState().ai?.kind, "running")
+    controller.focusManagerItem(0)
+    assert.equal(controller.getState().manager.focusedIndex, 0)
+    assert.equal(providerCalls, 1)
+
+    releaseProviderCall()
+    await waitForCondition(() => controller.getState().ai?.kind === "updated")
+
+    assert.deepEqual(controller.getState().ai, { kind: "updated", count: 1, queue: { queued: 0, failed: 0 } })
+    assert.equal(showNote({ override: rootPath, selector: existingNote.key }).description, "Existing TUI summary.")
+    const queue = await readAiQueue(rootPath)
+    assert.deepEqual(queue.jobs, [])
+  })
+
+  test("AI process queue cleans up deleted-note work before Codex auth setup and does not block TUI interaction", async () => {
+    const deletedNote = createNote({
+      override: rootPath,
+      title: "Deleted Codex Auth Queue",
+      body: "Deleted codex auth queue body.",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    configureCodexForTui(rootPath)
+    const savedNote = showNote({ override: rootPath, selector: deletedNote.key })
+    enqueueDescribeNoteJob(rootPath, {
+      key: deletedNote.key,
+      relativePath: deletedNote.relativePath,
+      title: savedNote.title,
+      body: savedNote.body,
+      currentDescription: savedNote.description,
+      promptHash: "sha256:4545454545454545454545454545454545454545454545454545454545454545",
+    })
+    await rm(path.join(rootPath, deletedNote.relativePath), { force: true })
+    await rm(path.join(rootPath, ".data", "notes", `${deletedNote.key}.json`), { force: true })
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      aiStartupScheduler: createFakeScheduler(),
+    })
+
+    assert.deepEqual(controller.runCommand("/ai-process-queue"), { blocked: false })
+    assert.equal(controller.getState().ai?.kind, "running")
+    controller.focusManagerItem(0)
+    assert.equal(controller.getState().manager.focusedIndex, 0)
+
+    await waitForCondition(() => controller.getState().ai?.kind === "error")
+
+    const queue = await readAiQueue(rootPath)
+    assert.deepEqual(queue.jobs, [])
+  })
+
+  test("TUI startup forgets deleted exhausted failed queue jobs before showing AI status", async () => {
+    const deletedNote = createNote({
+      override: rootPath,
+      title: "Deleted Exhausted Queue",
+      body: "Deleted exhausted queue body.",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    configureCodexForTui(rootPath)
+    const savedNote = showNote({ override: rootPath, selector: deletedNote.key })
+    const job = enqueueDescribeNoteJob(rootPath, {
+      key: deletedNote.key,
+      relativePath: deletedNote.relativePath,
+      title: savedNote.title,
+      body: savedNote.body,
+      currentDescription: savedNote.description,
+      promptHash: "sha256:4646464646464646464646464646464646464646464646464646464646464646",
+    })
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      markDescribeNoteJobFailedIfContentHashMatches({
+        rootPath,
+        key: deletedNote.key,
+        contentHash: job.contentHash,
+        lastError: "Could not find a note matching selector.",
+        updatedAt: "2026-05-26T10:02:00.000Z",
+      })
+    }
+    await rm(path.join(rootPath, deletedNote.relativePath), { force: true })
+    await rm(path.join(rootPath, ".data", "notes", `${deletedNote.key}.json`), { force: true })
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      aiStartupScheduler: createFakeScheduler(),
+    })
+
+    assert.deepEqual(controller.getState().ai, { kind: "auth-required", reason: "auth required · run bn ai codex auth login", queue: { queued: 0, failed: 0 } })
+    const queue = await readAiQueue(rootPath)
+    assert.deepEqual(queue.jobs, [])
+  })
+
+  test("AI process queue retries a long-note failure without blocking TUI interaction", async () => {
+    const longBody = Array.from({ length: 220 }, (_, index) => `Section ${index}: detailed non-sensitive project notes for retry coverage.`).join("\n")
+    const note = createNote({
+      override: rootPath,
+      title: "Long Retry Nonblocking",
+      body: longBody,
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    configureAiForTui(rootPath)
+    const savedNote = showNote({ override: rootPath, selector: note.key })
+    enqueueDescribeNoteJob(rootPath, {
+      key: note.key,
+      relativePath: note.relativePath,
+      title: savedNote.title,
+      body: savedNote.body,
+      currentDescription: savedNote.description,
+      promptHash: "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+    })
+    rebuildIndexes({ override: rootPath })
+
+    let calls = 0
+    let releaseSecondProviderCall = () => {}
+    const secondProviderCall = new Promise<void>((resolve) => {
+      releaseSecondProviderCall = resolve
+    })
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      aiStartupScheduler: createFakeScheduler(),
+      aiClient: {
+        createChatCompletion: async () => {
+          calls += 1
+          if (calls === 1) {
+            return { text: "This description is deliberately far too verbose for the strict policy." }
+          }
+          await secondProviderCall
+          return { text: "Long retry summary." }
+        },
+      },
+    })
+
+    assert.deepEqual(controller.runCommand("/ai-process-queue"), { blocked: false })
+    await waitForCondition(() => controller.getState().ai?.kind !== "running")
+    let queue = await readAiQueue(rootPath)
+    assert.equal(queue.jobs.length, 1)
+    assert.equal(queue.jobs[0].status, "failed")
+    assert.equal(queue.jobs[0].attempts, 1)
+    assert.equal(showNote({ override: rootPath, selector: note.key }).description, savedNote.description)
+
+    assert.deepEqual(controller.runCommand("/ai-process-queue"), { blocked: false })
+    assert.equal(controller.getState().ai?.kind, "running")
+    controller.focusManagerItem(0)
+    assert.equal(controller.getState().manager.focusedIndex, 0)
+    assert.equal(controller.requestQuit().blocked, false)
+    assert.equal(controller.getState().ai?.kind, "running")
+
+    releaseSecondProviderCall()
+    await waitForCondition(() => controller.getState().ai?.kind === "updated")
+
+    assert.deepEqual(controller.getState().ai, { kind: "updated", count: 1, queue: { queued: 0, failed: 0 } })
+    assert.equal(showNote({ override: rootPath, selector: note.key }).description, "Long retry summary.")
+    queue = await readAiQueue(rootPath)
+    assert.equal(queue.jobs.length, 0)
+  })
+
+  test("AI process queue retries existing failed jobs before max attempts", async () => {
+    const failedNote = createNote({
+      override: rootPath,
+      title: "Existing Failed Queue Count",
+      body: "Failed queue body.",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    const pendingNote = createNote({
+      override: rootPath,
+      title: "Pending With Failed Queue Count",
+      body: "Pending queue body.",
+      clock: fixedClock("2026-05-26T10:01:00.000Z"),
+    })
+    configureAiForTui(rootPath)
+    for (const note of [failedNote, pendingNote]) {
+      const savedNote = showNote({ override: rootPath, selector: note.key })
+      enqueueDescribeNoteJob(rootPath, {
+        key: note.key,
+        relativePath: note.relativePath,
+        title: savedNote.title,
+        body: savedNote.body,
+        currentDescription: savedNote.description,
+        promptHash: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      })
+    }
+    const failedSaved = showNote({ override: rootPath, selector: failedNote.key })
+    assert.equal(markDescribeNoteJobFailedIfContentHashMatches({
+      rootPath,
+      key: failedNote.key,
+      contentHash: hashDescribeNoteContent({ title: failedSaved.title, body: failedSaved.body, currentDescription: failedSaved.description }),
+      lastError: "existing failed job",
+    }), true)
+    rebuildIndexes({ override: rootPath })
+
+    const aiStartupScheduler = createFakeScheduler()
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      aiStartupScheduler,
+      aiClient: {
+        createChatCompletion: async () => ({ text: "Pending success summary." }),
+      },
+    })
+
+    assert.deepEqual(controller.runCommand("/ai-process-queue"), { blocked: false })
+    await waitForCondition(() => controller.getState().ai?.kind === "updated")
+
+    assert.deepEqual(controller.getState().ai, { kind: "updated", count: 2, queue: { queued: 0, failed: 0 } })
+    assert.equal(showNote({ override: rootPath, selector: failedNote.key }).description, "Pending success summary.")
+    assert.equal(showNote({ override: rootPath, selector: pendingNote.key }).description, "Pending success summary.")
+    const queue = await readAiQueue(rootPath)
+    assert.equal(queue.jobs.length, 0)
   })
 
   test("unwrapped long-line navigation pans cursor logically and saves exact note body", async () => {
@@ -581,7 +1313,7 @@ describe("TUI workspace workflows", () => {
     assert.equal(controller.getState().editor?.body, "alpha thread alpha")
     await waitForAutosave()
     assert.equal(await readFile(path.join(rootPath, note.relativePath), "utf8"), "alpha thread alpha")
-  })
+  }, 10_000)
 
   test("autosave after editor input persists and manager can switch notes without blocking", async () => {
     const first = createNote({
@@ -1099,6 +1831,39 @@ describe("TUI workspace workflows", () => {
     assert.equal(controller.getState().editor?.findQuery, "Command")
   })
 
+  test("default TUI controller wires /ai-describe to the description service asynchronously", async () => {
+    const note = createNote({
+      override: rootPath,
+      title: "Default AI Describe",
+      body: "Body that the mock provider summarizes.",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    configureAiForTui(rootPath)
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      aiClient: {
+        createChatCompletion: async () => ({ text: "Mock generated summary." }),
+      },
+    })
+
+    openManagerNoteByKey(controller, note.key)
+    controller.showManager()
+    controller.openSearch("/ai-describe")
+
+    assert.deepEqual(controller.runCommand("/ai-describe"), { blocked: false })
+    assert.equal(controller.getState().screen, "manager")
+    assert.deepEqual(controller.getState().ai, { kind: "running", key: note.key, queue: { queued: 0, failed: 0 } })
+    controller.moveManagerSelection("down")
+
+    await waitForCondition(() => controller.getState().ai?.kind === "updated")
+
+    assert.deepEqual(controller.getState().ai, { kind: "updated", key: note.key, queue: { queued: 0, failed: 0 } })
+    assert.equal(showNote({ override: rootPath, selector: note.key }).description, "Mock generated summary.")
+    assert.equal(listNotes({ override: rootPath }).some((summary) => summary.key === note.key && summary.description === "Mock generated summary."), true)
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "note" && item.key === note.key && item.description === "Mock generated summary."), true)
+  })
+
   test("manager Search Everything shows applicable manager commands and runs new/delete prompts", async () => {
     createNote({
       override: rootPath,
@@ -1110,7 +1875,7 @@ describe("TUI workspace workflows", () => {
     const controller = createDefaultWorkspaceController({ rootPath })
 
     controller.openSearch("/")
-    assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/new"])
+    assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/new", "/ai-process-queue", "/ai-status"])
 
     const newResult = controller.getSearchResults().find((result) => result.kind === "command" && result.name === "/new")
     assert.ok(newResult)
@@ -1125,7 +1890,7 @@ describe("TUI workspace workflows", () => {
     controller.showManager()
     if (controller.getState().manager.currentFolderPath !== "") controller.goBack()
     controller.openSearch("/")
-    assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/new", "/delete"])
+    assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/new", "/delete", "/ai-describe", "/ai-process-queue", "/ai-status"])
     const deleteResult = controller.getSearchResults().find((result) => result.kind === "command" && result.name === "/delete")
 
     assert.ok(deleteResult)

@@ -21,6 +21,7 @@ export const TUI_SHORTCUTS = {
   managerNew: { key: "n", action: "New" },
   globalSearch: { key: "Ctrl+P", action: "Search" },
   managerBack: { key: "Esc", action: "Back" },
+  managerPreview: { key: "p", action: "Preview" },
   editorBack: { key: "Esc", action: "Manager" },
   editorSave: { key: "Ctrl+S", action: "Save" },
   editorFind: { key: "Ctrl+F", action: "Find" },

@@ -3,7 +3,7 @@ import { BoxRenderable, InputRenderable, InputRenderableEvents, TextRenderable, 
 import type { ManagerBrowserModel, ManagerBrowserRow, ManagerPreviewModel } from "./adapters/note-manager-adapter"
 import { padEndDisplayCells, truncateDisplayCells } from "./display-width"
 import { TUI_SHORTCUTS, renderShortcutHints, shortcutHintLabels, topbarTextIntent, type ShortcutHint, type ShortcutRenderableHint } from "./render-chrome"
-import type { ManagerItem, TuiState } from "./state"
+import type { AiStatusState, ManagerItem, TuiState } from "./state"
 import { tuiTheme, type TuiColorIntent } from "./theme"
 import type { WorkspaceController } from "./workspace-controller"
 
@@ -66,6 +66,12 @@ export interface ManagerEmptyStateViewModel {
 export interface ManagerPreviewSectionViewModel {
   label: string
   lines: string[]
+}
+
+export interface ManagerAiStatusViewModel {
+  text: string
+  renderedText: string
+  styleIntent: TuiColorIntent
 }
 
 export type ManagerPreviewViewModel =
@@ -139,6 +145,7 @@ export interface ManagerViewModel {
   }
   rows: ManagerRowViewModel[]
   status: string
+  aiStatus: ManagerAiStatusViewModel
   shortcutHints: ShortcutHint[]
   shortcuts: string[]
   createPrompt?: {
@@ -191,7 +198,104 @@ function currentOpenNoteLabel(state: TuiState): string {
   }
 
   const contentLabel = note.title.trim() || basenameLabel(note.relativePath) || note.key
-  return `Currently open: ${contentLabel}`
+  return `Current open: ${contentLabel}`
+}
+
+function normalizeAiStatus(ai: AiStatusState | null | undefined): AiStatusState {
+  return ai ?? { kind: "not-configured" }
+}
+
+function cleanAiStatusDetail(value: string | null | undefined): string {
+  return (value ?? "").replace(/\s+/gu, " ").trim()
+}
+
+function nonNegativeInteger(value: number | null | undefined): number {
+  return Number.isFinite(value) ? Math.max(0, Math.trunc(value ?? 0)) : 0
+}
+
+function aiQueueStatusSuffix(status: AiStatusState): string {
+  if (!("queue" in status) || !status.queue) {
+    return ""
+  }
+  const failed = nonNegativeInteger(status.queue.failed ?? 0)
+  return failed > 0 ? ` · ${failed} failed` : ""
+}
+
+function aiStatusIntent(status: AiStatusState): TuiColorIntent {
+  if (("queue" in status && nonNegativeInteger(status.queue?.failed ?? 0) > 0) || status.kind === "error") {
+    return "danger"
+  }
+
+  switch (status.kind) {
+    case "running":
+    case "auth-required":
+      return "warning"
+    case "connected":
+    case "updated":
+      return "success"
+    case "not-configured":
+    default:
+      return "mutedText"
+  }
+}
+
+export function buildAiStatusViewModel(ai: AiStatusState | null | undefined, width?: number): ManagerAiStatusViewModel {
+  const status = normalizeAiStatus(ai)
+  let text: string
+
+  switch (status.kind) {
+    case "auth-required": {
+      const reason = truncateDisplayCells(cleanAiStatusDetail(status.reason) || "auth required", 62)
+      text = `AI: ${reason}`
+      break
+    }
+    case "connected": {
+      const model = cleanAiStatusDetail(status.model)
+      text = model ? `AI: connected · ${model}` : "AI: connected"
+      break
+    }
+    case "running": {
+      const key = cleanAiStatusDetail(status.key)
+      if (status.progress) {
+        const processed = nonNegativeInteger(status.progress.processed)
+        const total = nonNegativeInteger(status.progress.total)
+        text = `AI: running · processing ${Math.min(processed, total)}/${total}`
+      } else if (key) {
+        text = `AI: running · ${key}`
+      } else {
+        text = "AI: running"
+      }
+      break
+    }
+    case "updated": {
+      const key = cleanAiStatusDetail(status.key)
+      if (key) {
+        text = `AI: updated · ${key}`
+      } else if (typeof status.count === "number") {
+        text = `AI: updated ${Math.max(0, Math.trunc(status.count))} description(s)`
+      } else {
+        text = "AI: updated"
+      }
+      break
+    }
+    case "error": {
+      const reason = truncateDisplayCells(cleanAiStatusDetail(status.reason) || "unknown", 62)
+      text = `AI: error · ${reason}`
+      break
+    }
+    case "not-configured":
+    default:
+      text = "AI: not configured"
+      break
+  }
+
+  text += aiQueueStatusSuffix(status)
+
+  return {
+    text,
+    renderedText: typeof width === "number" ? truncateDisplayCells(text, Math.max(0, Math.trunc(width))) : text,
+    styleIntent: aiStatusIntent(status),
+  }
 }
 
 function focusedItemLabel(rows: ManagerRowViewModel[], preview: ManagerPreviewViewModel): string {
@@ -239,6 +343,7 @@ function managerShortcutHints(state: TuiState, previewHidden: boolean, width?: n
     { ...TUI_SHORTCUTS.managerNew, priority: "primary" },
     { ...TUI_SHORTCUTS.globalSearch, priority: "primary" },
     { ...TUI_SHORTCUTS.managerBack, priority: "primary" },
+    { ...TUI_SHORTCUTS.managerPreview, priority: "primary" },
   ]
   if (typeof width === "number" && width < MANAGER_PREVIEW_NARROW_WIDTH) {
     return primary
@@ -270,8 +375,8 @@ function rowSegmentWidthsForAvailable(available: number | undefined): { primary:
 function displaySegmentsFor(row: BrowserishRow, maxWidth?: number): ManagerRowViewModel["displaySegments"] {
   const primary = row.type === "folder"
     ? row.title || basenameLabel(row.relativePath) || row.filename.replace(/\/+$/u, "")
-    : row.filename || row.title || row.key
-  const secondary = row.type === "folder" ? row.description : row.title || row.description
+    : row.title.trim() || row.filename || row.key
+  const secondary = row.description
   const segments = {
     primary,
     secondary,
@@ -419,6 +524,7 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
   const appStatusLabel = state.manager.status?.trim() || "Ready"
   const rightLabel = `${itemCountLabel} | ${appStatusLabel}`
   const bottomPath = currentOpenNoteLabel(state)
+  const aiStatus = buildAiStatusViewModel(state.ai, options.width)
 
   const currentPath = currentPathLabel(currentFolderPath)
   const createPrompt = state.mode === "manager.create"
@@ -492,6 +598,7 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
     },
     rows,
     status: appStatusLabel,
+    aiStatus,
     shortcutHints,
     shortcuts: shortcutHintLabels(shortcutHints),
     createPrompt,
@@ -796,7 +903,29 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     }))
     root.add(deleteBar)
   }
-  root.add(new TextRenderable(options.renderer, { content: vm.topbar.bottomPath, height: 1, fg: tuiTheme.mutedText }))
+  const footerStatusRow = new BoxRenderable(options.renderer, {
+    id: "bluenote-manager-footer-status-row",
+    flexDirection: "row",
+    width: "100%",
+    height: 1,
+    overflow: "hidden",
+  })
+  footerStatusRow.add(new TextRenderable(options.renderer, {
+    id: "bluenote-manager-current-open",
+    content: vm.topbar.bottomPath,
+    height: 1,
+    flexGrow: 1,
+    flexShrink: 1,
+    fg: tuiTheme.mutedText,
+  }))
+  footerStatusRow.add(new TextRenderable(options.renderer, {
+    id: "bluenote-manager-ai-status",
+    content: vm.aiStatus.renderedText,
+    height: 1,
+    flexShrink: 0,
+    fg: tuiTheme[vm.aiStatus.styleIntent],
+  }))
+  root.add(footerStatusRow)
   root.add(new TextRenderable(options.renderer, { id: "bluenote-manager-footer-hints", content: renderShortcutHints(vm.shortcutHints), height: 1, fg: tuiTheme.textMuted }))
 
   return root

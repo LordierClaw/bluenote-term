@@ -125,6 +125,24 @@ export const TUI_COMMANDS: readonly TuiCommandDefinition[] = [
     contexts: ["manager"],
   },
   {
+    name: "/ai-describe",
+    description: "Generate and apply an AI description for the selected or active note in the background",
+    usage: "/ai-describe",
+    contexts: ["manager", "editor"],
+  },
+  {
+    name: "/ai-process-queue",
+    description: "Process pending AI description jobs in the background",
+    usage: "/ai-process-queue",
+    contexts: ["manager", "editor"],
+  },
+  {
+    name: "/ai-status",
+    description: "Show current AI connection or background job status",
+    usage: "/ai-status",
+    contexts: ["manager", "editor"],
+  },
+  {
     name: "/find",
     description: "Find text in the active editor buffer",
     usage: "/find <query>",
@@ -637,6 +655,9 @@ function commandAvailableForContext(command: TuiCommandDefinition, context: Sear
   }
   if (command.name === "/delete") {
     return context.screen === "manager" && context.managerSelection === "note"
+  }
+  if (command.name === "/ai-describe") {
+    return context.screen === "editor" || (context.screen === "manager" && context.managerSelection === "note")
   }
   return true
 }

@@ -125,14 +125,14 @@ describe("TUI render view models", () => {
       workspaceLabel: "Workspace · notes/",
       summaryLabel: "2 items · Ready",
       orientation: "Browse your local Markdown workspace.",
-      primaryActions: ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back"],
+      primaryActions: ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview"],
     })
     assert.deepEqual(vm.topbar, {
       leftTitle: "BlueNote",
       itemCountLabel: "2 items",
       appStatusLabel: "Ready",
       rightLabel: "2 items | Ready",
-      bottomPath: "Currently open: Daily Plan",
+      bottomPath: "Current open: Daily Plan",
       styleIntent: "textPrimary",
     })
     assert.equal(vm.panels.layout1.title, "notes/")
@@ -144,8 +144,9 @@ describe("TUI render view models", () => {
       { key: "n", action: "New", priority: "primary" },
       { key: "Ctrl+P", action: "Search", priority: "primary" },
       { key: "Esc", action: "Back", priority: "primary" },
+      { key: "p", action: "Preview", priority: "primary" },
     ])
-    assert.deepEqual(vm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back"])
+    assert.deepEqual(vm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview"])
     const creatingVm = buildManagerViewModel({
       ...baseState,
       mode: "manager.create",
@@ -211,7 +212,7 @@ describe("TUI render view models", () => {
       vm.rows.map((row) => row.displaySegments),
       [
         { primary: "inbox", secondary: "2 notes", metadata: "" },
-        { primary: "daily-plan.md", secondary: "Daily Plan", metadata: "" },
+        { primary: "Daily Plan", secondary: "Today priorities.", metadata: "" },
       ],
     )
     assert.deepEqual(
@@ -272,12 +273,13 @@ describe("TUI render view models", () => {
       { key: "n", action: "New", priority: "primary" },
       { key: "Ctrl+P", action: "Search", priority: "primary" },
       { key: "Esc", action: "Back", priority: "primary" },
+      { key: "p", action: "Preview", priority: "primary" },
     ])
-    assert.deepEqual(wideVm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back"])
+    assert.deepEqual(wideVm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview"])
     assert.ok(wideVm.shortcuts.every((hint) => /^\[[^\]]+\] [A-Z?]/u.test(hint)), wideVm.shortcuts.join(" | "))
-    assert.deepEqual(narrowVm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back"])
+    assert.deepEqual(narrowVm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview"])
     assert.doesNotMatch([...wideVm.shortcuts, ...narrowVm.shortcuts].join(" "), /\[\?\] More/u)
-    assert.doesNotMatch(narrowVm.shortcuts.join(" "), /Delete|Quit|Preview/u)
+    assert.doesNotMatch(narrowVm.shortcuts.join(" "), /Delete|Quit/u)
     assert.deepEqual(filteringVm.shortcutHints, [
       { key: "Enter", action: "Open", priority: "primary" },
       { key: "Esc", action: "Close", priority: "primary" },
@@ -303,7 +305,7 @@ describe("TUI render view models", () => {
     assert.equal(vm.topbar.itemCountLabel, "1 items (filtered)")
     assert.equal(vm.topbar.appStatusLabel, "Indexing...")
     assert.equal(vm.topbar.rightLabel, "1 items (filtered) | Indexing...")
-    assert.equal(vm.topbar.bottomPath, "Currently open: Daily Plan")
+    assert.equal(vm.topbar.bottomPath, "Current open: Daily Plan")
     assert.doesNotMatch(vm.topbar.rightLabel, /notes\/|daily-plan|Rebuild idle|Index ready/u)
 
     const filenameFallbackVm = buildManagerViewModel({
@@ -313,7 +315,7 @@ describe("TUI render view models", () => {
         note: { ...baseState.editor!.note, title: "", relativePath: "notes/inbox/untitled-note.md" },
       },
     })
-    assert.equal(filenameFallbackVm.topbar.bottomPath, "Currently open: untitled-note.md")
+    assert.equal(filenameFallbackVm.topbar.bottomPath, "Current open: untitled-note.md")
 
     const noOpenNoteVm = buildManagerViewModel({
       ...baseState,
@@ -418,7 +420,7 @@ describe("TUI render view models", () => {
       itemCountLabel: "2 items",
       appStatusLabel: "Ready",
       rightLabel: "2 items | Ready",
-      bottomPath: "Currently open: Daily Plan",
+      bottomPath: "Current open: Daily Plan",
       styleIntent: "textPrimary",
     })
     assert.deepEqual(vm.panels, {
@@ -432,12 +434,12 @@ describe("TUI render view models", () => {
       vm.layout1.rows.map((row) => ({ filename: row.filename, displaySegments: row.displaySegments, focused: row.focused, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent })),
       [
         { filename: "projects", displaySegments: { primary: "projects", secondary: "", metadata: "" }, focused: true, styleIntent: "focusedRow", itemStyleIntent: "textPrimary" },
-        { filename: "root-note.md", displaySegments: { primary: "root-note.md", secondary: "Root Note", metadata: "" }, focused: false, styleIntent: "panel", itemStyleIntent: "textPrimary" },
+        { filename: "root-note.md", displaySegments: { primary: "Root Note", secondary: "A top-level note.", metadata: "" }, focused: false, styleIntent: "panel", itemStyleIntent: "textPrimary" },
       ],
     )
     assert.equal(vm.layout2.preview.type, "folder")
     assert.deepEqual(vm.layout2.preview.sections, [
-      { label: "Items", lines: ["client", "api-roadmap.md"] },
+      { label: "Items", lines: ["client", "API Roadmap"] },
     ])
     assert.deepEqual(vm.layout2.preview.sections.map((section) => section.label), ["Items"])
     assert.doesNotMatch(JSON.stringify(vm.layout2.preview.sections), /Path|Description|Contents/u)
@@ -445,7 +447,7 @@ describe("TUI render view models", () => {
       vm.layout2.preview.rows.map((row) => ({ filename: row.filename, displaySegments: row.displaySegments, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent })),
       [
         { filename: "client", displaySegments: { primary: "client", secondary: "", metadata: "" }, styleIntent: "panel", itemStyleIntent: "textPrimary" },
-        { filename: "api-roadmap.md", displaySegments: { primary: "api-roadmap.md", secondary: "API Roadmap", metadata: "" }, styleIntent: "panel", itemStyleIntent: "textPrimary" },
+        { filename: "api-roadmap.md", displaySegments: { primary: "API Roadmap", secondary: "Ship API work.", metadata: "" }, styleIntent: "panel", itemStyleIntent: "textPrimary" },
       ],
     )
   })
@@ -489,8 +491,8 @@ describe("TUI render view models", () => {
       assert.ok(displayCellWidth(row.displaySegments.secondary) <= 12, row.displaySegments.secondary)
     }
     assert.match(vm.layout1.rows[0]!.displaySegments.primary, /^folder-/u)
-    assert.match(vm.layout1.rows[1]!.displaySegments.primary, /^filename-/u)
-    assert.doesNotMatch(vm.layout1.rows[1]!.displaySegments.primary, /Launch notes/u)
+    assert.match(vm.layout1.rows[1]!.displaySegments.primary, /^Launch notes/u)
+    assert.doesNotMatch(vm.layout1.rows[1]!.displaySegments.primary, /^filename-/u)
     assert.doesNotMatch(vm.layout1.rows[1]!.displaySegments.primary, /�/u)
     assert.ok(vm.layout1.rows[1]!.displaySegments.secondary.endsWith("…"), vm.layout1.rows[1]!.displaySegments.secondary)
   })
@@ -1700,10 +1702,21 @@ describe("TUI render view models", () => {
       assert.deepEqual(widePreviewText.slice(0, 5), ["Root Note", "", "# Root Note", "", "Preview body."])
       assert.equal(widePreviewText.includes("Preview"), false)
       assert.doesNotMatch(widePreviewText.join("\n"), /Path|Description|notes\/root-note\.md|A top-level note\./u)
-      assert.equal(renderedRowText.startsWith("root-note.md"), true)
+      assert.equal(renderedRowText.startsWith("Root Note"), true)
       assert.doesNotMatch(renderedRowText, /^[\s›●📁📄]/u)
       assert.doesNotMatch(renderedRowText, /[›●]/u)
-      assert.deepEqual(renderedRowSegments.slice(0, 1), ["root-note.md".padEnd(24)])
+      assert.deepEqual(renderedRowSegments.slice(0, 1), ["Root Note".padEnd(24)])
+
+      const wideRootChildren = wideScreen.getChildren()
+      const footerHintIndex = wideRootChildren.findIndex((node) => node.id === "bluenote-manager-footer-hints")
+      const statusRowIndex = wideRootChildren.findIndex((node) => node.id === "bluenote-manager-footer-status-row")
+      const statusRow = wideRootChildren[statusRowIndex] as { getChildren?: () => Renderable[] } | undefined
+      const statusRowChildren = statusRow?.getChildren?.() ?? []
+      const aiStatusIndex = statusRowChildren.findIndex((node) => node.id === "bluenote-manager-ai-status")
+      assert.equal(statusRowIndex, footerHintIndex - 1)
+      assert.equal(statusRowIndex, wideRootChildren.length - 2)
+      assert.equal(statusRowChildren.some((node) => node.id === "bluenote-manager-current-open"), true)
+      assert.match((statusRowChildren[aiStatusIndex] as any)?.content?.chunks?.map?.((chunk: { text?: string }) => chunk.text ?? "").join("") ?? (statusRowChildren[aiStatusIndex] as any)?.content, /AI: not configured$/u)
 
       renderer.root.remove(wideScreen.id)
       wideScreen.destroyRecursively()
@@ -1717,7 +1730,7 @@ describe("TUI render view models", () => {
       assert.equal(narrowIds.includes("bluenote-manager-layout-1"), true)
       assert.equal(narrowIds.includes("bluenote-manager-layout-2"), false)
       assert.equal((narrowLayout1 as any)?._width, "100%")
-      assert.match(narrowText, /root-note\.md/u)
+      assert.doesNotMatch(narrowText, /root-note\.md/u)
       assert.match(narrowText, /Root Note/u)
       assert.doesNotMatch(narrowText, /notes\/root-note\.md/u)
       assert.doesNotMatch(narrowText, /\[\?\] More/u)

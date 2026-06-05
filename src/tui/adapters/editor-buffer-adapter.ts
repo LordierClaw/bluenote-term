@@ -82,7 +82,7 @@ export interface ReplaceAllMatchesResult {
 }
 
 export interface SaveEditorBufferDependencies {
-  persist: (note: TuiNote, body: string) => TuiNote | Promise<TuiNote>
+  persist: (note: TuiNote, body: string, warn?: (message: string) => void) => TuiNote | Promise<TuiNote>
 }
 
 function cloneNote(note: TuiNote): TuiNote {
