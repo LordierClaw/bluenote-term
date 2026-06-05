@@ -237,13 +237,14 @@ export async function generateNoteDescription(options: GenerateNoteDescriptionOp
     }
   }
 
+  const currentSidecar = sidecars.read(key)
   sidecars.write({
-    ...sidecar,
+    ...currentSidecar,
     description,
     ai: {
-      ...sidecar.ai,
+      ...currentSidecar.ai,
       description: {
-        ...sidecar.ai?.description,
+        ...currentSidecar.ai?.description,
         lastProcessedAt: timestamp,
       },
     },

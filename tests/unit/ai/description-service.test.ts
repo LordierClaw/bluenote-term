@@ -12,6 +12,7 @@ import type { AiChatCompletionRequest, AiCompletionResult } from "../../../src/a
 import { ensureManagedRoot, getAiLogsPath } from "../../../src/storage/root-layout"
 import { createNoteRepository } from "../../../src/storage/note-repository"
 import { createSidecarRepository } from "../../../src/storage/sidecar-repository"
+import { archiveNote } from "../../../src/core/archive-note"
 
 const FIXED_FRONTMATTER = {
   id: "project-notes",
@@ -162,6 +163,48 @@ test("generating for a selected note auto-applies a valid description, preserves
     assert.equal(resultsLog[0].status, "applied")
     assert.equal(resultsLog[0].description, "Launch tasks and owner follow-ups.")
     await assertPrivateFileMode(resultsLogPath)
+  })
+})
+
+test("AI apply preserves current sidecar path and archive metadata after an in-flight move", async () => {
+  await withRoot("bluenote-ai-description-inflight-archive-", async (rootPath) => {
+    writeConfig(rootPath)
+    createProjectNote(rootPath)
+    const completion = deferredCompletion()
+    let providerStarted!: () => void
+    const providerStartedPromise = new Promise<void>((resolve) => {
+      providerStarted = resolve
+    })
+
+    const generationPromise = generateNoteDescription({
+      rootPath,
+      selector: "project-notes",
+      client: {
+        async createChatCompletion() {
+          providerStarted()
+          return completion.promise
+        },
+      },
+      clock: fixedClock("2026-06-01T10:05:00.000Z"),
+    })
+
+    await providerStartedPromise
+    const archived = archiveNote({
+      override: rootPath,
+      selector: "project-notes",
+      clock: fixedClock("2026-06-01T10:03:00.000Z"),
+    })
+
+    completion.resolve({ text: "Archived project follow-up notes." })
+    const result = await generationPromise
+
+    assert.equal(result.status, "applied")
+    const currentSidecar = createSidecarRepository(rootPath).read("project-notes")
+    assert.equal(currentSidecar.description, "Archived project follow-up notes.")
+    assert.equal(currentSidecar.relativePath, archived.relativePath)
+    assert.equal(currentSidecar.archivedAt, archived.archivedAt)
+    assert.equal(currentSidecar.updatedAt, FIXED_FRONTMATTER.updatedAt)
+    assert.equal(currentSidecar.ai?.description?.lastProcessedAt, "2026-06-01T10:05:00.000Z")
   })
 })
 
