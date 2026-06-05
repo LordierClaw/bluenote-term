@@ -44,6 +44,20 @@ async function runInjectedAi(
   }
 }
 
+async function runAiWithoutInjectedClient(rootPath: string, args: string[]) {
+  const previousRoot = process.env.BLUENOTE_ROOT
+  process.env.BLUENOTE_ROOT = rootPath
+  try {
+    return await runCliAsync(args, pkg.version)
+  } finally {
+    if (previousRoot === undefined) {
+      delete process.env.BLUENOTE_ROOT
+    } else {
+      process.env.BLUENOTE_ROOT = previousRoot
+    }
+  }
+}
+
 function extractKey(stdout: string): string {
   const match = stdout.match(/^Created note\nKey: (.+)\n/m)
   assert.notEqual(match, null)
@@ -296,6 +310,44 @@ test("bn ai process-queue exits non-zero when a queued job fails and still print
     assert.equal(queue.jobs[0].status, "failed")
     assert.equal(queue.jobs[0].attempts, 1)
     assert.equal(queue.jobs[0].lastError, "provider unavailable")
+  } finally {
+    await harness.cleanup()
+  }
+}, SUBPROCESS_HEAVY_TIMEOUT_MS)
+
+test("bn ai process-queue leaves Codex jobs pending without consuming attempts when auth is missing", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-ai-process-queue-codex-auth-missing-")
+
+  try {
+    const key = await createQueuedNote(harness, "Codex Auth Missing Process Note", "0x88888888")
+
+    const setConfig = harness.run([
+      "ai",
+      "config",
+      "set",
+      "--provider",
+      "codex",
+      "--model",
+      "gpt-5.1-codex",
+    ])
+    assert.equal(setConfig.exitCode, 0)
+
+    const firstResult = await runAiWithoutInjectedClient(harness.rootPath, ["ai", "process-queue"])
+    const secondResult = await runAiWithoutInjectedClient(harness.rootPath, ["ai", "process-queue"])
+
+    assert.notEqual(firstResult.exitCode, 0)
+    assert.equal(firstResult.stderr, "")
+    assert.match(firstResult.stdout, /Processed AI queue: 0 applied, 0 failed, 1 remaining\./)
+    assert.notEqual(secondResult.exitCode, 0)
+    assert.equal(secondResult.stderr, "")
+    assert.match(secondResult.stdout, /Processed AI queue: 0 applied, 0 failed, 1 remaining\./)
+
+    const queue = JSON.parse(await readFile(path.join(harness.rootPath, ".data", "ai", "queue.json"), "utf8"))
+    assert.equal(queue.jobs.length, 1)
+    assert.equal(queue.jobs[0].key, key)
+    assert.equal(queue.jobs[0].status, "pending")
+    assert.equal(queue.jobs[0].attempts, 0)
+    assert.equal(queue.jobs[0].lastError, null)
   } finally {
     await harness.cleanup()
   }

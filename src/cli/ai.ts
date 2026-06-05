@@ -5,7 +5,7 @@ import { ensureManagedRoot } from "../storage/root-layout"
 import { createAiConfigRepository, maskApiKey, type AiConfig } from "../ai/config"
 import { generateNoteDescription, type GenerateNoteDescriptionResult } from "../ai/description-service"
 import { sanitizeAiErrorMessage, sanitizeCodexAuthErrorMessage } from "../ai/error-redaction"
-import { createAiTextGenerationClient, type AiTextGenerationClient } from "../ai/provider"
+import { CodexProviderSetupRequiredError, createAiTextGenerationClient, type AiTextGenerationClient } from "../ai/provider"
 import type { OpenAiCompatibleFetch } from "../ai/openai-compatible-client"
 import type { AiQueueJob } from "../ai/queue-repository"
 import { dropDescribeNoteJobIfNoteMissing, listPendingAiJobs, listRetryableAiJobs, markDescribeNoteJobFailedIfContentHashMatches } from "../ai/queue-service"
@@ -449,6 +449,7 @@ export async function runAiCli(args: string[], runtime: AiCliRuntimeOptions = {}
     const selectedJobs = jobs.slice(0, limit ?? jobs.length)
     let applied = 0
     let failed = 0
+    let setupBlocked = false
 
     for (const job of selectedJobs) {
       try {
@@ -467,6 +468,11 @@ export async function runAiCli(args: string[], runtime: AiCliRuntimeOptions = {}
           }
         }
       } catch (error) {
+        if (error instanceof CodexProviderSetupRequiredError) {
+          setupBlocked = true
+          continue
+        }
+
         if (markJobFailed(rootPath, job, error, secrets)) {
           failed += 1
         }
@@ -475,7 +481,7 @@ export async function runAiCli(args: string[], runtime: AiCliRuntimeOptions = {}
 
     const remaining = listPendingAiJobs(rootPath).length
     return {
-      exitCode: failed > 0 ? 1 : 0,
+      exitCode: failed > 0 || setupBlocked ? 1 : 0,
       stdout: `Processed AI queue: ${applied} applied, ${failed} failed, ${remaining} remaining.\n`,
       stderr: "",
     }
