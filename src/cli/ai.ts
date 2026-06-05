@@ -251,7 +251,13 @@ function describeOutput(result: GenerateNoteDescriptionResult): CliResult {
     }
   }
 
-  throw new UsageError("Provider returned an invalid description.", {
+  if (result.status === "stale") {
+    throw new UsageError(`AI description result was stale: ${result.error ?? "note changed while AI description was generating"}.`, {
+      hint: "The existing note description was left unchanged. Run bn ai describe again to refresh it.",
+    })
+  }
+
+  throw new UsageError(result.error ?? "Provider returned an invalid description.", {
     hint: "The existing note description was left unchanged.",
   })
 }

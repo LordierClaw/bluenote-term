@@ -35,8 +35,6 @@ export interface AiQueueRepository {
 }
 
 const EMPTY_QUEUE: AiQueue = { version: 1, jobs: [] }
-const LOCK_RETRY_DELAY_MS = 10
-const LOCK_TIMEOUT_MS = 5_000
 
 function getTemporaryQueuePath(queuePath: string): string {
   return `${queuePath}.${process.pid}.${Date.now()}.${Math.random().toString(16).slice(2)}.tmp`
@@ -50,36 +48,23 @@ function removeTemporaryQueue(queuePath: string): void {
   }
 }
 
-function sleepSync(milliseconds: number): void {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds)
-}
-
 function acquireQueueLock(lockPath: string, relativePath: string): () => void {
-  const deadline = Date.now() + LOCK_TIMEOUT_MS
-
-  while (true) {
-    try {
-      mkdirSync(path.dirname(lockPath), { recursive: true })
-      mkdirSync(lockPath)
-      break
-    } catch (error) {
-      const code = error instanceof Error && "code" in error ? (error as NodeJS.ErrnoException).code : undefined
-      if (code !== "EEXIST") {
-        throw new UsageError(`Could not lock AI queue '${relativePath}'.`, {
-          hint: "Ensure BLUENOTE_ROOT points to a writable directory path.",
-          cause: error,
-        })
-      }
-
-      if (Date.now() >= deadline) {
-        throw new UsageError(`Timed out waiting for AI queue lock '${relativePath}'.`, {
-          hint: "Retry after any other BlueNote AI queue operation finishes.",
-          cause: error,
-        })
-      }
-
-      sleepSync(LOCK_RETRY_DELAY_MS)
+  try {
+    mkdirSync(path.dirname(lockPath), { recursive: true })
+    mkdirSync(lockPath)
+  } catch (error) {
+    const code = error instanceof Error && "code" in error ? (error as NodeJS.ErrnoException).code : undefined
+    if (code === "EEXIST") {
+      throw new UsageError(`AI queue '${relativePath}' is busy.`, {
+        hint: "Retry after any other BlueNote AI queue operation finishes.",
+        cause: error,
+      })
     }
+
+    throw new UsageError(`Could not lock AI queue '${relativePath}'.`, {
+      hint: "Ensure BLUENOTE_ROOT points to a writable directory path.",
+      cause: error,
+    })
   }
 
   return () => {

@@ -122,7 +122,7 @@ Phase 6.1 Codex auth is part of this Phase 6 scope. The branch should keep a sma
 - Lifecycle-owned timers/promises are cancelled or ignored on dispose.
 - Late provider results cannot overwrite newer note state or mark refreshed content fresh.
 - TUI AI status is Manager-only chrome; Editor hides AI status and preserves editor shortcuts.
-- Manager places `Current open: <label>` on the left and `AI: <status>` on the right on the same row, with predictable truncation.
+- Manager places `Currently open: <label>` on the left and `AI: <status>` on the right on the same row, with predictable truncation.
 - Normal Manager AI status avoids `x queued` and `empty` wording. It may show connected/updated/running/failed/error/auth-required/not-configured and `processing x/y` during active runs.
 - Status wording is provider-neutral during normal operation and only mentions Codex in setup guidance such as `run bn ai codex auth login`.
 - Status color/style intents:

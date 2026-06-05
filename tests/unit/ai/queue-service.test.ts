@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
 import { existsSync } from "node:fs"
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { pathToFileURL } from "node:url"
 
 import { UsageError } from "../../../src/core/errors"
@@ -152,8 +152,33 @@ test("duplicate describe-note jobs for the same key are refreshed, not duplicate
   })
 })
 
-test("concurrent describe-note enqueues for different keys preserve both jobs", async () => {
-  await withRoot("bluenote-ai-queue-concurrent-", async (rootPath) => {
+test("busy queue lock fails fast instead of blocking the event loop", async () => {
+  await withRoot("bluenote-ai-queue-busy-lock-", async (rootPath) => {
+    const lockPath = `${getAiQueuePath(rootPath)}.lock`
+    await mkdir(lockPath, { recursive: true })
+
+    let timerFired = false
+    const timer = new Promise<void>((resolve) => {
+      setTimeout(() => {
+        timerFired = true
+        resolve()
+      }, 0)
+    })
+
+    assert.throws(
+      () => enqueueDescribeNoteJob(rootPath, baseDescribeInput),
+      (error: unknown) => error instanceof UsageError
+        && /AI queue '.data\/ai\/queue.json' is busy\./u.test(error.message)
+        && /Retry after any other BlueNote AI queue operation finishes\./u.test(error.hint ?? ""),
+    )
+
+    await timer
+    assert.equal(timerFired, true)
+  })
+})
+
+test("concurrent describe-note enqueues fail fast while another process holds the queue lock", async () => {
+  await withRoot("bluenote-ai-queue-concurrent-busy-", async (rootPath) => {
     const markerPath = path.join(rootPath, ".data", "ai", "first-ready")
     const firstEnqueue = enqueueInChildProcess(rootPath, baseDescribeInput, "2026-06-01T00:00:00.000Z", {
       markerPath,
@@ -162,18 +187,20 @@ test("concurrent describe-note enqueues for different keys preserve both jobs", 
 
     await waitForFile(markerPath)
 
-    await Promise.all([
-      firstEnqueue,
-      enqueueInChildProcess(rootPath, {
-        ...baseDescribeInput,
-        key: "meeting-notes",
-        relativePath: "notes/inbox/meeting-notes.md",
-        title: "Meeting notes",
-      }, "2026-06-01T00:01:00.000Z"),
-    ])
+    const secondEnqueue = enqueueInChildProcess(rootPath, {
+      ...baseDescribeInput,
+      key: "meeting-notes",
+      relativePath: "notes/inbox/meeting-notes.md",
+      title: "Meeting notes",
+    }, "2026-06-01T00:01:00.000Z")
+
+    const [firstResult, secondResult] = await Promise.allSettled([firstEnqueue, secondEnqueue])
+    assert.equal(firstResult.status, "fulfilled")
+    assert.equal(secondResult.status, "rejected")
+    assert.match(String(secondResult.reason), /AI queue '.data\/ai\/queue.json' is busy\./u)
 
     const queue = createAiQueueRepository(rootPath).read()
-    assert.deepEqual(queue.jobs.map((job) => job.key).sort(), ["meeting-notes", "project-notes"])
+    assert.deepEqual(queue.jobs.map((job) => job.key), ["project-notes"])
   })
 })
 

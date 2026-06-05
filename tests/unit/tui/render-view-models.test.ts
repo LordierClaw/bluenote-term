@@ -132,7 +132,7 @@ describe("TUI render view models", () => {
       itemCountLabel: "2 items",
       appStatusLabel: "Ready",
       rightLabel: "2 items | Ready",
-      bottomPath: "Current open: Daily Plan",
+      bottomPath: "Currently open: Daily Plan",
       styleIntent: "textPrimary",
     })
     assert.equal(vm.panels.layout1.title, "notes/")
@@ -305,7 +305,7 @@ describe("TUI render view models", () => {
     assert.equal(vm.topbar.itemCountLabel, "1 items (filtered)")
     assert.equal(vm.topbar.appStatusLabel, "Indexing...")
     assert.equal(vm.topbar.rightLabel, "1 items (filtered) | Indexing...")
-    assert.equal(vm.topbar.bottomPath, "Current open: Daily Plan")
+    assert.equal(vm.topbar.bottomPath, "Currently open: Daily Plan")
     assert.doesNotMatch(vm.topbar.rightLabel, /notes\/|daily-plan|Rebuild idle|Index ready/u)
 
     const filenameFallbackVm = buildManagerViewModel({
@@ -315,7 +315,7 @@ describe("TUI render view models", () => {
         note: { ...baseState.editor!.note, title: "", relativePath: "notes/inbox/untitled-note.md" },
       },
     })
-    assert.equal(filenameFallbackVm.topbar.bottomPath, "Current open: untitled-note.md")
+    assert.equal(filenameFallbackVm.topbar.bottomPath, "Currently open: untitled-note.md")
 
     const noOpenNoteVm = buildManagerViewModel({
       ...baseState,
@@ -420,7 +420,7 @@ describe("TUI render view models", () => {
       itemCountLabel: "2 items",
       appStatusLabel: "Ready",
       rightLabel: "2 items | Ready",
-      bottomPath: "Current open: Daily Plan",
+      bottomPath: "Currently open: Daily Plan",
       styleIntent: "textPrimary",
     })
     assert.deepEqual(vm.panels, {

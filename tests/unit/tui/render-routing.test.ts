@@ -1417,7 +1417,7 @@ describe("TUI render keyboard routing", () => {
       const renderedText = textLines.join("\n")
 
       assert.ok(textLines.includes("BlueNote  Workspace · notes/inbox  1 items (filtered) · Indexing..."))
-      assert.match(renderedText, /Current open: Daily Plan/u)
+      assert.match(renderedText, /Currently open: Daily Plan/u)
       assert.match(renderedText, /AI: not configured/u)
       assert.match(renderedText, /\[\/\] Filter/u)
       assert.doesNotMatch(renderedText, /Rebuild idle|Index ready|selected daily-plan|notes\/inbox → notes\/inbox\/daily-plan\.md|filter “daily”/u)

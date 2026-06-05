@@ -198,7 +198,7 @@ function currentOpenNoteLabel(state: TuiState): string {
   }
 
   const contentLabel = note.title.trim() || basenameLabel(note.relativePath) || note.key
-  return `Current open: ${contentLabel}`
+  return `Currently open: ${contentLabel}`
 }
 
 function normalizeAiStatus(ai: AiStatusState | null | undefined): AiStatusState {

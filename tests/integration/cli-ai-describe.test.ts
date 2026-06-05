@@ -165,6 +165,81 @@ test("bn ai describe sanitizes provider errors before returning CLI output", asy
   }
 }, 20_000)
 
+test("bn ai describe surfaces invalid description details", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-ai-describe-invalid-detail-")
+
+  try {
+    const createResult = harness.run(["new", "--title", "Invalid Detail"], {
+      BLUENOTE_TEST_NOW: "2026-06-01T00:00:00.000Z",
+      BLUENOTE_TEST_RANDOM_SEQUENCE: "0x12345678",
+    })
+    assert.equal(createResult.exitCode, 0)
+    const key = extractKey(createResult.stdout)
+
+    const setConfig = harness.run([
+      "ai",
+      "config",
+      "set",
+      "--base-url",
+      "http://127.0.0.1:4321/v1",
+      "--api-key",
+      "test-token-secret",
+      "--model",
+      "test-model",
+    ])
+    assert.equal(setConfig.exitCode, 0)
+
+    const result = await runInjectedAi(harness.rootPath, ["ai", "describe", key], async () => ({
+      text: "This output has far too many words to be accepted by BlueNote.",
+    }))
+
+    assert.equal(result.exitCode, 1)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Provider returned an invalid description: description must be under 10 words\./)
+    assert.match(result.stderr, /Hint: The existing note description was left unchanged\./)
+  } finally {
+    await harness.cleanup()
+  }
+}, 20_000)
+
+test("bn ai describe surfaces stale result details separately from invalid output", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-ai-describe-stale-detail-")
+
+  try {
+    const createResult = harness.run(["new", "--title", "Stale Detail"], {
+      BLUENOTE_TEST_NOW: "2026-06-01T00:00:00.000Z",
+      BLUENOTE_TEST_RANDOM_SEQUENCE: "0x12345678",
+    })
+    assert.equal(createResult.exitCode, 0)
+    const key = extractKey(createResult.stdout)
+
+    const setConfig = harness.run([
+      "ai",
+      "config",
+      "set",
+      "--base-url",
+      "http://127.0.0.1:4321/v1",
+      "--api-key",
+      "test-token-secret",
+      "--model",
+      "test-model",
+    ])
+    assert.equal(setConfig.exitCode, 0)
+
+    const result = await runInjectedAi(harness.rootPath, ["ai", "describe", key], async () => {
+      await Bun.write(path.join(harness.rootPath, "notes", "inbox", `${key}.md`), "Changed while provider was running.\n")
+      return { text: "Fresh result ignored." }
+    })
+
+    assert.equal(result.exitCode, 1)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /AI description result was stale: note changed while AI description was generating; skipped stale result\./)
+    assert.match(result.stderr, /Hint: The existing note description was left unchanged\. Run bn ai describe again to refresh it\./)
+  } finally {
+    await harness.cleanup()
+  }
+}, 20_000)
+
 test("bn ai describe creates the default Codex provider from root-local auth", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-ai-describe-codex-")
 
