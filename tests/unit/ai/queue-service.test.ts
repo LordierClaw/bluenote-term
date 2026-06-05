@@ -223,7 +223,7 @@ test("concurrent describe-note enqueues fail fast while another process holds th
   })
 })
 
-test("content hash changes update updatedAt, contentHash, and status pending", async () => {
+test("content hash changes reset failed-job attempts so refreshed work remains retryable", async () => {
   await withRoot("bluenote-ai-queue-refresh-content-", async (rootPath) => {
     const repository = createAiQueueRepository(rootPath)
     const first = enqueueDescribeNoteJob(rootPath, baseDescribeInput, {
@@ -232,7 +232,7 @@ test("content hash changes update updatedAt, contentHash, and status pending", a
 
     repository.write({
       version: 1,
-      jobs: [{ ...first, status: "failed", attempts: 2, lastError: "rate limited", nextAttemptAt: "2026-06-01T01:00:00.000Z" }],
+      jobs: [{ ...first, status: "failed", attempts: 3, lastError: "rate limited", nextAttemptAt: "2026-06-01T01:00:00.000Z" }],
     })
 
     const refreshed = enqueueDescribeNoteJob(rootPath, {
@@ -247,7 +247,8 @@ test("content hash changes update updatedAt, contentHash, and status pending", a
     assert.equal(refreshed.status, "pending")
     assert.equal(refreshed.lastError, null)
     assert.equal(refreshed.nextAttemptAt, null)
-    assert.equal(refreshed.attempts, 2)
+    assert.equal(refreshed.attempts, 0)
+    assert.deepEqual(listRetryableAiJobs(rootPath, 3).map((job) => job.key), [baseDescribeInput.key])
   })
 })
 

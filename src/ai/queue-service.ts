@@ -47,6 +47,9 @@ export function enqueueDescribeNoteJob(
   return repository.update((queue) => {
     const existingJob = queue.jobs.find((job) => job.kind === "describe-note" && job.key === input.key)
 
+    const refreshedWorkChanged = existingJob
+      ? existingJob.contentHash !== contentHash || existingJob.promptHash !== input.promptHash
+      : false
     const job: DescribeNoteJob = existingJob
       ? {
           ...existingJob,
@@ -54,6 +57,7 @@ export function enqueueDescribeNoteJob(
           contentHash,
           promptHash: input.promptHash,
           status: "pending",
+          attempts: refreshedWorkChanged ? 0 : existingJob.attempts,
           lastError: null,
           updatedAt: now,
           nextAttemptAt: null,
