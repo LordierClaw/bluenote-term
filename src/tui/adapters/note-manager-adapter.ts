@@ -5,6 +5,7 @@ import type { ManagerItem, ManagerState, TuiNote } from "../state"
 
 export interface NoteManagerSummary extends NoteSummary {
   body?: string
+  createdAt?: string
 }
 
 export type MoveManagerSelectionDirection = "up" | "down" | "first" | "last"
@@ -118,6 +119,13 @@ function normalizeManagerFolderPath(path: string | null | undefined): string {
   return normalizeRelativePath(path ?? "").replace(/^\/+|\/+$/gu, "")
 }
 
+export function canCreateManagerFolderAt(path: string | null | undefined): boolean {
+  const normalizedPath = normalizeManagerFolderPath(path)
+  const parts = normalizedPath.split("/").filter(Boolean)
+
+  return parts.length >= 1 && parts[0] === "note" && parts.every((part) => !part.startsWith("."))
+}
+
 function isManagedNoteArea(area: string | undefined): area is "note" | "draft" | "notes" {
   return area === "note" || area === "draft" || area === "notes"
 }
@@ -199,6 +207,7 @@ function noteItemForSummary(summary: NoteManagerSummary): ManagerItem | null {
     title: summary.title,
     description: summary.description,
     relativePath,
+    createdAt: summary.createdAt,
   }
 }
 
@@ -235,6 +244,9 @@ function allBrowserItems(noteSummaries: readonly NoteManagerSummary[], userFolde
     return area === "note" || area === "draft"
   })
   const hasLegacyNotes = noteItems.some((item) => item.relativePath.split("/").filter(Boolean)[0] === "notes")
+  if (hasPhaseSevenAreas) {
+    folderPaths.add("note")
+  }
   if (hasPhaseSevenAreas && hasLegacyNotes) {
     folderPaths.add("notes")
   }
@@ -258,6 +270,17 @@ function compareBrowserItems(left: ManagerItem, right: ManagerItem): number {
 
   if (left.type === "folder") {
     return left.relativePath.localeCompare(right.relativePath)
+  }
+
+  const leftArea = left.relativePath.split("/").filter(Boolean)[0]
+  const rightArea = right.relativePath.split("/").filter(Boolean)[0]
+  if (leftArea === "draft" && rightArea === "draft") {
+    const leftCreated = Date.parse(left.createdAt ?? "")
+    const rightCreated = Date.parse(right.createdAt ?? "")
+    const createdComparison = (Number.isFinite(rightCreated) ? rightCreated : 0) - (Number.isFinite(leftCreated) ? leftCreated : 0)
+    if (createdComparison !== 0) {
+      return createdComparison
+    }
   }
 
   const nameComparison = left.filename.localeCompare(right.filename)
@@ -441,6 +464,7 @@ export function buildManagerBrowserModel(
       currentFolderPath,
       hoveredPath,
       filterQuery,
+      canCreateFolder: canCreateManagerFolderAt(currentFolderPath),
     },
   }
 }

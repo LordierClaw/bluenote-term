@@ -7,6 +7,7 @@ export interface NoteSummary {
   title: string
   description: string
   relativePath: string
+  createdAt?: string
 }
 
 export function listNotes(options: ResolveBlueNoteRootOptions & NoteVisibilityOptions = {}): NoteSummary[] {
@@ -17,5 +18,6 @@ export function listNotes(options: ResolveBlueNoteRootOptions & NoteVisibilityOp
     title: summary.title,
     description: summary.description,
     relativePath: summary.relativePath,
+    createdAt: summary.createdAt,
   }))
 }

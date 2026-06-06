@@ -22,6 +22,7 @@ export type SearchEverythingManagerSelection = "note" | "folder" | "none"
 export interface SearchEverythingCommandContext {
   screen: Exclude<TuiScreen, "search">
   managerSelection?: SearchEverythingManagerSelection
+  managerCanCreateFolder?: boolean
 }
 
 export interface SearchEverythingResultOptions {
@@ -112,8 +113,8 @@ export interface SearchEverythingPreview {
 export const TUI_COMMANDS: readonly TuiCommandDefinition[] = [
   {
     name: "/new",
-    description: "Create a new note and open it in the editor",
-    usage: "/new [title]",
+    description: "Create a new folder in the current note folder",
+    usage: "/new <folder-name>",
     shortcut: TUI_SHORTCUTS.managerNew.key,
     contexts: ["manager"],
   },
@@ -652,6 +653,9 @@ function commandAvailableForContext(command: TuiCommandDefinition, context: Sear
   }
   if (command.contexts && !command.contexts.includes(context.screen)) {
     return false
+  }
+  if (command.name === "/new") {
+    return context.screen === "manager" && context.managerCanCreateFolder === true
   }
   if (command.name === "/delete") {
     return context.screen === "manager" && context.managerSelection === "note"

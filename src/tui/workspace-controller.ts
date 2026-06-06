@@ -2,6 +2,7 @@ import type { ClipboardModel, ClipboardOperationResult, EditorCursorDirection, E
 import { advanceEditorFindState, backspaceAtEditorCursor, deleteAtEditorCursor, findInEditorBody, insertTextAtEditorCursor, moveEditorCursor, pasteText, replaceAllMatches, replaceCurrentMatch, replaceEditorBody } from "./adapters/editor-buffer-adapter"
 import {
   buildManagerBrowserModel,
+  canCreateManagerFolderAt,
   focusedManagerBrowserItem,
   goToManagerParent,
   moveManagerSelection,
@@ -112,7 +113,7 @@ export interface WorkspaceControllerDependencies {
   listNoteFolders?: () => readonly string[]
   showNote: (selector: string) => TuiNote
   searchNotes: (query: string) => readonly SearchNoteMatch[]
-  createNote?: (title: string, body: string) => TuiNote | { key: string }
+  createFolder?: (folderRelativePath: string) => void
   deleteNote?: (selector: string) => void
   rebuildIndexes?: () => void
   persistEditorBody?: SaveEditorBufferDependencies["persist"]
@@ -265,6 +266,29 @@ function commandArgumentsFor(command: string): string {
 
 function filenameForPath(path: string): string {
   return path.replaceAll("\\", "/").split("/").filter(Boolean).at(-1) ?? path
+}
+
+function normalizeWorkspaceRelativePath(relativePath: string | null | undefined): string {
+  return (relativePath ?? "").replaceAll("\\", "/").replace(/\/+/gu, "/").replace(/^\/+|\/+$/gu, "")
+}
+
+function managerFolderForNotePath(relativePath: string | null | undefined): string | null {
+  const normalizedPath = normalizeWorkspaceRelativePath(relativePath)
+  const parts = normalizedPath.split("/").filter(Boolean)
+
+  if (parts.length < 2 || !normalizedPath.endsWith(".md")) {
+    return null
+  }
+
+  if (parts[0] !== "note" && parts[0] !== "draft") {
+    return null
+  }
+
+  return parts.slice(0, -1).join("/")
+}
+
+function folderNameSegmentFromTitle(title: string): string {
+  return title.trim().replaceAll("\\", "/").split("/").filter(Boolean).at(-1)?.trim() ?? ""
 }
 
 export function editorRequiresDestructiveConfirmation(editor: EditorBufferState | null | undefined): boolean {
@@ -1116,7 +1140,8 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     const focused = state.manager.items[state.manager.focusedIndex]
     return {
       screen: "manager",
-      managerSelection: focused?.type === "note" || state.editor ? "note" : focused?.type ?? "none",
+      managerSelection: focused?.type ?? "none",
+      managerCanCreateFolder: state.manager.canCreateFolder === true,
     }
   }
 
@@ -1391,6 +1416,12 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     },
 
     openManagerCreate: () => {
+      const currentFolderPath = state.manager.currentFolderPath ?? ""
+      if (!canCreateManagerFolderAt(currentFolderPath)) {
+        setManagerStatus(currentFolderPath.split("/").filter(Boolean)[0] === "draft" ? "Folder creation is unavailable in draft" : "Folder creation is unavailable here")
+        applyManagerBrowserModel()
+        return
+      }
       state = openManagerCreateState(state)
       applyManagerBrowserModel()
     },
@@ -1403,33 +1434,56 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     submitManagerCreate: async () => {
       const title = state.manager.createDraft?.title.trim() ?? ""
       if (!title) {
-        state = setManagerCreateStatus(state, "Title required")
+        state = setManagerCreateStatus(state, "Folder name required")
         applyManagerBrowserModel()
         return ok()
       }
 
-      if (editorRequiresDestructiveConfirmation(state.editor)) {
-        state = setManagerCreateStatus(state, "Save or discard current note first")
+      const parentFolderPath = normalizeWorkspaceRelativePath(state.manager.currentFolderPath)
+      const isFolderCreate = canCreateManagerFolderAt(parentFolderPath)
+
+      if (!isFolderCreate) {
+        state = setManagerCreateStatus(state, "Folder creation is unavailable here")
         applyManagerBrowserModel()
-        return dirtyBlocked()
+        return ok()
       }
 
       try {
-        const created = deps.createNote?.(title, "")
-        if (!created) {
-          state = setManagerCreateStatus(state, "Create unavailable")
+        const folderName = folderNameSegmentFromTitle(title)
+        if (!folderName) {
+          state = setManagerCreateStatus(state, "Folder name required")
           applyManagerBrowserModel()
           return ok()
         }
+        if (!deps.createFolder) {
+          state = setManagerCreateStatus(state, "Create folder unavailable")
+          applyManagerBrowserModel()
+          return ok()
+        }
+        const folderRelativePath = `${parentFolderPath}/${folderName}`
+        deps.createFolder(folderRelativePath)
 
         clearManagerPreviewCache()
         deps.rebuildIndexes?.()
         refreshManager()
-        setEditorNote(deps.showNote(created.key))
+        state = cancelManagerCreateState(state)
+        state = {
+          ...state,
+          screen: "manager",
+          mode: "manager.browse",
+          manager: {
+            ...state.manager,
+            currentFolderPath: parentFolderPath,
+            hoveredPath: null,
+            focusedIndex: 0,
+            status: null,
+          },
+        }
+        applyManagerBrowserModel()
         return ok()
       } catch {
         clearManagerPreviewCache()
-        state = setManagerCreateStatus(state, "Create failed")
+        state = setManagerCreateStatus(state, "Create folder failed")
         applyManagerBrowserModel()
         return ok()
       }
@@ -1780,13 +1834,36 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
     showManager: () => {
       const selectorLeavingEditor = state.screen === "editor" ? state.editor?.note.key ?? null : null
+      const anchoredFolderPath = managerFolderForNotePath(state.editor?.note.relativePath) ?? state.manager.currentFolderPath ?? ""
       state = {
         ...state,
         screen: "manager",
         mode: "manager.browse",
         search: null,
+        manager: {
+          ...state.manager,
+          currentFolderPath: anchoredFolderPath,
+          hoveredPath: null,
+          focusedIndex: 0,
+        },
       }
       applyManagerBrowserModel()
+      if (state.editor) {
+        const activeNoteIndex = state.manager.items.findIndex((item) => item.type === "note" && item.key === state.editor?.note.key)
+        if (activeNoteIndex !== -1) {
+          const activeNoteItem = state.manager.items[activeNoteIndex]
+          state = {
+            ...state,
+            manager: {
+              ...state.manager,
+              focusedIndex: activeNoteIndex,
+              hoveredPath: activeNoteItem?.relativePath ?? null,
+              selectedNoteKey: activeNoteItem?.key ?? null,
+            },
+          }
+          applyManagerBrowserModel()
+        }
+      }
       if (selectorLeavingEditor && aiIdlePendingSelector === selectorLeavingEditor) {
         scheduleManagerAiIdleWork(selectorLeavingEditor)
       }
@@ -2222,7 +2299,8 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       }
 
       if (commandName === "/delete") {
-        const commandDeleteTarget: ManagerItem | undefined = state.editor
+        const invokedFromEditor = state.search?.previousScreen === "editor" || (state.screen === "editor" && !state.search)
+        const commandDeleteTarget: ManagerItem | undefined = invokedFromEditor && state.editor
           ? {
             type: "note",
             key: state.editor.note.key,

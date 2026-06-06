@@ -37,6 +37,7 @@ export interface ManagerItem {
   title: string
   description: string
   relativePath: string
+  createdAt?: string
 }
 
 export interface TuiNote {
@@ -61,6 +62,7 @@ export interface ManagerState {
   status?: string | null
   createDraft?: ManagerCreateDraft | null
   deleteDraft?: ManagerDeleteDraft | null
+  canCreateFolder?: boolean
 }
 
 export interface ManagerCreateDraft {
@@ -196,6 +198,7 @@ function cloneManagerState(manager: ManagerState): ManagerState {
     status: manager.status ?? null,
     createDraft: manager.createDraft ? { ...manager.createDraft } : null,
     deleteDraft: manager.deleteDraft ? { ...manager.deleteDraft } : null,
+    canCreateFolder: manager.canCreateFolder ?? false,
   }
 }
 
@@ -227,6 +230,7 @@ const defaultManagerState = (): ManagerState => ({
   status: null,
   createDraft: null,
   deleteDraft: null,
+  canCreateFolder: false,
 })
 
 export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}): TuiState {

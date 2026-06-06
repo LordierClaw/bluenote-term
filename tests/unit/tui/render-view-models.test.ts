@@ -18,6 +18,7 @@ const baseState: TuiState = {
   manager: {
     focusedIndex: 1,
     selectedNoteKey: "daily-plan",
+    canCreateFolder: true,
     items: [
       {
         type: "folder",
@@ -154,14 +155,14 @@ describe("TUI render view models", () => {
     })
     assert.deepEqual(creatingVm.createPrompt, {
       visible: true,
-      sheetTitle: "New note",
-      description: "Create a Markdown note in this workspace.",
+      sheetTitle: "New folder",
+      description: "Create a folder in this workspace.",
       destinationLabel: "Create in: notes/",
-      inputLabel: "Title:",
+      inputLabel: "Folder name:",
       title: "Project Plan",
       status: "Title required",
       inputId: "bluenote-manager-create-title",
-      placeholder: "Note title…",
+      placeholder: "Folder name…",
       focused: true,
       styleIntent: "borderFocus",
       surfaceIntent: "surfacePanelRaised",
@@ -232,9 +233,9 @@ describe("TUI render view models", () => {
     }, { layout1Rows: [], preview: { type: "empty", path: null }, currentFolderPath: "", hoveredPath: null, focusedIndex: 0, empty: true, state: { items: [], focusedIndex: 0, selectedNoteKey: null } })
 
     assert.deepEqual(emptyVm.layout1.emptyState, {
-      title: "No notes here yet",
-      body: "Create a note in notes/ or search your workspace.",
-      actions: ["[n] New", "[Ctrl+P] Search"],
+      title: "No items here yet",
+      body: "Search your workspace from notes/ or choose another folder.",
+      actions: ["[Ctrl+P] Search"],
       styleIntent: "mutedText",
     })
     assert.deepEqual(emptyVm.panels, {
@@ -1515,10 +1516,11 @@ describe("TUI render view models", () => {
     }
     try {
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "alpha beta" }],
-        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "alpha beta" }),
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "alpha beta" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "alpha beta" }),
         searchNotes: () => [],
       })
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
       assert.equal(controller.openFocusedManagerItem().blocked, false)
       controller.openEditorFind()
       const editorRoot = renderEditorScreen({ renderer, controller })
@@ -1529,7 +1531,7 @@ describe("TUI render view models", () => {
       let managerRoot = renderManagerScreen({ renderer, controller })
       const filterText = descendants(managerRoot).map(textFor).join("\n")
       assert.match(filterText, /Narrow the current folder without leaving the dashboard\./u)
-      assert.match(filterText, /Scope: notes\//u)
+      assert.match(filterText, /Scope: note\b/u)
       assert.match(filterText, /Filter:/u)
       assert.deepEqual(chunkTextsForId(managerRoot, "bluenote-manager-filter-hints"), ["[Esc]", " Close", "  ", "[Enter]", " Open"])
 
@@ -1658,9 +1660,11 @@ describe("TUI render view models", () => {
     try {
       const controller = createWorkspaceController({
         listNotes: () => [],
+        listNoteFolders: () => ["note"],
         showNote: () => ({ ...baseState.editor!.note }),
         searchNotes: () => [],
       })
+      controller.openFocusedManagerItem()
       controller.openManagerCreate()
       controller.updateManagerCreateTitle("Project Plan")
       const screen = renderManagerScreen({ renderer, controller })
@@ -1840,11 +1844,12 @@ describe("TUI render view models", () => {
             key: "daily-plan",
             title: "Daily Plan",
             description: "Today priorities.",
-            relativePath: "notes/inbox/daily-plan.md",
+            relativePath: "note/inbox/daily-plan.md",
             body: "Ship renderer screens.",
           },
         ],
-        showNote: () => ({ ...baseState.editor!.note }),
+        listNoteFolders: () => ["note", "note/inbox"],
+        showNote: () => ({ ...baseState.editor!.note, relativePath: "note/inbox/daily-plan.md" }),
         searchNotes: () => [],
       })
       controller.openSearch("daily")
@@ -1869,10 +1874,10 @@ describe("TUI render view models", () => {
       assert.doesNotMatch(text, /Search · daily/u)
       assert.match(resultText, /› \[note\] Daily Plan —/u)
       assert.doesNotMatch(resultText, /undefined/u)
-      assert.deepEqual(previewLines.slice(0, 2), ["notes/inbox/daily-plan.md", "Ship renderer screens."])
+      assert.deepEqual(previewLines.slice(0, 2), ["note/inbox/daily-plan.md", "Ship renderer screens."])
       assert.match(text, /Ship renderer screens\./u)
       const previewTitle = previewRegion?.getChildren()[0] as any
-      assert.deepEqual(previewTitle?.content?.chunks?.map((chunk: { text?: string }) => chunk.text), ["notes/inbox/", "daily", "-plan.md"])
+      assert.deepEqual(previewTitle?.content?.chunks?.map((chunk: { text?: string }) => chunk.text), ["note/inbox/", "daily", "-plan.md"])
       assert.deepEqual(Array.from(previewTitle?.content?.chunks?.[1]?.bg.buffer ?? []), colorInts(tuiTheme.focusedRow))
       assert.doesNotMatch(text, /Preview ·|Summary|Excerpt|Items|Availability/u)
       controller.openSearch("/archive")
@@ -1885,6 +1890,9 @@ describe("TUI render view models", () => {
       assert.doesNotMatch(renderedStatusText, /Search Everything · Esc/u)
       assert.doesNotMatch(renderedStatusText, /Command unavailable|\/archive/u)
 
+      controller.cancelSearch()
+      controller.focusManagerItem(0)
+      controller.openFocusedManagerItem()
       controller.openSearch("/new")
       const dangerRoot = renderSearchEverythingScreen({ renderer, controller })
       const commandRow = descendants(dangerRoot).find((node) => node.id === "bluenote-search-result-row-0") as any
@@ -1895,7 +1903,7 @@ describe("TUI render view models", () => {
         "] ",
         "/new",
         " — ",
-        "Create a new note and open it in the editor",
+        "Create a new folder in the current note folder",
       ])
       assert.deepEqual(Array.from(commandChunks[1].fg.buffer), colorInts(tuiTheme.info))
       dangerRoot.destroyRecursively()

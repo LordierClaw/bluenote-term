@@ -340,7 +340,7 @@ function managerShortcutHints(state: TuiState, previewHidden: boolean, width?: n
   const primary: ShortcutHint[] = [
     { ...TUI_SHORTCUTS.managerOpen, priority: "primary" },
     { ...TUI_SHORTCUTS.managerFilter, priority: "primary" },
-    { ...TUI_SHORTCUTS.managerNew, priority: "primary" },
+    ...(state.manager.canCreateFolder ? [{ ...TUI_SHORTCUTS.managerNew, priority: "primary" as const }] : []),
     { ...TUI_SHORTCUTS.globalSearch, priority: "primary" },
     { ...TUI_SHORTCUTS.managerBack, priority: "primary" },
     { ...TUI_SHORTCUTS.managerPreview, priority: "primary" },
@@ -493,11 +493,21 @@ function previewViewModelFor(preview: ManagerPreviewModel | null | undefined, op
   return notePreview
 }
 
-function emptyStateFor(currentPath: string): ManagerEmptyStateViewModel {
+function emptyStateFor(currentPath: string, canCreateFolder: boolean): ManagerEmptyStateViewModel {
+  const searchAction = shortcutHintLabels([{ ...TUI_SHORTCUTS.globalSearch }])[0]!
+  if (!canCreateFolder) {
+    return {
+      title: "No items here yet",
+      body: `Search your workspace from ${currentPath} or choose another folder.`,
+      actions: [searchAction],
+      styleIntent: "mutedText",
+    }
+  }
+
   return {
-    title: "No notes here yet",
-    body: `Create a note in ${currentPath} or search your workspace.`,
-    actions: [shortcutHintLabels([{ ...TUI_SHORTCUTS.managerNew }])[0]!, shortcutHintLabels([{ ...TUI_SHORTCUTS.globalSearch }])[0]!],
+    title: "No folders here yet",
+    body: `Create a folder in ${currentPath} or search your workspace.`,
+    actions: [shortcutHintLabels([{ ...TUI_SHORTCUTS.managerNew }])[0]!, searchAction],
     styleIntent: "mutedText",
   }
 }
@@ -527,16 +537,17 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
   const aiStatus = buildAiStatusViewModel(state.ai, options.width)
 
   const currentPath = currentPathLabel(currentFolderPath)
+  const isFolderCreatePrompt = state.manager.canCreateFolder === true
   const createPrompt = state.mode === "manager.create"
     ? {
         visible: true as const,
         inputId: "bluenote-manager-create-title",
-        sheetTitle: "New note",
-        description: "Create a Markdown note in this workspace.",
+        sheetTitle: isFolderCreatePrompt ? "New folder" : "New note",
+        description: isFolderCreatePrompt ? "Create a folder in this workspace." : "Create a Markdown note in this workspace.",
         destinationLabel: `Create in: ${currentPath}`,
-        inputLabel: "Title:",
+        inputLabel: isFolderCreatePrompt ? "Folder name:" : "Title:",
         title: state.manager.createDraft?.title ?? "",
-        placeholder: "Note title…",
+        placeholder: isFolderCreatePrompt ? "Folder name…" : "Note title…",
         status: state.manager.createDraft?.status ?? null,
         focused: true as const,
         styleIntent: "borderFocus" as const,
@@ -591,7 +602,7 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
     layout1: {
       rows,
       empty: rows.length === 0,
-      emptyState: rows.length === 0 ? emptyStateFor(currentPath) : null,
+      emptyState: rows.length === 0 ? emptyStateFor(currentPath, state.manager.canCreateFolder === true) : null,
     },
     layout2: {
       preview,

@@ -63,7 +63,12 @@ function openManagerNoteByKey(controller: DefaultWorkspaceController, key: strin
     return false
   }
 
-  assert.equal(openFromCurrentFolder(), true, `missing manager note ${key}`)
+  const openedFromAnchoredFolder = openFromCurrentFolder()
+  const openedFromRoot = openedFromAnchoredFolder
+    ? true
+    : controller.getState().manager.currentFolderPath !== "" && controller.goBack().blocked === false && openFromCurrentFolder()
+
+  assert.equal(openedFromRoot, true, `missing manager note ${key}`)
 }
 
 async function countNoteSidecars(rootPath: string): Promise<number> {
@@ -292,6 +297,40 @@ describe("TUI workspace workflows", () => {
     await access(path.join(rootPath, opened?.relativePath ?? "missing"))
   })
 
+  test("default manager orders real draft notes by created date descending", () => {
+    const older = createNote({
+      override: rootPath,
+      type: "draft",
+      body: "older draft",
+      randomSource: () => 111111,
+      clock: fixedClock("2026-06-01T00:00:00.000Z"),
+    })
+    const newer = createNote({
+      override: rootPath,
+      type: "draft",
+      body: "newer draft",
+      randomSource: () => 222222,
+      clock: fixedClock("2026-06-03T00:00:00.000Z"),
+    })
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: older.relativePath,
+      openedAt: "2026-06-03T12:00:00.000Z",
+    })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clock: fixedClock("2026-06-04T00:00:00.000Z"),
+      cleanupStaleAtomicTemps: () => {},
+    })
+
+    assert.equal(controller.showManager().blocked, false)
+    assert.equal(controller.getState().manager.currentFolderPath, "draft")
+    assert.deepEqual(controller.getState().manager.items.map((item) => item.relativePath), [
+      newer.relativePath,
+      older.relativePath,
+    ])
+  })
+
   test("loads manager rows after creating derived indexes for a freshly initialized root", async () => {
     const freshRootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-tui-fresh-root-"))
 
@@ -303,16 +342,49 @@ describe("TUI workspace workflows", () => {
       assert.equal(controller.getState().screen, "editor")
       assert.ok(controller.getState().editor?.note.relativePath.startsWith("draft/"))
       assert.deepEqual(controller.showManager(), { blocked: false })
+      assert.equal(controller.getState().manager.currentFolderPath, "draft")
+      assert.deepEqual(controller.goBack(), { blocked: false })
       assert.deepEqual(
         controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`),
-        ["folder:draft"],
+        ["folder:draft", "folder:note"],
       )
+      openManagerFolderPath(controller, "note")
+      controller.openManagerCreate()
+      controller.updateManagerCreateTitle("client-a")
+      assert.equal((await controller.submitManagerCreate()).blocked, false)
+      await access(path.join(freshRootPath, "note", "client-a"))
+      await assert.rejects(() => access(path.join(freshRootPath, ".data", "notes", "client-a.json")))
       assert.deepEqual(JSON.parse(await readFile(path.join(freshRootPath, ".data", "config.json"), "utf8")), {
         latestOpenedNoteTtlDays: 7,
       })
     } finally {
       await rm(freshRootPath, { recursive: true, force: true })
     }
+  })
+
+  test("default manager keeps real legacy notes reachable when Phase 7 areas exist", async () => {
+    await mkdir(path.join(rootPath, "notes", "inbox"), { recursive: true })
+    await writeFile(path.join(rootPath, "notes", "inbox", "daily.md"), "---\nid: daily\nschemaVersion: 1\ntitle: Legacy Daily\nmode: note\ntags: []\ncreatedAt: '2026-05-20T10:00:00.000Z'\nupdatedAt: '2026-05-20T10:00:00.000Z'\n---\n\nLegacy body", "utf8")
+    createNote({
+      override: rootPath,
+      title: "Phase 7 Draft",
+      body: "draft body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+      randomSource: () => 444444,
+    })
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createDefaultWorkspaceController({ rootPath })
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    if (controller.getState().manager.currentFolderPath !== "") controller.goBack()
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "folder" && item.relativePath === "notes"), true)
+
+    openManagerFolderPath(controller, "notes/inbox")
+    const legacyIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.relativePath === "notes/inbox/daily.md")
+    assert.notEqual(legacyIndex, -1)
+    controller.focusManagerItem(legacyIndex)
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    assert.equal(controller.getState().editor?.note.relativePath, "notes/inbox/daily.md")
   })
 
   test("manager shows filesystem-seeded empty user folders while hiding internal note folders", async () => {
@@ -324,6 +396,7 @@ describe("TUI workspace workflows", () => {
 
     const controller = createDefaultWorkspaceController({ rootPath })
     assert.deepEqual(controller.showManager(), { blocked: false })
+    if (controller.getState().manager.currentFolderPath !== "") controller.goBack()
 
     assert.deepEqual(
       controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`),
@@ -346,12 +419,16 @@ describe("TUI workspace workflows", () => {
   test("manager filter navigation routes to rows filtered by visible filename and opens the focused note", () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Alpha Filter Target",
       body: "alpha body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
     const second = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Beta Filter Target",
       body: "beta body",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
@@ -1815,30 +1892,31 @@ describe("TUI workspace workflows", () => {
     assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), "Original body before writer failure")
   })
 
-  test("manager create prompt creates a real plain Markdown note through core services", async () => {
+  test("manager create prompt creates a real folder under note through core services", async () => {
     const controller = createDefaultWorkspaceController({ rootPath, clock: fixedClock("2026-05-26T10:02:00.000Z") })
+    const sidecarCountBefore = await countNoteSidecars(rootPath)
 
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    if (controller.getState().manager.currentFolderPath !== "") controller.goBack()
+    openManagerFolderPath(controller, "note")
     controller.openManagerCreate()
-    controller.updateManagerCreateTitle("TUI Created Note")
+    controller.updateManagerCreateTitle("TUI Created Folder")
     const result = await controller.submitManagerCreate()
 
     assert.equal(result.blocked, false)
-    assert.equal(controller.getState().screen, "editor")
-    assert.equal(controller.getState().editor?.note.title, "TUI Created Note")
-    assert.equal(controller.getState().editor?.body, "")
-
-    const created = controller.getState().editor!.note
-    const noteText = await readFile(path.join(rootPath, created.relativePath), "utf8")
-    assert.equal(noteText, "")
-    assert.doesNotMatch(noteText, /^---/)
-    await access(path.join(rootPath, ".data", "notes", `${created.key}.json`))
-    assert.equal(showNote({ override: rootPath, selector: created.key }).title, "TUI Created Note")
-    assert.equal(showNote({ override: rootPath, selector: created.key }).body, "")
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().manager.currentFolderPath, "note")
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "folder" && item.relativePath === "note/TUI Created Folder"), true)
+    await access(path.join(rootPath, "note", "TUI Created Folder"))
+    assert.equal(await countNoteSidecars(rootPath), sidecarCountBefore)
   })
 
-  test("manager create prompt stays recoverable and creates no note when hidden preview dirty guard blocks", async () => {
+  test("manager folder create preserves a dirty editor and creates no note sidecar", async () => {
     const existing = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Dirty Guard Existing",
       body: "Original guard body",
       clock: fixedClock("2026-05-26T10:02:30.000Z"),
@@ -1856,13 +1934,13 @@ describe("TUI workspace workflows", () => {
 
     const result = await controller.submitManagerCreate()
 
-    assert.deepEqual(result, { blocked: true, reason: "dirty-editor" })
-    assert.equal(controller.getState().mode, "manager.create")
+    assert.deepEqual(result, { blocked: false })
+    assert.equal(controller.getState().mode, "manager.browse")
     assert.equal(controller.getState().manager.previewVisible, false)
-    assert.equal(controller.getState().manager.createDraft?.title, "Blocked Dirty Create")
-    assert.equal(controller.getState().manager.createDraft?.status, "Save or discard current note first")
     assert.equal(controller.getState().editor?.body, "Unsaved guard body")
+    assert.equal(controller.getState().editor?.dirty, true)
     assert.equal(await countNoteSidecars(rootPath), sidecarCountBefore)
+    await access(path.join(rootPath, "note", "Blocked Dirty Create"))
   })
 
   test("manager delete confirmation removes a real note file and sidecar through core services", async () => {
@@ -2120,9 +2198,11 @@ describe("TUI workspace workflows", () => {
     assert.equal(controller.getState().manager.items.some((item) => item.type === "note" && item.key === note.key && item.description === "Mock generated summary."), true)
   })
 
-  test("manager Search Everything shows applicable manager commands and runs new/delete prompts", async () => {
-    createNote({
+  test("manager Search Everything shows applicable manager commands and runs folder-create/delete prompts", async () => {
+    const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Command Note",
       body: "Command body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -2132,6 +2212,11 @@ describe("TUI workspace workflows", () => {
 
     assert.deepEqual(controller.showManager(), { blocked: false })
     if (controller.getState().manager.currentFolderPath !== "") controller.goBack()
+    controller.openSearch("/")
+    assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/ai-process-queue", "/ai-status"])
+
+    controller.cancelSearch()
+    openManagerFolderPath(controller, "note")
     controller.openSearch("/")
     assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/new", "/delete", "/ai-describe", "/ai-process-queue", "/ai-status"])
 
@@ -2143,10 +2228,12 @@ describe("TUI workspace workflows", () => {
 
     controller.updateManagerCreateTitle("Created From Search")
     assert.equal((await controller.submitManagerCreate()).blocked, false)
-    assert.equal(controller.getState().editor?.note.title, "Created From Search")
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "folder" && item.relativePath === "note/Created From Search"), true)
+    await access(path.join(rootPath, "note", "Created From Search"))
 
-    controller.showManager()
-    if (controller.getState().manager.currentFolderPath !== "") controller.goBack()
+    const noteIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === note.key)
+    assert.notEqual(noteIndex, -1)
+    controller.focusManagerItem(noteIndex)
     controller.openSearch("/")
     assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/new", "/delete", "/ai-describe", "/ai-process-queue", "/ai-status"])
     const deleteResult = controller.getSearchResults().find((result) => result.kind === "command" && result.name === "/delete")
@@ -2157,6 +2244,6 @@ describe("TUI workspace workflows", () => {
     assert.equal(controller.getState().screen, "manager")
     assert.equal(controller.getState().mode, "manager.deleteConfirm")
     assert.equal((await controller.confirmManagerDelete()).blocked, false)
-    assert.equal(listNotes({ override: rootPath, visibility: "drafts" }).some((note) => note.title === "Created From Search"), false)
+    assert.equal(listNotes({ override: rootPath, visibility: "drafts" }).some((listedNote) => listedNote.key === note.key), false)
   })
 })

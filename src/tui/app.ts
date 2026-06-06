@@ -1,5 +1,5 @@
 import path from "node:path"
-import { existsSync, readdirSync, type Dirent } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, readdirSync, type Dirent } from "node:fs"
 import { createCliRenderer, BoxRenderable, type CliRenderer, type PasteEvent, type Renderable } from "@opentui/core"
 
 import { resolveBlueNoteRoot } from "../config/root"
@@ -36,6 +36,7 @@ import type { AiStatusState, TuiNote } from "./state"
 import { createDesktopClipboardModel } from "./adapters/desktop-clipboard-adapter"
 import { createWorkspaceController, type WorkspaceCommandHandler, type WorkspaceController, type WorkspaceControllerDependencies } from "./workspace-controller"
 import { recordLatestOpenedNote, resolveStartupNote } from "./latest-opened-note"
+import type { NoteManagerSummary } from "./adapters/note-manager-adapter"
 
 export { createDesktopClipboardModel } from "./adapters/desktop-clipboard-adapter"
 
@@ -126,7 +127,24 @@ function persistTuiEditorBody(rootPath: string, note: TuiNote, body: string, clo
 }
 
 function showTuiNote(rootPath: string, selector: string): TuiNote {
-  const note = showNote({ override: rootPath, selector })
+  let note: TuiNote
+  try {
+    note = showNote({ override: rootPath, selector })
+  } catch (error) {
+    const legacySummary = listLegacyTuiNoteSummaries(rootPath).find((summary) => summary.key === selector || summary.relativePath === selector || summary.title === selector)
+    if (!legacySummary) {
+      throw error
+    }
+    return {
+      key: legacySummary.key,
+      title: legacySummary.title,
+      description: legacySummary.description,
+      body: legacySummary.body ?? "",
+      relativePath: legacySummary.relativePath,
+      createdAt: legacySummary.createdAt,
+    }
+  }
+
   const sidecars = createSidecarRepository(rootPath)
 
   if (!existsSync(sidecars.getSidecarPath(note.key))) {
@@ -141,8 +159,11 @@ function showTuiNote(rootPath: string, selector: string): TuiNote {
   }
 }
 
+function legacyNotesPath(rootPath: string): string {
+  return path.join(rootPath, "notes")
+}
+
 function listTuiNoteFolders(rootPath: string): string[] {
-  const notesPath = getNotesPath(rootPath)
   const folders: string[] = []
 
   function visit(directoryPath: string, relativePath: string): void {
@@ -164,8 +185,77 @@ function listTuiNoteFolders(rootPath: string): string[] {
     }
   }
 
-  visit(notesPath, "note")
+  visit(getNotesPath(rootPath), "note")
+  visit(legacyNotesPath(rootPath), "notes")
   return folders
+}
+
+function titleFromLegacyMarkdown(body: string, fallback: string): string {
+  const frontmatterTitle = body.match(/^---\n(?<frontmatter>[\s\S]*?)\n---/u)?.groups?.frontmatter.match(/^title:\s*['"]?(?<title>[^'"\n]+)['"]?\s*$/mu)?.groups?.title?.trim()
+  if (frontmatterTitle) {
+    return frontmatterTitle
+  }
+
+  const headingTitle = body.match(/^#\s+(?<title>.+)$/mu)?.groups?.title?.trim()
+  return headingTitle || fallback
+}
+
+function listLegacyTuiNoteSummaries(rootPath: string): NoteManagerSummary[] {
+  const summaries: NoteManagerSummary[] = []
+
+  function visit(directoryPath: string, relativePath: string): void {
+    let entries: Dirent[]
+    try {
+      entries = readdirSync(directoryPath, { withFileTypes: true })
+    } catch {
+      return
+    }
+
+    for (const entry of entries) {
+      if (entry.name.startsWith(".")) {
+        continue
+      }
+      const childRelativePath = `${relativePath}/${entry.name}`
+      const childPath = path.join(directoryPath, entry.name)
+      if (entry.isDirectory()) {
+        visit(childPath, childRelativePath)
+        continue
+      }
+      if (!entry.isFile() || !entry.name.endsWith(".md")) {
+        continue
+      }
+
+      let body = ""
+      try {
+        body = readFileSync(childPath, "utf8")
+      } catch {
+        continue
+      }
+
+      const key = path.basename(entry.name, ".md")
+      summaries.push({
+        key,
+        title: titleFromLegacyMarkdown(body, key),
+        description: "",
+        body,
+        relativePath: childRelativePath,
+      })
+    }
+  }
+
+  visit(legacyNotesPath(rootPath), "notes")
+  return summaries
+}
+
+function createTuiNoteFolder(rootPath: string, folderRelativePath: string): void {
+  const normalizedPath = folderRelativePath.replaceAll("\\", "/").replace(/^\/+|\/+$/gu, "")
+  const parts = normalizedPath.split("/").filter(Boolean)
+
+  if (parts.length < 2 || parts[0] !== "note" || parts.some((part) => part === "." || part === ".." || part.startsWith("."))) {
+    throw new Error("Folder must be under note/")
+  }
+
+  mkdirSync(path.join(getNotesPath(rootPath), ...parts.slice(1)), { recursive: true })
 }
 
 function ensureTuiIndexes(rootPath: string): void {
@@ -417,11 +507,11 @@ export function createDefaultWorkspaceController(options: DefaultWorkspaceContro
   })
 
   const controller = createWorkspaceController({
-    listNotes: () => listNotes({ override: rootPath, visibility: "drafts" }),
+    listNotes: () => [...listNotes({ override: rootPath, visibility: "drafts" }), ...listLegacyTuiNoteSummaries(rootPath)],
     listNoteFolders: () => listTuiNoteFolders(rootPath),
     showNote: (selector) => showTuiNote(rootPath, selector),
     searchNotes: (query) => searchNotes(query, { override: rootPath, visibility: "drafts" }),
-    createNote: (title, body) => createNote({ override: rootPath, title, body, clock }),
+    createFolder: (folderRelativePath) => createTuiNoteFolder(rootPath, folderRelativePath),
     deleteNote: (selector) => {
       deleteNote({ override: rootPath, selector, force: true })
     },

@@ -651,11 +651,18 @@ describe("TUI Search Everything adapter", () => {
 
   test("filters slash-prefixed command results to applicable manager commands from manager search", () => {
     const withoutSelection = buildSearchEverythingResults("/", createDeps(), { commandContext: { screen: "manager", managerSelection: "folder" } })
-    assert.deepEqual(withoutSelection.filter((result) => result.kind === "command").map((result) => result.name), ["/new", "/ai-process-queue", "/ai-status"])
+    assert.deepEqual(withoutSelection.filter((result) => result.kind === "command").map((result) => result.name), ["/ai-process-queue", "/ai-status"])
 
-    const withNoteSelection = buildSearchEverythingResults("/", createDeps(), { commandContext: { screen: "manager", managerSelection: "note" } })
+    const withNoteSelection = buildSearchEverythingResults("/", createDeps(), { commandContext: { screen: "manager", managerSelection: "note", managerCanCreateFolder: true } })
     assert.deepEqual(withNoteSelection.filter((result) => result.kind === "command").map((result) => result.name), ["/new", "/delete", "/ai-describe", "/ai-process-queue", "/ai-status"])
     assert.equal(withNoteSelection.some((result) => result.kind === "command" && ["/archive", "/rebuild", "/migrate"].includes(result.name)), false)
+  })
+
+  test("new command metadata advertises folder creation in the current note folder", () => {
+    const newCommand = TUI_COMMANDS.find((command) => command.name === "/new")
+
+    assert.equal(newCommand?.description, "Create a new folder in the current note folder")
+    assert.equal(newCommand?.usage, "/new <folder-name>")
   })
 
   test("clipboard command metadata advertises Mode A terminal-native and whole-note commands", () => {
