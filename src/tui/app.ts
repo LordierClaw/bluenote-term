@@ -220,9 +220,9 @@ export function getInitialTuiAiStatus(rootPath: string): AiStatusState {
     const status = createCodexAuthRepository(rootPath).getStatus({ provider: config.provider })
     switch (status.state) {
       case "authenticated":
+      case "expired":
         return { kind: "connected", model: config.model, queue }
       case "setup-required":
-      case "expired":
         return { kind: "auth-required", reason: "auth required · run bn ai codex auth login", queue }
       case "invalid":
         return { kind: "error", reason: sanitizeAiErrorMessage(status.message), queue }

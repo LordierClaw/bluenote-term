@@ -6,6 +6,7 @@ import { mkdtemp, rm, readFile, access, readdir, writeFile, mkdir } from "node:f
 import { existsSync } from "node:fs"
 
 import { createAiConfigRepository } from "../../src/ai/config-repository"
+import { createCodexAuthRepository } from "../../src/ai/codex-auth-repository"
 import { CodexTextGenerationClientError } from "../../src/ai/codex-client"
 import { enqueueDescribeNoteJob, hashDescribeNoteContent, markDescribeNoteJobFailedIfContentHashMatches } from "../../src/ai/queue-service"
 import { createNote } from "../../src/core/create-note"
@@ -90,6 +91,22 @@ function configureCodexForTui(rootPath: string): void {
       conversations: false,
       results: true,
     },
+  })
+}
+
+function writeExpiredCodexAuth(rootPath: string): void {
+  createCodexAuthRepository(rootPath).write({
+    version: 1,
+    provider: "codex",
+    authType: "device-code-oauth",
+    idToken: "expired-id-token-secret",
+    accessToken: "expired-access-token-secret",
+    refreshToken: "refresh-token-secret",
+    expiresAt: "2026-05-26T10:00:00.000Z",
+    createdAt: "2026-05-26T09:00:00.000Z",
+    updatedAt: "2026-05-26T09:00:00.000Z",
+    issuer: "https://chatgpt.com",
+    clientId: "codex-client-id",
   })
 }
 
@@ -664,6 +681,39 @@ describe("TUI workspace workflows", () => {
     assert.deepEqual(controller.getState().ai, { kind: "updated", count: 1, queue: { queued: 0, failed: 0 } })
     assert.equal(showNote({ override: rootPath, selector: note.key }).description, "Startup processed summary.")
     assert.equal(listNotes({ override: rootPath }).some((summary) => summary.key === note.key && summary.description === "Startup processed summary."), true)
+  })
+
+  test("AI startup scan attempts Codex refreshable expired auth instead of preflight blocking", async () => {
+    const note = createNote({
+      override: rootPath,
+      title: "Expired Codex Refreshable Startup",
+      body: "Expired access token should still allow refresh-backed startup work.",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    configureCodexForTui(rootPath)
+    writeExpiredCodexAuth(rootPath)
+    rebuildIndexes({ override: rootPath })
+    const aiStartupScheduler = createFakeScheduler()
+    let providerCalls = 0
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      aiStartupScheduler,
+      aiClient: {
+        createChatCompletion: async () => {
+          providerCalls += 1
+          return { text: "Refresh-backed startup summary." }
+        },
+      },
+    })
+
+    assert.notEqual(controller.getState().ai?.kind, "auth-required")
+    aiStartupScheduler.runNext()
+
+    await waitForCondition(() => controller.getState().ai?.kind === "updated")
+
+    assert.equal(providerCalls, 1)
+    assert.deepEqual(controller.getState().ai, { kind: "updated", count: 1, queue: { queued: 0, failed: 0 } })
+    assert.equal(showNote({ override: rootPath, selector: note.key }).description, "Refresh-backed startup summary.")
   })
 
   test("AI process queue leaves refreshed newer jobs pending when an older provider call fails", async () => {

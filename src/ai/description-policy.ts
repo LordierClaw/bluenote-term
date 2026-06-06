@@ -50,8 +50,16 @@ function containsProviderRefusalOrError(value: string): boolean {
   return /\b(?:as an ai|i cannot|i can't|sorry,? but|provider error|rate limit)\b|\berror\s*:/i.test(value)
 }
 
+const SENTENCE_TERMINATORS = ".!?。！？"
+
 function isExactlyOneSentence(value: string): boolean {
-  return /^[^.!?]+[.!?]$/.test(value.trim())
+  const trimmed = value.trim()
+  const finalCharacter = trimmed.at(-1)
+  if (!finalCharacter || !SENTENCE_TERMINATORS.includes(finalCharacter)) {
+    return false
+  }
+
+  return !Array.from(trimmed.slice(0, -1)).some((character) => SENTENCE_TERMINATORS.includes(character))
 }
 
 export function sanitizeAiDescription(raw: string): string {

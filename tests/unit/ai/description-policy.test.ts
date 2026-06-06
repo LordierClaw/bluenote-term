@@ -26,6 +26,12 @@ test("accepts a 9-word description", () => {
   )
 })
 
+test("accepts localized one-sentence punctuation for configured output languages", () => {
+  assert.equal(sanitizeAiDescription("画像最適化とAPI設定のメモ。"), "画像最適化とAPI設定のメモ。")
+  assert.equal(sanitizeAiDescription("整理图片优化和API配置。"), "整理图片优化和API配置。")
+  assert.equal(sanitizeAiDescription("確認が必要です！"), "確認が必要です！")
+})
+
 test("rejects multiple sentences", () => {
   assertInvalidDescription("Project tasks are ready. Owner follow-ups remain.", /one short sentence/i)
 })
