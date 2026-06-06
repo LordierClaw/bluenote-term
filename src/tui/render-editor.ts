@@ -443,6 +443,8 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
   }
   const wrapLabel = baseWrapLabel
   const { visibleShortcuts, visibleShortcutHints, hiddenShortcutCount } = visibleShortcutLabels(shortcuts, responsive.width ?? 0)
+  const editorBottomStatusLabel = editor?.statusMessage ?? null
+  const editorBottomStatusIntent = "info"
 
   return {
     topbar: {
@@ -523,7 +525,7 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
       ...(activeSelectionRange ? { activeSelectionRange } : {}),
     },
     bottombar: {
-      status: editor?.statusMessage ? { label: editor.statusMessage, intent: "info" } : null,
+      status: editorBottomStatusLabel === null ? null : { label: editorBottomStatusLabel, intent: editorBottomStatusIntent },
       row2: {
         shortcuts: shortcuts.map(toShortcutHint).map(shortcutHintLabel),
         visibleShortcuts,

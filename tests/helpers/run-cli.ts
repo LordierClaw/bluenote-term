@@ -4,7 +4,7 @@ import { resolveBlueNoteRoot } from "../../src/config/root"
 import { AppError } from "../../src/core/errors"
 import { systemClock } from "../../src/platform/clock"
 import { migrateLegacyStorage } from "../../src/storage/migration"
-import { formatCliError, formatMigrateCliResult, runCli, type CliRuntimeOptions } from "../../src/cli/entry"
+import { formatCliError, formatMigrateCliResult, runCliAsync, type CliRuntimeOptions } from "../../src/cli/entry"
 
 function readTestClock() {
   const value = process.env.BLUENOTE_TEST_NOW
@@ -98,7 +98,7 @@ const args = process.argv.slice(2)
 const result =
   shouldForceMigrateRebuildFailure() && args[0] === "migrate"
     ? runMigrateCliWithInjectedFailure(randomSource, clock ?? systemClock)
-    : runCli(args, pkg.version, {
+    : await runCliAsync(args, pkg.version, {
         createNoteOptions: {
           ...(clock ? { clock } : {}),
           ...(randomSource ? { randomSource } : {}),

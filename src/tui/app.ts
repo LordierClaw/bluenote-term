@@ -3,6 +3,17 @@ import { existsSync, readdirSync, type Dirent } from "node:fs"
 import { createCliRenderer, BoxRenderable, type CliRenderer, type PasteEvent, type Renderable } from "@opentui/core"
 
 import { resolveBlueNoteRoot } from "../config/root"
+import { createAiConfigRepository } from "../ai/config"
+import { createCodexAuthClient } from "../ai/codex-auth-client"
+import { createCodexAuthRepository } from "../ai/codex-auth-repository"
+import { generateNoteDescription } from "../ai/description-service"
+import { sanitizeAiErrorMessage } from "../ai/error-redaction"
+import { enqueueDescribeNoteIfAiEnabled } from "../ai/enqueue-describe-note"
+import { scanAndEnqueueStaleDescriptions } from "../ai/stale-description-scan"
+import { CodexProviderSetupRequiredError, createAiTextGenerationClient, type AiTextGenerationClient } from "../ai/provider"
+import { CodexTextGenerationClientError } from "../ai/codex-client"
+import { createAiQueueRepository } from "../ai/queue-repository"
+import { dropDescribeNoteJobIfNoteMissing, listPendingAiJobs, listRetryableAiJobs, markDescribeNoteJobFailedIfContentHashMatches } from "../ai/queue-service"
 import { createNote } from "../core/create-note"
 import { deleteNote } from "../core/delete-note"
 import { IndexUnavailableError } from "../core/errors"
@@ -21,7 +32,7 @@ import { renderEditorScreen, routeEditorKey } from "./render-editor"
 import { sanitizePastedEditorText } from "./paste"
 import { renderManagerScreen, routeManagerKey } from "./render-manager"
 import { renderSearchEverythingScreen, routeSearchEverythingKey } from "./render-search-everything"
-import type { TuiNote } from "./state"
+import type { AiStatusState, TuiNote } from "./state"
 import { createDesktopClipboardModel } from "./adapters/desktop-clipboard-adapter"
 import { createWorkspaceController, type WorkspaceCommandHandler, type WorkspaceController, type WorkspaceControllerDependencies } from "./workspace-controller"
 
@@ -54,6 +65,11 @@ type WorkspaceInputRenderer = {
 export interface DefaultWorkspaceControllerOptions {
   rootPath?: string
   clock?: Clock
+  aiClient?: AiTextGenerationClient
+  fetch?: typeof fetch
+  autosaveScheduler?: WorkspaceControllerDependencies["autosaveScheduler"]
+  aiIdleScheduler?: WorkspaceControllerDependencies["aiIdleScheduler"]
+  aiStartupScheduler?: WorkspaceControllerDependencies["aiIdleScheduler"]
   commandHandlers?: Partial<Record<string, WorkspaceCommandHandler>>
   clipboard?: WorkspaceControllerDependencies["clipboard"]
   createClipboard?: () => NonNullable<WorkspaceControllerDependencies["clipboard"]>
@@ -72,7 +88,17 @@ export function formatTuiBootstrapMessage(info: TuiBootstrapInfo = getTuiBootstr
   return `${info.appName} TUI workspace bootstrap ready (${info.status}). Follow-up: ${info.followUp}.\n`
 }
 
-function persistTuiEditorBody(rootPath: string, note: TuiNote, body: string, clock: Clock): TuiNote {
+function enqueueAiDescriptionAfterTuiSave(rootPath: string, note: TuiNote, body: string, clock: Clock, warn?: (message: string) => void): boolean {
+  return enqueueDescribeNoteIfAiEnabled(rootPath, {
+    key: note.key,
+    relativePath: note.relativePath,
+    title: note.title,
+    body,
+    currentDescription: note.description,
+  }, { clock, warn })
+}
+
+function persistTuiEditorBody(rootPath: string, note: TuiNote, body: string, clock: Clock, warn?: (message: string) => void): TuiNote {
   const repository = createNoteRepository(rootPath)
   repository.syncEditedNote(path.join(rootPath, note.relativePath), {
     title: note.title,
@@ -95,7 +121,6 @@ function persistTuiEditorBody(rootPath: string, note: TuiNote, body: string, clo
   } catch {
     return savedNote
   }
-
   return savedNote
 }
 
@@ -154,6 +179,168 @@ function ensureTuiIndexes(rootPath: string): void {
   }
 }
 
+function readTuiAiQueueSummary(rootPath: string): { queued: number; failed: number } {
+  const queueRepository = createAiQueueRepository(rootPath)
+  try {
+    return queueRepository.exists()
+      ? queueRepository.read().jobs.reduce((summary, job) => {
+          if (job.status === "pending" || job.status === "running") {
+            summary.queued += 1
+          } else if (job.status === "failed") {
+            summary.failed += 1
+          }
+          return summary
+        }, { queued: 0, failed: 0 })
+      : { queued: 0, failed: 0 }
+  } catch {
+    return { queued: 0, failed: 0 }
+  }
+}
+
+export function getInitialTuiAiStatus(rootPath: string): AiStatusState {
+  const repository = createAiConfigRepository(rootPath)
+  const queue = readTuiAiQueueSummary(rootPath)
+
+  if (!repository.exists()) {
+    return { kind: "not-configured" }
+  }
+
+  let config: ReturnType<typeof repository.read>
+  try {
+    config = repository.read()
+  } catch {
+    return { kind: "error", reason: "config invalid" }
+  }
+
+  if (!config.enabled) {
+    return { kind: "not-configured" }
+  }
+
+  if (config.provider === "codex") {
+    const status = createCodexAuthRepository(rootPath).getStatus({ provider: config.provider })
+    switch (status.state) {
+      case "authenticated":
+      case "expired":
+        return { kind: "connected", model: config.model, queue }
+      case "setup-required":
+        return { kind: "auth-required", reason: "auth required · run bn ai codex auth login", queue }
+      case "invalid":
+        return { kind: "error", reason: sanitizeAiErrorMessage(status.message), queue }
+      case "not-configured":
+      default:
+        return { kind: "not-configured" }
+    }
+  }
+
+  try {
+    createAiTextGenerationClient(config)
+  } catch (error) {
+    return { kind: "error", reason: sanitizeAiErrorMessage(error), queue }
+  }
+
+  return { kind: "connected", model: config.model, queue }
+}
+
+function markTuiAiQueueJobFailed(rootPath: string, job: ReturnType<typeof listPendingAiJobs>[number], error: unknown, secrets: string[] = []): boolean {
+  const message = sanitizeAiErrorMessage(error, secrets)
+  return markDescribeNoteJobFailedIfContentHashMatches({
+    rootPath,
+    key: job.key,
+    contentHash: job.contentHash,
+    lastError: message,
+  })
+}
+
+function isCodexProviderSetupBlocked(error: unknown): boolean {
+  if (error instanceof CodexProviderSetupRequiredError) {
+    return true
+  }
+
+  if (!(error instanceof CodexTextGenerationClientError)) {
+    return false
+  }
+
+  const message = error.message.toLowerCase()
+  return message.includes("codex auth setup is required")
+    || message.includes("codex auth refresh failed")
+    || message.includes("codex auth is expired")
+    || message.includes("run bn ai codex auth login")
+}
+
+function codexAuthRequiredError(): Error {
+  return new Error("auth required · run bn ai codex auth login")
+}
+
+function failPendingTuiAiQueueJobs(rootPath: string, error: unknown): { applied: number; failed: number; failedThisRun: number; queued: number; remaining: number } {
+  let failedThisRun = 0
+  for (const job of listPendingAiJobs(rootPath)) {
+    if (markTuiAiQueueJobFailed(rootPath, job, error)) {
+      failedThisRun += 1
+    }
+  }
+
+  const summary = readTuiAiQueueSummary(rootPath)
+  return { applied: 0, failed: summary.failed, failedThisRun, queued: summary.queued, remaining: summary.queued }
+}
+
+function dropMissingTuiAiQueueJobs(rootPath: string): void {
+  const queueRepository = createAiQueueRepository(rootPath)
+  if (!queueRepository.exists()) {
+    return
+  }
+
+  for (const job of queueRepository.read().jobs) {
+    dropDescribeNoteJobIfNoteMissing(rootPath, job)
+  }
+}
+
+async function processTuiAiQueue(rootPath: string, client: AiTextGenerationClient, onProgress?: (progress: { processed: number; total: number }) => void): Promise<{ applied: number; failed: number; failedThisRun: number; queued: number; remaining: number }> {
+  const config = createAiConfigRepository(rootPath).exists() ? createAiConfigRepository(rootPath).read() : null
+  const jobs = listRetryableAiJobs(rootPath, config?.maxAttempts ?? 3)
+  const secrets = config?.provider === "openai-compatible" ? [config.apiKey] : []
+  let applied = 0
+  let failedThisRun = 0
+  let processed = 0
+
+  onProgress?.({ processed, total: jobs.length })
+  for (const job of jobs) {
+    let reportProcessed = true
+    try {
+      if (dropDescribeNoteJobIfNoteMissing(rootPath, job)) {
+        continue
+      }
+
+      const result = await generateNoteDescription({ rootPath, selector: job.key, client })
+      if (result.status === "applied") {
+        applied += 1
+      } else if (result.status === "stale") {
+        // A newer autosave/queue refresh superseded this provider response.
+        // Leave the refreshed pending job untouched for a later run.
+      } else {
+        if (markTuiAiQueueJobFailed(rootPath, job, result.error ?? "invalid description", secrets)) {
+          failedThisRun += 1
+        }
+      }
+    } catch (error) {
+      if (isCodexProviderSetupBlocked(error)) {
+        reportProcessed = false
+        throw codexAuthRequiredError()
+      }
+      if (markTuiAiQueueJobFailed(rootPath, job, error, secrets)) {
+        failedThisRun += 1
+      }
+    } finally {
+      if (reportProcessed) {
+        processed += 1
+        onProgress?.({ processed, total: jobs.length })
+      }
+    }
+  }
+
+  const summary = readTuiAiQueueSummary(rootPath)
+  return { applied, failed: summary.failed, failedThisRun, queued: summary.queued, remaining: summary.queued }
+}
+
 export function createDefaultWorkspaceController(options: DefaultWorkspaceControllerOptions = {}): WorkspaceController {
   const rootPath = resolveBlueNoteRoot({ override: options.rootPath })
   const clock = options.clock ?? systemClock
@@ -161,8 +348,67 @@ export function createDefaultWorkspaceController(options: DefaultWorkspaceContro
 
   cleanupStaleAtomicTemps(rootPath)
   ensureTuiIndexes(rootPath)
+  try {
+    dropMissingTuiAiQueueJobs(rootPath)
+  } catch {
+    // Startup should still surface queue read/write problems through later save/status paths
+    // instead of blocking the whole TUI before the user can interact.
+  }
+  const aiConfigRepository = createAiConfigRepository(rootPath)
+  let aiClient: AiTextGenerationClient | undefined = options.aiClient
+  if (!aiClient && aiConfigRepository.exists()) {
+    try {
+      const config = aiConfigRepository.read()
+      if (config.enabled && config.provider === "openai-compatible") {
+        aiClient = createAiTextGenerationClient(config, { fetch: options.fetch ?? fetch })
+      }
+    } catch {
+      aiClient = undefined
+    }
+  }
 
-  return createWorkspaceController({
+  function getAiClient(): AiTextGenerationClient | undefined {
+    if (!aiConfigRepository.exists()) {
+      return aiClient
+    }
+
+    const config = aiConfigRepository.read()
+    if (!config.enabled) {
+      aiClient = undefined
+      return undefined
+    }
+    if (aiClient) {
+      return aiClient
+    }
+    if (config.provider === "openai-compatible") {
+      aiClient = createAiTextGenerationClient(config, { fetch: options.fetch ?? fetch })
+      return aiClient
+    }
+
+    const repository = createCodexAuthRepository(rootPath)
+    const authClient = createCodexAuthClient({
+      fetch: options.fetch ?? fetch,
+      repository,
+    })
+    aiClient = createAiTextGenerationClient(config, {
+      fetch: options.fetch ?? fetch,
+      codexAuth: {
+        hasAuth: () => repository.exists(),
+        async getAuth() {
+          return repository.exists() ? repository.read() : null
+        },
+        async refreshAuth(auth) {
+          const refreshed = await authClient.refreshAuth(auth)
+          repository.write(refreshed)
+          return refreshed
+        },
+      },
+      now: () => clock.now(),
+    })
+    return aiClient
+  }
+
+  const controller = createWorkspaceController({
     listNotes: () => listNotes({ override: rootPath }),
     listNoteFolders: () => listTuiNoteFolders(rootPath),
     showNote: (selector) => showTuiNote(rootPath, selector),
@@ -171,10 +417,77 @@ export function createDefaultWorkspaceController(options: DefaultWorkspaceContro
     deleteNote: (selector) => {
       deleteNote({ override: rootPath, selector, force: true })
     },
-    persistEditorBody: (note, body) => persistTuiEditorBody(rootPath, note, body, clock),
+    persistEditorBody: (note, body, warn) => persistTuiEditorBody(rootPath, note, body, clock, warn),
+    autosaveScheduler: options.autosaveScheduler,
+    aiIdleScheduler: options.aiIdleScheduler,
     clipboard: options.clipboard ?? options.createClipboard?.() ?? createDesktopClipboardModel(),
+    initialAiStatus: getInitialTuiAiStatus(rootPath),
+    aiActions: {
+      describeNote: async (selector) => {
+        const client = getAiClient()
+        if (!client) {
+          throw new Error("AI is not configured.")
+        }
+        return generateNoteDescription({ rootPath, selector, client, clock })
+      },
+      enqueueNote: (selector) => {
+        const note = showTuiNote(rootPath, selector)
+        const enqueued = enqueueAiDescriptionAfterTuiSave(rootPath, note, note.body, clock)
+        return enqueued ? readTuiAiQueueSummary(rootPath) : false
+      },
+      enqueueStaleDescriptions: () => {
+        const result = scanAndEnqueueStaleDescriptions(rootPath, { clock })
+        return { ...result, ...readTuiAiQueueSummary(rootPath) }
+      },
+      processQueue: (onProgress) => {
+        try {
+          dropMissingTuiAiQueueJobs(rootPath)
+        } catch (error) {
+          return Promise.resolve(failPendingTuiAiQueueJobs(rootPath, error))
+        }
+
+        let client: AiTextGenerationClient | undefined
+        try {
+          client = getAiClient()
+        } catch (error) {
+          if (isCodexProviderSetupBlocked(error)) {
+            return Promise.reject(codexAuthRequiredError())
+          }
+          return Promise.resolve(failPendingTuiAiQueueJobs(rootPath, error))
+        }
+        if (client) {
+          return processTuiAiQueue(rootPath, client, onProgress)
+        }
+        const summary = readTuiAiQueueSummary(rootPath)
+        return Promise.resolve({ applied: 0, failed: summary.failed, queued: summary.queued, remaining: summary.queued })
+      },
+      getStatus: () => getInitialTuiAiStatus(rootPath),
+    },
     commandHandlers: options.commandHandlers,
   })
+
+  const startupScanScheduler = options.aiStartupScheduler ?? {
+    setTimeout: (callback: () => void, delay: number) => globalThis.setTimeout(callback, delay),
+    clearTimeout: (handle: unknown) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
+  }
+  let startupScanTimer: unknown = startupScanScheduler.setTimeout(() => {
+    startupScanTimer = null
+    controller.startAiStartupScan()
+  }, 0)
+
+  return {
+    ...controller,
+    dispose() {
+      if (startupScanTimer !== null) {
+        try {
+          startupScanScheduler.clearTimeout(startupScanTimer)
+        } finally {
+          startupScanTimer = null
+        }
+      }
+      controller.dispose()
+    },
+  }
 }
 
 export interface RoutedWorkspaceKey {

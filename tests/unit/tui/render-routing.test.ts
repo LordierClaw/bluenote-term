@@ -5,7 +5,7 @@ import { createCliRenderer, PasteEvent } from "@opentui/core"
 
 import { blurWorkspaceInputs, defaultTuiRendererConfig, focusActiveWorkspaceInput, routeControlledEditorBodyInput, routeWorkspaceKey, startTuiWorkspace, waitForInteractiveTuiExit } from "../../../src/tui/app"
 import { buildEditorViewModel, renderEditorScreen, routeEditorKey } from "../../../src/tui/render-editor"
-import { renderManagerScreen, routeManagerKey } from "../../../src/tui/render-manager"
+import { buildManagerViewModel, renderManagerScreen, routeManagerKey } from "../../../src/tui/render-manager"
 import { renderSearchEverythingScreen, routeSearchEverythingKey } from "../../../src/tui/render-search-everything"
 import { tuiTheme } from "../../../src/tui/theme"
 import type { TuiState } from "../../../src/tui/state"
@@ -158,6 +158,7 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
       return { blocked: false }
     },
     dispose: () => calls.push("dispose"),
+    startAiStartupScan: () => calls.push("startAiStartupScan"),
     setAutosaveStateChangeHandler: () => calls.push("setAutosaveStateChangeHandler"),
     selectSearchResult: () => {
       calls.push("selectSearchResult")
@@ -1319,6 +1320,76 @@ describe("TUI render keyboard routing", () => {
     assert.deepEqual(calls, ["toggleManagerPreview", "openSearch:", "toggleSearch:"])
   })
 
+  test("manager view model uses note title and description columns with filename fallback", () => {
+    const state: TuiState = {
+      screen: "manager",
+      manager: { items: [], focusedIndex: 0, selectedNoteKey: null, currentFolderPath: "notes/inbox" },
+      editor: null,
+      search: null,
+    }
+    const titledNote = {
+      type: "note" as const,
+      key: "daily-plan",
+      filename: "daily-plan.md",
+      title: "Daily Plan",
+      description: "Today priorities.",
+      relativePath: "notes/inbox/daily-plan.md",
+      index: 0,
+      focused: true,
+      selected: false,
+      columns: { filename: "daily-plan.md", title: "Daily Plan", description: "Today priorities." },
+      rowStyleIntent: "note" as const,
+    }
+    const untitledNote = {
+      type: "note" as const,
+      key: "untitled",
+      filename: "untitled.md",
+      title: "   ",
+      description: "Needs a title.",
+      relativePath: "notes/inbox/untitled.md",
+      index: 1,
+      focused: false,
+      selected: false,
+      columns: { filename: "untitled.md", title: "   ", description: "Needs a title." },
+      rowStyleIntent: "note" as const,
+    }
+    const folder = {
+      type: "folder" as const,
+      key: "notes/inbox/projects",
+      filename: "projects",
+      title: "Projects",
+      description: "2 notes",
+      relativePath: "notes/inbox/projects",
+      index: 2,
+      focused: false,
+      selected: false,
+      columns: { filename: "projects", title: "Projects", description: "2 notes" },
+      rowStyleIntent: "folder" as const,
+    }
+    const vm = buildManagerViewModel(state, {
+      layout1Rows: [titledNote, untitledNote, folder],
+      preview: { type: "folder", path: "notes/inbox/projects", rows: [titledNote, untitledNote] },
+      currentFolderPath: "notes/inbox",
+      hoveredPath: titledNote.relativePath,
+      focusedIndex: 0,
+      empty: false,
+      state: state.manager,
+    }, { width: 100 })
+
+    assert.deepEqual(vm.layout1.rows.map((row) => row.displaySegments), [
+      { primary: "Daily Plan", secondary: "Today priorities.", metadata: "" },
+      { primary: "untitled.md", secondary: "Needs a title.", metadata: "" },
+      { primary: "Projects", secondary: "2 notes", metadata: "" },
+    ])
+    assert.equal(vm.layout2.preview.type, "folder")
+    if (vm.layout2.preview.type === "folder") {
+      assert.deepEqual(vm.layout2.preview.rows.map((row) => row.displaySegments), [
+        { primary: "Daily Plan", secondary: "Today priorities.", metadata: "" },
+        { primary: "untitled.md", secondary: "Needs a title.", metadata: "" },
+      ])
+    }
+  })
+
   test("manager renderer prints simplified topbar and currently-open footer label", async () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
@@ -1347,6 +1418,7 @@ describe("TUI render keyboard routing", () => {
 
       assert.ok(textLines.includes("BlueNote  Workspace · notes/inbox  1 items (filtered) · Indexing..."))
       assert.match(renderedText, /Currently open: Daily Plan/u)
+      assert.match(renderedText, /AI: not configured/u)
       assert.match(renderedText, /\[\/\] Filter/u)
       assert.doesNotMatch(renderedText, /Rebuild idle|Index ready|selected daily-plan|notes\/inbox → notes\/inbox\/daily-plan\.md|filter “daily”/u)
     } finally {
@@ -1373,8 +1445,9 @@ describe("TUI render keyboard routing", () => {
       assert.notEqual(topbar?.border, true)
       assert.deepEqual(topbar?.fg?.toInts?.(), [248, 250, 252, 255])
       assert.notEqual(footer?.border, true)
-      assert.equal(footerText, "[Enter] Open  [/] Filter  [n] New  [Ctrl+P] Search  [Esc] Back")
+      assert.equal(footerText, "[Enter] Open  [/] Filter  [n] New  [Ctrl+P] Search  [Esc] Back  [p] Preview")
       assert.deepEqual(footerChunks.filter((chunk: { text?: string }) => /^\[[^\]]+\]$/u.test(chunk.text ?? "")).map((chunk: any) => chunk.fg?.toInts?.()), [
+        [56, 189, 248, 255],
         [56, 189, 248, 255],
         [56, 189, 248, 255],
         [56, 189, 248, 255],
@@ -1512,8 +1585,9 @@ describe("TUI render keyboard routing", () => {
       assert.equal(showCalls, 0)
       assert.notEqual(narrowLayout1, undefined)
       assert.equal(narrowLayout2, undefined)
-      assert.match(narrowText, /daily\.md/u)
+      assert.doesNotMatch(narrowText, /daily\.md/u)
       assert.match(narrowText, /Daily/u)
+      assert.match(narrowText, /Today/u)
       assert.doesNotMatch(narrowText, /notes\/daily\.md/u)
       assert.match(narrowText, /Preview hidden for narrow terminal · p show/u)
       assert.doesNotMatch(narrowText, /Preview body/u)
@@ -1546,8 +1620,9 @@ describe("TUI render keyboard routing", () => {
       assert.equal(showCalls, 0)
       assert.notEqual(findById(narrowScreen, "bluenote-manager-layout-1"), undefined)
       assert.equal(findById(narrowScreen, "bluenote-manager-layout-2"), undefined)
-      assert.match(narrowText, /daily\.md/u)
+      assert.doesNotMatch(narrowText, /daily\.md/u)
       assert.match(narrowText, /Daily/u)
+      assert.match(narrowText, /Today/u)
       assert.doesNotMatch(narrowText, /notes\/daily\.md/u)
       assert.doesNotMatch(narrowText, /Preview hidden \(narrow width\)/u)
       assert.doesNotMatch(narrowText, /Preview body/u)

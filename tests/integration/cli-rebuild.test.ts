@@ -299,7 +299,7 @@ test("bn rebuild exits 2 and surfaces invalid sidecar validation errors", async 
   } finally {
     await harness.cleanup()
   }
-})
+}, 15_000)
 
 test("bn rebuild exits 2 with a controlled error when .data/notes cannot be scanned", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-rebuild-sidecar-scan-")

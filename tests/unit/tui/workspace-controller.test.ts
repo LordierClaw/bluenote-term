@@ -1,6 +1,17 @@
 import { describe, test } from "bun:test"
 import assert from "node:assert/strict"
+import os from "node:os"
+import path from "node:path"
+import { writeFileSync } from "node:fs"
+import { mkdtemp, rm } from "node:fs/promises"
 
+import { createAiConfigRepository, type AiConfig } from "../../../src/ai/config"
+import { enqueueDescribeNoteJob } from "../../../src/ai/queue-service"
+import { createAiQueueRepository } from "../../../src/ai/queue-repository"
+import { ensureManagedRoot, getAiConfigPath } from "../../../src/storage/root-layout"
+import { createNoteRepository } from "../../../src/storage/note-repository"
+import { createSidecarRepository } from "../../../src/storage/sidecar-repository"
+import { createDefaultWorkspaceController } from "../../../src/tui/app"
 import {
   createWorkspaceController,
   editorRequiresDestructiveConfirmation,
@@ -10,6 +21,48 @@ import { buildManagerViewModel, routeManagerKey } from "../../../src/tui/render-
 import type { NoteManagerSummary } from "../../../src/tui/adapters/note-manager-adapter"
 import { buildSearchEverythingPreview, type SearchEverythingResult } from "../../../src/tui/adapters/search-everything-adapter"
 import { createInitialTuiState, type TuiNote } from "../../../src/tui/state"
+
+function validAiConfig(overrides: Partial<AiConfig> = {}): AiConfig {
+  return {
+    version: 1,
+    enabled: true,
+    provider: "openai-compatible",
+    baseUrl: "https://api.openai.com/v1",
+    apiKey: "***",
+    model: "gpt-4o-mini",
+    logging: {
+      usage: true,
+      conversations: false,
+      results: true,
+    },
+    ...overrides,
+  }
+}
+
+function validCodexAiConfig(overrides: Partial<AiConfig> = {}): AiConfig {
+  return {
+    version: 1,
+    enabled: true,
+    provider: "codex",
+    model: "codex-test-model",
+    logging: {
+      usage: true,
+      conversations: false,
+      results: true,
+    },
+    ...overrides,
+  } as AiConfig
+}
+
+async function withManagedRoot(name: string, callback: (rootPath: string) => Promise<void> | void): Promise<void> {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), name))
+
+  try {
+    await callback(ensureManagedRoot(tempRoot))
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true })
+  }
+}
 
 function createFakeScheduler() {
   type ScheduledTask = { id: number; callback: () => void; delay: number; cleared: boolean }
@@ -132,6 +185,12 @@ function openInboxDaily(controller: ReturnType<typeof createWorkspaceController>
   controller.openFocusedManagerItem()
 }
 
+async function flushBackgroundAi(): Promise<void> {
+  await Promise.resolve()
+  await Promise.resolve()
+  await new Promise<void>((resolve) => setTimeout(resolve, 0))
+}
+
 function openArchiveReview(controller: ReturnType<typeof createWorkspaceController>, options?: { confirmed?: boolean }) {
   controller.showManager()
   if (controller.getState().manager.currentFolderPath !== "") {
@@ -158,6 +217,741 @@ describe("TUI workspace controller", () => {
       ["folder:notes/archive", "folder:notes/inbox"],
     )
     assert.deepEqual(calls, ["list"])
+  })
+
+  test("accepts an initial AI status dependency for startup rendering", () => {
+    const { deps } = createDeps({ initialAiStatus: { kind: "connected", model: "gpt-4o-mini" } })
+    const controller = createWorkspaceController(deps)
+
+    assert.equal(buildManagerViewModel(controller.getState()).aiStatus.text, "AI: connected · gpt-4o-mini")
+  })
+
+  test("default TUI controller reads configured AI model at startup without running jobs", async () => {
+    await withManagedRoot("bluenote-tui-ai-status-", (rootPath) => {
+      createAiConfigRepository(rootPath).write(validAiConfig({ model: "claude-3-5-haiku" }))
+
+      const controller = createDefaultWorkspaceController({
+        rootPath,
+        cleanupStaleAtomicTemps: () => {},
+        clipboard: {
+          name: "test clipboard",
+          canRead: true,
+          canWrite: true,
+          readText: () => "",
+          writeText: () => {},
+        },
+      })
+
+      assert.equal(buildManagerViewModel(controller.getState()).aiStatus.text, "AI: connected · claude-3-5-haiku")
+    })
+  })
+
+  test("default TUI controller reports an AI error instead of throwing on malformed startup config", async () => {
+    await withManagedRoot("bluenote-tui-ai-config-error-", (rootPath) => {
+      writeFileSync(getAiConfigPath(rootPath), "{ malformed-json", { encoding: "utf8", mode: 0o600 })
+
+      const controller = createDefaultWorkspaceController({
+        rootPath,
+        cleanupStaleAtomicTemps: () => {},
+        clipboard: {
+          name: "test clipboard",
+          canRead: true,
+          canWrite: true,
+          readText: () => "",
+          writeText: () => {},
+        },
+      })
+
+      assert.deepEqual(controller.getState().ai, { kind: "error", reason: "config invalid" })
+      assert.equal(buildManagerViewModel(controller.getState()).aiStatus.text, "AI: error · config invalid")
+    })
+  })
+
+  test("default TUI controller reports setup-required Codex config without marking AI connected", async () => {
+    await withManagedRoot("bluenote-tui-ai-codex-setup-required-", (rootPath) => {
+      createAiConfigRepository(rootPath).write(validCodexAiConfig())
+
+      const controller = createDefaultWorkspaceController({
+        rootPath,
+        fetch: (() => {
+          throw new Error("TUI startup must not call Codex auth or provider endpoints")
+        }) as unknown as typeof fetch,
+        cleanupStaleAtomicTemps: () => {},
+        clipboard: {
+          name: "test clipboard",
+          canRead: true,
+          canWrite: true,
+          readText: () => "",
+          writeText: () => {},
+        },
+      })
+
+      const ai = controller.getState().ai
+      if (!ai) {
+        throw new Error("Expected startup AI status")
+      }
+      assert.deepEqual(ai, { kind: "auth-required", reason: "auth required · run bn ai codex auth login", queue: { queued: 0, failed: 0 } })
+      assert.equal(buildManagerViewModel(controller.getState()).aiStatus.text, "AI: auth required · run bn ai codex auth login")
+      assert.doesNotMatch(buildManagerViewModel(controller.getState()).aiStatus.text, /connected/)
+    })
+  })
+
+  test("Codex auth-required startup scan leaves queued work pending instead of marking it failed", async () => {
+    await withManagedRoot("bluenote-tui-ai-codex-startup-queue-auth-required-", async (rootPath) => {
+      createAiConfigRepository(rootPath).write(validCodexAiConfig())
+      const repository = createNoteRepository(rootPath)
+      repository.create({
+        frontmatter: {
+          id: "daily-plan",
+          schemaVersion: 1,
+          title: "Daily Plan",
+          mode: "plain",
+          tags: [],
+          createdAt: "2026-06-01T10:00:00.000Z",
+          updatedAt: "2026-06-01T10:00:00.000Z",
+        },
+        body: "Original daily body\n",
+      })
+      enqueueDescribeNoteJob(rootPath, {
+        key: "daily-plan",
+        relativePath: "notes/inbox/daily-plan.md",
+        title: "Daily Plan",
+        body: "Original daily body\n",
+        currentDescription: "",
+        promptHash: "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      })
+      let providerCalls = 0
+      const aiStartupScheduler = createFakeScheduler()
+      const controller = createDefaultWorkspaceController({
+        rootPath,
+        aiStartupScheduler,
+        fetch: (() => {
+          providerCalls += 1
+          throw new Error("startup must not call auth/provider while auth is required")
+        }) as unknown as typeof fetch,
+        cleanupStaleAtomicTemps: () => {},
+        clipboard: {
+          name: "test clipboard",
+          canRead: true,
+          canWrite: true,
+          readText: () => "",
+          writeText: () => {},
+        },
+      })
+
+      assert.deepEqual(controller.getState().ai, { kind: "auth-required", reason: "auth required · run bn ai codex auth login", queue: { queued: 1, failed: 0 } })
+      aiStartupScheduler.runNext()
+      await flushBackgroundAi()
+
+      assert.equal(providerCalls, 0)
+      assert.deepEqual(controller.getState().ai, { kind: "auth-required", reason: "auth required · run bn ai codex auth login", queue: { queued: 1, failed: 0 } })
+      const queue = createAiQueueRepository(rootPath).read()
+      assert.deepEqual(queue.jobs.map((job) => job.status), ["pending"])
+    })
+  })
+
+  test("Codex auth-required startup keeps input navigation save autosave and quit off provider work", async () => {
+    await withManagedRoot("bluenote-tui-ai-codex-nonblocking-", async (rootPath) => {
+      createAiConfigRepository(rootPath).write(validCodexAiConfig())
+      const repository = createNoteRepository(rootPath)
+      repository.create({
+        frontmatter: {
+          id: "daily-plan",
+          schemaVersion: 1,
+          title: "Daily Plan",
+          mode: "plain",
+          tags: [],
+          createdAt: "2026-06-01T10:00:00.000Z",
+          updatedAt: "2026-06-01T10:00:00.000Z",
+        },
+        body: "Original daily body\n",
+      })
+      let providerCalls = 0
+      const autosaveScheduler = createFakeScheduler()
+      const aiIdleScheduler = createFakeScheduler()
+      const controller = createDefaultWorkspaceController({
+        rootPath,
+        autosaveScheduler,
+        aiIdleScheduler,
+        fetch: (() => {
+          providerCalls += 1
+          return new Promise<Response>(() => {})
+        }) as unknown as typeof fetch,
+        cleanupStaleAtomicTemps: () => {},
+        clipboard: {
+          name: "test clipboard",
+          canRead: true,
+          canWrite: true,
+          readText: () => "",
+          writeText: () => {},
+        },
+      })
+
+      assert.equal(providerCalls, 0)
+      controller.focusManagerItem(1)
+      assert.deepEqual(controller.openFocusedManagerItem(), { blocked: false })
+      controller.focusManagerItem(0)
+      assert.deepEqual(controller.openFocusedManagerItem(), { blocked: false })
+      controller.insertEditorText(" changed")
+      assert.equal(providerCalls, 0)
+      assert.deepEqual(controller.runCommand("/save"), { blocked: false })
+      assert.equal(providerCalls, 0)
+      await flushBackgroundAi()
+      assert.equal(providerCalls, 0)
+
+      controller.insertEditorText(" autosaved")
+      autosaveScheduler.runNext()
+      await flushBackgroundAi()
+      assert.equal(providerCalls, 0)
+      assert.deepEqual(controller.showManager(), { blocked: false })
+      assert.deepEqual(controller.requestQuit({ confirmed: true }), { blocked: false })
+      assert.equal(providerCalls, 0)
+    })
+  })
+
+  test("Codex /ai-describe missing auth failure is fast sanitized and does not block save", async () => {
+    await withManagedRoot("bluenote-tui-ai-codex-describe-missing-auth-", async (rootPath) => {
+      createAiConfigRepository(rootPath).write(validCodexAiConfig())
+      const repository = createNoteRepository(rootPath)
+      repository.create({
+        frontmatter: {
+          id: "daily-plan",
+          schemaVersion: 1,
+          title: "Daily Plan",
+          mode: "plain",
+          tags: [],
+          createdAt: "2026-06-01T10:00:00.000Z",
+          updatedAt: "2026-06-01T10:00:00.000Z",
+        },
+        body: "Original daily body\n",
+      })
+      let providerCalls = 0
+      const controller = createDefaultWorkspaceController({
+        rootPath,
+        fetch: (() => {
+          providerCalls += 1
+          throw new Error("unexpected provider call with secret-token")
+        }) as unknown as typeof fetch,
+        cleanupStaleAtomicTemps: () => {},
+        clipboard: {
+          name: "test clipboard",
+          canRead: true,
+          canWrite: true,
+          readText: () => "",
+          writeText: () => {},
+        },
+      })
+      controller.focusManagerItem(1)
+      controller.openFocusedManagerItem()
+      controller.focusManagerItem(0)
+      controller.openFocusedManagerItem()
+
+      assert.deepEqual(controller.runCommand("/ai-describe"), { blocked: false })
+      assert.deepEqual(controller.getState().ai, { kind: "running", key: "daily-plan", queue: { queued: 0, failed: 0 } })
+      controller.insertEditorText(" saved while codex auth fails")
+      assert.deepEqual(controller.runCommand("/save"), { blocked: false })
+      await flushBackgroundAi()
+
+      assert.equal(providerCalls, 0)
+      const ai = controller.getState().ai
+      assert.equal(ai?.kind, "error")
+      const reason = ai && ai.kind === "error" ? ai.reason : ""
+      assert.match(reason, /Codex auth setup is required|Codex auth required/u)
+      assert.doesNotMatch(reason, /secret-token|accessToken|refreshToken/u)
+      assert.equal(controller.getState().editor?.dirty, false)
+    })
+  })
+
+  test("default TUI queue failure persists sanitized lastError without provider secrets", async () => {
+    await withManagedRoot("bluenote-tui-ai-queue-sanitized-error-", async (rootPath) => {
+      createAiConfigRepository(rootPath).write(validAiConfig({ apiKey: "test-token" }))
+      const repository = createNoteRepository(rootPath)
+      const created = repository.create({
+        frontmatter: {
+          id: "daily-plan",
+          schemaVersion: 1,
+          title: "Daily Plan",
+          mode: "plain",
+          tags: [],
+          createdAt: "2026-06-01T10:00:00.000Z",
+          updatedAt: "2026-06-01T10:00:00.000Z",
+        },
+        body: "Daily priorities and follow-ups.\n",
+      })
+      const sidecar = createSidecarRepository(rootPath).read("daily-plan")
+      enqueueDescribeNoteJob(rootPath, {
+        key: "daily-plan",
+        relativePath: created.relativePath,
+        title: sidecar.title,
+        body: "Daily priorities and follow-ups.\n",
+        currentDescription: sidecar.description,
+        promptHash: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      })
+
+      const controller = createDefaultWorkspaceController({
+        rootPath,
+        cleanupStaleAtomicTemps: () => {},
+        aiClient: {
+          async createChatCompletion() {
+            throw new Error("401 test-token rejected Bearer abc.def.ghi and ***")
+          },
+        },
+        clipboard: {
+          name: "test clipboard",
+          canRead: true,
+          canWrite: true,
+          readText: () => "",
+          writeText: () => {},
+        },
+      })
+
+      assert.deepEqual(controller.runCommand("/ai-process-queue"), { blocked: false })
+      await flushBackgroundAi()
+
+      const [job] = createAiQueueRepository(rootPath).read().jobs
+      assert.equal(job.status, "failed")
+      assert.equal(job.lastError, "401 [redacted] rejected Bearer [redacted] and [redacted]")
+      assert.doesNotMatch(job.lastError ?? "", /test-token|abc\.def\.ghi|\*\*\*/u)
+    })
+  })
+
+  test("/ai-describe starts background work, closes search, and updates status on success", async () => {
+    let resolveDescribe!: (value: { key: string; status: "applied"; description: string }) => void
+    const describePromise = new Promise<{ key: string; status: "applied"; description: string }>((resolve) => {
+      resolveDescribe = resolve
+    })
+    let latestSummaries = noteSummaries
+    const calls: string[] = []
+    const { deps } = createDeps({
+      listNotes: () => {
+        calls.push("list")
+        return latestSummaries
+      },
+      aiActions: {
+        describeNote: (selector) => {
+          calls.push(`ai-describe:${selector}`)
+          return describePromise
+        },
+      },
+    })
+    const controller = createWorkspaceController(deps)
+    openInboxDaily(controller)
+    controller.showManager()
+    controller.openSearch("/ai-describe")
+
+    const result = controller.runCommand("/ai-describe")
+
+    assert.deepEqual(result, { blocked: false })
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.deepEqual(controller.getState().ai, { kind: "running", key: "daily-plan" })
+    assert.deepEqual(calls.filter((call) => call.startsWith("ai-describe")), ["ai-describe:daily-plan"])
+    controller.openManagerFilter()
+    assert.equal(controller.getState().mode, "manager.filter")
+
+    latestSummaries = noteSummaries.map((summary) => summary.key === "daily-plan" ? { ...summary, description: "AI summary" } : summary)
+    resolveDescribe({ key: "daily-plan", status: "applied", description: "AI summary" })
+    await describePromise
+    await flushBackgroundAi()
+
+    assert.deepEqual(controller.getState().ai, { kind: "updated", key: "daily-plan", queue: { queued: 0, failed: 0 } })
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "note" && item.description === "AI summary"), true)
+  })
+
+  test("/ai-describe from editor keeps editing usable and reports sanitized errors", async () => {
+    let rejectDescribe!: (error: Error) => void
+    const describePromise = new Promise<never>((_, reject) => {
+      rejectDescribe = reject
+    })
+    const { deps } = createDeps({
+      aiActions: {
+        describeNote: () => describePromise,
+      },
+    })
+    const controller = createWorkspaceController(deps)
+    openInboxDaily(controller)
+    controller.openSearch("/ai-describe")
+
+    assert.deepEqual(controller.runCommand("/ai-describe"), { blocked: false })
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().mode, "editor.body")
+    assert.deepEqual(controller.getState().ai, { kind: "running", key: "daily-plan" })
+
+    controller.insertEditorText(" while ai runs")
+    assert.match(controller.getState().editor?.body ?? "", /while ai runs$/u)
+
+    rejectDescribe(new Error("401 token *** rejected"))
+    await describePromise.catch(() => undefined)
+    await flushBackgroundAi()
+
+    assert.deepEqual(controller.getState().ai, { kind: "error", reason: "401 token [redacted] rejected", queue: { queued: 0, failed: 0 } })
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().mode, "editor.body")
+  })
+
+  test("/ai-process-queue runs in the background and reports updated count", async () => {
+    let resolveQueue!: (value: { applied: number; failed: number; remaining: number }) => void
+    const queuePromise = new Promise<{ applied: number; failed: number; remaining: number }>((resolve) => {
+      resolveQueue = resolve
+    })
+    const { deps } = createDeps({
+      aiActions: {
+        processQueue: () => queuePromise,
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    assert.deepEqual(controller.runCommand("/ai-process-queue"), { blocked: false })
+    assert.deepEqual(controller.getState().ai, { kind: "running" })
+    controller.openManagerFilter()
+    assert.equal(controller.getState().mode, "manager.filter")
+
+    resolveQueue({ applied: 2, failed: 0, remaining: 0 })
+    await queuePromise
+    await flushBackgroundAi()
+
+    assert.deepEqual(controller.getState().ai, { kind: "updated", count: 2, queue: { queued: 0, failed: 0 } })
+  })
+
+  test("/ai-process-queue reports retry failures even when cumulative failed count stays unchanged", async () => {
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini", queue: { queued: 1, failed: 1 } },
+      aiActions: {
+        processQueue: async () => ({ applied: 0, failed: 1, remaining: 1 }),
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    assert.deepEqual(controller.runCommand("/ai-process-queue"), { blocked: false })
+    await flushBackgroundAi()
+
+    assert.deepEqual(controller.getState().ai, { kind: "error", reason: "1 failed", queue: { queued: 1, failed: 1 } })
+  })
+
+  test("/ai-process-queue does not start duplicate queue processing while one run is in flight", async () => {
+    let resolveQueue!: (value: { applied: number; failed: number; remaining: number }) => void
+    const queuePromise = new Promise<{ applied: number; failed: number; remaining: number }>((resolve) => {
+      resolveQueue = resolve
+    })
+    let processQueueCalls = 0
+    const { deps } = createDeps({
+      aiActions: {
+        processQueue: () => {
+          processQueueCalls += 1
+          return queuePromise
+        },
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    assert.deepEqual(controller.runCommand("/ai-process-queue"), { blocked: false })
+    assert.deepEqual(controller.runCommand("/ai-process-queue"), { blocked: false })
+    assert.equal(processQueueCalls, 1)
+    assert.deepEqual(controller.getState().ai, { kind: "running", queue: { queued: 0, failed: 0 } })
+
+    resolveQueue({ applied: 2, failed: 0, remaining: 0 })
+    await queuePromise
+    await flushBackgroundAi()
+
+    assert.equal(processQueueCalls, 1)
+    assert.deepEqual(controller.getState().ai, { kind: "updated", count: 2, queue: { queued: 0, failed: 0 } })
+  })
+
+  test("AI idle queued during in-flight queue processing runs after the current processor finishes", async () => {
+    const aiIdleScheduler = createFakeScheduler()
+    let resolveFirstQueue!: (value: { applied: number; failed: number; queued: number; remaining: number }) => void
+    const firstQueuePromise = new Promise<{ applied: number; failed: number; queued: number; remaining: number }>((resolve) => {
+      resolveFirstQueue = resolve
+    })
+    let resolveSecondQueue!: (value: { applied: number; failed: number; queued: number; remaining: number }) => void
+    const secondQueuePromise = new Promise<{ applied: number; failed: number; queued: number; remaining: number }>((resolve) => {
+      resolveSecondQueue = resolve
+    })
+    const calls: string[] = []
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini", queue: { queued: 1, failed: 0 } },
+      aiIdleScheduler,
+      aiActions: {
+        enqueueNote: (selector) => {
+          calls.push(`enqueue:${selector}`)
+          return { queued: 1, failed: 0 }
+        },
+        processQueue: () => {
+          calls.push("process")
+          return calls.filter((call) => call === "process").length === 1 ? firstQueuePromise : secondQueuePromise
+        },
+      },
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    assert.deepEqual(controller.runCommand("/ai-process-queue"), { blocked: false })
+    assert.deepEqual(calls, ["process"])
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("queued while first process still runs")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+    aiIdleScheduler.runNext()
+    assert.deepEqual(calls, ["process", "enqueue:daily-plan"])
+
+    resolveFirstQueue({ applied: 1, failed: 0, queued: 1, remaining: 1 })
+    await firstQueuePromise
+    await flushBackgroundAi()
+    assert.deepEqual(calls, ["process", "enqueue:daily-plan", "process"])
+
+    resolveSecondQueue({ applied: 1, failed: 0, queued: 0, remaining: 0 })
+    await secondQueuePromise
+    await flushBackgroundAi()
+    assert.deepEqual(controller.getState().ai, { kind: "updated", count: 1, queue: { queued: 0, failed: 0 } })
+  })
+
+  test("stale AI idle enqueue drains queue without overwriting newer explicit AI status", async () => {
+    const aiIdleScheduler = createFakeScheduler()
+    let resolveEnqueue!: (value: { queued: number; failed: number }) => void
+    const enqueuePromise = new Promise<{ queued: number; failed: number }>((resolve) => {
+      resolveEnqueue = resolve
+    })
+    let resolveDescribe!: (value: { key: string; status: "applied" }) => void
+    const describePromise = new Promise<{ key: string; status: "applied" }>((resolve) => {
+      resolveDescribe = resolve
+    })
+    const calls: string[] = []
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      aiIdleScheduler,
+      aiActions: {
+        enqueueNote: (selector) => {
+          calls.push(`enqueue:${selector}`)
+          return enqueuePromise
+        },
+        describeNote: (selector) => {
+          calls.push(`describe:${selector}`)
+          return describePromise
+        },
+        processQueue: async () => {
+          calls.push("process")
+          return { applied: 1, failed: 0, queued: 0, remaining: 0 }
+        },
+      },
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("idle enqueue resolves after explicit command")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+    aiIdleScheduler.runNext()
+    assert.deepEqual(calls, ["enqueue:daily-plan"])
+
+    assert.deepEqual(controller.runCommand("/ai-describe"), { blocked: false })
+    assert.deepEqual(controller.getState().ai, { kind: "running", key: "daily-plan", queue: { queued: 0, failed: 0 } })
+    assert.deepEqual(calls, ["enqueue:daily-plan", "describe:daily-plan"])
+
+    resolveEnqueue({ queued: 1, failed: 0 })
+    await enqueuePromise
+    await flushBackgroundAi()
+    assert.deepEqual(calls, ["enqueue:daily-plan", "describe:daily-plan", "process"])
+    assert.deepEqual(controller.getState().ai, { kind: "running", key: "daily-plan", queue: { queued: 0, failed: 0 } })
+
+    resolveDescribe({ key: "daily-plan", status: "applied" })
+    await describePromise
+    await flushBackgroundAi()
+    assert.deepEqual(controller.getState().ai, { kind: "updated", key: "daily-plan", queue: { queued: 0, failed: 0 } })
+  })
+
+  test("deferred AI idle queue rerun does not overwrite a newer explicit AI status", async () => {
+    const aiIdleScheduler = createFakeScheduler()
+    let resolveFirstQueue!: (value: { applied: number; failed: number; queued: number; remaining: number }) => void
+    const firstQueuePromise = new Promise<{ applied: number; failed: number; queued: number; remaining: number }>((resolve) => {
+      resolveFirstQueue = resolve
+    })
+    let resolveSecondQueue!: (value: { applied: number; failed: number; queued: number; remaining: number }) => void
+    const secondQueuePromise = new Promise<{ applied: number; failed: number; queued: number; remaining: number }>((resolve) => {
+      resolveSecondQueue = resolve
+    })
+    let resolveDescribe!: (value: { key: string; status: "applied" }) => void
+    const describePromise = new Promise<{ key: string; status: "applied" }>((resolve) => {
+      resolveDescribe = resolve
+    })
+    const calls: string[] = []
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini", queue: { queued: 1, failed: 0 } },
+      aiIdleScheduler,
+      aiActions: {
+        enqueueNote: (selector) => {
+          calls.push(`enqueue:${selector}`)
+          return { queued: 1, failed: 0 }
+        },
+        describeNote: (selector) => {
+          calls.push(`describe:${selector}`)
+          return describePromise
+        },
+        processQueue: () => {
+          calls.push("process")
+          return calls.filter((call) => call === "process").length === 1 ? firstQueuePromise : secondQueuePromise
+        },
+      },
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    assert.deepEqual(controller.runCommand("/ai-process-queue"), { blocked: false })
+    openInboxDaily(controller)
+    controller.updateEditorBody("queue rerun requested before explicit command")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+    aiIdleScheduler.runNext()
+    assert.deepEqual(calls, ["process", "enqueue:daily-plan"])
+
+    assert.deepEqual(controller.runCommand("/ai-describe"), { blocked: false })
+    assert.deepEqual(controller.getState().ai, { kind: "running", key: "daily-plan", queue: { queued: 1, failed: 0 } })
+
+    resolveFirstQueue({ applied: 1, failed: 0, queued: 1, remaining: 1 })
+    await firstQueuePromise
+    await flushBackgroundAi()
+    assert.deepEqual(calls, ["process", "enqueue:daily-plan", "describe:daily-plan", "process"])
+    assert.deepEqual(controller.getState().ai, { kind: "running", key: "daily-plan", queue: { queued: 1, failed: 0 } })
+
+    resolveSecondQueue({ applied: 1, failed: 0, queued: 0, remaining: 0 })
+    await secondQueuePromise
+    await flushBackgroundAi()
+    assert.deepEqual(controller.getState().ai, { kind: "running", key: "daily-plan", queue: { queued: 0, failed: 0 } })
+
+    resolveDescribe({ key: "daily-plan", status: "applied" })
+    await describePromise
+    await flushBackgroundAi()
+    assert.deepEqual(controller.getState().ai, { kind: "updated", key: "daily-plan", queue: { queued: 0, failed: 0 } })
+  })
+
+  test("AI success with failed manager refresh reports an error without leaking an unhandled rejection", async () => {
+    let resolveDescribe!: (value: { key: string; status: "applied" }) => void
+    const describePromise = new Promise<{ key: string; status: "applied" }>((resolve) => {
+      resolveDescribe = resolve
+    })
+    let failRefresh = false
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => {
+      unhandled.push(reason)
+    }
+    process.on("unhandledRejection", onUnhandled)
+
+    try {
+      const { deps } = createDeps({
+        listNotes: () => {
+          if (failRefresh) {
+            throw new Error("refresh failed sk-testsecret123")
+          }
+          return noteSummaries
+        },
+        aiActions: {
+          describeNote: () => describePromise,
+        },
+      })
+      const controller = createWorkspaceController(deps)
+      openInboxDaily(controller)
+
+      assert.deepEqual(controller.runCommand("/ai-describe"), { blocked: false })
+      assert.deepEqual(controller.getState().ai, { kind: "running", key: "daily-plan" })
+
+      failRefresh = true
+      resolveDescribe({ key: "daily-plan", status: "applied" })
+      await describePromise
+      await flushBackgroundAi()
+
+      assert.deepEqual(controller.getState().ai, { kind: "error", reason: "refresh failed [redacted]", queue: { queued: 0, failed: 0 } })
+      assert.deepEqual(unhandled, [])
+    } finally {
+      process.off("unhandledRejection", onUnhandled)
+    }
+  })
+
+  test("overlapping AI commands keep older completion from overwriting newer status", async () => {
+    let resolveDescribe!: (value: { key: string; status: "applied" }) => void
+    const describePromise = new Promise<{ key: string; status: "applied" }>((resolve) => {
+      resolveDescribe = resolve
+    })
+    let resolveQueue!: (value: { applied: number; failed: number; remaining: number }) => void
+    const queuePromise = new Promise<{ applied: number; failed: number; remaining: number }>((resolve) => {
+      resolveQueue = resolve
+    })
+    const { deps } = createDeps({
+      aiActions: {
+        describeNote: () => describePromise,
+        processQueue: () => queuePromise,
+      },
+    })
+    const controller = createWorkspaceController(deps)
+    openInboxDaily(controller)
+
+    assert.deepEqual(controller.runCommand("/ai-describe"), { blocked: false })
+    assert.deepEqual(controller.getState().ai, { kind: "running", key: "daily-plan" })
+    assert.deepEqual(controller.runCommand("/ai-process-queue"), { blocked: false })
+    assert.deepEqual(controller.getState().ai, { kind: "running", queue: { queued: 0, failed: 0 } })
+
+    resolveQueue({ applied: 3, failed: 0, remaining: 0 })
+    await queuePromise
+    await flushBackgroundAi()
+    assert.deepEqual(controller.getState().ai, { kind: "updated", count: 3, queue: { queued: 0, failed: 0 } })
+
+    resolveDescribe({ key: "daily-plan", status: "applied" })
+    await describePromise
+    await flushBackgroundAi()
+
+    assert.deepEqual(controller.getState().ai, { kind: "updated", count: 3, queue: { queued: 0, failed: 0 } })
+  })
+
+  test("AI non-blocking: unresolved describe work does not block manager navigation, note switching, quit, or dispose", () => {
+    const neverResolves = new Promise<{ key: string; status: "applied" }>(() => {})
+    const { deps } = createDeps({
+      aiActions: {
+        describeNote: () => neverResolves,
+      },
+    })
+    const controller = createWorkspaceController(deps)
+    openInboxDaily(controller)
+
+    assert.deepEqual(controller.runCommand("/ai-describe"), { blocked: false })
+    assert.deepEqual(controller.getState().ai, { kind: "running", key: "daily-plan" })
+
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    assert.equal(controller.getState().screen, "manager")
+
+    assert.deepEqual(openArchiveReview(controller), { blocked: false })
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.key, "archive-review")
+
+    assert.deepEqual(controller.requestQuit(), { blocked: false })
+    assert.deepEqual(controller.runCommand("/quit"), { blocked: false })
+    assert.doesNotThrow(() => controller.dispose())
+  })
+
+  test("AI non-blocking: late describe completion cannot mutate the active editor after note navigation", async () => {
+    let resolveDescribe!: (value: { key: string; status: "applied"; description: string }) => void
+    const describePromise = new Promise<{ key: string; status: "applied"; description: string }>((resolve) => {
+      resolveDescribe = resolve
+    })
+    let latestSummaries = noteSummaries
+    const { deps } = createDeps({
+      listNotes: () => latestSummaries,
+      aiActions: {
+        describeNote: () => describePromise,
+      },
+    })
+    const controller = createWorkspaceController(deps)
+    openInboxDaily(controller)
+
+    assert.deepEqual(controller.runCommand("/ai-describe"), { blocked: false })
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    assert.deepEqual(openArchiveReview(controller), { blocked: false })
+    assert.equal(controller.getState().editor?.note.key, "archive-review")
+    assert.equal(controller.getState().editor?.body, "Archive body")
+
+    latestSummaries = noteSummaries.map((summary) => summary.key === "daily-plan" ? { ...summary, description: "Late AI summary" } : summary)
+    resolveDescribe({ key: "daily-plan", status: "applied", description: "Late AI summary" })
+    await describePromise
+    await flushBackgroundAi()
+
+    assert.equal(controller.getState().editor?.note.key, "archive-review")
+    assert.equal(controller.getState().editor?.body, "Archive body")
   })
 
   test("loads empty user folders through the workspace discovery boundary without leaking hidden internal folders", () => {
@@ -1224,12 +2018,12 @@ describe("TUI workspace controller", () => {
     const controller = createWorkspaceController(deps)
 
     controller.openSearch("/")
-    assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/new"])
+    assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/new", "/ai-process-queue", "/ai-status"])
     assert.equal(controller.getSearchResults().some((result) => result.kind === "command" && ["/archive", "/rebuild", "/migrate"].includes(result.name)), false)
 
     openInboxDaily(controller)
     controller.openSearch("/")
-    assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/find", "/replace", "/save", "/copy-all", "/replace-all", "/paste"])
+    assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/ai-describe", "/ai-process-queue", "/ai-status", "/find", "/replace", "/save", "/copy-all", "/replace-all", "/paste"])
   })
 
   test("selecting shown editor commands opens the expected editor prompt or mode", () => {
@@ -2213,6 +3007,801 @@ describe("TUI workspace controller", () => {
     await Promise.resolve()
 
     assert.deepEqual(persistedBodies, ["daily-plan:Manual body", "daily-plan:Autosaved body"])
+  })
+
+  test("AI idle autosave scheduling waits until successful changed saves and does not call providers immediately", async () => {
+    const autosaveScheduler = createFakeScheduler()
+    const aiIdleScheduler = createFakeScheduler()
+    const aiCalls: string[] = []
+    const persistedBodies: string[] = []
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      autosaveScheduler,
+      aiIdleScheduler,
+      aiActions: {
+        describeNote: (selector) => {
+          aiCalls.push(`describe:${selector}`)
+          return Promise.resolve({ key: selector, status: "applied" })
+        },
+        processQueue: () => {
+          aiCalls.push("process")
+          return Promise.resolve({ applied: 0, failed: 0, remaining: 0 })
+        },
+      },
+      persistEditorBody: (note, body) => {
+        persistedBodies.push(`${note.key}:${body}`)
+        // The default TUI persistence path can return a note object whose body
+        // has already been updated by lower-level storage/indexing code. AI
+        // idle scheduling must compare against the editor's savedBody snapshot,
+        // not the persisted note object.
+        note.body = body
+        return { ...note, body }
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("AI idle autosave body one")
+    autosaveScheduler.runNext()
+    await Promise.resolve()
+
+    assert.deepEqual(persistedBodies, ["daily-plan:AI idle autosave body one"])
+    assert.deepEqual(aiCalls, [])
+    assert.deepEqual(aiIdleScheduler.activeTasks().map((task) => task.delay), [10_000])
+
+    controller.updateEditorBody("AI idle autosave body two")
+    assert.equal(aiIdleScheduler.tasks[0]?.cleared, true)
+    assert.deepEqual(aiIdleScheduler.activeTasks(), [])
+
+    autosaveScheduler.runNext()
+    await Promise.resolve()
+    assert.deepEqual(persistedBodies, ["daily-plan:AI idle autosave body one", "daily-plan:AI idle autosave body two"])
+    assert.deepEqual(aiCalls, [])
+    assert.deepEqual(aiIdleScheduler.activeTasks().map((task) => task.delay), [10_000])
+  })
+
+  test("AI idle scheduler errors do not turn changed autosaves into persistence failures", async () => {
+    const autosaveScheduler = createFakeScheduler()
+    const persistedBodies: string[] = []
+    const throwingAiIdleScheduler = {
+      setTimeout: () => {
+        throw new Error("scheduler unavailable")
+      },
+      clearTimeout: () => undefined,
+    }
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      autosaveScheduler,
+      aiIdleScheduler: throwingAiIdleScheduler,
+      aiActions: {
+        processQueue: () => Promise.resolve({ applied: 0, failed: 0, remaining: 0 }),
+      },
+      persistEditorBody: (note, body) => {
+        persistedBodies.push(`${note.key}:${body}`)
+        return { ...note, body }
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("AI idle autosave survives scheduler failure")
+    autosaveScheduler.runNext()
+    await Promise.resolve()
+
+    assert.deepEqual(persistedBodies, ["daily-plan:AI idle autosave survives scheduler failure"])
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+    assert.equal(controller.getState().editor?.savedBody, "AI idle autosave survives scheduler failure")
+  })
+
+  test("AI idle scheduler errors do not turn changed manual saves into dirty blocked failures", async () => {
+    const persistedBodies: string[] = []
+    const throwingAiIdleScheduler = {
+      setTimeout: () => {
+        throw new Error("scheduler unavailable")
+      },
+      clearTimeout: () => undefined,
+    }
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      aiIdleScheduler: throwingAiIdleScheduler,
+      aiActions: {
+        processQueue: () => Promise.resolve({ applied: 0, failed: 0, remaining: 0 }),
+      },
+      persistEditorBody: (note, body) => {
+        persistedBodies.push(`${note.key}:${body}`)
+        return { ...note, body }
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("AI idle manual save survives scheduler failure")
+
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+    assert.deepEqual(persistedBodies, ["daily-plan:AI idle manual save survives scheduler failure"])
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+    assert.equal(controller.getState().editor?.savedBody, "AI idle manual save survives scheduler failure")
+  })
+
+  test("AI idle scheduler failure does not leave orphaned pending work for later manager navigation", async () => {
+    const aiCalls: string[] = []
+    const throwingAiIdleScheduler = {
+      setTimeout: () => {
+        throw new Error("scheduler unavailable")
+      },
+      clearTimeout: () => undefined,
+    }
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      aiIdleScheduler: throwingAiIdleScheduler,
+      aiActions: {
+        enqueueNote: (selector) => {
+          aiCalls.push(`enqueue:${selector}`)
+          return { queued: 1, failed: 0 }
+        },
+        processQueue: () => {
+          aiCalls.push("process")
+          return Promise.resolve({ applied: 0, failed: 0, remaining: 0 })
+        },
+      },
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("AI idle scheduler failure should not queue later")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    assert.deepEqual(openArchiveReview(controller, { confirmed: true }), { blocked: false })
+    await flushBackgroundAi()
+
+    assert.deepEqual(aiCalls, [])
+  })
+
+  test("AI idle opening another note does not queue before dirty switch confirmation", async () => {
+    const aiIdleScheduler = createFakeScheduler()
+    const aiCalls: string[] = []
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      aiIdleScheduler,
+      aiActions: {
+        enqueueNote: (selector) => {
+          aiCalls.push(`enqueue:${selector}`)
+          return { queued: 1, failed: 0 }
+        },
+        processQueue: () => {
+          aiCalls.push("process")
+          return Promise.resolve({ applied: 0, failed: 0, remaining: 0 })
+        },
+      },
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("AI idle saved before dirty edit")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+    controller.updateEditorBody("AI idle dirty edit must block before queue")
+    assert.deepEqual(controller.showManager(), { blocked: false })
+
+    assert.deepEqual(openArchiveReview(controller), { blocked: true, reason: "dirty-editor" })
+    await flushBackgroundAi()
+
+    assert.deepEqual(aiCalls, [])
+    assert.deepEqual(aiIdleScheduler.activeTasks(), [])
+  })
+
+  test("AI idle manual save queues only latest saved editor body after 10 seconds of editor idle", async () => {
+    const aiIdleScheduler = createFakeScheduler()
+    const aiCalls: string[] = []
+    const persistedBodies: string[] = []
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      aiIdleScheduler,
+      aiActions: {
+        enqueueNote: (selector) => {
+          aiCalls.push(`enqueue:${selector}:${controller.getState().editor?.savedBody ?? "missing"}`)
+          return { queued: 1, failed: 0 }
+        },
+        processQueue: () => {
+          aiCalls.push("process")
+          return Promise.resolve({ applied: 1, failed: 0, queued: 0, remaining: 0 })
+        },
+      },
+      persistEditorBody: (note, body) => {
+        persistedBodies.push(`${note.key}:${body}`)
+        return { ...note, body }
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("AI idle manual saved first body")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+    assert.deepEqual(aiIdleScheduler.activeTasks().map((task) => task.delay), [10_000])
+
+    controller.updateEditorBody("AI idle manual saved latest body")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+
+    assert.deepEqual(persistedBodies, [
+      "daily-plan:AI idle manual saved first body",
+      "daily-plan:AI idle manual saved latest body",
+    ])
+    assert.equal(aiIdleScheduler.tasks[0]?.cleared, true)
+    assert.deepEqual(aiIdleScheduler.activeTasks().map((task) => task.delay), [10_000])
+
+    aiIdleScheduler.runNext()
+    assert.deepEqual(aiCalls, ["enqueue:daily-plan:AI idle manual saved latest body"])
+    await flushBackgroundAi()
+    assert.deepEqual(aiCalls, ["enqueue:daily-plan:AI idle manual saved latest body", "process"])
+
+    controller.updateEditorBody("AI idle manual saved latest body while queue is pending")
+    assert.equal(controller.getState().editor?.body, "AI idle manual saved latest body while queue is pending")
+    assert.equal(controller.getState().editor?.dirty, true)
+  })
+
+  test("AI idle switching to manager before autosave completes queues after 5 seconds of manager idle", async () => {
+    const autosaveScheduler = createFakeScheduler()
+    const aiIdleScheduler = createFakeScheduler()
+    const aiCalls: string[] = []
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      autosaveScheduler,
+      aiIdleScheduler,
+      aiActions: {
+        enqueueNote: (selector) => {
+          aiCalls.push(`enqueue:${selector}`)
+          return { queued: 1, failed: 0 }
+        },
+        processQueue: () => {
+          aiCalls.push("process")
+          return Promise.resolve({ applied: 1, failed: 0, queued: 0, remaining: 0 })
+        },
+      },
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("manager before autosave body")
+    assert.deepEqual(autosaveScheduler.activeTasks().map((task) => task.delay), [750])
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    assert.deepEqual(aiIdleScheduler.activeTasks(), [])
+
+    autosaveScheduler.runNext()
+    await flushBackgroundAi()
+
+    assert.deepEqual(aiCalls, [])
+    assert.deepEqual(aiIdleScheduler.activeTasks().map((task) => task.delay), [5_000])
+
+    aiIdleScheduler.runNext()
+    assert.deepEqual(aiCalls, ["enqueue:daily-plan"])
+    await flushBackgroundAi()
+    assert.deepEqual(aiCalls, ["enqueue:daily-plan", "process"])
+  })
+
+  test("AI idle switching from editor to manager queues the open note after 5 seconds of manager idle", async () => {
+    const aiIdleScheduler = createFakeScheduler()
+    const aiCalls: string[] = []
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      aiIdleScheduler,
+      aiActions: {
+        enqueueNote: (selector) => {
+          aiCalls.push(`enqueue:${selector}`)
+          return { queued: 1, failed: 0 }
+        },
+        processQueue: () => {
+          aiCalls.push("process")
+          return Promise.resolve({ applied: 1, failed: 0, queued: 0, remaining: 0 })
+        },
+      },
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("manager idle body")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+    assert.deepEqual(aiIdleScheduler.activeTasks().map((task) => task.delay), [10_000])
+
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    assert.deepEqual(aiCalls, [])
+    assert.equal(aiIdleScheduler.tasks[0]?.cleared, true)
+    assert.deepEqual(aiIdleScheduler.activeTasks().map((task) => task.delay), [5_000])
+
+    aiIdleScheduler.runNext()
+    assert.deepEqual(aiCalls, ["enqueue:daily-plan"])
+    await flushBackgroundAi()
+    assert.deepEqual(aiCalls, ["enqueue:daily-plan", "process"])
+  })
+
+  test("AI idle manager navigation resets the 5 second manager idle timer", async () => {
+    const aiIdleScheduler = createFakeScheduler()
+    const aiCalls: string[] = []
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      aiIdleScheduler,
+      aiActions: {
+        enqueueNote: (selector) => {
+          aiCalls.push(`enqueue:${selector}`)
+          return { queued: 1, failed: 0 }
+        },
+        processQueue: () => Promise.resolve({ applied: 1, failed: 0, queued: 0, remaining: 0 }),
+      },
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("manager idle reset body")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    const firstManagerTimer = aiIdleScheduler.activeTasks()[0]
+
+    controller.moveManagerSelection("down")
+
+    assert.equal(firstManagerTimer?.cleared, true)
+    assert.deepEqual(aiIdleScheduler.activeTasks().map((task) => task.delay), [5_000])
+    assert.deepEqual(aiCalls, [])
+
+    aiIdleScheduler.runNext()
+    assert.deepEqual(aiCalls, ["enqueue:daily-plan"])
+  })
+
+  test("AI idle Search Everything note selection immediately queues the previously edited note", async () => {
+    const aiIdleScheduler = createFakeScheduler()
+    const aiCalls: string[] = []
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      aiIdleScheduler,
+      aiActions: {
+        enqueueNote: (selector) => {
+          aiCalls.push(`enqueue:${selector}`)
+          return { queued: 1, failed: 0 }
+        },
+        processQueue: () => {
+          aiCalls.push("process")
+          return Promise.resolve({ applied: 1, failed: 0, queued: 0, remaining: 0 })
+        },
+      },
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("search immediately queues previous note")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    assert.deepEqual(aiIdleScheduler.activeTasks().map((task) => task.delay), [5_000])
+
+    controller.openSearch("archive")
+    const result = controller.selectSearchResult({
+      kind: "note",
+      id: "note:archive-review",
+      key: "archive-review",
+      filename: "archive-review.md",
+      title: "Archive Review",
+      description: "Old ideas.",
+      relativePath: "notes/archive/archive-review.md",
+      label: "Archive Review",
+      detail: "archive-review.md — notes/archive/archive-review.md",
+      score: 100,
+      matchedFields: ["title"],
+    })
+
+    assert.deepEqual(result, { blocked: false })
+    assert.equal(controller.getState().editor?.note.key, "archive-review")
+    assert.equal(aiIdleScheduler.tasks.some((task) => task.delay === 5_000 && task.cleared), true)
+    assert.deepEqual(aiCalls, ["enqueue:daily-plan"])
+    await flushBackgroundAi()
+    assert.deepEqual(aiCalls, ["enqueue:daily-plan", "process"])
+  })
+
+  test("AI idle opening another note from manager immediately queues the previously edited note", async () => {
+    const aiIdleScheduler = createFakeScheduler()
+    const aiCalls: string[] = []
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      aiIdleScheduler,
+      aiActions: {
+        enqueueNote: (selector) => {
+          aiCalls.push(`enqueue:${selector}`)
+          return { queued: 1, failed: 0 }
+        },
+        processQueue: () => {
+          aiCalls.push("process")
+          return Promise.resolve({ applied: 1, failed: 0, queued: 0, remaining: 0 })
+        },
+      },
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("manager immediate body")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    assert.deepEqual(aiIdleScheduler.activeTasks().map((task) => task.delay), [5_000])
+
+    assert.deepEqual(openArchiveReview(controller, { confirmed: true }), { blocked: false })
+    assert.equal(aiIdleScheduler.tasks.some((task) => task.delay === 5_000 && task.cleared), true)
+    assert.deepEqual(aiCalls, ["enqueue:daily-plan"])
+    await flushBackgroundAi()
+    assert.deepEqual(aiCalls, ["enqueue:daily-plan", "process"])
+  })
+
+  test("AI status label reports queue processing progress without provider names", () => {
+    const { deps } = createDeps({ initialAiStatus: { kind: "running", progress: { processed: 1, total: 3 }, queue: { queued: 2, failed: 1 } } })
+    const controller = createWorkspaceController(deps)
+
+    assert.equal(buildManagerViewModel(controller.getState()).aiStatus.text, "AI: running · processing 1/3 · 1 failed")
+  })
+
+  test("AI idle manual process command clears pending delayed queue work", async () => {
+    const aiIdleScheduler = createFakeScheduler()
+    const queueCalls: string[] = []
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      aiIdleScheduler,
+      aiActions: {
+        processQueue: () => {
+          queueCalls.push("process")
+          return Promise.resolve({ applied: 0, failed: 0, remaining: 0 })
+        },
+      },
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("AI idle explicit process clears timer")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+    assert.deepEqual(aiIdleScheduler.activeTasks().map((task) => task.delay), [10_000])
+
+    assert.deepEqual(controller.runCommand("/ai-process-queue"), { blocked: false })
+    await flushBackgroundAi()
+
+    assert.deepEqual(queueCalls, ["process"])
+    assert.equal(aiIdleScheduler.tasks[0]?.cleared, true)
+    assert.deepEqual(aiIdleScheduler.activeTasks(), [])
+  })
+
+  test("AI idle status command clears pending delayed queue work", async () => {
+    const aiIdleScheduler = createFakeScheduler()
+    const queueCalls: string[] = []
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      aiIdleScheduler,
+      aiActions: {
+        processQueue: () => {
+          queueCalls.push("process")
+          return Promise.resolve({ applied: 0, failed: 0, remaining: 0 })
+        },
+        getStatus: () => ({ kind: "connected", model: "gpt-4o-mini" }),
+      },
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("AI idle explicit status clears timer")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+    assert.deepEqual(aiIdleScheduler.activeTasks().map((task) => task.delay), [10_000])
+
+    assert.deepEqual(controller.runCommand("/ai-status"), { blocked: false })
+    await flushBackgroundAi()
+
+    assert.deepEqual(queueCalls, [])
+    assert.equal(aiIdleScheduler.tasks[0]?.cleared, true)
+    assert.deepEqual(aiIdleScheduler.activeTasks(), [])
+    assert.deepEqual(controller.getState().ai, { kind: "connected", model: "gpt-4o-mini" })
+  })
+
+  test("AI idle stale timer does not run if clearing the old scheduler handle fails", async () => {
+    type ScheduledTask = { id: number; callback: () => void; delay: number; cleared: boolean }
+    const tasks: ScheduledTask[] = []
+    const aiIdleScheduler = {
+      tasks,
+      setTimeout(callback: () => void, delay: number) {
+        const task = { id: tasks.length + 1, callback, delay, cleared: false }
+        tasks.push(task)
+        return task.id
+      },
+      clearTimeout() {
+        throw new Error("clear failed")
+      },
+      activeTasks() {
+        return tasks.filter((task) => !task.cleared)
+      },
+    }
+    const aiCalls: string[] = []
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      aiIdleScheduler,
+      aiActions: {
+        processQueue: () => {
+          aiCalls.push("process")
+          return Promise.resolve({ applied: 1, failed: 0, remaining: 0 })
+        },
+      },
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("AI idle stale timer one")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+    controller.updateEditorBody("AI idle stale timer two")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+
+    tasks[0]?.callback()
+    await flushBackgroundAi()
+    assert.deepEqual(aiCalls, [])
+
+    tasks[1]?.callback()
+    await flushBackgroundAi()
+    assert.deepEqual(aiCalls, ["process"])
+  })
+
+  test("AI idle pending timer is cleared before /ai-describe so stale background work cannot preempt explicit results", async () => {
+    const aiIdleScheduler = createFakeScheduler()
+    const aiCalls: string[] = []
+    let resolveDescribe!: (value: { key: string; status: "applied"; description: string }) => void
+    const describePromise = new Promise<{ key: string; status: "applied"; description: string }>((resolve) => {
+      resolveDescribe = resolve
+    })
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      aiIdleScheduler,
+      aiActions: {
+        describeNote: (selector) => {
+          aiCalls.push(`describe:${selector}`)
+          return describePromise
+        },
+        processQueue: () => {
+          aiCalls.push("process")
+          return Promise.resolve({ applied: 1, failed: 0, remaining: 0 })
+        },
+      },
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("AI idle explicit describe clears timer")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+    assert.deepEqual(aiIdleScheduler.activeTasks().map((task) => task.delay), [10_000])
+
+    assert.deepEqual(controller.runCommand("/ai-describe"), { blocked: false })
+
+    assert.deepEqual(aiCalls, ["describe:daily-plan"])
+    assert.equal(aiIdleScheduler.tasks[0]?.cleared, true)
+    assert.deepEqual(aiIdleScheduler.activeTasks(), [])
+
+    resolveDescribe({ key: "daily-plan", status: "applied", description: "AI summary" })
+    await describePromise
+    await flushBackgroundAi()
+
+    assert.deepEqual(aiCalls, ["describe:daily-plan"])
+    assert.deepEqual(controller.getState().ai, { kind: "updated", key: "daily-plan", queue: { queued: 0, failed: 0 } })
+  })
+
+  test("AI idle changed save enqueues and starts unresolved queue processing without blocking UI actions", async () => {
+    const autosaveScheduler = createFakeScheduler()
+    const aiIdleScheduler = createFakeScheduler()
+    const aiCalls: string[] = []
+    const persistedBodies: string[] = []
+    const neverSettledQueue = new Promise<{ applied: number; failed: number; remaining: number }>(() => {})
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      autosaveScheduler,
+      aiIdleScheduler,
+      aiActions: {
+        enqueueNote: (selector: string) => {
+          aiCalls.push(`enqueue:${selector}`)
+          return true
+        },
+        processQueue: () => {
+          aiCalls.push("process")
+          return neverSettledQueue
+        },
+      },
+      persistEditorBody: (note, body) => {
+        persistedBodies.push(`${note.key}:${body}`)
+        return { ...note, body }
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("AI idle nonblocking saved body")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+
+    assert.deepEqual(persistedBodies, ["daily-plan:AI idle nonblocking saved body"])
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+    assert.deepEqual(aiCalls, [])
+    assert.deepEqual(aiIdleScheduler.activeTasks().map((task) => task.delay), [10_000])
+
+    aiIdleScheduler.runNext()
+    assert.deepEqual(aiCalls, ["enqueue:daily-plan"])
+    await flushBackgroundAi()
+    assert.deepEqual(aiCalls, ["enqueue:daily-plan", "process"])
+    assert.deepEqual(controller.getState().ai, { kind: "running", progress: { processed: 0, total: 1 }, queue: { queued: 1, failed: 0 } })
+
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    assert.deepEqual(openArchiveReview(controller), { blocked: false })
+    assert.equal(controller.getState().editor?.note.key, "archive-review")
+    controller.insertEditorText(" while queue is unresolved")
+    assert.equal(controller.getState().editor?.body, "Archive body while queue is unresolved")
+    autosaveScheduler.runNext()
+    await Promise.resolve()
+    await Promise.resolve()
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+    assert.deepEqual(controller.requestQuit(), { blocked: false })
+    assert.doesNotThrow(() => controller.getManagerBrowserModel())
+    assert.doesNotThrow(() => controller.getState())
+    assert.doesNotThrow(() => controller.dispose())
+    assert.deepEqual(aiCalls, ["enqueue:daily-plan", "process"])
+  })
+
+  test("AI idle timer enqueues the latest saved note before delayed queue processing", async () => {
+    const aiIdleScheduler = createFakeScheduler()
+    const aiCalls: string[] = []
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      aiIdleScheduler,
+      aiActions: {
+        enqueueNote: (selector: string) => {
+          aiCalls.push(`enqueue:${selector}`)
+        },
+        processQueue: () => {
+          aiCalls.push("process")
+          return Promise.resolve({ applied: 1, failed: 0, remaining: 0 })
+        },
+      },
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("AI idle enqueue latest daily")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+
+    assert.deepEqual(aiCalls, [])
+    assert.deepEqual(aiIdleScheduler.activeTasks().map((task) => task.delay), [10_000])
+
+    aiIdleScheduler.runNext()
+    assert.deepEqual(aiCalls, ["enqueue:daily-plan"])
+    await flushBackgroundAi()
+
+    assert.deepEqual(aiCalls, ["enqueue:daily-plan", "process"])
+    assert.deepEqual(controller.getState().ai, { kind: "updated", count: 1, queue: { queued: 0, failed: 0 } })
+  })
+
+  test("AI idle enqueue false result is reported as an AI error instead of processing an empty queue", async () => {
+    const aiIdleScheduler = createFakeScheduler()
+    const aiCalls: string[] = []
+    const persistedBodies: string[] = []
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      aiIdleScheduler,
+      aiActions: {
+        enqueueNote: (selector: string) => {
+          aiCalls.push(`enqueue:${selector}`)
+          return false
+        },
+        processQueue: () => {
+          aiCalls.push("process")
+          return Promise.resolve({ applied: 0, failed: 0, remaining: 0 })
+        },
+      },
+      persistEditorBody: (note, body) => {
+        persistedBodies.push(`${note.key}:${body}`)
+        return { ...note, body }
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("AI idle enqueue failure remains saved")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+
+    aiIdleScheduler.runNext()
+    await flushBackgroundAi()
+
+    assert.deepEqual(persistedBodies, ["daily-plan:AI idle enqueue failure remains saved"])
+    assert.equal(controller.getState().editor?.dirty, false)
+    assert.deepEqual(aiCalls, ["enqueue:daily-plan"])
+    assert.deepEqual(controller.getState().ai, { kind: "error", reason: "enqueue failed", queue: { queued: 0, failed: 0 } })
+  })
+
+  test("AI idle delayed save completion after dispose does not schedule timers or start work", async () => {
+    const aiIdleScheduler = createFakeScheduler()
+    const aiCalls: string[] = []
+    let resolvePersist!: (note: TuiNote) => void
+    const persistPromise = new Promise<TuiNote>((resolve) => {
+      resolvePersist = resolve
+    })
+    const { deps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      aiIdleScheduler,
+      aiActions: {
+        enqueueNote: (selector: string) => {
+          aiCalls.push(`enqueue:${selector}`)
+        },
+        processQueue: () => {
+          aiCalls.push("process")
+          return Promise.resolve({ applied: 1, failed: 0, remaining: 0 })
+        },
+      },
+      persistEditorBody: (note, body) => {
+        return persistPromise.then(() => ({ ...note, body }))
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.updateEditorBody("AI idle save resolves after dispose")
+    const save = controller.saveEditor()
+    controller.dispose()
+    resolvePersist({ ...notesByKey["daily-plan"], body: "AI idle save resolves after dispose" })
+    assert.deepEqual(await save, { blocked: false })
+
+    assert.deepEqual(aiIdleScheduler.activeTasks(), [])
+    assert.deepEqual(aiCalls, [])
+  })
+
+  test("AI idle unavailable or not configured skips provider work while note persistence succeeds", async () => {
+    const unavailableAiIdleScheduler = createFakeScheduler()
+    const unavailablePersistedBodies: string[] = []
+    const { deps: unavailableDeps } = createDeps({
+      initialAiStatus: { kind: "connected", model: "gpt-4o-mini" },
+      aiIdleScheduler: unavailableAiIdleScheduler,
+      persistEditorBody: (note, body) => {
+        unavailablePersistedBodies.push(`${note.key}:${body}`)
+        return { ...note, body }
+      },
+    })
+    const unavailableController = createWorkspaceController(unavailableDeps)
+
+    openInboxDaily(unavailableController)
+    unavailableController.updateEditorBody("AI idle unavailable body")
+    assert.deepEqual(await unavailableController.saveEditor(), { blocked: false })
+    assert.deepEqual(unavailablePersistedBodies, ["daily-plan:AI idle unavailable body"])
+    assert.deepEqual(unavailableAiIdleScheduler.activeTasks(), [])
+
+    const notConfiguredAiIdleScheduler = createFakeScheduler()
+    let providerCalls = 0
+    const configuredOffPersistedBodies: string[] = []
+    const { deps: notConfiguredDeps } = createDeps({
+      initialAiStatus: { kind: "not-configured" },
+      aiIdleScheduler: notConfiguredAiIdleScheduler,
+      aiActions: {
+        processQueue: () => {
+          providerCalls += 1
+          return Promise.resolve({ applied: 0, failed: 0, remaining: 0 })
+        },
+      },
+      persistEditorBody: (note, body) => {
+        configuredOffPersistedBodies.push(`${note.key}:${body}`)
+        return { ...note, body }
+      },
+    })
+    const notConfiguredController = createWorkspaceController(notConfiguredDeps)
+
+    openInboxDaily(notConfiguredController)
+    notConfiguredController.updateEditorBody("AI idle not configured body")
+    assert.deepEqual(await notConfiguredController.saveEditor(), { blocked: false })
+
+    assert.deepEqual(configuredOffPersistedBodies, ["daily-plan:AI idle not configured body"])
+    assert.deepEqual(notConfiguredAiIdleScheduler.activeTasks(), [])
+    assert.equal(providerCalls, 0)
   })
 
   test("updating editor body to saved content does not schedule autosave or mark pending", () => {

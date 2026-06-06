@@ -15,12 +15,14 @@ import { rebuildIndexes, type RebuildIndexesOptions } from "../core/rebuild-inde
 import { searchNotes, type SearchNoteMatch } from "../core/search-notes"
 import { showNote } from "../core/show-note"
 import { runTuiCli } from "../tui/app"
+import { runAiCli, type AiCliRuntimeOptions } from "./ai"
 
 export interface CliRuntimeOptions {
   createNoteOptions?: Pick<Parameters<typeof createNote>[0], "clock" | "randomSource">
   migrateStorageOptions?: Pick<MigrateStorageOptions, "clock" | "randomSource">
   rebuildIndexesOptions?: Pick<RebuildIndexesOptions, "testHooks">
   tuiRunner?: () => CliResult
+  ai?: AiCliRuntimeOptions
 }
 
 export function formatCliError(error: AppError): CliResult {
@@ -77,7 +79,24 @@ export function formatHelp(version: string): string {
     "  rebuild      Rebuild derived metadata and search indexes",
     "  migrate      Convert frontmatter notes into plain files + sidecars",
     "  tui          Launch the terminal UI workspace",
+    "  ai           Configure and run opt-in AI description generation",
   ].join("\n") + "\n"
+}
+
+export async function runCliAsync(args: string[], version: string, runtime: CliRuntimeOptions = {}): Promise<CliResult> {
+  try {
+    if (args[0] === "ai") {
+      return await runAiCli(args.slice(1), runtime.ai)
+    }
+
+    return runCli(args, version, runtime)
+  } catch (error) {
+    if (error instanceof AppError) {
+      return formatCliError(error)
+    }
+
+    throw error
+  }
 }
 
 export function formatSearchMatches(query: string, matches: SearchNoteMatch[]): string {

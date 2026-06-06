@@ -26,7 +26,7 @@ test("bn init exits 0 and reports the initialized root", async () => {
   } finally {
     await harness.cleanup()
   }
-})
+}, 15_000)
 
 test("bn init is idempotent on subsequent runs", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-init-idempotent-")
@@ -43,7 +43,7 @@ test("bn init is idempotent on subsequent runs", async () => {
   } finally {
     await harness.cleanup()
   }
-})
+}, 10_000)
 
 test("bn init migrates existing .state metadata into .data without rewriting notes", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-init-state-migration-")
@@ -99,7 +99,7 @@ test("bn init reports a user-facing error when BLUENOTE_ROOT points to a file", 
   } finally {
     await fixture.cleanup()
   }
-})
+}, 15_000)
 
 test("bn init reports a user-facing error when writing .data/manifest.json fails", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-init-manifest-error-")

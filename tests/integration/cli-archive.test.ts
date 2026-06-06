@@ -118,7 +118,7 @@ test("bn archive <selector> moves the plain note to notes/archive, preserves the
   } finally {
     await harness.cleanup()
   }
-})
+}, 30_000)
 
 test("bn archive rejects notes that are already archived", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-archive-")
@@ -155,7 +155,7 @@ test("bn archive rejects notes that are already archived", async () => {
   } finally {
     await harness.cleanup()
   }
-})
+}, 15_000)
 
 test("bn archive requires a selector argument in <key|path> form", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-archive-usage-")

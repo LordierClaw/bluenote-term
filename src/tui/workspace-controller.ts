@@ -41,9 +41,11 @@ import {
   type EditorBufferState,
   type EditorReplaceField,
   type ManagerItem,
+  type AiStatusState,
   type TuiNote,
   type TuiState,
 } from "./state"
+import { sanitizeAiErrorMessage } from "../ai/error-redaction"
 import type { SearchNoteMatch } from "../core/search-notes"
 
 export type WorkspaceActionBlockedReason = "dirty-editor"
@@ -64,6 +66,42 @@ export interface WorkspaceCommandContext {
 
 export type WorkspaceCommandHandler = (context: WorkspaceCommandContext) => void
 
+export interface WorkspaceAiDescribeResult {
+  key: string
+  status?: string
+  description?: string
+}
+
+export interface WorkspaceAiQueueResult {
+  applied?: number
+  failed?: number
+  failedThisRun?: number
+  queued?: number
+  remaining?: number
+}
+
+export type WorkspaceAiQueueProgressHandler = (progress: { processed: number; total: number }) => void
+
+export interface WorkspaceAiStaleScanResult {
+  scanned?: number
+  enqueued?: number
+  queued?: number
+  failed?: number
+}
+
+export interface WorkspaceAiEnqueueResult {
+  queued?: number
+  failed?: number
+}
+
+export interface WorkspaceAiActions {
+  describeNote?: (selector: string) => Promise<WorkspaceAiDescribeResult>
+  enqueueNote?: (selector: string) => Promise<WorkspaceAiEnqueueResult | boolean | void> | WorkspaceAiEnqueueResult | boolean | void
+  enqueueStaleDescriptions?: () => Promise<WorkspaceAiStaleScanResult> | WorkspaceAiStaleScanResult
+  processQueue?: (onProgress?: WorkspaceAiQueueProgressHandler) => Promise<WorkspaceAiQueueResult>
+  getStatus?: () => AiStatusState
+}
+
 export interface WorkspaceDebounceScheduler {
   setTimeout: (callback: () => void, delay: number) => unknown
   clearTimeout: (handle: unknown) => void
@@ -79,7 +117,10 @@ export interface WorkspaceControllerDependencies {
   rebuildIndexes?: () => void
   persistEditorBody?: SaveEditorBufferDependencies["persist"]
   autosaveScheduler?: WorkspaceDebounceScheduler
+  aiIdleScheduler?: WorkspaceDebounceScheduler
   clipboard?: ClipboardModel
+  initialAiStatus?: AiStatusState
+  aiActions?: WorkspaceAiActions
   onAutosaveStateChange?: () => void
   commandHandlers?: Partial<Record<string, WorkspaceCommandHandler>>
 }
@@ -138,6 +179,7 @@ export interface WorkspaceController {
   redoEditor: () => void
   requestQuit: (options?: WorkspaceActionOptions) => WorkspaceActionResult
   dispose: () => void
+  startAiStartupScan: () => void
   setAutosaveStateChangeHandler: (handler: (() => void) | null) => void
   selectSearchResult: (result?: SearchEverythingResult, options?: WorkspaceActionOptions) => WorkspaceActionResult
   runCommand: (command: string, options?: WorkspaceActionOptions) => WorkspaceActionResult
@@ -286,9 +328,13 @@ function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
 export function createWorkspaceController(deps: WorkspaceControllerDependencies): WorkspaceController {
   let noteSummaries: readonly NoteManagerSummary[] = []
   let userFolderPaths: readonly string[] = []
-  let state = createInitialTuiState()
+  let state = createInitialTuiState({ ai: deps.initialAiStatus })
   let searchResults: SearchEverythingResult[] = []
   let autosaveTimer: unknown = null
+  let aiIdleTimer: unknown = null
+  let aiIdleGeneration = 0
+  let aiIdlePendingSelector: string | null = null
+  let disposed = false
   let inFlightSave: { noteKey: string; body: string; promise: Promise<TuiNote> } | null = null
   const saveQueuesByNote = new Map<string, Promise<void>>()
   let autosaveStateChangeHandler: (() => void) | null = deps.onAutosaveStateChange ?? null
@@ -297,6 +343,12 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     setTimeout: (callback, delay) => globalThis.setTimeout(callback, delay),
     clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
   }
+  const aiIdleScheduler: WorkspaceDebounceScheduler = deps.aiIdleScheduler ?? {
+    setTimeout: (callback, delay) => globalThis.setTimeout(callback, delay),
+    clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
+  }
+  const editorAiIdleDelayMs = 10_000
+  const managerAiIdleDelayMs = 5_000
   let fallbackClipboardText = ""
   const clipboard: ClipboardModel = deps.clipboard ?? {
     name: "in-memory clipboard",
@@ -362,13 +414,113 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     }
   }
 
+  function clearAiIdleTimer(options: { clearPending?: boolean } = {}): void {
+    if (aiIdleTimer !== null) {
+      aiIdleGeneration += 1
+      try {
+        aiIdleScheduler.clearTimeout(aiIdleTimer)
+      } catch {
+        // AI idle scheduler failures must never affect note persistence or user actions.
+      }
+      aiIdleTimer = null
+    }
+    if (options.clearPending) {
+      aiIdlePendingSelector = null
+    }
+  }
+
+  function canScheduleAiIdleWork(): boolean {
+    return Boolean(!disposed && (deps.aiActions?.enqueueNote || deps.aiActions?.processQueue) && state.ai?.kind !== "not-configured")
+  }
+
+  function scheduleAiIdleWork(selector: string, delay: number): void {
+    clearAiIdleTimer()
+    if (!canScheduleAiIdleWork()) {
+      aiIdlePendingSelector = null
+      return
+    }
+
+    try {
+      const generation = aiIdleGeneration + 1
+      aiIdleGeneration = generation
+      aiIdleTimer = aiIdleScheduler.setTimeout(() => {
+        if (generation !== aiIdleGeneration) {
+          return
+        }
+        aiIdleTimer = null
+        if (disposed || !canScheduleAiIdleWork()) {
+          return
+        }
+        startAiIdleWork(selector)
+      }, delay)
+      aiIdlePendingSelector = selector
+    } catch {
+      aiIdleTimer = null
+      aiIdlePendingSelector = null
+      // AI idle scheduler failures must never roll back successful note persistence.
+    }
+  }
+
+  function scheduleEditorAiIdleWork(selector: string): void {
+    scheduleAiIdleWork(selector, editorAiIdleDelayMs)
+  }
+
+  function scheduleManagerAiIdleWork(selector: string): void {
+    scheduleAiIdleWork(selector, managerAiIdleDelayMs)
+  }
+
+  function scheduleSavedNoteAiIdleWork(selector: string): void {
+    if (state.screen === "manager" || state.search?.previousScreen === "manager") {
+      scheduleManagerAiIdleWork(selector)
+      return
+    }
+    scheduleEditorAiIdleWork(selector)
+  }
+
+  function recordManagerAiActivity(): void {
+    if (state.screen !== "manager" || !aiIdlePendingSelector) {
+      return
+    }
+    scheduleManagerAiIdleWork(aiIdlePendingSelector)
+  }
+
+  function queuePendingAiIdleWorkBeforeOpeningNote(nextKey: string): void {
+    const pendingOpenNoteSelector = aiIdlePendingSelector
+    if (pendingOpenNoteSelector && state.editor?.note.key === pendingOpenNoteSelector && nextKey !== pendingOpenNoteSelector) {
+      queuePendingAiIdleWorkNow(pendingOpenNoteSelector)
+    }
+  }
+
+  function queuePendingAiIdleWorkNow(selector: string): void {
+    clearAiIdleTimer()
+    aiIdlePendingSelector = null
+    if (disposed || !canScheduleAiIdleWork()) {
+      return
+    }
+    startAiIdleWork(selector)
+  }
+
+  function didApplySavedSnapshot(noteKey: string, submittedBody: string): boolean {
+    return Boolean(
+      state.editor?.note.key === noteKey
+      && state.editor.savedBody === submittedBody
+      && state.editor.body === submittedBody
+      && !state.editor.dirty,
+    )
+  }
+
   function notifyAutosaveStateChange(): void {
     autosaveStateChangeHandler?.()
   }
 
+  let lastPersistWarning: string | null = null
+
   function persistEditorSnapshot(noteToPersist: TuiNote, submittedBody: string): TuiNote | Promise<TuiNote> {
     const persist = deps.persistEditorBody ?? ((note, body) => ({ ...note, body }))
-    return persist(noteToPersist, submittedBody)
+    lastPersistWarning = null
+    return persist(noteToPersist, submittedBody, (message) => {
+      lastPersistWarning = message
+    })
   }
 
   function persistEditorSnapshotCoalesced(noteToPersist: TuiNote, submittedBody: string): TuiNote | Promise<TuiNote> {
@@ -420,25 +572,43 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   }
 
   async function autosaveEditor(noteToPersist: TuiNote, submittedBody: string): Promise<void> {
+    if (disposed) {
+      return
+    }
+    const currentEditor = state.editor
     if (
-      state.editor?.note.key !== noteToPersist.key
-      || state.editor.body !== submittedBody
-      || !state.editor.dirty
+      currentEditor?.note.key !== noteToPersist.key
+      || currentEditor.body !== submittedBody
+      || !currentEditor.dirty
     ) {
       return
     }
 
     state = markAutosaveSaving(state)
     notifyAutosaveStateChange()
+    const editorAfterSaving = state.editor
+    if (!editorAfterSaving) {
+      return
+    }
+    const hasChangedBody = editorAfterSaving.savedBody !== submittedBody
     try {
       const persistedNote = persistEditorSnapshotCoalesced(noteToPersist, submittedBody)
       const savedNote = isPromiseLike(persistedNote) ? await persistedNote : persistedNote
+      if (disposed) {
+        return
+      }
       const previousState = state
       applySavedEditorAndPreviewCache(savedNote, submittedBody)
+      if (state !== previousState && hasChangedBody) {
+        scheduleSavedNoteAiIdleWork(noteToPersist.key)
+      }
       if (state !== previousState) {
         notifyAutosaveStateChange()
       }
     } catch {
+      if (disposed) {
+        return
+      }
       clearManagerPreviewCache()
       const previousState = state
       state = applyAutosaveFailure(state, noteToPersist.key, submittedBody)
@@ -449,6 +619,9 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   }
 
   function scheduleAutosave(): void {
+    if (disposed) {
+      return
+    }
     if (!state.editor) {
       return
     }
@@ -458,6 +631,9 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     const submittedBody = state.editor.body
     autosaveTimer = autosaveScheduler.setTimeout(() => {
       autosaveTimer = null
+      if (disposed) {
+        return
+      }
       void autosaveEditor(noteToPersist, submittedBody)
     }, 750)
   }
@@ -549,6 +725,9 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       clearAutosaveTimer()
       updatePreviewSourcesForSavedNote(persistedNote)
     }
+    if (lastPersistWarning && state.editor?.note.key === persistedNote.key && state.editor.body === submittedBody) {
+      setEditorStatus(lastPersistWarning)
+    }
   }
 
   function clearManagerPreviewCache(): void {
@@ -563,6 +742,284 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         status,
       },
     }
+  }
+
+  function sanitizeAiStatusReason(error: unknown): string {
+    return sanitizeAiErrorMessage(error)
+  }
+
+  function nonNegativeInteger(value: number | null | undefined): number {
+    return Number.isFinite(value) ? Math.max(0, Math.trunc(value ?? 0)) : 0
+  }
+
+  function queueStatus(queued = 0, failed = 0): { queued: number; failed?: number } {
+    return {
+      queued: nonNegativeInteger(queued),
+      failed: nonNegativeInteger(failed),
+    }
+  }
+
+  function currentQueueStatus(): { queued: number; failed?: number } | undefined {
+    const ai = state.ai
+    if (ai?.kind === "not-configured") {
+      return undefined
+    }
+    if (ai && "queue" in ai && ai.queue) {
+      return queueStatus(ai.queue.queued, ai.queue.failed ?? 0)
+    }
+    return queueStatus()
+  }
+
+  function withQueueStatus(ai: AiStatusState, queue = currentQueueStatus()): AiStatusState {
+    if (!queue || ai.kind === "not-configured") {
+      return ai
+    }
+    return { ...ai, queue }
+  }
+
+  function queueStatusFromResult(result: WorkspaceAiQueueResult | undefined): { queued: number; failed?: number } {
+    return queueStatus(result?.queued ?? result?.remaining ?? currentQueueStatus()?.queued ?? 0, result?.failed ?? currentQueueStatus()?.failed ?? 0)
+  }
+
+  function queueStatusFromEnqueueResult(result: WorkspaceAiEnqueueResult | boolean | void): { queued: number; failed?: number } {
+    if (typeof result === "object" && result !== null) {
+      return queueStatus(result.queued ?? currentQueueStatus()?.queued ?? 0, result.failed ?? currentQueueStatus()?.failed ?? 0)
+    }
+    return queueStatus((currentQueueStatus()?.queued ?? 0) + 1, currentQueueStatus()?.failed ?? 0)
+  }
+
+  function queueStatusFromStaleScanResult(result: WorkspaceAiStaleScanResult | undefined): { queued: number; failed?: number } {
+    if (typeof result?.queued === "number") {
+      return queueStatus(result.queued, result.failed ?? currentQueueStatus()?.failed ?? 0)
+    }
+    const enqueued = Math.max(0, Math.trunc(result?.enqueued ?? 0))
+    return queueStatus((currentQueueStatus()?.queued ?? 0) + enqueued, currentQueueStatus()?.failed ?? 0)
+  }
+
+  function setAiStatus(ai: AiStatusState): void {
+    state = {
+      ...state,
+      ai,
+    }
+    notifyAutosaveStateChange()
+  }
+
+  let aiOperationId = 0
+  let aiStartupScanCancelled = false
+  let aiQueueProcessingPromise: Promise<void> | null = null
+  let aiQueueProcessRequestedDuringRun: { mode: "status"; operationId: number } | { mode: "background" } | null = null
+
+  function nextAiOperationId(): number {
+    aiStartupScanCancelled = true
+    aiOperationId += 1
+    return aiOperationId
+  }
+
+  function isLatestAiOperation(operationId: number): boolean {
+    return operationId === aiOperationId
+  }
+
+  function setLatestAiStatus(operationId: number, ai: AiStatusState): void {
+    if (isLatestAiOperation(operationId)) {
+      setAiStatus(ai)
+    }
+  }
+
+  function currentAiDescribeSelector(): string | null {
+    if (state.search?.previousScreen === "editor" && state.editor) {
+      return state.editor.note.key
+    }
+    if (state.screen === "editor" && state.editor) {
+      return state.editor.note.key
+    }
+    const focused = state.manager.items[state.manager.focusedIndex]
+    return selectedNoteKeyFor(focused) ?? state.manager.selectedNoteKey ?? state.editor?.note.key ?? null
+  }
+
+  function startAiDescribe(): void {
+    if (disposed) {
+      return
+    }
+    const operationId = nextAiOperationId()
+    const selector = currentAiDescribeSelector()
+    if (!selector || !deps.aiActions?.describeNote) {
+      setAiStatus(withQueueStatus({ kind: "error", reason: "unavailable" }))
+      return
+    }
+
+    setAiStatus(withQueueStatus({ kind: "running", key: selector }))
+    void (async () => {
+      try {
+        const result = await deps.aiActions?.describeNote?.(selector)
+        if (disposed) return
+        if (!isLatestAiOperation(operationId)) return
+        if (!result || (result.status && result.status !== "applied")) {
+          setLatestAiStatus(operationId, withQueueStatus({ kind: "error", reason: "invalid result" }))
+          return
+        }
+        refreshManager()
+        setLatestAiStatus(operationId, withQueueStatus({ kind: "updated", key: result.key || selector }))
+      } catch (error) {
+        if (disposed) return
+        setLatestAiStatus(operationId, withQueueStatus({ kind: "error", reason: sanitizeAiStatusReason(error) }))
+      }
+    })()
+  }
+
+  function startAiIdleWork(selector: string): void {
+    if (disposed) {
+      return
+    }
+    if (aiIdlePendingSelector === selector) {
+      aiIdlePendingSelector = null
+    }
+    if (!deps.aiActions?.enqueueNote) {
+      startAiProcessQueue()
+      return
+    }
+
+    const operationId = nextAiOperationId()
+    setAiStatus(withQueueStatus({ kind: "running", key: selector }))
+    void (async () => {
+      try {
+        if (disposed) return
+        const enqueued = await deps.aiActions?.enqueueNote?.(selector)
+        if (disposed) return
+        if (enqueued === false) {
+          setLatestAiStatus(operationId, withQueueStatus({ kind: "error", reason: "enqueue failed" }))
+          return
+        }
+        const queue = queueStatusFromEnqueueResult(enqueued)
+        if (deps.aiActions?.processQueue) {
+          const processOperationId = isLatestAiOperation(operationId) ? operationId : null
+          if (processOperationId !== null) {
+            setLatestAiStatus(processOperationId, withQueueStatus({ kind: "running" }, queue))
+          }
+          startAiProcessQueue({ operationId: processOperationId, rerunAfterCurrent: true })
+          globalThis.setTimeout(() => {
+            if (disposed || aiQueueProcessingPromise) return
+            const pendingQueue = currentQueueStatus()
+            if ((pendingQueue?.queued ?? 0) > 0) {
+              startAiProcessQueue({ operationId: isLatestAiOperation(operationId) ? operationId : null, rerunAfterCurrent: true })
+            }
+          }, 0)
+          return
+        }
+        setLatestAiStatus(operationId, withQueueStatus({ kind: "updated", key: selector }, queue))
+      } catch (error) {
+        if (disposed) return
+        setLatestAiStatus(operationId, withQueueStatus({ kind: "error", reason: sanitizeAiStatusReason(error) }))
+      }
+    })()
+  }
+
+  function startAiProcessQueue(options: { operationId?: number | null; rerunAfterCurrent?: boolean } = {}): void {
+    if (disposed) {
+      return
+    }
+    if (aiQueueProcessingPromise) {
+      if (options.rerunAfterCurrent === true) {
+        if (options.operationId === null) {
+          if (aiQueueProcessRequestedDuringRun?.mode !== "status") {
+            aiQueueProcessRequestedDuringRun = { mode: "background" }
+          }
+        } else {
+          aiQueueProcessRequestedDuringRun = { mode: "status", operationId: options.operationId ?? aiOperationId }
+        }
+      }
+      if (options.operationId === null) {
+        return
+      }
+      if (state.ai?.kind === "running") {
+        setAiStatus(withQueueStatus(state.ai))
+      } else {
+        setAiStatus(withQueueStatus({ kind: "running" }))
+      }
+      return
+    }
+    const operationId = options.operationId === null ? null : options.operationId ?? nextAiOperationId()
+    if (!deps.aiActions?.processQueue) {
+      if (operationId !== null) {
+        setAiStatus(withQueueStatus({ kind: "error", reason: "unavailable" }))
+      }
+      return
+    }
+
+    const initialQueue = currentQueueStatus()
+    const totalForRun = nonNegativeInteger(initialQueue?.queued ?? 0)
+    const runningStatus: AiStatusState = totalForRun > 0
+      ? { kind: "running", progress: { processed: 0, total: totalForRun } }
+      : { kind: "running" }
+    if (operationId !== null) {
+      setAiStatus(withQueueStatus(runningStatus, initialQueue))
+    }
+    const queueProcessing = (async () => {
+      try {
+        if (disposed) return
+        const result = await deps.aiActions?.processQueue?.((progress) => {
+          if (operationId === null || disposed || !isLatestAiOperation(operationId)) return
+          const total = nonNegativeInteger(progress.total)
+          const processed = Math.min(nonNegativeInteger(progress.processed), total)
+          const queue = queueStatus(Math.max(0, total - processed), currentQueueStatus()?.failed ?? 0)
+          setLatestAiStatus(operationId, withQueueStatus({ kind: "running", progress: { processed, total } }, queue))
+        })
+        if (disposed) return
+        refreshManager()
+        if (operationId === null || !isLatestAiOperation(operationId)) {
+          setAiStatus(withQueueStatus(state.ai ?? { kind: "not-configured" }, queueStatusFromResult(result)))
+          return
+        }
+        const queue = queueStatusFromResult(result)
+        const newlyFailed = Math.max(0, result?.failedThisRun ?? result?.failed ?? 0)
+        if (newlyFailed > 0) {
+          setLatestAiStatus(operationId, withQueueStatus({ kind: "error", reason: `${newlyFailed} failed` }, queue))
+          return
+        }
+        setLatestAiStatus(operationId, withQueueStatus({ kind: "updated", count: result?.applied ?? 0 }, queue))
+      } catch (error) {
+        if (disposed || operationId === null) return
+        setLatestAiStatus(operationId, withQueueStatus({ kind: "error", reason: sanitizeAiStatusReason(error) }))
+      }
+    })()
+    aiQueueProcessingPromise = queueProcessing
+    void queueProcessing.finally(() => {
+      if (aiQueueProcessingPromise === queueProcessing) {
+        aiQueueProcessingPromise = null
+        if (aiQueueProcessRequestedDuringRun && !disposed) {
+          const rerunRequest = aiQueueProcessRequestedDuringRun
+          aiQueueProcessRequestedDuringRun = null
+          startAiProcessQueue({
+            operationId: rerunRequest.mode === "background" || !isLatestAiOperation(rerunRequest.operationId) ? null : rerunRequest.operationId,
+          })
+        }
+      }
+    })
+  }
+
+  function startAiStartupScan(): void {
+    if (disposed || aiStartupScanCancelled || !deps.aiActions?.enqueueStaleDescriptions || state.ai?.kind === "not-configured") {
+      return
+    }
+
+    const operationId = aiOperationId
+    void (async () => {
+      try {
+        if (disposed) return
+        const result = await deps.aiActions?.enqueueStaleDescriptions?.()
+        if (disposed) return
+        if (!isLatestAiOperation(operationId)) return
+        const queue = queueStatusFromStaleScanResult(result)
+        if (deps.aiActions?.processQueue && queue.queued > 0 && state.ai?.kind !== "auth-required") {
+          setLatestAiStatus(operationId, withQueueStatus({ kind: "running" }, queue))
+          startAiProcessQueue({ operationId })
+        } else {
+          setLatestAiStatus(operationId, withQueueStatus(state.ai ?? { kind: "not-configured" }, queue))
+        }
+      } catch (error) {
+        if (disposed) return
+        setLatestAiStatus(operationId, withQueueStatus({ kind: "error", reason: sanitizeAiStatusReason(error) }))
+      }
+    })()
   }
 
   function setManagerDeleteStatus(status: string | null): void {
@@ -638,6 +1095,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       return dirtyBlocked()
     }
 
+    queuePendingAiIdleWorkBeforeOpeningNote(key)
     setEditorNote(deps.showNote(key))
     return ok()
   }
@@ -723,11 +1181,13 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       ...state,
       editor: editorToApply,
     }
+    clearAiIdleTimer({ clearPending: true })
     const editor = state.editor
     if (!editor) return
     const hasConflictingInFlightSave = inFlightSave?.noteKey === editor.note.key && inFlightSave.body !== editor.body
     if (!editor.dirty && !hasConflictingInFlightSave) {
       clearAutosaveTimer()
+      clearAiIdleTimer()
       state = {
         ...state,
         editor: {
@@ -813,6 +1273,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         },
       }
       applyManagerBrowserModel()
+      recordManagerAiActivity()
     },
 
     moveManagerSelection: (direction, options = {}) => {
@@ -831,6 +1292,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         },
       }
       applyManagerBrowserModel()
+      recordManagerAiActivity()
     },
 
     openFocusedManagerItem: (options = {}) => {
@@ -869,6 +1331,8 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         return dirtyBlocked()
       }
 
+      queuePendingAiIdleWorkBeforeOpeningNote(focused.key)
+
       state = clearManagerFilterState(state)
       const note = deps.showNote(focused.key)
       setEditorNote(note)
@@ -898,6 +1362,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       }
 
       if (state.screen === "editor") {
+        const selectorLeavingEditor = state.editor?.note.key ?? null
         state = {
           ...state,
           screen: "manager",
@@ -905,6 +1370,9 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
           search: null,
         }
         applyManagerBrowserModel()
+        if (selectorLeavingEditor && aiIdlePendingSelector === selectorLeavingEditor) {
+          scheduleManagerAiIdleWork(selectorLeavingEditor)
+        }
       }
       return ok()
     },
@@ -1303,6 +1771,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     },
 
     showManager: () => {
+      const selectorLeavingEditor = state.screen === "editor" ? state.editor?.note.key ?? null : null
       state = {
         ...state,
         screen: "manager",
@@ -1310,6 +1779,9 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         search: null,
       }
       applyManagerBrowserModel()
+      if (selectorLeavingEditor && aiIdlePendingSelector === selectorLeavingEditor) {
+        scheduleManagerAiIdleWork(selectorLeavingEditor)
+      }
       return ok()
     },
 
@@ -1484,6 +1956,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       clearAutosaveTimer()
       const noteToPersist = toTuiNote(state.editor.note)
       const submittedBody = state.editor.body
+      const hasChangedBody = state.editor.savedBody !== submittedBody
       try {
         const coalescedWithInFlight = inFlightSave?.noteKey === noteToPersist.key && inFlightSave.body === submittedBody
         const persistedNote = persistEditorSnapshotCoalesced(noteToPersist, submittedBody)
@@ -1491,7 +1964,13 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         if (isPromiseLike(persistedNote)) {
           try {
             const savedNote = await persistedNote
+            if (disposed) {
+              return ok()
+            }
             applySavedEditorAndPreviewCache(savedNote, submittedBody)
+            if (hasChangedBody && didApplySavedSnapshot(noteToPersist.key, submittedBody)) {
+              scheduleSavedNoteAiIdleWork(noteToPersist.key)
+            }
             return ok()
           } catch (error) {
             if (!coalescedWithInFlight || state.editor?.note.key !== noteToPersist.key || state.editor.body !== submittedBody) {
@@ -1499,14 +1978,26 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
             }
             const retriedNote = persistEditorSnapshot(noteToPersist, submittedBody)
             const savedNote = isPromiseLike(retriedNote) ? await retriedNote : retriedNote
+            if (disposed) {
+              return ok()
+            }
             applySavedEditorAndPreviewCache(savedNote, submittedBody)
+            if (hasChangedBody && didApplySavedSnapshot(noteToPersist.key, submittedBody)) {
+              scheduleSavedNoteAiIdleWork(noteToPersist.key)
+            }
             return ok()
           }
         }
 
         applySavedEditorAndPreviewCache(persistedNote, submittedBody)
+        if (hasChangedBody && didApplySavedSnapshot(noteToPersist.key, submittedBody)) {
+          scheduleSavedNoteAiIdleWork(noteToPersist.key)
+        }
         return ok()
       } catch {
+        if (disposed) {
+          return ok()
+        }
         clearManagerPreviewCache()
         state = markAutosaveError(state)
         notifyAutosaveStateChange()
@@ -1558,9 +2049,13 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     },
 
     dispose: () => {
+      disposed = true
       clearAutosaveTimer()
+      clearAiIdleTimer()
       autosaveStateChangeHandler = null
     },
+
+    startAiStartupScan,
 
     setAutosaveStateChangeHandler: (handler) => {
       autosaveStateChangeHandler = handler
@@ -1637,6 +2132,39 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
           state = closeSearchEverything(state)
         }
         controller.pasteEditorClipboard()
+        return ok()
+      }
+
+      if (commandName === "/ai-describe") {
+        if (state.search) {
+          state = closeSearchEverything(state)
+        }
+        clearAiIdleTimer({ clearPending: true })
+        startAiDescribe()
+        return ok()
+      }
+
+      if (commandName === "/ai-process-queue") {
+        if (state.search) {
+          state = closeSearchEverything(state)
+        }
+        clearAiIdleTimer({ clearPending: true })
+        startAiProcessQueue()
+        return ok()
+      }
+
+      if (commandName === "/ai-status") {
+        if (state.search) {
+          state = closeSearchEverything(state)
+        }
+        clearAiIdleTimer({ clearPending: true })
+        nextAiOperationId()
+        const currentStatus = deps.aiActions?.getStatus?.()
+        if (currentStatus) {
+          setAiStatus(currentStatus)
+        } else {
+          notifyAutosaveStateChange()
+        }
         return ok()
       }
 

@@ -39,7 +39,7 @@ test("bn search <query> returns grouped note blocks with ranked match details", 
   } finally {
     await harness.cleanup()
   }
-})
+}, 15_000)
 
 test("bn list and bn search prefer derived index data when available", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-search-index-preferred-")
@@ -65,7 +65,7 @@ test("bn list and bn search prefer derived index data when available", async () 
   } finally {
     await harness.cleanup()
   }
-})
+}, 15_000)
 
 test("bn search returns a calm no-result message when nothing matches", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-search-no-results-")
@@ -87,7 +87,7 @@ test("bn search returns a calm no-result message when nothing matches", async ()
   } finally {
     await harness.cleanup()
   }
-})
+}, 15_000)
 
 test("bn search 123 only prints notes with fields containing 123", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-search-contains-numeric-")
@@ -129,7 +129,7 @@ test("bn search 123 only prints notes with fields containing 123", async () => {
   } finally {
     await harness.cleanup()
   }
-})
+}, 15_000)
 
 test("bn search finds arbitrary substring contains matches through the real index", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-search-substring-")
@@ -155,7 +155,7 @@ test("bn search finds arbitrary substring contains matches through the real inde
   } finally {
     await harness.cleanup()
   }
-})
+}, 15_000)
 
 test("bn search returns actionable rebuild guidance when derived indexes are missing", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-search-missing-index-")

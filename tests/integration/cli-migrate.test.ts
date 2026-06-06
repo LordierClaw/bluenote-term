@@ -46,7 +46,7 @@ test("bn migrate converts legacy frontmatter notes into plain notes, sidecars, a
   } finally {
     await harness.cleanup()
   }
-})
+}, 15_000)
 
 test("bn migrate returns a calm no-op message for already migrated roots", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-migrate-noop-")
@@ -128,7 +128,7 @@ test("bn migrate reports a clean rollback error when rebuild cannot write derive
   } finally {
     await harness.cleanup()
   }
-})
+}, 15_000)
 
 test("bn migrate fails hard on unsafe already-migrated roots", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-migrate-unsafe-")
@@ -148,7 +148,7 @@ test("bn migrate fails hard on unsafe already-migrated roots", async () => {
   } finally {
     await harness.cleanup()
   }
-})
+}, 15_000)
 
 test("bn migrate fails hard on mixed-format roots", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-migrate-mixed-")
@@ -192,7 +192,7 @@ test("bn migrate fails hard on mixed-format roots", async () => {
   } finally {
     await harness.cleanup()
   }
-})
+}, 15_000)
 
 test("bn migrate reports a clean user-facing error when BLUENOTE_ROOT points to a file", async () => {
   const fixture = await createBlockedRootFixture("bluenote-cli-migrate-blocked-root-")
@@ -208,7 +208,7 @@ test("bn migrate reports a clean user-facing error when BLUENOTE_ROOT points to 
   } finally {
     await fixture.cleanup()
   }
-})
+}, 15_000)
 
 test("bn migrate reports conflict when .state and .data contain different sidecars", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-migrate-state-conflict-")

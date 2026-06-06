@@ -630,13 +630,13 @@ describe("TUI Search Everything adapter", () => {
   test("filters slash-prefixed command results to working editor commands from editor search", () => {
     assert.deepEqual(
       TUI_COMMANDS.map((command) => command.name),
-      ["/new", "/delete", "/find", "/replace", "/save", "/copy-all", "/replace-all", "/paste"],
+      ["/new", "/delete", "/ai-describe", "/ai-process-queue", "/ai-status", "/find", "/replace", "/save", "/copy-all", "/replace-all", "/paste"],
     )
 
     const results = buildSearchEverythingResults("/", createDeps(), { commandContext: { screen: "editor" } })
     assert.deepEqual(
       results.filter((result) => result.kind === "command").map((result) => result.name),
-      ["/find", "/replace", "/save", "/copy-all", "/replace-all", "/paste"],
+      ["/ai-describe", "/ai-process-queue", "/ai-status", "/find", "/replace", "/save", "/copy-all", "/replace-all", "/paste"],
     )
 
     const maintenanceResults = buildSearchEverythingResults("/re", createDeps(), { commandContext: { screen: "editor" } })
@@ -651,10 +651,10 @@ describe("TUI Search Everything adapter", () => {
 
   test("filters slash-prefixed command results to applicable manager commands from manager search", () => {
     const withoutSelection = buildSearchEverythingResults("/", createDeps(), { commandContext: { screen: "manager", managerSelection: "folder" } })
-    assert.deepEqual(withoutSelection.filter((result) => result.kind === "command").map((result) => result.name), ["/new"])
+    assert.deepEqual(withoutSelection.filter((result) => result.kind === "command").map((result) => result.name), ["/new", "/ai-process-queue", "/ai-status"])
 
     const withNoteSelection = buildSearchEverythingResults("/", createDeps(), { commandContext: { screen: "manager", managerSelection: "note" } })
-    assert.deepEqual(withNoteSelection.filter((result) => result.kind === "command").map((result) => result.name), ["/new", "/delete"])
+    assert.deepEqual(withNoteSelection.filter((result) => result.kind === "command").map((result) => result.name), ["/new", "/delete", "/ai-describe", "/ai-process-queue", "/ai-status"])
     assert.equal(withNoteSelection.some((result) => result.kind === "command" && ["/archive", "/rebuild", "/migrate"].includes(result.name)), false)
   })
 

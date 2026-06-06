@@ -18,6 +18,11 @@ export interface NoteSidecar {
   updatedAt: string
   archivedAt: string | null
   namingVersion: number
+  ai?: {
+    description?: {
+      lastProcessedAt?: string
+    }
+  }
 }
 
 const REQUIRED_SIDECAR_FIELDS = [
@@ -30,6 +35,10 @@ const REQUIRED_SIDECAR_FIELDS = [
   "archivedAt",
   "namingVersion",
 ] as const
+
+const OPTIONAL_SIDECAR_FIELDS = ["ai"] as const
+const AI_FIELDS = ["description"] as const
+const AI_DESCRIPTION_FIELDS = ["lastProcessedAt"] as const
 
 function assertArchivedAtField(record: Record<string, unknown>, sourcePath: string): string | null {
   const value = record.archivedAt
@@ -51,6 +60,44 @@ function assertDescriptionField(record: Record<string, unknown>, sourcePath: str
   return value
 }
 
+function validateAiMetadata(
+  value: unknown,
+  sourcePath: string,
+  validationKind: string,
+): NoteSidecar["ai"] | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+
+  if (!isRecord(value)) {
+    throw new InvalidFrontmatterError(`Invalid ${validationKind} in ${sourcePath}: 'ai' must be a JSON object.`)
+  }
+
+  assertKnownFields(value, AI_FIELDS, sourcePath, validationKind)
+
+  if (value.description === undefined) {
+    return undefined
+  }
+
+  if (!isRecord(value.description)) {
+    throw new InvalidFrontmatterError(
+      `Invalid ${validationKind} in ${sourcePath}: 'description' must be a JSON object.`,
+    )
+  }
+
+  assertKnownFields(value.description, AI_DESCRIPTION_FIELDS, sourcePath, validationKind)
+
+  if (value.description.lastProcessedAt === undefined) {
+    return undefined
+  }
+
+  return {
+    description: {
+      lastProcessedAt: assertTimestampField(value.description, "lastProcessedAt", sourcePath, validationKind),
+    },
+  }
+}
+
 export function validateNoteSidecar(sidecar: unknown, sourcePath: string): NoteSidecar {
   const validationKind = "sidecar metadata"
 
@@ -58,8 +105,9 @@ export function validateNoteSidecar(sidecar: unknown, sourcePath: string): NoteS
     throw new InvalidFrontmatterError(`Invalid ${validationKind} in ${sourcePath}: expected a JSON object.`)
   }
 
-  assertKnownFields(sidecar, REQUIRED_SIDECAR_FIELDS, sourcePath, validationKind)
+  assertKnownFields(sidecar, [...REQUIRED_SIDECAR_FIELDS, ...OPTIONAL_SIDECAR_FIELDS], sourcePath, validationKind)
   assertRequiredFields(sidecar, REQUIRED_SIDECAR_FIELDS, sourcePath, validationKind)
+  const ai = validateAiMetadata(sidecar.ai, sourcePath, validationKind)
 
   return {
     key: assertStringField(sidecar, "key", sourcePath, validationKind),
@@ -70,5 +118,6 @@ export function validateNoteSidecar(sidecar: unknown, sourcePath: string): NoteS
     updatedAt: assertTimestampField(sidecar, "updatedAt", sourcePath, validationKind),
     archivedAt: assertArchivedAtField(sidecar, sourcePath),
     namingVersion: assertNumberField(sidecar, "namingVersion", sourcePath, validationKind),
+    ...(ai === undefined ? {} : { ai }),
   }
 }
