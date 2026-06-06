@@ -38,6 +38,7 @@ export function legacyNoteMarkdown({
 export const noteMarkdown = legacyNoteMarkdown
 
 export function sidecarJson(input: {
+  type?: "normal" | "draft" | "archived"
   key: string
   title: string
   description: string
@@ -47,15 +48,25 @@ export function sidecarJson(input: {
   archivedAt?: string | null
   namingVersion?: number
 }): string {
+  const archivedAt = input.archivedAt ?? null
+  const type =
+    input.type ??
+    (archivedAt !== null || input.relativePath.startsWith(".data/archive/")
+      ? "archived"
+      : input.relativePath.startsWith("draft/")
+        ? "draft"
+        : "normal")
+
   return `${JSON.stringify(
     {
+      type,
       key: input.key,
       title: input.title,
       description: input.description,
       relativePath: input.relativePath,
       createdAt: input.createdAt ?? "2026-05-21T10:15:00.000Z",
       updatedAt: input.updatedAt ?? input.createdAt ?? "2026-05-21T10:15:00.000Z",
-      archivedAt: input.archivedAt ?? null,
+      archivedAt,
       namingVersion: input.namingVersion ?? 1,
     },
     null,

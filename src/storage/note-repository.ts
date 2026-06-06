@@ -9,7 +9,7 @@ import { type PlainNote, validateNoteFrontmatter } from "./note-schema"
 import type { NoteFrontmatter, ParsedNote } from "./note-schema"
 import { parsePlainNote, serializePlainNote } from "./plain-note"
 import { createSidecarRepository } from "./sidecar-repository"
-import type { NoteSidecar } from "./sidecar-schema"
+import type { NoteSidecar, NoteType } from "./sidecar-schema"
 import { replaceNoteBodyAtomically } from "./atomic-note-writer"
 import { getArchiveNotePath, getInboxNotePath, getNotesPath } from "./root-layout"
 
@@ -183,8 +183,21 @@ function assertUniqueNoteKeys(rootPath: string, notePaths: readonly string[]): v
   }
 }
 
+function inferNoteType(relativePath: string, archivedAt: string | null): NoteType {
+  if (archivedAt !== null || relativePath.startsWith(".data/archive/")) {
+    return "archived"
+  }
+
+  if (relativePath.startsWith("draft/")) {
+    return "draft"
+  }
+
+  return "normal"
+}
+
 function buildSidecar(frontmatter: NoteFrontmatter, relativePath: string, body: string, archivedAt: string | null): NoteSidecar {
   return {
+    type: inferNoteType(relativePath, archivedAt),
     key: frontmatter.id,
     title: frontmatter.title,
     description: deriveDescription(body),
@@ -511,7 +524,9 @@ export function createNoteRepository(rootPath: string): NoteRepository {
       })
       const archivedSidecar: NoteSidecar = {
         ...existingSidecar,
+        type: "archived",
         relativePath: archivedRelativePath,
+        updatedAt: archivedAt,
         archivedAt,
       }
       let wroteArchivedCopy = false

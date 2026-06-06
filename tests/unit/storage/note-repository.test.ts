@@ -20,7 +20,7 @@ const FIXED_FRONTMATTER = {
   updatedAt: "2026-05-21T10:15:00.000Z",
 }
 
-test("repository writes a new note to notes/inbox", async () => {
+test("repository writes a new note to note", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-"))
 
   try {
@@ -30,12 +30,59 @@ test("repository writes a new note to notes/inbox", async () => {
       body: "Hello from BlueNote.\n",
     })
 
-    assert.equal(created.relativePath, "notes/inbox/note-123.md")
-    assert.equal(created.notePath, path.join(rootPath, "notes", "inbox", "note-123.md"))
+    assert.equal(created.relativePath, "note/note-123.md")
+    assert.equal(created.notePath, path.join(rootPath, "note", "note-123.md"))
+
+    const sidecar = JSON.parse(await readFile(path.join(getStateNotesPath(rootPath), "note-123.json"), "utf8"))
+    assert.equal(sidecar.type, "normal")
+    assert.equal(sidecar.relativePath, "note/note-123.md")
+    assert.equal(sidecar.archivedAt, null)
 
     const loaded = repository.read(created.notePath)
     assert.deepEqual(loaded.frontmatter, FIXED_FRONTMATTER)
     assert.equal(loaded.body, "Hello from BlueNote.\n")
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("repository list reads typed normal sidecars produced by create", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-list-sidecars-"))
+
+  try {
+    const repository = createNoteRepository(rootPath)
+    repository.create({
+      frontmatter: FIXED_FRONTMATTER,
+      body: "List body.\n",
+    })
+
+    const notes = repository.list()
+
+    assert.equal(notes.length, 1)
+    assert.equal(notes[0]?.sourcePath, "note/note-123.md")
+    assert.deepEqual(notes[0]?.frontmatter, FIXED_FRONTMATTER)
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("repository archive writes an archived sidecar type", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-archive-type-"))
+
+  try {
+    const repository = createNoteRepository(rootPath)
+    const created = repository.create({
+      frontmatter: FIXED_FRONTMATTER,
+      body: "Archive body.\n",
+    })
+
+    const archived = repository.archive(created.notePath, "2026-05-21T12:30:00.000Z")
+    const sidecar = JSON.parse(await readFile(path.join(getStateNotesPath(rootPath), "note-123.json"), "utf8"))
+
+    assert.equal(archived.relativePath, ".data/archive/note-123.md")
+    assert.equal(sidecar.type, "archived")
+    assert.equal(sidecar.relativePath, ".data/archive/note-123.md")
+    assert.equal(sidecar.archivedAt, "2026-05-21T12:30:00.000Z")
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }
@@ -74,7 +121,7 @@ test("repository wraps note creation filesystem failures in a UsageError", async
       () => repository.create({ frontmatter: FIXED_FRONTMATTER, body: "" }),
       (error) => {
         assert.ok(error instanceof UsageError)
-        assert.match(error.message, /Could not create note 'notes[\\/]inbox[\\/]note-123\.md'\./)
+        assert.match(error.message, /Could not create note 'note[\\/]note-123\.md'\./)
         assert.equal(error.hint, "Ensure BLUENOTE_ROOT points to a writable directory path.")
 
         return true
@@ -92,10 +139,10 @@ test("repository wraps note read filesystem failures in a UsageError", async () 
     const repository = createNoteRepository(rootPath)
 
     assert.throws(
-      () => repository.read(path.join(rootPath, "notes", "inbox", "missing.md")),
+      () => repository.read(path.join(rootPath, "note", "missing.md")),
       (error) => {
         assert.ok(error instanceof UsageError)
-        assert.match(error.message, /Could not read note 'notes[\\/]inbox[\\/]missing\.md'\./)
+        assert.match(error.message, /Could not read note 'note[\\/]missing\.md'\./)
         assert.equal(error.hint, "Ensure the note exists inside BLUENOTE_ROOT and is readable.")
 
         return true
@@ -108,8 +155,8 @@ test("repository wraps note read filesystem failures in a UsageError", async () 
 
 test("repository archive rolls back the destination file when removing the source fails", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-archive-rollback-"))
-  const inboxPath = path.join(rootPath, "notes", "inbox")
-  const archivePath = path.join(rootPath, "notes", "archive")
+  const inboxPath = path.join(rootPath, "note")
+  const archivePath = path.join(rootPath, ".data", "archive")
   const sourcePath = path.join(inboxPath, "note-123.md")
   const archivedPath = path.join(archivePath, "note-123.md")
 
@@ -140,7 +187,7 @@ test("repository archive rolls back the destination file when removing the sourc
         () => repository.archive(sourcePath, "2026-05-21T12:30:00.000Z"),
         (error) => {
           assert.ok(error instanceof UsageError)
-          assert.match(error.message, /Could not archive note 'notes[\\/]inbox[\\/]note-123\.md'\./)
+          assert.match(error.message, /Could not archive note 'note[\\/]note-123\.md'\./)
           assert.equal(error.hint, "Ensure the note exists inside BLUENOTE_ROOT and the archive path is writable.")
           assert.equal(error.cause, sourceRemovalFailure)
           return true
@@ -179,7 +226,7 @@ test("syncEditedNote preserves the previous note body when the atomic body write
         }),
       (error) => {
         assert.ok(error instanceof UsageError)
-        assert.match(error.message, /Could not update note 'notes[\\/]inbox[\\/]note-123\.md'\./)
+        assert.match(error.message, /Could not update note 'note[\\/]note-123\.md'\./)
         assert.equal(error.hint, "Ensure the note and its sidecar are writable inside BLUENOTE_ROOT.")
         assert.ok(error.cause instanceof UsageError)
         assert.match(error.cause.message, /atomic note writer path .* must not be a symlink/i)
@@ -230,7 +277,7 @@ test("syncEditedNote rolls back the body with the atomic writer when sidecar per
           }),
         (error) => {
           assert.ok(error instanceof UsageError)
-          assert.match(error.message, /Could not update note 'notes[\\/]inbox[\\/]note-123\.md'\./)
+          assert.match(error.message, /Could not update note 'note[\\/]note-123\.md'\./)
           assert.ok(error.cause instanceof UsageError)
           assert.equal(error.cause.cause, sidecarFailure)
           return true

@@ -8,6 +8,7 @@ import { createManagedRootHarness } from "../helpers/cli"
 import { noteMarkdown } from "../helpers/note-fixtures"
 
 function sidecarJson(input: {
+  type?: "normal" | "draft" | "archived"
   key: string
   title: string
   description: string
@@ -19,6 +20,7 @@ function sidecarJson(input: {
 }): string {
   return `${JSON.stringify(
     {
+      type: input.type ?? (input.archivedAt == null ? "normal" : "archived"),
       key: input.key,
       title: input.title,
       description: input.description,
@@ -257,7 +259,7 @@ test("bn rebuild rejects orphaned sidecars whose relative path escapes the manag
     assert.equal(result.exitCode, 2)
     assert.equal(result.stdout, "")
     assert.match(result.stderr, /Validation failed while rebuilding indexes\./)
-    assert.match(result.stderr, /Target path '.+' is outside the managed root '.+'\./)
+    assert.match(result.stderr, /type 'normal' must use a relativePath under 'note\/'\./)
     assert.doesNotMatch(result.stderr, /points to missing note/)
   } finally {
     await harness.cleanup()
@@ -283,10 +285,7 @@ test("bn rebuild rejects orphaned sidecars whose relative path is absolute", asy
     assert.equal(result.exitCode, 2)
     assert.equal(result.stdout, "")
     assert.match(result.stderr, /Validation failed while rebuilding indexes\./)
-    assert.match(
-      result.stderr,
-      /Sidecar '\.data[\\/]notes[\\/]absolute-note\.json' declares absolute relativePath '\/tmp\/outside-note\.md'\./,
-    )
+    assert.match(result.stderr, /type 'normal' must use a relativePath under 'note\/'\./)
     assert.doesNotMatch(result.stderr, /points to missing note 'tmp[\\/]outside-note\.md'/)
   } finally {
     await harness.cleanup()
@@ -332,6 +331,7 @@ test("bn rebuild exits 2 and surfaces invalid sidecar validation errors", async 
       path.join(harness.rootPath, ".data", "notes", "broken-sidecar.json"),
       JSON.stringify(
         {
+          type: "normal",
           key: "broken-sidecar",
           title: "Broken Sidecar",
           relativePath,

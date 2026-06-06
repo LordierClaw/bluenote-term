@@ -10,10 +10,11 @@ import { InvalidFrontmatterError, UsageError } from "../../../src/core/errors"
 import { createSidecarRepository } from "../../../src/storage/sidecar-repository"
 
 const FIXED_SIDECAR = {
+  type: "normal",
   key: "note-work-24-abc123",
   title: "Note Work #24",
   description: "Meeting notes about rollout risks.",
-  relativePath: "notes/inbox/note-work-24-abc123.md",
+  relativePath: "note/note-work-24-abc123.md",
   createdAt: "2026-05-24T12:00:00.000Z",
   updatedAt: "2026-05-24T12:10:00.000Z",
   archivedAt: null,
@@ -104,8 +105,9 @@ test("sidecar repository overwrite-path write failures preserve the existing sid
     const originalJson = await readFile(sidecarPath, "utf8")
     const updatedSidecar = {
       ...FIXED_SIDECAR,
+      type: "archived" as const,
       title: "Archived Note Work #24",
-      relativePath: "notes/archive/note-work-24-abc123.md",
+      relativePath: ".data/archive/note-work-24-abc123.md",
       archivedAt: "2026-05-24T12:30:00.000Z",
     }
     const originalWriteFileSync = fs.writeFileSync
@@ -152,6 +154,7 @@ test("sidecar repository rejects missing required sidecar fields when writing", 
     assert.throws(
       () =>
         repository.write({
+          type: "normal",
           key: "note-work-24-abc123",
           title: "Note Work #24",
           description: "Meeting notes about rollout risks.",
@@ -183,10 +186,11 @@ test("sidecar repository rejects invalid stored sidecars", async () => {
     await writeFile(
       sidecarPath,
       JSON.stringify({
+        type: "normal",
         key: "note-work-24-abc123",
         title: "Note Work #24",
         description: "Meeting notes about rollout risks.",
-        relativePath: "notes/inbox/note-work-24-abc123.md",
+        relativePath: "note/note-work-24-abc123.md",
         createdAt: "2026-05-24T12:00:00.000Z",
         updatedAt: "not-a-timestamp",
         archivedAt: null,

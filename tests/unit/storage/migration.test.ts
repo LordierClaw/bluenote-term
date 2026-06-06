@@ -2,7 +2,7 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
-import { mkdtemp, readFile, readdir, rm, writeFile, access } from "node:fs/promises"
+import { mkdtemp, readFile, readdir, rm, writeFile, access, mkdir } from "node:fs/promises"
 
 import { loadIndexStore } from "../../../src/index/index-store"
 import { createNoteKey } from "../../../src/domain/note-key"
@@ -19,6 +19,8 @@ const MIGRATED_AT = "2026-05-24T12:00:00.000Z"
 async function createRoot(prefix: string): Promise<string> {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), prefix))
   ensureManagedRoot(rootPath)
+  await mkdir(path.join(rootPath, "notes", "inbox"), { recursive: true })
+  await mkdir(path.join(rootPath, "notes", "archive"), { recursive: true })
   return rootPath
 }
 
@@ -39,7 +41,7 @@ test("detectStorageFormat classifies empty, old, new, and mixed managed roots", 
       "utf8",
     )
 
-    const newRelativePath = "notes/inbox/new-note-abcd12.md"
+    const newRelativePath = "note/new-note-abcd12.md"
     await writeFile(path.join(newRoot, newRelativePath), "Plain note body.\n", "utf8")
     await writeFile(
       path.join(newRoot, ".data", "notes", "new-note-abcd12.json"),
@@ -48,6 +50,19 @@ test("detectStorageFormat classifies empty, old, new, and mixed managed roots", 
         title: "New Note",
         description: "Plain note body.",
         relativePath: newRelativePath,
+      }),
+      "utf8",
+    )
+    const archivedNewRelativePath = ".data/archive/archived-new-note.md"
+    await writeFile(path.join(newRoot, archivedNewRelativePath), "Archived plain note body.\n", "utf8")
+    await writeFile(
+      path.join(newRoot, ".data", "notes", "archived-new-note.json"),
+      sidecarJson({
+        key: "archived-new-note",
+        title: "Archived New Note",
+        description: "Archived plain note body.",
+        relativePath: archivedNewRelativePath,
+        archivedAt: "2026-05-22T12:00:00.000Z",
       }),
       "utf8",
     )
@@ -61,7 +76,7 @@ test("detectStorageFormat classifies empty, old, new, and mixed managed roots", 
       }),
       "utf8",
     )
-    const mixedRelativePath = "notes/inbox/already-new-qwerty.md"
+    const mixedRelativePath = "note/already-new-qwerty.md"
     await writeFile(path.join(mixedRoot, mixedRelativePath), "Already migrated body.\n", "utf8")
     await writeFile(
       path.join(mixedRoot, ".data", "notes", "already-new-qwerty.json"),
@@ -90,7 +105,7 @@ test("detectStorageFormat classifies empty, old, new, and mixed managed roots", 
       kind: "new-format",
       legacyNoteCount: 0,
       plainNoteCount: 1,
-      sidecarCount: 1,
+      sidecarCount: 2,
     })
     assert.deepEqual(detectStorageFormat(mixedRoot), {
       kind: "mixed-format",
@@ -105,6 +120,94 @@ test("detectStorageFormat classifies empty, old, new, and mixed managed roots", 
       rm(newRoot, { recursive: true, force: true }),
       rm(mixedRoot, { recursive: true, force: true }),
     ])
+  }
+})
+
+test("detectStorageFormat classifies archived-only migrated roots as new-format", async () => {
+  const rootPath = await createRoot("bluenote-migration-archived-only-")
+  const archivedRelativePath = ".data/archive/archived-only.md"
+
+  try {
+    await writeFile(path.join(rootPath, archivedRelativePath), "Archived-only body.\n", "utf8")
+    await writeFile(
+      path.join(rootPath, ".data", "notes", "archived-only.json"),
+      sidecarJson({
+        key: "archived-only",
+        title: "Archived Only",
+        description: "Archived-only body.",
+        relativePath: archivedRelativePath,
+        archivedAt: "2026-05-22T12:00:00.000Z",
+      }),
+      "utf8",
+    )
+
+    assert.deepEqual(detectStorageFormat(rootPath), {
+      kind: "new-format",
+      legacyNoteCount: 0,
+      plainNoteCount: 0,
+      sidecarCount: 1,
+    })
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("detectStorageFormat rejects active plain notes that are missing sidecars", async () => {
+  const rootPath = await createRoot("bluenote-migration-orphan-active-")
+  const archivedRelativePath = ".data/archive/archived-note.md"
+
+  try {
+    await writeFile(path.join(rootPath, "note", "orphan-active.md"), "Orphan active body.\n", "utf8")
+    await writeFile(path.join(rootPath, archivedRelativePath), "Archived body.\n", "utf8")
+    await writeFile(
+      path.join(rootPath, ".data", "notes", "archived-note.json"),
+      sidecarJson({
+        key: "archived-note",
+        title: "Archived Note",
+        description: "Archived body.",
+        relativePath: archivedRelativePath,
+        archivedAt: "2026-05-22T12:00:00.000Z",
+      }),
+      "utf8",
+    )
+
+    assert.deepEqual(detectStorageFormat(rootPath), {
+      kind: "mixed-format",
+      legacyNoteCount: 0,
+      plainNoteCount: 1,
+      sidecarCount: 1,
+    })
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("detectStorageFormat rejects draft sidecars until draft repository support is enabled", async () => {
+  const rootPath = await createRoot("bluenote-migration-draft-sidecar-")
+  const draftRelativePath = "draft/draft-a8k2p9.md"
+
+  try {
+    await writeFile(path.join(rootPath, draftRelativePath), "Draft body.\n", "utf8")
+    await writeFile(
+      path.join(rootPath, ".data", "notes", "draft-a8k2p9.json"),
+      sidecarJson({
+        type: "draft",
+        key: "draft-a8k2p9",
+        title: "draft-a8k2p9",
+        description: "Draft body.",
+        relativePath: draftRelativePath,
+      }),
+      "utf8",
+    )
+
+    assert.deepEqual(detectStorageFormat(rootPath), {
+      kind: "mixed-format",
+      legacyNoteCount: 0,
+      plainNoteCount: 0,
+      sidecarCount: 1,
+    })
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
   }
 })
 
@@ -164,8 +267,8 @@ test("migrateLegacyStorage converts legacy frontmatter notes into plain notes, s
 
     const inboxKey = createNoteKey("Alpha Launch Plan", { randomSource: () => 0x12345678 })
     const archiveKey = createNoteKey("Archived Rollback Checklist", { randomSource: () => 0x12345678 })
-    const migratedInboxRelativePath = `notes/inbox/${inboxKey}.md`
-    const migratedArchiveRelativePath = `notes/archive/${archiveKey}.md`
+    const migratedInboxRelativePath = `note/${inboxKey}.md`
+    const migratedArchiveRelativePath = `.data/archive/${archiveKey}.md`
 
     assert.equal(migrated.status, "migrated")
     assert.equal(migrated.migratedNoteCount, 2)
@@ -181,6 +284,7 @@ test("migrateLegacyStorage converts legacy frontmatter notes into plain notes, s
     assert.equal(await readFile(path.join(rootPath, migratedArchiveRelativePath), "utf8"), archiveBody)
 
     assert.deepEqual(JSON.parse(await readFile(path.join(rootPath, ".data", "notes", `${inboxKey}.json`), "utf8")), {
+      type: "normal",
       key: inboxKey,
       title: "Alpha Launch Plan",
       description: createNoteDescription(inboxBody),
@@ -191,12 +295,13 @@ test("migrateLegacyStorage converts legacy frontmatter notes into plain notes, s
       namingVersion: 1,
     })
     assert.deepEqual(JSON.parse(await readFile(path.join(rootPath, ".data", "notes", `${archiveKey}.json`), "utf8")), {
+      type: "archived",
       key: archiveKey,
       title: "Archived Rollback Checklist",
       description: createNoteDescription(archiveBody),
       relativePath: migratedArchiveRelativePath,
       createdAt: LEGACY_CREATED_AT,
-      updatedAt: LEGACY_UPDATED_AT,
+      updatedAt: LEGACY_ARCHIVED_AT,
       archivedAt: LEGACY_ARCHIVED_AT,
       namingVersion: 1,
     })
@@ -248,16 +353,6 @@ test("migrateLegacyStorage converts legacy frontmatter notes into plain notes, s
     const store = loadIndexStore(rootPath)
     assert.deepEqual(store.listAllSummaries(), [
       {
-        key: archiveKey,
-        id: archiveKey,
-        title: "Archived Rollback Checklist",
-        description: createNoteDescription(archiveBody),
-        relativePath: migratedArchiveRelativePath,
-        createdAt: LEGACY_CREATED_AT,
-        updatedAt: LEGACY_UPDATED_AT,
-        archivedAt: LEGACY_ARCHIVED_AT,
-      },
-      {
         key: inboxKey,
         id: inboxKey,
         title: "Alpha Launch Plan",
@@ -277,7 +372,7 @@ test("migrateLegacyStorage removes partial derived indexes and restores legacy n
   const rootPath = await createRoot("bluenote-migration-rollback-")
   const randomSource = () => 0.1234
   const legacyKey = createNoteKey("Rollback Recovery Note", { randomSource })
-  const migratedRelativePath = `notes/inbox/${legacyKey}.md`
+  const migratedRelativePath = `note/${legacyKey}.md`
   const legacyRelativePath = "notes/inbox/legacy-rollback-uuid.md"
   const legacyPath = path.join(rootPath, legacyRelativePath)
   const migratedPath = path.join(rootPath, migratedRelativePath)
@@ -327,7 +422,7 @@ test("migrateLegacyStorage is a calm no-op for already migrated roots and reject
   const mixedRoot = await createRoot("bluenote-migration-mixed-error-")
 
   try {
-    const relativePath = "notes/inbox/already-new-51u7i0.md"
+    const relativePath = "note/already-new-51u7i0.md"
     await writeFile(path.join(newRoot, relativePath), "Already migrated body.\n", "utf8")
     await writeFile(
       path.join(newRoot, ".data", "notes", "already-new-51u7i0.json"),
@@ -336,6 +431,19 @@ test("migrateLegacyStorage is a calm no-op for already migrated roots and reject
         title: "Already New",
         description: "Already migrated body.",
         relativePath,
+      }),
+      "utf8",
+    )
+    const archivedNoopRelativePath = ".data/archive/already-archived-new.md"
+    await writeFile(path.join(newRoot, archivedNoopRelativePath), "Already archived new body.\n", "utf8")
+    await writeFile(
+      path.join(newRoot, ".data", "notes", "already-archived-new.json"),
+      sidecarJson({
+        key: "already-archived-new",
+        title: "Already Archived New",
+        description: "Already archived new body.",
+        relativePath: archivedNoopRelativePath,
+        archivedAt: "2026-05-22T12:00:00.000Z",
       }),
       "utf8",
     )

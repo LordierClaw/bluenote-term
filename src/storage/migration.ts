@@ -65,6 +65,50 @@ interface RecoveryKeyMapNote {
   nextRelativePath: string
 }
 
+function collectMarkdownRecords(
+  rootPath: string,
+  directoryPath: string,
+  records: Array<{ notePath: string; relativePath: string }>,
+): void {
+  if (!existsSync(directoryPath)) {
+    return
+  }
+
+  for (const entry of readdirSync(directoryPath, { withFileTypes: true })) {
+    const entryPath = path.join(directoryPath, entry.name)
+
+    if (entry.isDirectory()) {
+      collectMarkdownRecords(rootPath, entryPath, records)
+      continue
+    }
+
+    if (entry.isFile() && entry.name.endsWith(".md")) {
+      records.push({
+        notePath: entryPath,
+        relativePath: toPortableRelativePath(path.relative(rootPath, entryPath)),
+      })
+    }
+  }
+}
+
+function listMigrationNotePaths(rootPath: string): Array<{ notePath: string; relativePath: string }> {
+  const recordsByPath = new Map<string, { notePath: string; relativePath: string }>()
+  const repository = createNoteRepository(rootPath)
+  const legacyRecords: Array<{ notePath: string; relativePath: string }> = []
+
+  for (const record of repository.listNotePaths()) {
+    recordsByPath.set(record.relativePath, record)
+  }
+
+  collectMarkdownRecords(rootPath, path.join(rootPath, "notes"), legacyRecords)
+
+  for (const record of legacyRecords) {
+    recordsByPath.set(record.relativePath, record)
+  }
+
+  return [...recordsByPath.values()].sort((left, right) => left.relativePath.localeCompare(right.relativePath))
+}
+
 function listSidecarKeys(rootPath: string): string[] {
   const sidecarDirectoryPath = getStateNotesPath(rootPath)
 
@@ -89,7 +133,7 @@ function readLegacyMigrationCandidates(rootPath: string): {
   candidates: LegacyMigrationCandidate[]
 } {
   const repository = createNoteRepository(rootPath)
-  const records = repository.listNotePaths()
+  const records = listMigrationNotePaths(rootPath)
   const candidates: LegacyMigrationCandidate[] = []
   let legacyNoteCount = 0
   let plainNoteCount = 0
@@ -121,33 +165,40 @@ function readLegacyMigrationCandidates(rootPath: string): {
 }
 
 function hasSafeNewFormatState(rootPath: string): boolean {
-  const repository = createNoteRepository(rootPath)
   const sidecars = createSidecarRepository(rootPath)
-  const records = repository.listNotePaths()
   const sidecarKeys = listSidecarKeys(rootPath)
 
-  if (records.length === 0 || sidecarKeys.length !== records.length) {
+  if (sidecarKeys.length === 0) {
     return false
   }
 
-  const seenKeys = new Set<string>()
+  const records = listMigrationNotePaths(rootPath)
+  const activeNotePaths = new Set(records.map((record) => record.relativePath))
+  const sidecarPaths = new Set<string>()
 
   try {
-    for (const record of records) {
-      const key = path.basename(record.relativePath, ".md")
+    for (const key of sidecarKeys) {
       const sidecar = sidecars.read(key)
+      const relativePath = toPortableRelativePath(sidecar.relativePath)
+      const notePath = assertPathInsideRoot(rootPath, path.join(rootPath, relativePath))
 
-      if (toPortableRelativePath(sidecar.relativePath) !== record.relativePath || seenKeys.has(key)) {
+      if (
+        sidecar.key !== key ||
+        path.basename(relativePath, ".md") !== key ||
+        sidecarPaths.has(relativePath) ||
+        !existsSync(notePath) ||
+        (sidecar.type !== "archived" && !activeNotePaths.has(relativePath))
+      ) {
         return false
       }
 
-      seenKeys.add(key)
+      sidecarPaths.add(relativePath)
     }
   } catch {
     return false
   }
 
-  return sidecarKeys.every((key) => seenKeys.has(key))
+  return [...activeNotePaths].every((relativePath) => sidecarPaths.has(relativePath))
 }
 
 export function detectStorageFormat(rootPath: string): StorageFormatSummary {
@@ -173,7 +224,7 @@ export function detectStorageFormat(rootPath: string): StorageFormatSummary {
     }
   }
 
-  if (legacyNoteCount === 0 && plainNoteCount > 0 && sidecarCount > 0 && hasSafeNewFormatState(managedRootPath)) {
+  if (legacyNoteCount === 0 && sidecarCount > 0 && hasSafeNewFormatState(managedRootPath)) {
     return {
       kind: "new-format",
       legacyNoteCount,
@@ -213,8 +264,12 @@ function writeRecoverySnapshot(rootPath: string, migratedAt: string, candidates:
   return recoveryPath
 }
 
-function buildMigratedRelativePath(previousRelativePath: string, key: string): string {
-  return joinPortableRelativePath(path.posix.dirname(toPortableRelativePath(previousRelativePath)), `${key}.md`)
+function buildMigratedRelativePath(candidate: LegacyMigrationCandidate, key: string): string {
+  if (candidate.archivedAt !== null) {
+    return joinPortableRelativePath(STATE_DIRECTORY, "archive", `${key}.md`)
+  }
+
+  return joinPortableRelativePath("note", `${key}.md`)
 }
 
 function writeRecoveryKeyMap(
@@ -318,7 +373,7 @@ export function migrateLegacyStorage(options: MigrateLegacyStorageOptions): Migr
         isUnique: (proposedKey) => !existingKeys.has(proposedKey),
         randomSource: options.randomSource,
       })
-      const nextRelativePath = buildMigratedRelativePath(candidate.previousRelativePath, key)
+      const nextRelativePath = buildMigratedRelativePath(candidate, key)
       const nextNotePath = assertPathInsideRoot(rootPath, path.join(rootPath, nextRelativePath))
       const previousNotePath = assertPathInsideRoot(rootPath, path.join(rootPath, candidate.previousRelativePath))
 
@@ -328,12 +383,13 @@ export function migrateLegacyStorage(options: MigrateLegacyStorageOptions): Migr
       migratedRelativePaths.push(nextRelativePath)
 
       sidecars.write({
+        type: candidate.archivedAt === null ? "normal" : "archived",
         key,
         title: candidate.title,
         description: createNoteDescription(candidate.body),
         relativePath: nextRelativePath,
         createdAt: candidate.createdAt,
-        updatedAt: candidate.updatedAt,
+        updatedAt: candidate.archivedAt ?? candidate.updatedAt,
         archivedAt: candidate.archivedAt,
         namingVersion: 1,
       })
