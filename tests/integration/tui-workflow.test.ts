@@ -80,6 +80,22 @@ function configureAiForTui(rootPath: string): void {
   })
 }
 
+function configureDisabledAiForTui(rootPath: string): void {
+  createAiConfigRepository(rootPath).write({
+    version: 1,
+    enabled: false,
+    provider: "openai-compatible",
+    baseUrl: "http://127.0.0.1:4321/v1",
+    apiKey: "disabled-test-token",
+    model: "disabled-test-model",
+    logging: {
+      usage: true,
+      conversations: false,
+      results: true,
+    },
+  })
+}
+
 function configureCodexForTui(rootPath: string): void {
   createAiConfigRepository(rootPath).write({
     version: 1,
@@ -899,6 +915,46 @@ describe("TUI workspace workflows", () => {
     assert.deepEqual(controller.getState().ai, { kind: "auth-required", reason: "auth required · run bn ai codex auth login", queue: { queued: 0, failed: 0 } })
     const queue = await readAiQueue(rootPath)
     assert.deepEqual(queue.jobs, [])
+  })
+
+  test("AI process queue preserves queued jobs without attempts when AI is disabled", async () => {
+    const note = createNote({
+      override: rootPath,
+      title: "Disabled TUI Queue",
+      body: "Disabled AI should not consume queued attempts.",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    configureDisabledAiForTui(rootPath)
+    rebuildIndexes({ override: rootPath })
+    const savedNote = showNote({ override: rootPath, selector: note.key })
+    enqueueDescribeNoteJob(rootPath, {
+      key: savedNote.key,
+      relativePath: savedNote.relativePath,
+      title: savedNote.title,
+      body: savedNote.body,
+      currentDescription: savedNote.description ?? "",
+      promptHash: "sha256:4747474747474747474747474747474747474747474747474747474747474747",
+    })
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      aiClient: {
+        createChatCompletion: async () => {
+          throw new Error("provider should not be called while AI is disabled")
+        },
+      },
+    })
+
+    controller.runCommand("/ai-process-queue")
+
+    await waitForCondition(() => controller.getState().ai?.kind === "updated")
+
+    assert.deepEqual(controller.getState().ai, { kind: "updated", count: 0, queue: { queued: 1, failed: 0 } })
+    const queue = await readAiQueue(rootPath)
+    assert.equal(queue.jobs.length, 1)
+    assert.equal(queue.jobs[0].key, note.key)
+    assert.equal(queue.jobs[0].status, "pending")
+    assert.equal(queue.jobs[0].attempts, 0)
+    assert.equal(queue.jobs[0].lastError, null)
   })
 
   test("AI process queue preserves Codex jobs when auth refresh fails without blocking TUI interaction", async () => {

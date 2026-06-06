@@ -4,6 +4,7 @@ import path from "node:path"
 import { readFile } from "node:fs/promises"
 
 import { createManagedRootHarness } from "../helpers/cli"
+import { createAiConfigRepository } from "../../src/ai/config-repository"
 import { enqueueDescribeNoteJob, markDescribeNoteJobFailedIfContentHashMatches } from "../../src/ai/queue-service"
 import { readDescribeNotePrompt } from "../../src/ai/prompt-repository"
 import { runCliAsync } from "../../src/cli/entry"
@@ -311,6 +312,43 @@ test("bn ai process-queue exits non-zero when a queued job fails and still print
     assert.equal(queue.jobs[0].status, "failed")
     assert.equal(queue.jobs[0].attempts, 1)
     assert.equal(queue.jobs[0].lastError, "provider unavailable")
+  } finally {
+    await harness.cleanup()
+  }
+}, SUBPROCESS_HEAVY_TIMEOUT_MS)
+
+test("bn ai process-queue preserves queued jobs without attempts when AI is disabled", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-ai-process-queue-disabled-")
+
+  try {
+    const key = await createQueuedNote(harness, "Disabled Queue Note", "0x77777777")
+    createAiConfigRepository(harness.rootPath).write({
+      version: 1,
+      enabled: false,
+      provider: "openai-compatible",
+      baseUrl: "https://api.example.test/v1",
+      apiKey: "disabled-api-key-secret",
+      model: "disabled-model",
+      logging: {
+        usage: true,
+        conversations: false,
+        results: true,
+      },
+    })
+
+    const result = await runInjectedAi(harness.rootPath, ["ai", "process-queue"], async () => {
+      throw new Error("provider should not be called while AI is disabled")
+    })
+
+    assert.equal(result.exitCode, 1)
+    assert.equal(result.stdout, "Processed AI queue: 0 applied, 0 failed, 1 remaining.\n")
+    assert.equal(result.stderr, "")
+    const queue = JSON.parse(await readFile(path.join(harness.rootPath, ".data", "ai", "queue.json"), "utf8"))
+    assert.equal(queue.jobs.length, 1)
+    assert.equal(queue.jobs[0].key, key)
+    assert.equal(queue.jobs[0].status, "pending")
+    assert.equal(queue.jobs[0].attempts, 0)
+    assert.equal(queue.jobs[0].lastError, null)
   } finally {
     await harness.cleanup()
   }

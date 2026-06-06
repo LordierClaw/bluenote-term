@@ -460,8 +460,17 @@ export async function runAiCli(args: string[], runtime: AiCliRuntimeOptions = {}
     const rootPath = getConfiguredRootPath()
     requireAiConfig(rootPath)
     const config = createAiConfigRepository(rootPath).read()
-    const secrets = config.provider === "openai-compatible" ? [config.apiKey] : []
     const limit = parseLimit(subcommandArgs)
+    if (!config.enabled) {
+      const remaining = listPendingAiJobs(rootPath).length
+      return {
+        exitCode: remaining > 0 ? 1 : 0,
+        stdout: `Processed AI queue: 0 applied, 0 failed, ${remaining} remaining.\n`,
+        stderr: "",
+      }
+    }
+
+    const secrets = config.provider === "openai-compatible" ? [config.apiKey] : []
     const jobs = listRetryableAiJobs(rootPath, config.maxAttempts ?? 3)
     const selectedJobs = jobs.slice(0, limit ?? jobs.length)
     let applied = 0

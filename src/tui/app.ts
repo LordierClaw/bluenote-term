@@ -359,7 +359,7 @@ export function createDefaultWorkspaceController(options: DefaultWorkspaceContro
   if (!aiClient && aiConfigRepository.exists()) {
     try {
       const config = aiConfigRepository.read()
-      if (config.provider === "openai-compatible") {
+      if (config.enabled && config.provider === "openai-compatible") {
         aiClient = createAiTextGenerationClient(config, { fetch: options.fetch ?? fetch })
       }
     } catch {
@@ -368,16 +368,17 @@ export function createDefaultWorkspaceController(options: DefaultWorkspaceContro
   }
 
   function getAiClient(): AiTextGenerationClient | undefined {
-    if (aiClient) {
-      return aiClient
-    }
     if (!aiConfigRepository.exists()) {
-      return undefined
+      return aiClient
     }
 
     const config = aiConfigRepository.read()
     if (!config.enabled) {
+      aiClient = undefined
       return undefined
+    }
+    if (aiClient) {
+      return aiClient
     }
     if (config.provider === "openai-compatible") {
       aiClient = createAiTextGenerationClient(config, { fetch: options.fetch ?? fetch })
