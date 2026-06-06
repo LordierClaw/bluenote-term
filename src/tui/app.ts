@@ -11,6 +11,7 @@ import { sanitizeAiErrorMessage } from "../ai/error-redaction"
 import { enqueueDescribeNoteIfAiEnabled } from "../ai/enqueue-describe-note"
 import { scanAndEnqueueStaleDescriptions } from "../ai/stale-description-scan"
 import { CodexProviderSetupRequiredError, createAiTextGenerationClient, type AiTextGenerationClient } from "../ai/provider"
+import { CodexTextGenerationClientError } from "../ai/codex-client"
 import { createAiQueueRepository } from "../ai/queue-repository"
 import { dropDescribeNoteJobIfNoteMissing, listPendingAiJobs, listRetryableAiJobs, markDescribeNoteJobFailedIfContentHashMatches } from "../ai/queue-service"
 import { createNote } from "../core/create-note"
@@ -250,6 +251,26 @@ function markTuiAiQueueJobFailed(rootPath: string, job: ReturnType<typeof listPe
   })
 }
 
+function isCodexProviderSetupBlocked(error: unknown): boolean {
+  if (error instanceof CodexProviderSetupRequiredError) {
+    return true
+  }
+
+  if (!(error instanceof CodexTextGenerationClientError)) {
+    return false
+  }
+
+  const message = error.message.toLowerCase()
+  return message.includes("codex auth setup is required")
+    || message.includes("codex auth refresh failed")
+    || message.includes("codex auth is expired")
+    || message.includes("run bn ai codex auth login")
+}
+
+function codexAuthRequiredError(): Error {
+  return new Error("auth required · run bn ai codex auth login")
+}
+
 function failPendingTuiAiQueueJobs(rootPath: string, error: unknown): { applied: number; failed: number; failedThisRun: number; queued: number; remaining: number } {
   let failedThisRun = 0
   for (const job of listPendingAiJobs(rootPath)) {
@@ -283,6 +304,7 @@ async function processTuiAiQueue(rootPath: string, client: AiTextGenerationClien
 
   onProgress?.({ processed, total: jobs.length })
   for (const job of jobs) {
+    let reportProcessed = true
     try {
       if (dropDescribeNoteJobIfNoteMissing(rootPath, job)) {
         continue
@@ -300,12 +322,18 @@ async function processTuiAiQueue(rootPath: string, client: AiTextGenerationClien
         }
       }
     } catch (error) {
+      if (isCodexProviderSetupBlocked(error)) {
+        reportProcessed = false
+        throw codexAuthRequiredError()
+      }
       if (markTuiAiQueueJobFailed(rootPath, job, error, secrets)) {
         failedThisRun += 1
       }
     } finally {
-      processed += 1
-      onProgress?.({ processed, total: jobs.length })
+      if (reportProcessed) {
+        processed += 1
+        onProgress?.({ processed, total: jobs.length })
+      }
     }
   }
 
@@ -421,8 +449,8 @@ export function createDefaultWorkspaceController(options: DefaultWorkspaceContro
         try {
           client = getAiClient()
         } catch (error) {
-          if (error instanceof CodexProviderSetupRequiredError) {
-            return Promise.reject(error)
+          if (isCodexProviderSetupBlocked(error)) {
+            return Promise.reject(codexAuthRequiredError())
           }
           return Promise.resolve(failPendingTuiAiQueueJobs(rootPath, error))
         }

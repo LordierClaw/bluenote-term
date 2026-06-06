@@ -6,6 +6,7 @@ import { mkdtemp, rm, readFile, access, readdir, writeFile, mkdir } from "node:f
 import { existsSync } from "node:fs"
 
 import { createAiConfigRepository } from "../../src/ai/config-repository"
+import { CodexTextGenerationClientError } from "../../src/ai/codex-client"
 import { enqueueDescribeNoteJob, hashDescribeNoteContent, markDescribeNoteJobFailedIfContentHashMatches } from "../../src/ai/queue-service"
 import { createNote } from "../../src/core/create-note"
 import { initRoot } from "../../src/core/init-root"
@@ -848,6 +849,51 @@ describe("TUI workspace workflows", () => {
     assert.deepEqual(controller.getState().ai, { kind: "auth-required", reason: "auth required · run bn ai codex auth login", queue: { queued: 0, failed: 0 } })
     const queue = await readAiQueue(rootPath)
     assert.deepEqual(queue.jobs, [])
+  })
+
+  test("AI process queue preserves Codex jobs when auth refresh fails without blocking TUI interaction", async () => {
+    const note = createNote({
+      override: rootPath,
+      title: "TUI Codex Refresh Failure Queue",
+      body: "Codex refresh failure should keep this job pending.",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    configureCodexForTui(rootPath)
+    const savedNote = showNote({ override: rootPath, selector: note.key })
+    enqueueDescribeNoteJob(rootPath, {
+      key: note.key,
+      relativePath: note.relativePath,
+      title: savedNote.title,
+      body: savedNote.body,
+      currentDescription: savedNote.description,
+      promptHash: "sha256:4747474747474747474747474747474747474747474747474747474747474747",
+    })
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      aiStartupScheduler: createFakeScheduler(),
+      aiClient: {
+        createChatCompletion: async () => {
+          throw new CodexTextGenerationClientError("Codex auth refresh failed: Codex token refresh failed with status 400: invalid_grant. Run bn ai codex auth login.")
+        },
+      },
+    })
+
+    assert.deepEqual(controller.runCommand("/ai-process-queue"), { blocked: false })
+    assert.equal(controller.getState().ai?.kind, "running")
+    controller.focusManagerItem(0)
+    assert.equal(controller.getState().manager.focusedIndex, 0)
+
+    await waitForCondition(() => controller.getState().ai?.kind !== "running")
+
+    assert.deepEqual(controller.getState().ai, { kind: "error", reason: "auth required · run bn ai codex auth login", queue: { queued: 1, failed: 0 } })
+    const queue = await readAiQueue(rootPath)
+    assert.equal(queue.jobs.length, 1)
+    assert.equal(queue.jobs[0].key, note.key)
+    assert.equal(queue.jobs[0].status, "pending")
+    assert.equal(queue.jobs[0].attempts, 0)
+    assert.equal(queue.jobs[0].lastError, null)
   })
 
   test("AI process queue retries a long-note failure without blocking TUI interaction", async () => {
