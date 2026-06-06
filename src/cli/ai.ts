@@ -444,6 +444,11 @@ export async function runAiCli(args: string[], runtime: AiCliRuntimeOptions = {}
     const rootPath = getConfiguredRootPath()
     requireAiConfig(rootPath)
     const config = createAiConfigRepository(rootPath).read()
+    if (!config.enabled) {
+      throw new UsageError("AI description generation is disabled.", {
+        hint: "Enable AI in .data/ai/config.json before generating note descriptions.",
+      })
+    }
     const secrets = config.provider === "openai-compatible" ? [config.apiKey] : []
     try {
       return describeOutput(await generateNoteDescription({ rootPath, selector, client: getAiClient(config, runtime) }))

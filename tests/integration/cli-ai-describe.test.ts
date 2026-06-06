@@ -9,6 +9,7 @@ import { readDescribeNotePrompt } from "../../src/ai/prompt-repository"
 import { runCliAsync } from "../../src/cli/entry"
 import type { AiTextGenerationClient } from "../../src/ai/provider"
 import { createCodexAuthRepository } from "../../src/ai/codex-auth-repository"
+import { createAiConfigRepository } from "../../src/ai/config-repository"
 import pkg from "../../package.json"
 
 async function runInjectedAi(
@@ -237,6 +238,41 @@ test("bn ai describe surfaces stale result details separately from invalid outpu
     assert.equal(result.stdout, "")
     assert.match(result.stderr, /AI description result was stale: note changed while AI description was generating; skipped stale result\./)
     assert.match(result.stderr, /Hint: The existing note description was left unchanged\. Run bn ai describe again to refresh it\./)
+  } finally {
+    await harness.cleanup()
+  }
+}, 20_000)
+
+test("bn ai describe reports disabled AI before constructing a Codex client", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-ai-describe-disabled-codex-")
+
+  try {
+    const createResult = harness.run(["new", "--title", "Disabled Codex Describe"], {
+      BLUENOTE_TEST_NOW: "2026-06-01T00:00:00.000Z",
+      BLUENOTE_TEST_RANDOM_SEQUENCE: "0x90909090",
+    })
+    assert.equal(createResult.exitCode, 0)
+    const key = extractKey(createResult.stdout)
+    await Bun.write(path.join(harness.rootPath, "notes", "inbox", `${key}.md`), "Disabled Codex should not load auth.\n")
+    assert.equal(harness.run(["rebuild"]).exitCode, 0)
+    createAiConfigRepository(harness.rootPath).write({
+      version: 1,
+      enabled: false,
+      provider: "codex",
+      model: "codex-disabled-model",
+      logging: {
+        usage: true,
+        conversations: false,
+        results: true,
+      },
+    })
+
+    const result = harness.run(["ai", "describe", key])
+
+    assert.equal(result.exitCode, 1)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /AI description generation is disabled\./)
+    assert.doesNotMatch(result.stderr, /Codex auth setup is required/)
   } finally {
     await harness.cleanup()
   }
