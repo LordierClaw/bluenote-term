@@ -233,6 +233,35 @@ test("handles pending, timeout, denied/cancelled/permanent errors, and HTTP erro
   })
 })
 
+test("terminal device errors on pending-status responses fail immediately without polling until timeout", async () => {
+  let currentTime = new Date("2026-06-04T00:00:00.000Z").getTime()
+  const sleeps: number[] = []
+  const { fetch } = createFakeFetch((_, __, index) => index === 0
+    ? jsonResponse({ device_auth_id: "device-secret-value", user_code: "CODE-0000", interval: 1 })
+    : jsonResponse({ error: "access_denied", error_description: "user declined authorization" }, { status: 403 }))
+  const client = createCodexAuthClient({
+    fetch,
+    issuer,
+    clientId,
+    now: () => new Date(currentTime),
+    loginTimeoutMs: 5,
+    sleep: async (ms: number) => {
+      sleeps.push(ms)
+      currentTime += ms
+    },
+  })
+
+  const flow = await client.startDeviceFlow()
+  await assert.rejects(() => client.completeDeviceFlow(flow), (error: unknown) => {
+    assert.ok(error instanceof CodexAuthClientError)
+    assert.equal(error.code, "denied")
+    assert.match(error.message, /access_denied|declined/)
+    assert.doesNotMatch(error.message, /device-secret-value|CODE-0000/)
+    return true
+  })
+  assert.deepEqual(sleeps, [])
+})
+
 test("caps pending poll sleeps to the remaining login timeout", async () => {
   let currentTime = new Date("2026-06-04T00:00:00.000Z").getTime()
   const sleeps: number[] = []

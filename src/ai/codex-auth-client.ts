@@ -157,9 +157,6 @@ function providerErrorText(body: unknown): string | undefined {
 function classifyDeviceError(status: number, body: unknown): CodexAuthClientErrorCode | "pending" {
   const text = (providerErrorText(body) ?? "").toLowerCase()
 
-  if (status === 403 || status === 404 || text.includes("authorization_pending")) {
-    return "pending"
-  }
   if (text.includes("access_denied") || text.includes("authorization_declined") || text.includes("denied")) {
     return "denied"
   }
@@ -168,6 +165,9 @@ function classifyDeviceError(status: number, body: unknown): CodexAuthClientErro
   }
   if (text.includes("expired")) {
     return "expired"
+  }
+  if (status === 403 || status === 404 || text.includes("authorization_pending")) {
+    return "pending"
   }
   if (status >= 400 && status < 500) {
     return "permanent"
