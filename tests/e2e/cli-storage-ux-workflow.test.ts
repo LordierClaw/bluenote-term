@@ -35,7 +35,7 @@ test("CLI storage and UX workflow stays consistent through the real bin/bn.ts en
 
     await access(path.join(harness.rootPath, ".data", "notes"))
 
-    const createFirstResult = runOk("bn new first", ["new", "--title", "Workflow Alpha"])
+    const createFirstResult = runOk("bn new first", ["new", "--path", "note", "--title", "Workflow Alpha", "Alpha normal body"])
     assert.match(createFirstResult.stdout, /^Created note\nKey: workflow-alpha-[a-z0-9]{6}\nPath: note\/workflow-alpha-[a-z0-9]{6}\.md\n$/)
 
     const firstKeyMatch = createFirstResult.stdout.match(/^Created note\nKey: (workflow-alpha-[a-z0-9]{6})\nPath: (note\/(workflow-alpha-[a-z0-9]{6})\.md)\n$/)
@@ -44,26 +44,38 @@ test("CLI storage and UX workflow stays consistent through the real bin/bn.ts en
     const firstKey = firstKeyMatch[1]
     const firstRelativePath = firstKeyMatch[2]
 
-    assert.equal(await readFile(path.join(harness.rootPath, firstRelativePath), "utf8"), "")
+    assert.equal(await readFile(path.join(harness.rootPath, firstRelativePath), "utf8"), "Alpha normal body")
     const firstSidecar = await readSidecar(firstKey)
     assert.equal(firstSidecar.key, firstKey)
     assert.equal(firstSidecar.title, "Workflow Alpha")
-    assert.equal(firstSidecar.description, "")
+    assert.equal(firstSidecar.description, "Alpha normal body")
     assert.equal(firstSidecar.relativePath, firstRelativePath)
     assert.equal(firstSidecar.archivedAt, null)
     assert.equal(firstSidecar.namingVersion, 1)
     assert.match(firstSidecar.createdAt, /^\d{4}-\d{2}-\d{2}T/)
     assert.match(firstSidecar.updatedAt, /^\d{4}-\d{2}-\d{2}T/)
 
-    const createSecondResult = runOk("bn new second", ["new", "--title", "Workflow Beta"])
+    const draftResult = runOk("bn new draft", ["new", "Quick draft body"])
+    assert.match(draftResult.stdout, /^Created note\nKey: draft-[a-z0-9]{6}\nPath: draft\/draft-[a-z0-9]{6}\.md\n$/)
+    const draftRelativePath = draftResult.stdout.match(/Path: (draft\/draft-[a-z0-9]{6}\.md)/)?.[1]
+    assert.ok(draftRelativePath)
+    assert.equal(await readFile(path.join(harness.rootPath, draftRelativePath), "utf8"), "Quick draft body")
+
+    const noBodyResult = harness.runBin(["new"])
+    assert.equal(noBodyResult.exitCode, 1)
+    assert.equal(noBodyResult.stdout, "")
+    assert.match(noBodyResult.stderr, /Missing note body/)
+
+    const createSecondResult = runOk("bn new second", ["new", "--path", "note", "--title", "Workflow Beta", "Beta normal body"])
     const secondKeyMatch = createSecondResult.stdout.match(/^Created note\nKey: (workflow-beta-[a-z0-9]{6})\nPath: (note\/(workflow-beta-[a-z0-9]{6})\.md)\n$/)
     assert.ok(secondKeyMatch)
     assert.equal(secondKeyMatch[1], secondKeyMatch[3])
     const secondKey = secondKeyMatch[1]
 
     const listResult = runOk("bn list", ["list"])
-    assert.match(listResult.stdout, new RegExp(`Workflow Alpha\\t${harness.escapeForRegExp(firstKey)}\\t\\tnote/${harness.escapeForRegExp(firstKey)}\\.md`))
-    assert.match(listResult.stdout, new RegExp(`Workflow Beta\\t${harness.escapeForRegExp(secondKey)}\\t\\tnote/${harness.escapeForRegExp(secondKey)}\\.md`))
+    assert.match(listResult.stdout, new RegExp(`Workflow Alpha\\t${harness.escapeForRegExp(firstKey)}\\tAlpha normal body\\tnote/${harness.escapeForRegExp(firstKey)}\\.md`))
+    assert.match(listResult.stdout, new RegExp(`Workflow Beta\\t${harness.escapeForRegExp(secondKey)}\\tBeta normal body\\tnote/${harness.escapeForRegExp(secondKey)}\\.md`))
+    assert.match(listResult.stdout, /draft-[a-z0-9]{6}\tdraft-[a-z0-9]{6}\tQuick draft body\tdraft\/draft-[a-z0-9]{6}\.md/)
 
     const searchResult = runOk("bn search workflow beta", ["search", "workflow beta"])
     assert.match(searchResult.stdout, /Workflow Beta/)
@@ -78,9 +90,9 @@ test("CLI storage and UX workflow stays consistent through the real bin/bn.ts en
         "Title: Workflow Beta",
         `Key: ${secondKey}`,
         `Path: note/${secondKey}.md`,
-        "Description: ",
+        "Description: Beta normal body",
         "",
-        "",
+        "Beta normal body",
       ].join("\n"),
     )
 
@@ -118,13 +130,13 @@ test("CLI storage and UX workflow stays consistent through the real bin/bn.ts en
     await assert.rejects(() => access(path.join(harness.rootPath, ".data", "notes", `${firstKey}.json`)), { code: "ENOENT" })
 
     const rebuildResult = runOk("bn rebuild", ["rebuild"])
-    assert.equal(rebuildResult.stdout, "Rebuilt indexes for 0 note(s).\n")
+    assert.equal(rebuildResult.stdout, "Rebuilt indexes for 1 note(s).\n")
 
     await access(path.join(harness.rootPath, ".data", "metadata.sqlite"))
     await access(path.join(harness.rootPath, ".data", "search-index.json"))
 
     const finalListResult = runOk("bn list after archive and delete", ["list"])
-    assert.equal(finalListResult.stdout, "")
+    assert.match(finalListResult.stdout, /draft-[a-z0-9]{6}\tdraft-[a-z0-9]{6}\tQuick draft body\tdraft\/draft-[a-z0-9]{6}\.md/)
 
     const finalSearchResult = runOk("bn search aurora signals", ["search", "aurora", "signals"])
     assert.equal(finalSearchResult.stdout, 'No notes matched "aurora signals".\n')

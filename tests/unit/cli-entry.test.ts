@@ -2,7 +2,7 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
-import { mkdtemp, readFile, rm } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises"
 
 import { formatHelp, formatSearchMatches, runCli } from "../../src/cli/entry"
 
@@ -15,7 +15,8 @@ test("formatHelp lists the public commands without removed command or release-st
   assert.match(help, /--help/)
   assert.match(help, /--version/)
   assert.match(help, /init\s+Initialize the managed BlueNote root/)
-  assert.match(help, /new\s+--title <title>\s+Create a new note in note\/ and print its key\/path/)
+  assert.match(help, /new\s+\[--title <title>\] \[--path note\/<folder>\] \[--clipboard\] <body>/)
+  assert.doesNotMatch(help, /new\s+--title <title>\s+Create a new note in note\/ and print its key\/path/)
   assert.match(help, /list\s+List active notes as title, key, description, and path/)
   assert.match(help, /show\s+<key\|path>\s+Print a matching note summary and body/)
   assert.match(help, /search\s+<query>/)
@@ -82,7 +83,7 @@ test("runCli delegates tui to an injectable TUI runner and returns its result", 
   assert.equal(result.stderr, "")
 })
 
-test("runCli accepts injected create-note dependencies for deterministic new-note tests", async () => {
+test("runCli creates an untitled draft from positional body with deterministic create-note dependencies", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-entry-new-"))
   const previousRoot = process.env.BLUENOTE_ROOT
 
@@ -90,7 +91,7 @@ test("runCli accepts injected create-note dependencies for deterministic new-not
 
   try {
     const result = runCli(
-      ["new", "--title", "Example"],
+      ["new", "Plain body text"],
       "0.1.0",
       {
         createNoteOptions: {
@@ -106,8 +107,126 @@ test("runCli accepts injected create-note dependencies for deterministic new-not
 
     assert.equal(result.exitCode, 0)
     assert.equal(result.stderr, "")
-    assert.equal(result.stdout, "Created note\nKey: example-51u7i0\nPath: note/example-51u7i0.md\n")
-    assert.equal(await readFile(path.join(rootPath, "note", "example-51u7i0.md"), "utf8"), "")
+    assert.equal(result.stdout, "Created note\nKey: draft-51u7i0\nPath: draft/draft-51u7i0.md\n")
+    assert.equal(await readFile(path.join(rootPath, "draft", "draft-51u7i0.md"), "utf8"), "Plain body text")
+  } finally {
+    if (previousRoot === undefined) {
+      delete process.env.BLUENOTE_ROOT
+    } else {
+      process.env.BLUENOTE_ROOT = previousRoot
+    }
+
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("runCli creates a title-derived draft when --title and positional body are provided", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-entry-new-title-draft-"))
+  const previousRoot = process.env.BLUENOTE_ROOT
+
+  process.env.BLUENOTE_ROOT = rootPath
+
+  try {
+    const result = runCli(["new", "--title", "Idea", "Draft body"], "0.1.0", {
+      createNoteOptions: {
+        clock: { now: () => new Date("2026-05-24T12:00:00.000Z") },
+        randomSource: () => 0x12345678,
+      },
+    })
+
+    assert.equal(result.exitCode, 0)
+    assert.equal(result.stderr, "")
+    assert.equal(result.stdout, "Created note\nKey: idea-51u7i0\nPath: draft/idea-51u7i0.md\n")
+    assert.equal(await readFile(path.join(rootPath, "draft", "idea-51u7i0.md"), "utf8"), "Draft body")
+  } finally {
+    if (previousRoot === undefined) {
+      delete process.env.BLUENOTE_ROOT
+    } else {
+      process.env.BLUENOTE_ROOT = previousRoot
+    }
+
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("runCli creates a normal note under an existing note folder when --path, --title, and body are provided", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-entry-new-normal-"))
+  const previousRoot = process.env.BLUENOTE_ROOT
+
+  process.env.BLUENOTE_ROOT = rootPath
+
+  try {
+    runCli(["init"], "0.1.0")
+    await mkdir(path.join(rootPath, "note", "work"), { recursive: true })
+
+    const result = runCli(["new", "--path", "note/work", "--title", "Meeting", "Meeting body"], "0.1.0", {
+      createNoteOptions: {
+        clock: { now: () => new Date("2026-05-24T12:00:00.000Z") },
+        randomSource: () => 0x12345678,
+      },
+    })
+
+    assert.equal(result.exitCode, 0)
+    assert.equal(result.stderr, "")
+    assert.equal(result.stdout, "Created note\nKey: meeting-51u7i0\nPath: note/work/meeting-51u7i0.md\n")
+    assert.equal(await readFile(path.join(rootPath, "note", "work", "meeting-51u7i0.md"), "utf8"), "Meeting body")
+  } finally {
+    if (previousRoot === undefined) {
+      delete process.env.BLUENOTE_ROOT
+    } else {
+      process.env.BLUENOTE_ROOT = previousRoot
+    }
+
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("runCli rejects invalid new-note body source and path combinations", () => {
+  const cases: Array<{ args: string[]; pattern: RegExp }> = [
+    { args: ["new", "--path", "note/work", "body"], pattern: /--path requires --title/ },
+    { args: ["new", "--path", "draft", "--title", "Bad", "body"], pattern: /--path must point to an existing folder under note\// },
+    { args: ["new", "--path", "note/missing", "--title", "Bad", "body"], pattern: /existing folder under note\// },
+    { args: ["new"], pattern: /Missing note body/ },
+    { args: ["new", "body", "--clipboard"], pattern: /Choose either positional body or --clipboard/ },
+  ]
+
+  for (const { args, pattern } of cases) {
+    const result = runCli(args, "0.1.0")
+    assert.equal(result.exitCode, 1)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, pattern)
+  }
+})
+
+test("runCli reads body from injected clipboard runtime and rejects empty or unavailable clipboard", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-entry-new-clipboard-"))
+  const previousRoot = process.env.BLUENOTE_ROOT
+
+  process.env.BLUENOTE_ROOT = rootPath
+
+  try {
+    const created = runCli(["new", "--clipboard"], "0.1.0", {
+      clipboard: { readText: () => "Clipboard body" },
+      createNoteOptions: {
+        clock: { now: () => new Date("2026-05-24T12:00:00.000Z") },
+        randomSource: () => 0x12345678,
+      },
+    })
+
+    assert.equal(created.exitCode, 0)
+    assert.equal(await readFile(path.join(rootPath, "draft", "draft-51u7i0.md"), "utf8"), "Clipboard body")
+
+    const empty = runCli(["new", "--clipboard"], "0.1.0", {
+      clipboard: { readText: () => "" },
+    })
+    assert.equal(empty.exitCode, 1)
+    assert.match(empty.stderr, /Clipboard is empty or unavailable/)
+
+    const unavailable = runCli(["new", "--clipboard"], "0.1.0", {
+      clipboard: { readText: () => { throw new Error("no clipboard") } },
+    })
+    assert.equal(unavailable.exitCode, 1)
+    assert.match(unavailable.stderr, /Clipboard is empty or unavailable/)
   } finally {
     if (previousRoot === undefined) {
       delete process.env.BLUENOTE_ROOT

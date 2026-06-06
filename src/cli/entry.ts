@@ -14,6 +14,7 @@ import { migrateStorage, type MigrateStorageOptions } from "../core/migrate-stor
 import { rebuildIndexes, type RebuildIndexesOptions } from "../core/rebuild-indexes"
 import { searchNotes, type SearchNoteMatch } from "../core/search-notes"
 import { showNote } from "../core/show-note"
+import { desktopClipboard, type ClipboardRuntime } from "../platform/clipboard"
 import { runTuiCli } from "../tui/app"
 import { runAiCli, type AiCliRuntimeOptions } from "./ai"
 
@@ -23,6 +24,7 @@ export interface CliRuntimeOptions {
   rebuildIndexesOptions?: Pick<RebuildIndexesOptions, "testHooks">
   tuiRunner?: () => CliResult
   ai?: AiCliRuntimeOptions
+  clipboard?: ClipboardRuntime
 }
 
 export function formatCliError(error: AppError): CliResult {
@@ -57,6 +59,126 @@ function readFlagValue(args: string[], flagName: string): string | undefined {
   return value
 }
 
+interface ParsedNewArgs {
+  title?: string
+  path?: string
+  useClipboard: boolean
+  body?: string
+}
+
+function parseNewArgs(args: string[]): ParsedNewArgs {
+  const positional: string[] = []
+  let title: string | undefined
+  let destinationPath: string | undefined
+  let useClipboard = false
+
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index]
+
+    if (arg === "--title") {
+      const value = args[index + 1]
+
+      if (value === undefined || value.startsWith("--")) {
+        throw new UsageError("Missing value for --title.", { hint: 'Pass --title "...".' })
+      }
+
+      title = value
+      index += 1
+      continue
+    }
+
+    if (arg === "--path") {
+      const value = args[index + 1]
+
+      if (value === undefined || value.startsWith("--")) {
+        throw new UsageError("Missing value for --path.", { hint: "Pass --path note/<folder>." })
+      }
+
+      destinationPath = value.replace(/\\/g, "/").replace(/^\.\//, "").replace(/\/$/, "")
+      index += 1
+      continue
+    }
+
+    if (arg === "--clipboard") {
+      useClipboard = true
+      continue
+    }
+
+    if (arg.startsWith("--")) {
+      throw new UsageError(`Unknown option for new note: ${arg}.`, {
+        hint: "Run bn new --help for available new-note options.",
+      })
+    }
+
+    positional.push(arg)
+  }
+
+  if (positional.length > 1) {
+    throw new UsageError("Too many positional body arguments for new note.", {
+      hint: 'Quote the note body as one argument, e.g. bn new "Body text".',
+    })
+  }
+
+  return { title, path: destinationPath, useClipboard, body: positional[0] }
+}
+
+function readNewNoteBody(parsed: ParsedNewArgs, runtime: CliRuntimeOptions): string {
+  const hasPositionalBody = parsed.body !== undefined
+
+  if (hasPositionalBody && parsed.useClipboard) {
+    throw new UsageError("Choose either positional body or --clipboard, not both.", {
+      hint: 'Run bn new "Body text" or bn new --clipboard.',
+    })
+  }
+
+  if (!hasPositionalBody && !parsed.useClipboard) {
+    throw new UsageError("Missing note body for new note.", {
+      hint: 'Pass a positional body or use --clipboard, e.g. bn new "Body text".',
+    })
+  }
+
+  if (hasPositionalBody) {
+    return parsed.body ?? ""
+  }
+
+  try {
+    const clipboardBody = (runtime.clipboard ?? desktopClipboard).readText()
+
+    if (clipboardBody.length === 0) {
+      throw new UsageError("Clipboard is empty or unavailable.", {
+        hint: 'Copy note text first, or pass a body directly with bn new "Body text".',
+      })
+    }
+
+    return clipboardBody
+  } catch (error) {
+    if (error instanceof UsageError) throw error
+
+    throw new UsageError("Clipboard is empty or unavailable.", {
+      hint: 'Copy note text first, or pass a body directly with bn new "Body text".',
+      cause: error,
+    })
+  }
+}
+
+function assertNewNotePathIsAllowed(destinationPath: string | undefined, title: string | undefined): void {
+  if (destinationPath === undefined) {
+    return
+  }
+
+  if (title === undefined || title.trim().length === 0) {
+    throw new UsageError("--path requires --title for normal note creation.", {
+      hint: 'Run bn new --path note/<folder> --title "Title" "Body text".',
+    })
+  }
+
+  if (destinationPath !== "note" && !destinationPath.startsWith("note/")) {
+    throw new UsageError("--path must point to an existing folder under note/.", {
+      hint: "Use --path note or an existing note/<folder> destination.",
+    })
+  }
+}
+
 export function formatHelp(version: string): string {
   return [
     `BlueNote v${version}`,
@@ -69,7 +191,8 @@ export function formatHelp(version: string): string {
     "  --help       Show this message",
     "  --version    Print the current version",
     "  init         Initialize the managed BlueNote root",
-    "  new          --title <title>  Create a new note in note/ and print its key/path",
+    "  new          [--title <title>] [--path note/<folder>] [--clipboard] <body>",
+    "               Create a draft from body text or clipboard; --path creates a normal note",
     "  list         List active notes as title, key, description, and path",
     "  show         <key|path>  Print a matching note summary and body",
     "  search       <query>          Search indexed notes",
@@ -172,18 +295,16 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
     }
 
     if (command === "new") {
-      const title = readFlagValue(commandArgs, "--title")
+      const parsed = parseNewArgs(commandArgs)
+      const body = readNewNoteBody(parsed, runtime)
 
-      if (!title) {
-        throw new UsageError("Missing required --title for new note.", {
-          hint: 'Run bn new --title "Example".',
-        })
-      }
+      assertNewNotePathIsAllowed(parsed.path, parsed.title)
 
       const summary = createNote({
-        title,
-        type: "normal",
-        destinationFolder: "note",
+        title: parsed.title,
+        body,
+        type: parsed.path === undefined ? "draft" : "normal",
+        ...(parsed.path === undefined ? {} : { destinationFolder: parsed.path }),
         ...runtime.createNoteOptions,
       })
 

@@ -12,7 +12,7 @@ test("CLI help describes the Phase 7 note layout for new notes", () => {
   assert.equal(result.exitCode, 0)
   assert.equal(result.stderr, "")
   assert.doesNotMatch(result.stdout, /notes\/inbox/)
-  assert.match(result.stdout, /Create a new note in note\//)
+  assert.match(result.stdout, /Create a draft from body text or clipboard/)
 })
 
 test("CLI workflow stays consistent across init, create, rebuild, list, search, show, edit, and archive", async () => {
@@ -39,15 +39,20 @@ test("CLI workflow stays consistent across init, create, rebuild, list, search, 
       await assert.rejects(access(path.join(harness.rootPath, relativePath)), `${relativePath} should not be created by bn init`)
     }
 
-    const newResult = runOk("bn new", ["new", "--title", "Workflow Example"])
-    assert.match(newResult.stdout, /^Created note\nKey: .+\nPath: note\/.+\.md\n$/)
+    const newResult = runOk("bn new", ["new", "--title", "Workflow Example", "Workflow example body"])
+    assert.match(newResult.stdout, /^Created note\nKey: .+\nPath: draft\/.+\.md\n$/)
 
-    const createdRelativePathMatch = newResult.stdout.match(/^Created note\nKey: .+\nPath: (note\/.+\.md)\n$/)
+    const createdRelativePathMatch = newResult.stdout.match(/^Created note\nKey: .+\nPath: (draft\/.+\.md)\n$/)
     const createdRelativePath = createdRelativePathMatch?.[1]
     assert.notEqual(createdRelativePath, undefined)
     const createdAbsolutePath = path.join(harness.rootPath, createdRelativePath ?? "")
     const createdMarkdown = await readFile(createdAbsolutePath, "utf8")
-    assert.equal(createdMarkdown, "")
+    assert.equal(createdMarkdown, "Workflow example body")
+
+    const missingPathResult = harness.run(["new", "--path", "note/missing", "--title", "Bad", "body"])
+    assert.equal(missingPathResult.exitCode, 1)
+    assert.equal(missingPathResult.stdout, "")
+    assert.match(missingPathResult.stderr, /existing folder under note\//)
 
     const secondNoteRelativePath = "note/reference-note.md"
     await harness.writeNote(secondNoteRelativePath, noteMarkdown({
@@ -65,7 +70,7 @@ test("CLI workflow stays consistent across init, create, rebuild, list, search, 
     await access(path.join(harness.rootPath, ".data", "search-index.json"))
 
     const listResult = runOk("bn list", ["list"])
-    assert.match(listResult.stdout, /Workflow Example\s+workflow-example-[a-z0-9]+\s+\s*note[\\/]workflow-example-[a-z0-9]+\.md/)
+    assert.match(listResult.stdout, /Workflow Example\s+workflow-example-[a-z0-9]+\s+Workflow example body\s+draft[\\/]workflow-example-[a-z0-9]+\.md/)
     assert.match(listResult.stdout, /Reference Note\s+reference-note\s+Reference zebra tokens remain searchable while active\.\s+note[\\/]reference-note\.md/)
 
     const searchResult = runOk("bn search zebra tokens", ["search", "zebra", "tokens"])
@@ -123,7 +128,7 @@ test("CLI workflow stays consistent across init, create, rebuild, list, search, 
     assert.match(`archivedAt: ${archivedSidecar.archivedAt}`, timestampFieldPattern("archivedAt"))
 
     const finalListResult = runOk("bn list after archive", ["list"])
-    assert.match(finalListResult.stdout, /Workflow Example\s+workflow-example-[a-z0-9]+\s+\s*note[\\/]workflow-example-[a-z0-9]+\.md/)
+    assert.match(finalListResult.stdout, /Workflow Example\s+workflow-example-[a-z0-9]+\s+Workflow example body\s+draft[\\/]workflow-example-[a-z0-9]+\.md/)
     assert.doesNotMatch(finalListResult.stdout, /reference-note/)
 
     const finalSearchResult = runOk("bn search after archive", ["search", "Edited zebra tokens"])
