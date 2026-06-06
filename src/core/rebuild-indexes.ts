@@ -9,7 +9,7 @@ import { parsePlainNote } from "../storage/plain-note"
 import { createSidecarRepository } from "../storage/sidecar-repository"
 import { createNoteRepository, type StoredNoteRecord } from "../storage/note-repository"
 import type { ParsedNote } from "../storage/note-schema"
-import { ensureManagedRoot } from "../storage/root-layout"
+import { ensureManagedRoot, getArchiveNotesPath } from "../storage/root-layout"
 import { migrateLegacyAppStateToData } from "../storage/app-state-migration"
 
 export interface RebuildIndexesOptions extends ResolveBlueNoteRootOptions {
@@ -186,6 +186,13 @@ export function rebuildIndexes(options: RebuildIndexesOptions = {}): RebuildInde
 
       try {
         const sidecar = sidecars.read(sidecarKey)
+        const sidecarNotePath = path.join(rootPath, sidecar.relativePath)
+        const archiveNotesPath = getArchiveNotesPath(rootPath)
+
+        if (existsSync(sidecarNotePath) && path.relative(archiveNotesPath, sidecarNotePath).split(path.sep)[0] !== "..") {
+          continue
+        }
+
         validationErrors.push(
           `Sidecar '${path.join(STATE_NOTES_DIRECTORY, `${sidecarKey}.json`)}' points to missing note '${sidecar.relativePath}'.`,
         )

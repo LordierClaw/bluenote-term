@@ -13,7 +13,10 @@ import { UsageError } from "../../../src/core/errors"
 import {
   ensureManagedRoot,
   getArchiveNotePath,
-  getInboxNotePath,
+  getArchiveNotesPath,
+  getDraftNotesPath,
+  getNormalNotePath,
+  getNormalNotesPath,
   getNotesPath,
   getStateNotesPath,
   MANAGED_ROOT_LAYOUT,
@@ -33,6 +36,16 @@ test("ensureManagedRoot creates the full managed root layout", async () => {
       assert.equal(stats.isDirectory(), true, `${relativePath} should be a directory`)
     }
 
+    for (const relativePath of ["note", "draft", path.join(".data", "archive"), path.join(".data", "notes"), path.join(".data", "ai")]) {
+      const fullPath = path.join(tempRoot, relativePath)
+      const stats = await stat(fullPath)
+      assert.equal(stats.isDirectory(), true, `${relativePath} should be a directory`)
+    }
+
+    for (const relativePath of [path.join("notes", "inbox"), path.join("notes", "journal"), path.join("notes", "archive")]) {
+      await assert.rejects(access(path.join(tempRoot, relativePath)), `${relativePath} should not be created for a fresh root`)
+    }
+
     await assert.rejects(access(path.join(tempRoot, ".bluenote")))
     await assert.rejects(access(path.join(tempRoot, ".state")))
   } finally {
@@ -46,13 +59,16 @@ test("root layout helpers expose note and sidecar paths for repository storage",
   try {
     const resolvedRoot = ensureManagedRoot(tempRoot)
 
-    assert.equal(getNotesPath(resolvedRoot), path.join(resolvedRoot, "notes"))
+    assert.equal(getNotesPath(resolvedRoot), path.join(resolvedRoot, "note"))
+    assert.equal(getNormalNotesPath(resolvedRoot), path.join(resolvedRoot, "note"))
+    assert.equal(getDraftNotesPath(resolvedRoot), path.join(resolvedRoot, "draft"))
+    assert.equal(getArchiveNotesPath(resolvedRoot), path.join(resolvedRoot, ".data", "archive"))
     assert.equal(getStateNotesPath(resolvedRoot), path.join(resolvedRoot, ".data", "notes"))
     assert.equal(APP_STATE_DIRECTORY, ".data")
     assert.equal(APP_STATE_NOTES_DIRECTORY, path.join(".data", "notes"))
     assert.equal(LEGACY_STATE_DIRECTORY, ".state")
-    assert.equal(getInboxNotePath(resolvedRoot, "note-123"), path.join(resolvedRoot, "notes", "inbox", "note-123.md"))
-    assert.equal(getArchiveNotePath(resolvedRoot, "note-123"), path.join(resolvedRoot, "notes", "archive", "note-123.md"))
+    assert.equal(getNormalNotePath(resolvedRoot, "note-123"), path.join(resolvedRoot, "note", "note-123.md"))
+    assert.equal(getArchiveNotePath(resolvedRoot, "note-123"), path.join(resolvedRoot, ".data", "archive", "note-123.md"))
   } finally {
     await rm(tempRoot, { recursive: true, force: true })
   }

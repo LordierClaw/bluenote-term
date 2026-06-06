@@ -18,11 +18,9 @@ import { UsageError } from "../core/errors"
 import { assertPathInsideRoot } from "../platform/path-safety"
 
 export const MANAGED_ROOT_LAYOUT = [
-  "notes/inbox",
-  "notes/journal",
-  "notes/archive",
-  "scratches",
-  "templates",
+  "note",
+  "draft",
+  path.join(STATE_DIRECTORY, "archive"),
   STATE_DIRECTORY,
   STATE_NOTES_DIRECTORY,
   STATE_RECOVERY_DIRECTORY,
@@ -33,20 +31,32 @@ export const MANAGED_ROOT_LAYOUT = [
   APP_STATE_AI_LOGS_DIRECTORY,
 ] as const
 
-const NOTES_DIRECTORY = "notes"
-const INBOX_DIRECTORY = path.join(NOTES_DIRECTORY, "inbox")
-const ARCHIVE_DIRECTORY = path.join(NOTES_DIRECTORY, "archive")
+const NORMAL_NOTES_DIRECTORY = "note"
+const DRAFT_NOTES_DIRECTORY = "draft"
+const ARCHIVE_NOTES_DIRECTORY = path.join(STATE_DIRECTORY, "archive")
 
 export function getNotesPath(rootPath: string): string {
-  return assertPathInsideRoot(rootPath, path.join(path.resolve(rootPath), NOTES_DIRECTORY))
+  return getNormalNotesPath(rootPath)
+}
+
+export function getNormalNotesPath(rootPath: string): string {
+  return assertPathInsideRoot(rootPath, path.join(path.resolve(rootPath), NORMAL_NOTES_DIRECTORY))
+}
+
+export function getDraftNotesPath(rootPath: string): string {
+  return assertPathInsideRoot(rootPath, path.join(path.resolve(rootPath), DRAFT_NOTES_DIRECTORY))
+}
+
+export function getArchiveNotesPath(rootPath: string): string {
+  return assertPathInsideRoot(rootPath, path.join(path.resolve(rootPath), ARCHIVE_NOTES_DIRECTORY))
 }
 
 export function getInboxPath(rootPath: string): string {
-  return assertPathInsideRoot(rootPath, path.join(path.resolve(rootPath), INBOX_DIRECTORY))
+  return getNormalNotesPath(rootPath)
 }
 
 export function getArchivePath(rootPath: string): string {
-  return assertPathInsideRoot(rootPath, path.join(path.resolve(rootPath), ARCHIVE_DIRECTORY))
+  return getArchiveNotesPath(rootPath)
 }
 
 export function getStateNotesPath(rootPath: string): string {
@@ -86,7 +96,11 @@ export function getLegacyStatePath(rootPath: string): string {
 }
 
 export function getInboxNotePath(rootPath: string, key: string): string {
-  const inboxPath = getInboxPath(rootPath)
+  return getNormalNotePath(rootPath, key)
+}
+
+export function getNormalNotePath(rootPath: string, key: string): string {
+  const inboxPath = getNormalNotesPath(rootPath)
 
   return assertPathInsideRoot(inboxPath, path.join(inboxPath, `${key}.md`))
 }
