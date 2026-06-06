@@ -116,6 +116,8 @@ export interface WorkspaceControllerDependencies {
   deleteNote?: (selector: string) => void
   rebuildIndexes?: () => void
   persistEditorBody?: SaveEditorBufferDependencies["persist"]
+  initialNote?: TuiNote
+  recordLatestOpenedNote?: (note: TuiNote) => void
   autosaveScheduler?: WorkspaceDebounceScheduler
   aiIdleScheduler?: WorkspaceDebounceScheduler
   clipboard?: ClipboardModel
@@ -1070,13 +1072,19 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   }
 
   function setEditorNote(note: TuiNote): void {
+    const openedNote = toTuiNote(note)
     state = openEditorForNote({
       ...state,
       manager: {
         ...state.manager,
         status: null,
       },
-    }, toTuiNote(note))
+    }, openedNote)
+    try {
+      deps.recordLatestOpenedNote?.(openedNote)
+    } catch {
+      // Latest-opened state is a best-effort startup hint; opening the editor must remain non-blocking.
+    }
   }
 
   function openNoteByKey(key: string, options: WorkspaceActionOptions = {}): WorkspaceActionResult {
@@ -2257,6 +2265,9 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   }
 
   refreshManager()
+  if (deps.initialNote) {
+    setEditorNote(deps.initialNote)
+  }
 
   return controller
 }

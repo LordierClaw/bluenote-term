@@ -10,6 +10,7 @@ import { enqueueDescribeNoteJob } from "../../../src/ai/queue-service"
 import { createAiQueueRepository } from "../../../src/ai/queue-repository"
 import { ensureManagedRoot, getAiConfigPath } from "../../../src/storage/root-layout"
 import { createNoteRepository } from "../../../src/storage/note-repository"
+import { rebuildIndexes } from "../../../src/core/rebuild-indexes"
 import { createSidecarRepository } from "../../../src/storage/sidecar-repository"
 import { createDefaultWorkspaceController } from "../../../src/tui/app"
 import {
@@ -178,11 +179,35 @@ function commandResult(name: "/new" | "/archive" | "/delete" | "/rebuild" | "/qu
   }
 }
 
+function openManagerFolderPath(controller: ReturnType<typeof createWorkspaceController>, folderPath: string): void {
+  controller.showManager()
+  if (controller.getState().manager.currentFolderPath !== "") {
+    controller.goBack()
+  }
+
+  const directFolderIndex = controller.getState().manager.items.findIndex((item) => item.type === "folder" && item.relativePath === folderPath)
+  if (directFolderIndex !== -1) {
+    controller.focusManagerItem(directFolderIndex)
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    return
+  }
+
+  let prefix = ""
+  for (const part of folderPath.split("/")) {
+    prefix = prefix ? `${prefix}/${part}` : part
+    const folderIndex = controller.getState().manager.items.findIndex((item) => item.type === "folder" && item.relativePath === prefix)
+    assert.notEqual(folderIndex, -1, `missing manager folder ${prefix}`)
+    controller.focusManagerItem(folderIndex)
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+  }
+}
+
 function openInboxDaily(controller: ReturnType<typeof createWorkspaceController>): void {
-  controller.focusManagerItem(1)
-  controller.openFocusedManagerItem()
-  controller.focusManagerItem(0)
-  controller.openFocusedManagerItem()
+  openManagerFolderPath(controller, "notes/inbox")
+  const noteIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === "daily-plan")
+  assert.notEqual(noteIndex, -1, "missing daily-plan manager row")
+  controller.focusManagerItem(noteIndex)
+  assert.equal(controller.openFocusedManagerItem().blocked, false)
 }
 
 async function flushBackgroundAi(): Promise<void> {
@@ -219,11 +244,77 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(calls, ["list"])
   })
 
+  test("keeps legacy notes folders reachable when draft notes exist", () => {
+    const mixedSummaries: NoteManagerSummary[] = [
+      ...noteSummaries,
+      {
+        key: "draft-a",
+        title: "draft-a",
+        description: "",
+        relativePath: "draft/draft-a.md",
+        body: "Draft body",
+      },
+    ]
+    const { deps } = createDeps({
+      listNotes: () => mixedSummaries,
+      showNote: (selector) => selector === "draft-a"
+        ? {
+            key: "draft-a",
+            title: "draft-a",
+            description: "",
+            relativePath: "draft/draft-a.md",
+            body: "Draft body",
+          }
+        : notesByKey[selector],
+    })
+    const controller = createWorkspaceController(deps)
+
+    assert.deepEqual(
+      controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`),
+      ["folder:draft", "folder:notes"],
+    )
+
+    openManagerFolderPath(controller, "notes/inbox")
+
+    assert.deepEqual(
+      controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`),
+      ["note:notes/inbox/daily-plan.md"],
+    )
+  })
+
   test("accepts an initial AI status dependency for startup rendering", () => {
     const { deps } = createDeps({ initialAiStatus: { kind: "connected", model: "gpt-4o-mini" } })
     const controller = createWorkspaceController(deps)
 
     assert.equal(buildManagerViewModel(controller.getState()).aiStatus.text, "AI: connected · gpt-4o-mini")
+  })
+
+  test("updates latest-opened whenever editor opens a note", () => {
+    const openedRelativePaths: string[] = []
+    const { deps } = createDeps({
+      recordLatestOpenedNote: (note) => {
+        openedRelativePaths.push(note.relativePath)
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+
+    assert.equal(controller.getState().screen, "editor")
+    assert.deepEqual(openedRelativePaths, ["notes/inbox/daily-plan.md"])
+  })
+
+  test("opens editor even when latest-opened recording fails", () => {
+    const { deps } = createDeps({
+      recordLatestOpenedNote: () => {
+        throw new Error("latest-opened write failed")
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    assert.doesNotThrow(() => openInboxDaily(controller))
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.relativePath, "notes/inbox/daily-plan.md")
   })
 
   test("default TUI controller reads configured AI model at startup without running jobs", async () => {
@@ -311,6 +402,7 @@ describe("TUI workspace controller", () => {
           updatedAt: "2026-06-01T10:00:00.000Z",
         },
         body: "Original daily body\n",
+        destination: { type: "normal", folderRelativePath: "note" },
       })
       enqueueDescribeNoteJob(rootPath, {
         key: "daily-plan",
@@ -365,7 +457,9 @@ describe("TUI workspace controller", () => {
           updatedAt: "2026-06-01T10:00:00.000Z",
         },
         body: "Original daily body\n",
+        destination: { type: "normal", folderRelativePath: "note" },
       })
+      rebuildIndexes({ override: rootPath })
       let providerCalls = 0
       const autosaveScheduler = createFakeScheduler()
       const aiIdleScheduler = createFakeScheduler()
@@ -424,7 +518,9 @@ describe("TUI workspace controller", () => {
           updatedAt: "2026-06-01T10:00:00.000Z",
         },
         body: "Original daily body\n",
+        destination: { type: "normal", folderRelativePath: "note" },
       })
+      rebuildIndexes({ override: rootPath })
       let providerCalls = 0
       const controller = createDefaultWorkspaceController({
         rootPath,
@@ -441,9 +537,11 @@ describe("TUI workspace controller", () => {
           writeText: () => {},
         },
       })
-      controller.focusManagerItem(1)
-      controller.openFocusedManagerItem()
-      controller.focusManagerItem(0)
+      assert.deepEqual(controller.showManager(), { blocked: false })
+      openManagerFolderPath(controller, "note")
+      const dailyIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === "daily-plan")
+      assert.notEqual(dailyIndex, -1)
+      controller.focusManagerItem(dailyIndex)
       controller.openFocusedManagerItem()
 
       assert.deepEqual(controller.runCommand("/ai-describe"), { blocked: false })

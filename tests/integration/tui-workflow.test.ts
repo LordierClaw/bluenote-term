@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
 import { mkdtemp, rm, readFile, access, readdir, writeFile, mkdir } from "node:fs/promises"
-import { existsSync } from "node:fs"
+import { existsSync, mkdirSync } from "node:fs"
 
 import { createAiConfigRepository } from "../../src/ai/config-repository"
 import { createCodexAuthRepository } from "../../src/ai/codex-auth-repository"
@@ -21,6 +21,7 @@ import { routeManagerKey } from "../../src/tui/render-manager"
 import { createWorkspaceController } from "../../src/tui/workspace-controller"
 import { ATOMIC_NOTE_WRITER_TEMP_PREFIX } from "../../src/storage/atomic-note-writer"
 import { getStateTmpPath } from "../../src/storage/root-layout"
+import { createLatestOpenedNoteRepository } from "../../src/tui/latest-opened-note"
 
 function fixedClock(iso: string) {
   return { now: () => new Date(iso) }
@@ -29,20 +30,40 @@ function fixedClock(iso: string) {
 type DefaultWorkspaceController = ReturnType<typeof createDefaultWorkspaceController>
 
 function openManagerNoteByKey(controller: DefaultWorkspaceController, key: string): void {
-  const rootFolderIndex = controller
-    .getState()
-    .manager.items.findIndex((item) => item.type === "folder" && item.relativePath === "notes/inbox")
+  assert.deepEqual(controller.showManager(), { blocked: false })
 
-  assert.notEqual(rootFolderIndex, -1)
-  controller.focusManagerItem(rootFolderIndex)
-  assert.equal(controller.openFocusedManagerItem().blocked, false)
-  assert.equal(controller.getState().screen, "manager")
-  assert.equal(controller.getState().manager.currentFolderPath, "notes/inbox")
+  const visited = new Set<string>()
+  function openFromCurrentFolder(): boolean {
+    const state = controller.getState()
+    const currentFolderPath = state.manager.currentFolderPath ?? ""
+    if (visited.has(currentFolderPath)) {
+      return false
+    }
+    visited.add(currentFolderPath)
 
-  const noteIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === key)
-  assert.notEqual(noteIndex, -1)
-  controller.focusManagerItem(noteIndex)
-  assert.equal(controller.openFocusedManagerItem().blocked, false)
+    const noteIndex = state.manager.items.findIndex((item) => item.type === "note" && item.key === key)
+    if (noteIndex !== -1) {
+      controller.focusManagerItem(noteIndex)
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+      return true
+    }
+
+    const folders = state.manager.items
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => item.type === "folder")
+    for (const { item, index } of folders) {
+      controller.focusManagerItem(index)
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+      if (openFromCurrentFolder()) {
+        return true
+      }
+      assert.equal(controller.goBack().blocked, false)
+      assert.equal(controller.getState().manager.currentFolderPath, currentFolderPath)
+    }
+    return false
+  }
+
+  assert.equal(openFromCurrentFolder(), true, `missing manager note ${key}`)
 }
 
 async function countNoteSidecars(rootPath: string): Promise<number> {
@@ -201,6 +222,76 @@ describe("TUI workspace workflows", () => {
     await rm(rootPath, { recursive: true, force: true })
   })
 
+  test("startup opens recorded note if path exists and openedAt is within TTL", () => {
+    const restoredNote = createNote({
+      override: rootPath,
+      title: "Restore Me",
+      body: "restored body",
+      clock: fixedClock("2026-06-05T12:00:00.000Z"),
+    })
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: restoredNote.relativePath,
+      openedAt: "2026-06-05T12:00:00.000Z",
+    })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clock: fixedClock("2026-06-06T12:00:00.000Z"),
+      cleanupStaleAtomicTemps: () => {},
+    })
+
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.relativePath, restoredNote.relativePath)
+    assert.deepEqual(createLatestOpenedNoteRepository(rootPath).read(), {
+      relativePath: restoredNote.relativePath,
+      openedAt: "2026-06-06T12:00:00.000Z",
+    })
+  })
+
+  test("startup creates and opens draft when latest-opened is stale", () => {
+    const staleNote = createNote({
+      override: rootPath,
+      title: "Stale Restore",
+      body: "stale body",
+      clock: fixedClock("2026-05-01T12:00:00.000Z"),
+    })
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: staleNote.relativePath,
+      openedAt: "2026-05-01T12:00:00.000Z",
+    })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clock: fixedClock("2026-06-06T12:00:00.000Z"),
+      cleanupStaleAtomicTemps: () => {},
+    })
+
+    const opened = controller.getState().editor?.note
+    assert.equal(controller.getState().screen, "editor")
+    assert.ok(opened?.relativePath.startsWith("draft/"))
+    assert.notEqual(opened?.relativePath, staleNote.relativePath)
+    assert.equal(createLatestOpenedNoteRepository(rootPath).read()?.relativePath, opened?.relativePath)
+  })
+
+  test("startup creates and opens draft when latest-opened path is missing", async () => {
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: "note/missing.md",
+      openedAt: "2026-06-06T11:00:00.000Z",
+    })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clock: fixedClock("2026-06-06T12:00:00.000Z"),
+      cleanupStaleAtomicTemps: () => {},
+    })
+
+    const opened = controller.getState().editor?.note
+    assert.equal(controller.getState().screen, "editor")
+    assert.ok(opened?.relativePath.startsWith("draft/"))
+    assert.equal(createLatestOpenedNoteRepository(rootPath).read()?.relativePath, opened?.relativePath)
+    await access(path.join(rootPath, opened?.relativePath ?? "missing"))
+  })
+
   test("loads manager rows after creating derived indexes for a freshly initialized root", async () => {
     const freshRootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-tui-fresh-root-"))
 
@@ -209,42 +300,46 @@ describe("TUI workspace workflows", () => {
 
       const controller = createDefaultWorkspaceController({ rootPath: freshRootPath })
 
-      assert.equal(controller.getState().screen, "manager")
+      assert.equal(controller.getState().screen, "editor")
+      assert.ok(controller.getState().editor?.note.relativePath.startsWith("draft/"))
+      assert.deepEqual(controller.showManager(), { blocked: false })
       assert.deepEqual(
         controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`),
-        ["folder:notes/archive", "folder:notes/inbox", "folder:notes/journal"],
+        ["folder:draft"],
       )
+      assert.deepEqual(JSON.parse(await readFile(path.join(freshRootPath, ".data", "config.json"), "utf8")), {
+        latestOpenedNoteTtlDays: 7,
+      })
     } finally {
       await rm(freshRootPath, { recursive: true, force: true })
     }
   })
 
   test("manager shows filesystem-seeded empty user folders while hiding internal note folders", async () => {
-    await mkdir(path.join(rootPath, "notes", "projects", "empty-client"), { recursive: true })
-    await mkdir(path.join(rootPath, "notes", ".data", "shadow"), { recursive: true })
-    await mkdir(path.join(rootPath, "notes", ".cache", "scratch"), { recursive: true })
-    await mkdir(path.join(rootPath, "notes", "projects", ".hidden-child"), { recursive: true })
+    await mkdir(path.join(rootPath, "note", "projects", "empty-client"), { recursive: true })
+    await mkdir(path.join(rootPath, "note", ".data", "shadow"), { recursive: true })
+    await mkdir(path.join(rootPath, "note", ".cache", "scratch"), { recursive: true })
+    await mkdir(path.join(rootPath, "note", "projects", ".hidden-child"), { recursive: true })
     rebuildIndexes({ override: rootPath })
 
     const controller = createDefaultWorkspaceController({ rootPath })
+    assert.deepEqual(controller.showManager(), { blocked: false })
 
     assert.deepEqual(
       controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`),
       [
-        "folder:notes/archive",
-        "folder:notes/inbox",
-        "folder:notes/journal",
-        "folder:notes/projects",
+        "folder:draft",
+        "folder:note",
       ],
     )
 
-    openManagerFolderPath(controller, "notes/projects")
+    openManagerFolderPath(controller, "note/projects")
     assert.deepEqual(controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`), [
-      "folder:notes/projects/empty-client",
+      "folder:note/projects/empty-client",
     ])
 
     assert.equal(controller.openFocusedManagerItem().blocked, false)
-    assert.equal(controller.getState().manager.currentFolderPath, "notes/projects/empty-client")
+    assert.equal(controller.getState().manager.currentFolderPath, "note/projects/empty-client")
     assert.equal(controller.getManagerBrowserModel().empty, true)
   })
 
@@ -305,7 +400,8 @@ describe("TUI workspace workflows", () => {
 
     const controller = createDefaultWorkspaceController({ rootPath })
 
-    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().screen, "editor")
+    assert.deepEqual(controller.showManager(), { blocked: false })
     await assert.rejects(() => access(staleWriterTemp))
     assert.equal(await readFile(unrelatedTemp, "utf8"), "unrelated temp")
     assert.equal(await readFile(path.join(rootPath, normalNote.relativePath), "utf8"), "normal note body")
@@ -396,7 +492,7 @@ describe("TUI workspace workflows", () => {
     assert.equal(queue.jobs.length, 0)
     assert.deepEqual(controller.getState().ai, { kind: "updated", count: 1, queue: { queued: 0, failed: 0 } })
     assert.equal(showNote({ override: rootPath, selector: first.key }).description, "Updated TUI idle summary.")
-    assert.equal(listNotes({ override: rootPath }).some((summary) => summary.key === first.key && summary.description === "Updated TUI idle summary."), true)
+    assert.equal(listNotes({ override: rootPath, visibility: "drafts" }).some((summary) => summary.key === first.key && summary.description === "Updated TUI idle summary."), true)
   })
 
   test("TUI autosave refreshes an existing describe-note job on AI idle when AI is configured", async () => {
@@ -555,7 +651,8 @@ describe("TUI workspace workflows", () => {
       },
     })
 
-    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().screen, "editor")
+    assert.ok(controller.getState().editor?.note.relativePath.startsWith("draft/"))
     assert.equal(controller.getState().ai?.kind, "connected")
     assert.equal(existsSync(path.join(rootPath, ".data", "ai", "queue.json")), false)
     assert.equal(aiStartupScheduler.activeTasks().length, 1)
@@ -696,7 +793,7 @@ describe("TUI workspace workflows", () => {
 
     assert.deepEqual(controller.getState().ai, { kind: "updated", count: 1, queue: { queued: 0, failed: 0 } })
     assert.equal(showNote({ override: rootPath, selector: note.key }).description, "Startup processed summary.")
-    assert.equal(listNotes({ override: rootPath }).some((summary) => summary.key === note.key && summary.description === "Startup processed summary."), true)
+    assert.equal(listNotes({ override: rootPath, visibility: "drafts" }).some((summary) => summary.key === note.key && summary.description === "Startup processed summary."), true)
   })
 
   test("AI startup scan attempts Codex refreshable expired auth instead of preflight blocking", async () => {
@@ -1673,7 +1770,11 @@ describe("TUI workspace workflows", () => {
       archivedAt: null,
       namingVersion: 1,
     }), "utf8")
-    const controller = createDefaultWorkspaceController({ rootPath })
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: first.relativePath,
+      openedAt: "2026-05-26T10:02:00.000Z",
+    })
+    const controller = createDefaultWorkspaceController({ rootPath, clock: fixedClock("2026-05-26T10:02:30.000Z") })
 
     openManagerNoteByKey(controller, first.key)
     controller.updateEditorBody("Summary line without token\nSaved body contains lag regression token")
@@ -1845,7 +1946,7 @@ describe("TUI workspace workflows", () => {
     rebuildIndexes({ override: rootPath })
 
     const controller = createWorkspaceController({
-      listNotes: () => listNotes({ override: rootPath }),
+      listNotes: () => listNotes({ override: rootPath, visibility: "drafts" }),
       showNote: (selector) => showNote({ override: rootPath, selector }),
       searchNotes: () => [
         {
@@ -1920,16 +2021,19 @@ describe("TUI workspace workflows", () => {
       body: "Body text that should not be needed for summary fallback",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
+    mkdirSync(path.join(rootPath, "note", "inbox"), { recursive: true })
     createNote({
       override: rootPath,
+      type: "normal",
       title: "Folder Target",
       body: "Another body",
+      destinationFolder: "note/inbox",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
     })
     rebuildIndexes({ override: rootPath })
 
     const controller = createWorkspaceController({
-      listNotes: () => listNotes({ override: rootPath }),
+      listNotes: () => listNotes({ override: rootPath, visibility: "drafts" }),
       showNote: (selector) => showNote({ override: rootPath, selector }),
       searchNotes: () => {
         throw new Error("simulated index failure")
@@ -1949,7 +2053,7 @@ describe("TUI workspace workflows", () => {
 
     controller.openSearch("")
     controller.updateSearchQuery("inbox")
-    assert.equal(controller.getSearchResults().some((result) => result.kind === "folder" && result.path === "notes/inbox"), true)
+    assert.equal(controller.getSearchResults().some((result) => result.kind === "folder" && result.path === "note/inbox"), true)
     controller.cancelSearch()
     assert.equal(controller.getState().screen, "editor")
   })
@@ -2012,7 +2116,7 @@ describe("TUI workspace workflows", () => {
 
     assert.deepEqual(controller.getState().ai, { kind: "updated", key: note.key, queue: { queued: 0, failed: 0 } })
     assert.equal(showNote({ override: rootPath, selector: note.key }).description, "Mock generated summary.")
-    assert.equal(listNotes({ override: rootPath }).some((summary) => summary.key === note.key && summary.description === "Mock generated summary."), true)
+    assert.equal(listNotes({ override: rootPath, visibility: "drafts" }).some((summary) => summary.key === note.key && summary.description === "Mock generated summary."), true)
     assert.equal(controller.getState().manager.items.some((item) => item.type === "note" && item.key === note.key && item.description === "Mock generated summary."), true)
   })
 
@@ -2026,8 +2130,10 @@ describe("TUI workspace workflows", () => {
     rebuildIndexes({ override: rootPath })
     const controller = createDefaultWorkspaceController({ rootPath })
 
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    if (controller.getState().manager.currentFolderPath !== "") controller.goBack()
     controller.openSearch("/")
-    assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/new", "/ai-process-queue", "/ai-status"])
+    assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/new", "/delete", "/ai-describe", "/ai-process-queue", "/ai-status"])
 
     const newResult = controller.getSearchResults().find((result) => result.kind === "command" && result.name === "/new")
     assert.ok(newResult)
@@ -2051,6 +2157,6 @@ describe("TUI workspace workflows", () => {
     assert.equal(controller.getState().screen, "manager")
     assert.equal(controller.getState().mode, "manager.deleteConfirm")
     assert.equal((await controller.confirmManagerDelete()).blocked, false)
-    assert.equal(listNotes({ override: rootPath }).some((note) => note.title === "Created From Search"), false)
+    assert.equal(listNotes({ override: rootPath, visibility: "drafts" }).some((note) => note.title === "Created From Search"), false)
   })
 })

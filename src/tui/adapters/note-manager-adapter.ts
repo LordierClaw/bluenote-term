@@ -115,9 +115,11 @@ function normalizeRelativePath(relativePath: string): string {
 }
 
 function normalizeManagerFolderPath(path: string | null | undefined): string {
-  const normalizedPath = normalizeRelativePath(path ?? "").replace(/^\/+|\/+$/gu, "")
+  return normalizeRelativePath(path ?? "").replace(/^\/+|\/+$/gu, "")
+}
 
-  return normalizedPath === "notes" ? "" : normalizedPath
+function isManagedNoteArea(area: string | undefined): area is "note" | "draft" | "notes" {
+  return area === "note" || area === "draft" || area === "notes"
 }
 
 function filenameFor(relativePath: string): string {
@@ -129,11 +131,11 @@ function foldersFor(relativePath: string): string[] {
   const normalizedPath = normalizeRelativePath(relativePath)
   const parts = normalizedPath.split("/").filter(Boolean)
 
-  if (parts.length <= 2 || parts[0] !== "notes") {
+  if (parts.length <= 2 || !isManagedNoteArea(parts[0])) {
     return []
   }
 
-  return parts.slice(1, -1).map((_, index) => ["notes", ...parts.slice(1, index + 2)].join("/"))
+  return parts.slice(1, -1).map((_, index) => [parts[0], ...parts.slice(1, index + 2)].join("/"))
 }
 
 function titleizeFolderName(folderPath: string): string {
@@ -158,14 +160,14 @@ function isBlueNoteNotePath(relativePath: string): boolean {
   const normalizedPath = normalizeRelativePath(relativePath)
   const parts = normalizedPath.split("/").filter(Boolean)
 
-  return parts.length >= 2 && parts[0] === "notes" && parts.every((part) => !part.startsWith(".")) && normalizedPath.endsWith(".md")
+  return parts.length >= 2 && isManagedNoteArea(parts[0]) && parts.every((part) => !part.startsWith(".")) && normalizedPath.endsWith(".md")
 }
 
 function isUserNoteFolderPath(relativePath: string): boolean {
   const normalizedPath = normalizeRelativePath(relativePath).replace(/^\/+|\/+$/gu, "")
   const parts = normalizedPath.split("/").filter(Boolean)
 
-  return parts.length >= 2 && parts[0] === "notes" && parts.every((part) => !part.startsWith("."))
+  return parts.length >= 1 && isManagedNoteArea(parts[0]) && parts.every((part) => !part.startsWith("."))
 }
 
 function folderAncestorsFor(folderPath: string): string[] {
@@ -176,7 +178,11 @@ function folderAncestorsFor(folderPath: string): string[] {
   }
 
   const parts = normalizedPath.split("/").filter(Boolean)
-  return parts.slice(1).map((_, index) => ["notes", ...parts.slice(1, index + 2)].join("/"))
+  if (parts[0] === "notes") {
+    return parts.slice(1).map((_, index) => ["notes", ...parts.slice(1, index + 2)].join("/"))
+  }
+
+  return parts.map((_, index) => parts.slice(0, index + 1).join("/"))
 }
 
 function noteItemForSummary(summary: NoteManagerSummary): ManagerItem | null {
@@ -216,9 +222,21 @@ function allBrowserItems(noteSummaries: readonly NoteManagerSummary[], userFolde
     noteItems.push(noteItem)
 
     const parts = noteItem.relativePath.split("/").filter(Boolean)
+    if (parts[0] === "note" || parts[0] === "draft") {
+      folderPaths.add(parts[0])
+    }
     for (let index = 1; index < parts.length - 1; index += 1) {
       folderPaths.add(parts.slice(0, index + 1).join("/"))
     }
+  }
+
+  const hasPhaseSevenAreas = noteItems.some((item) => {
+    const area = item.relativePath.split("/").filter(Boolean)[0]
+    return area === "note" || area === "draft"
+  })
+  const hasLegacyNotes = noteItems.some((item) => item.relativePath.split("/").filter(Boolean)[0] === "notes")
+  if (hasPhaseSevenAreas && hasLegacyNotes) {
+    folderPaths.add("notes")
   }
 
   const folderItems = Array.from(folderPaths).map<ManagerItem>((folderPath) => ({
@@ -248,7 +266,11 @@ function compareBrowserItems(left: ManagerItem, right: ManagerItem): number {
 
 function immediateRowsForFolder(items: readonly ManagerItem[], currentFolderPath: string): ManagerItem[] {
   const folderPath = normalizeManagerFolderPath(currentFolderPath)
-  const parentParts = folderPath ? folderPath.split("/").filter(Boolean) : ["notes"]
+  const hasPhaseSevenAreas = items.some((item) => {
+    const area = item.relativePath.split("/").filter(Boolean)[0]
+    return area === "note" || area === "draft"
+  })
+  const parentParts = folderPath ? folderPath.split("/").filter(Boolean) : hasPhaseSevenAreas ? [] : ["notes"]
 
   return items
     .filter((item) => {
@@ -481,7 +503,8 @@ export function goToManagerParent(state: ManagerState): ManagerState {
     return state
   }
 
-  const parentPath = currentFolderPath.includes("/") ? currentFolderPath.split("/").slice(0, -1).join("/") : ""
+  const rawParentPath = currentFolderPath.includes("/") ? currentFolderPath.split("/").slice(0, -1).join("/") : ""
+  const parentPath = rawParentPath === "notes" ? "" : rawParentPath
 
   return {
     ...state,

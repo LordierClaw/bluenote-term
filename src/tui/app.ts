@@ -35,6 +35,7 @@ import { renderSearchEverythingScreen, routeSearchEverythingKey } from "./render
 import type { AiStatusState, TuiNote } from "./state"
 import { createDesktopClipboardModel } from "./adapters/desktop-clipboard-adapter"
 import { createWorkspaceController, type WorkspaceCommandHandler, type WorkspaceController, type WorkspaceControllerDependencies } from "./workspace-controller"
+import { recordLatestOpenedNote, resolveStartupNote } from "./latest-opened-note"
 
 export { createDesktopClipboardModel } from "./adapters/desktop-clipboard-adapter"
 
@@ -163,7 +164,7 @@ function listTuiNoteFolders(rootPath: string): string[] {
     }
   }
 
-  visit(notesPath, "notes")
+  visit(notesPath, "note")
   return folders
 }
 
@@ -408,16 +409,25 @@ export function createDefaultWorkspaceController(options: DefaultWorkspaceContro
     return aiClient
   }
 
+  const initialNote = resolveStartupNote({
+    rootPath,
+    clock,
+    showNote: (selector) => showTuiNote(rootPath, selector),
+    createDraft: () => createNote({ override: rootPath, type: "draft", body: "", clock, enqueueAi: false }),
+  })
+
   const controller = createWorkspaceController({
-    listNotes: () => listNotes({ override: rootPath }),
+    listNotes: () => listNotes({ override: rootPath, visibility: "drafts" }),
     listNoteFolders: () => listTuiNoteFolders(rootPath),
     showNote: (selector) => showTuiNote(rootPath, selector),
-    searchNotes: (query) => searchNotes(query, { override: rootPath }),
+    searchNotes: (query) => searchNotes(query, { override: rootPath, visibility: "drafts" }),
     createNote: (title, body) => createNote({ override: rootPath, title, body, clock }),
     deleteNote: (selector) => {
       deleteNote({ override: rootPath, selector, force: true })
     },
     persistEditorBody: (note, body, warn) => persistTuiEditorBody(rootPath, note, body, clock, warn),
+    initialNote,
+    recordLatestOpenedNote: (note) => recordLatestOpenedNote(rootPath, note, clock),
     autosaveScheduler: options.autosaveScheduler,
     aiIdleScheduler: options.aiIdleScheduler,
     clipboard: options.clipboard ?? options.createClipboard?.() ?? createDesktopClipboardModel(),

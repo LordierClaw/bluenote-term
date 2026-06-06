@@ -18,6 +18,7 @@ export interface CreateNoteOptions extends ResolveBlueNoteRootOptions {
   destinationFolder?: string
   clock?: Clock
   randomSource?: () => number
+  enqueueAi?: boolean
 }
 
 export interface CreateNoteSummary {
@@ -134,14 +135,16 @@ export function createNote(options: CreateNoteOptions): CreateNoteSummary {
     )
   }
 
-  enqueueAiDescriptionAfterCreate(rootPath, {
-    key,
-    title,
-    description,
-    body: options.body ?? "",
-    relativePath: created.relativePath,
-    clock,
-  })
+  if (options.enqueueAi !== false) {
+    enqueueAiDescriptionAfterCreate(rootPath, {
+      key,
+      title,
+      description,
+      body: options.body ?? "",
+      relativePath: created.relativePath,
+      clock,
+    })
+  }
 
   return {
     key,

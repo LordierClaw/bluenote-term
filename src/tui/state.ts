@@ -532,7 +532,8 @@ export function setManagerFolderPath(state: TuiState, path: string): TuiState {
 
 export function goToManagerParent(state: TuiState): TuiState {
   const currentFolderPath = normalizeManagerPath(state.manager.currentFolderPath)
-  const parentPath = currentFolderPath.includes("/") ? currentFolderPath.split("/").slice(0, -1).join("/") : ""
+  const rawParentPath = currentFolderPath.includes("/") ? currentFolderPath.split("/").slice(0, -1).join("/") : ""
+  const parentPath = rawParentPath === "notes" ? "" : rawParentPath
 
   return setManagerFolderPath(state, parentPath)
 }
