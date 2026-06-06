@@ -70,8 +70,11 @@ test("CLI workflow stays consistent across init, create, rebuild, list, search, 
     await access(path.join(harness.rootPath, ".data", "search-index.json"))
 
     const listResult = runOk("bn list", ["list"])
-    assert.match(listResult.stdout, /Workflow Example\s+workflow-example-[a-z0-9]+\s+Workflow example body\s+draft[\\/]workflow-example-[a-z0-9]+\.md/)
+    assert.doesNotMatch(listResult.stdout, /Workflow Example\s+workflow-example-[a-z0-9]+\s+Workflow example body\s+draft[\\/]workflow-example-[a-z0-9]+\.md/)
     assert.match(listResult.stdout, /Reference Note\s+reference-note\s+Reference zebra tokens remain searchable while active\.\s+note[\\/]reference-note\.md/)
+
+    const listDraftsResult = runOk("bn list --drafts", ["list", "--drafts"])
+    assert.match(listDraftsResult.stdout, /Workflow Example\s+workflow-example-[a-z0-9]+\s+Workflow example body\s+draft[\\/]workflow-example-[a-z0-9]+\.md/)
 
     const searchResult = runOk("bn search zebra tokens", ["search", "zebra", "tokens"])
     assert.match(searchResult.stdout, /Reference Note/)
@@ -127,7 +130,7 @@ test("CLI workflow stays consistent across init, create, rebuild, list, search, 
     )
     assert.match(`archivedAt: ${archivedSidecar.archivedAt}`, timestampFieldPattern("archivedAt"))
 
-    const finalListResult = runOk("bn list after archive", ["list"])
+    const finalListResult = runOk("bn list --drafts after archive", ["list", "--drafts"])
     assert.match(finalListResult.stdout, /Workflow Example\s+workflow-example-[a-z0-9]+\s+Workflow example body\s+draft[\\/]workflow-example-[a-z0-9]+\.md/)
     assert.doesNotMatch(finalListResult.stdout, /reference-note/)
 

@@ -66,7 +66,7 @@ export interface SearchIndexMatch {
 export interface LoadedIndexStore {
   listSummaries(): IndexedNoteSummary[]
   listAllSummaries(): IndexedNoteSummary[]
-  search(query: string): SearchIndexMatch[]
+  search(query: string, options?: { includeArchived?: boolean }): SearchIndexMatch[]
 }
 
 function getDerivedDirectory(rootPath: string): string {
@@ -371,13 +371,15 @@ export function loadIndexStore(rootPath: string): LoadedIndexStore {
           return summaries.map((summary) => ({ ...summary }))
         },
 
-        search(query: string) {
+        search(query: string, options = {}) {
           if (query.trim() === "") {
             return []
           }
 
+          const visibleKeys = options.includeArchived === true ? new Set(summaries.map((summary) => summary.key)) : activeKeys
+
           return searchableMatches
-            .filter((match) => activeKeys.has(match.key))
+            .filter((match) => visibleKeys.has(match.key))
             .flatMap((match): SearchIndexMatch[] => {
               const containsMatches = collectSearchIndexContainsMatches(query, match)
 

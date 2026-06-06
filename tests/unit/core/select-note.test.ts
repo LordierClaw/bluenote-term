@@ -48,13 +48,18 @@ async function writePlainNoteWithSidecar(
     sidecarPath,
     JSON.stringify(
       {
+        type: relativePath.startsWith("draft/")
+          ? "draft"
+          : relativePath.startsWith(".data/archive/")
+            ? "archived"
+            : "normal",
         key,
         title,
         description,
         relativePath,
         createdAt: "2026-05-21T10:15:00.000Z",
         updatedAt: "2026-05-21T10:15:00.000Z",
-        archivedAt: null,
+        archivedAt: relativePath.startsWith(".data/archive/") ? "2026-05-22T10:15:00.000Z" : null,
         namingVersion: 1,
       },
       null,
@@ -106,13 +111,13 @@ test("selectNote resolves an exact sidecar key before considering slug matches",
       await writePlainNoteWithSidecar(rootPath, {
         key: "project-retrospective",
         title: "Direct Key Match",
-        relativePath: "notes/inbox/project-retrospective.md",
+        relativePath: "note/project-retrospective.md",
         body: "Direct key body.\n",
       })
       await writePlainNoteWithSidecar(rootPath, {
         key: "different-key",
         title: "Project Retrospective",
-        relativePath: "notes/journal/different-key.md",
+        relativePath: "note/different-key.md",
         body: "Slug body.\n",
       })
     },
@@ -120,7 +125,7 @@ test("selectNote resolves an exact sidecar key before considering slug matches",
       const selected = selectNote({ repository, selector: "project-retrospective" })
 
       assert.equal(selected.frontmatter.id, "project-retrospective")
-      assert.equal(selected.sourcePath, "notes/inbox/project-retrospective.md")
+      assert.equal(selected.sourcePath, "note/project-retrospective.md")
       assert.equal(selected.frontmatter.title, "Direct Key Match")
     },
   )
@@ -132,15 +137,15 @@ test("selectNote resolves an exact managed-root-relative path as a fallback", as
       await writePlainNoteWithSidecar(rootPath, {
         key: "archive-key",
         title: "Archive Note",
-        relativePath: "notes/archive/archive-key.md",
+        relativePath: ".data/archive/archive-key.md",
         body: "Archive body.\n",
       })
     },
     (repository) => {
-      const selected = selectNote({ repository, selector: "notes/archive/archive-key.md" })
+      const selected = selectNote({ repository, selector: ".data/archive/archive-key.md", visibility: "all" })
 
       assert.equal(selected.frontmatter.id, "archive-key")
-      assert.equal(selected.sourcePath, "notes/archive/archive-key.md")
+      assert.equal(selected.sourcePath, ".data/archive/archive-key.md")
     },
   )
 })
@@ -151,7 +156,7 @@ test("selectNote rejects non-canonical normalized path aliases", async () => {
       await writePlainNoteWithSidecar(rootPath, {
         key: "archive-key",
         title: "Archive Note",
-        relativePath: "notes/archive/archive-key.md",
+        relativePath: ".data/archive/archive-key.md",
         body: "Archive body.\n",
       })
     },
@@ -160,11 +165,12 @@ test("selectNote rejects non-canonical normalized path aliases", async () => {
         () =>
           selectNote({
             repository,
-            selector: `notes${path.sep}journal${path.sep}..${path.sep}archive${path.sep}archive-key.md`,
+            selector: `.data${path.sep}..${path.sep}.data${path.sep}archive${path.sep}archive-key.md`,
+            visibility: "all",
           }),
         (error) => {
           assert.ok(error instanceof SelectorNotFoundError)
-          assert.match(error.message, /Could not find a note matching selector 'notes[\\/]journal[\\/]\.\.[\\/]archive[\\/]archive-key\.md'\./)
+          assert.match(error.message, /Could not find a note matching selector '\.data[\\/]\.\.[\\/]\.data[\\/]archive[\\/]archive-key\.md'\./)
           return true
         },
       )
@@ -178,7 +184,7 @@ test("selectNote resolves a legacy frontmatter note by basename instead of UUID 
       await writeLegacyFrontmatterNote(rootPath, {
         frontmatterId: "123e4567-e89b-12d3-a456-426614174000",
         title: "Legacy UUID Note",
-        relativePath: "notes/inbox/human-key.md",
+        relativePath: "note/human-key.md",
         body: "Legacy body.\n",
       })
     },
@@ -186,7 +192,7 @@ test("selectNote resolves a legacy frontmatter note by basename instead of UUID 
       const selected = selectNote({ repository, selector: "human-key" })
 
       assert.equal(selected.frontmatter.id, "123e4567-e89b-12d3-a456-426614174000")
-      assert.equal(selected.sourcePath, "notes/inbox/human-key.md")
+      assert.equal(selected.sourcePath, "note/human-key.md")
     },
   )
 })
@@ -197,7 +203,7 @@ test("selectNote rejects legacy frontmatter ids as user-facing selectors", async
       await writeLegacyFrontmatterNote(rootPath, {
         frontmatterId: "legacy-id-123",
         title: "Legacy ID Note",
-        relativePath: "notes/inbox/human-key.md",
+        relativePath: "note/human-key.md",
         body: "Legacy body.\n",
       })
     },
@@ -220,13 +226,13 @@ test("selectNote resolves an exact key match even when a legacy frontmatter id c
       await writePlainNoteWithSidecar(rootPath, {
         key: "foo",
         title: "Key Foo Note",
-        relativePath: "notes/inbox/foo.md",
+        relativePath: "note/foo.md",
         body: "Key body.\n",
       })
       await writeLegacyFrontmatterNote(rootPath, {
         frontmatterId: "foo",
         title: "Legacy ID Foo Note",
-        relativePath: "notes/journal/legacy-human-key.md",
+        relativePath: "note/legacy-human-key.md",
         body: "Legacy body.\n",
       })
     },
@@ -234,7 +240,40 @@ test("selectNote resolves an exact key match even when a legacy frontmatter id c
       const selected = selectNote({ repository, selector: "foo" })
 
       assert.equal(selected.frontmatter.id, "foo")
-      assert.equal(selected.sourcePath, "notes/inbox/foo.md")
+      assert.equal(selected.sourcePath, "note/foo.md")
+    },
+  )
+})
+
+test("selectNote resolves exact selectors for normal, draft, and archived notes by default", async () => {
+  await withRepository(
+    async (rootPath) => {
+      await writePlainNoteWithSidecar(rootPath, {
+        key: "normal-note",
+        title: "Normal Note",
+        relativePath: "note/normal-note.md",
+        body: "Normal body.\n",
+      })
+      await writePlainNoteWithSidecar(rootPath, {
+        key: "draft-note",
+        title: "Draft Note",
+        relativePath: "draft/draft-note.md",
+        body: "Draft body.\n",
+      })
+      await writePlainNoteWithSidecar(rootPath, {
+        key: "archived-note",
+        title: "Archived Note",
+        relativePath: ".data/archive/archived-note.md",
+        body: "Archived body.\n",
+      })
+    },
+    (repository) => {
+      assert.equal(selectNote({ repository, selector: "normal-note" }).sourcePath, "note/normal-note.md")
+      assert.equal(selectNote({ repository, selector: "draft-note" }).sourcePath, "draft/draft-note.md")
+      assert.equal(selectNote({ repository, selector: "archived-note" }).sourcePath, ".data/archive/archived-note.md")
+      assert.equal(selectNote({ repository, selector: ".data/archive/archived-note.md" }).sourcePath, ".data/archive/archived-note.md")
+      assert.throws(() => selectNote({ repository, selector: "archived-note", visibility: "drafts" }), SelectorNotFoundError)
+      assert.equal(selectNote({ repository, selector: "archived-note", visibility: "all" }).sourcePath, ".data/archive/archived-note.md")
     },
   )
 })
@@ -245,7 +284,7 @@ test("selectNote rejects title-derived slug selectors", async () => {
       await writePlainNoteWithSidecar(rootPath, {
         key: "project-retro",
         title: "Project Retrospective",
-        relativePath: "notes/journal/project-retro.md",
+        relativePath: "note/project-retro.md",
         body: "Project body.\n",
       })
     },
@@ -268,13 +307,13 @@ test("selectNote suggests close note keys when a selector does not match", async
       await writePlainNoteWithSidecar(rootPath, {
         key: "show-note",
         title: "Show Note",
-        relativePath: "notes/inbox/show-note.md",
+        relativePath: "note/show-note.md",
         body: "Show body.\n",
       })
       await writePlainNoteWithSidecar(rootPath, {
         key: "slow-note",
         title: "Slow Note",
-        relativePath: "notes/journal/slow-note.md",
+        relativePath: "note/slow-note.md",
         body: "Slow body.\n",
       })
     },

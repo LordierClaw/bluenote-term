@@ -1,6 +1,7 @@
 import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions } from "../config/root"
 import { loadIndexStore, type SearchIndexMatch } from "../index/index-store"
 import { containsSearchQuery, type ContainsMatchField } from "../search/contains-match"
+import { noteIsVisible, type NoteVisibilityOptions } from "./note-visibility"
 
 export type SearchMatchSource = "title" | "description" | "content" | "key-path"
 
@@ -155,11 +156,12 @@ function getMatchPriority(explanation: SearchNoteExplanation): number {
   }
 }
 
-export function searchNotes(query: string, options: ResolveBlueNoteRootOptions = {}): SearchNoteMatch[] {
+export function searchNotes(query: string, options: ResolveBlueNoteRootOptions & NoteVisibilityOptions = {}): SearchNoteMatch[] {
   const rootPath = resolveBlueNoteRoot(options)
   const store = loadIndexStore(rootPath)
 
-  return store.search(query)
+  return store.search(query, { includeArchived: options.visibility === "all" })
+    .filter((match) => noteIsVisible(match, options.visibility))
     .map((match) => ({
       key: match.key,
       title: match.title,

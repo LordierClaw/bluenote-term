@@ -119,10 +119,10 @@ test("AI description workflow runs end to end against a mock OpenAI-compatible p
     assert.doesNotMatch(markdown, /^---$/m)
     assert.doesNotMatch(markdown, /description:/)
 
-    const listResult = runOk(harness, "bn list", ["list"])
+    const listResult = runOk(harness, "bn list --drafts", ["list", "--drafts"])
     assert.match(listResult.stdout, new RegExp(`Project tasks\\t${key}\\t${harness.escapeForRegExp(mockDescription)}\\tdraft/${key}\\.md`))
 
-    const searchResult = runOk(harness, "bn search", ["search", "Mock project task"])
+    const searchResult = runOk(harness, "bn search --drafts", ["search", "--drafts", "Mock project task"])
     assert.match(searchResult.stdout, /Project tasks/)
     assert.match(searchResult.stdout, new RegExp(`key: ${key}`))
     assert.match(searchResult.stdout, /match: description/)

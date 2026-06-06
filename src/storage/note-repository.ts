@@ -11,7 +11,7 @@ import { parsePlainNote, serializePlainNote } from "./plain-note"
 import { createSidecarRepository } from "./sidecar-repository"
 import type { NoteSidecar, NoteType } from "./sidecar-schema"
 import { replaceNoteBodyAtomically } from "./atomic-note-writer"
-import { getArchiveNotePath, getDraftNotesPath, getInboxNotePath, getNormalNotesPath } from "./root-layout"
+import { getArchiveNotePath, getArchiveNotesPath, getDraftNotesPath, getInboxNotePath, getNormalNotesPath } from "./root-layout"
 
 export interface CreateStoredNoteInput {
   frontmatter: NoteFrontmatter
@@ -718,7 +718,7 @@ export function createNoteRepository(rootPath: string): NoteRepository {
       const notePaths: string[] = []
 
       try {
-        for (const notesPath of [getNormalNotesPath(normalizedRootPath), getDraftNotesPath(normalizedRootPath)]) {
+        for (const notesPath of [getNormalNotesPath(normalizedRootPath), getDraftNotesPath(normalizedRootPath), getArchiveNotesPath(normalizedRootPath)]) {
           if (!existsSync(notesPath)) {
             continue
           }

@@ -4,8 +4,9 @@ import { toPortableRelativePath } from "../platform/path-safety"
 import { AmbiguousSelectorError, SelectorNotFoundError } from "./errors"
 import type { ParsedNote } from "../storage/note-schema"
 import type { NoteRepository } from "../storage/note-repository"
+import { noteIsVisible, type NoteVisibilityOptions } from "./note-visibility"
 
-export interface SelectNoteOptions {
+export interface SelectNoteOptions extends NoteVisibilityOptions {
   repository: NoteRepository
   selector: string
 }
@@ -72,7 +73,8 @@ function assertSingleMatch(selector: string, matches: ParsedNote[]): ParsedNote 
 }
 
 export function selectNote(options: SelectNoteOptions): ParsedNote {
-  const notes = options.repository.list()
+  const visibility = options.visibility ?? "all"
+  const notes = options.repository.list().filter((note) => noteIsVisible(note, visibility))
   const trimmedSelector = options.selector.trim()
 
   const exactKeyMatches = notes.filter((note) => selectorKeyFor(note) === trimmedSelector)

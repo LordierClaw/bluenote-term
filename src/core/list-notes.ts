@@ -1,5 +1,6 @@
 import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions } from "../config/root"
 import { loadIndexStore } from "../index/index-store"
+import { noteIsVisible, type NoteVisibilityOptions } from "./note-visibility"
 
 export interface NoteSummary {
   key: string
@@ -8,10 +9,10 @@ export interface NoteSummary {
   relativePath: string
 }
 
-export function listNotes(options: ResolveBlueNoteRootOptions = {}): NoteSummary[] {
+export function listNotes(options: ResolveBlueNoteRootOptions & NoteVisibilityOptions = {}): NoteSummary[] {
   const store = loadIndexStore(resolveBlueNoteRoot(options))
 
-  return store.listSummaries().map((summary) => ({
+  return store.listAllSummaries().filter((summary) => noteIsVisible(summary, options.visibility)).map((summary) => ({
     key: summary.key,
     title: summary.title,
     description: summary.description,

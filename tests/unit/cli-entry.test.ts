@@ -17,9 +17,9 @@ test("formatHelp lists the public commands without removed command or release-st
   assert.match(help, /init\s+Initialize the managed BlueNote root/)
   assert.match(help, /new\s+\[--title <title>\] \[--path note\/<folder>\] \[--clipboard\] <body>/)
   assert.doesNotMatch(help, /new\s+--title <title>\s+Create a new note in note\/ and print its key\/path/)
-  assert.match(help, /list\s+List active notes as title, key, description, and path/)
+  assert.match(help, /list\s+\[--drafts\|--all\]\s+List notes as title, key, description, and path/)
   assert.match(help, /show\s+<key\|path>\s+Print a matching note summary and body/)
-  assert.match(help, /search\s+<query>/)
+  assert.match(help, /search\s+\[--drafts\|--all\] <query>/)
   assert.match(help, /edit\s+<key\|path>\s+Open a matching note in \$EDITOR/)
   assert.match(help, /archive\s+<key\|path>\s+Archive a matching note/)
   assert.match(help, /delete\s+<key\|path>\s+--force\s+Permanently remove a matching note and sidecar/)
@@ -227,6 +227,55 @@ test("runCli reads body from injected clipboard runtime and rejects empty or una
     })
     assert.equal(unavailable.exitCode, 1)
     assert.match(unavailable.stderr, /Clipboard is empty or unavailable/)
+  } finally {
+    if (previousRoot === undefined) {
+      delete process.env.BLUENOTE_ROOT
+    } else {
+      process.env.BLUENOTE_ROOT = previousRoot
+    }
+
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("runCli rejects visibility flags and extra selectors for exact-selector commands", () => {
+  const cases: Array<{ args: string[]; pattern: RegExp }> = [
+    { args: ["show", "example-note", "--all"], pattern: /show does not accept --all/ },
+    { args: ["edit", "example-note", "--drafts"], pattern: /edit does not accept --drafts/ },
+    { args: ["delete", "example-note", "--force", "--all"], pattern: /delete does not accept --all/ },
+    { args: ["show", "one", "two"], pattern: /Too many selectors for show/ },
+  ]
+
+  for (const { args, pattern } of cases) {
+    const result = runCli(args, "0.1.0")
+    assert.equal(result.exitCode, 1)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, pattern)
+  }
+})
+
+test("runCli treats visibility flags as search options only before the query", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-entry-search-flags-"))
+  const previousRoot = process.env.BLUENOTE_ROOT
+
+  process.env.BLUENOTE_ROOT = rootPath
+
+  try {
+    runCli(["init"], "0.1.0")
+    const created = runCli(["new", "--path", "note", "--title", "Alpha", "body"], "0.1.0", {
+      createNoteOptions: {
+        randomSource: () => 0x12345678,
+      },
+    })
+    assert.equal(created.exitCode, 0)
+    const rebuilt = runCli(["rebuild"], "0.1.0")
+    assert.equal(rebuilt.exitCode, 0)
+
+    const result = runCli(["search", "alpha", "--all"], "0.1.0")
+
+    assert.equal(result.exitCode, 0)
+    assert.equal(result.stdout, 'No notes matched "alpha --all".\n')
+    assert.equal(result.stderr, "")
   } finally {
     if (previousRoot === undefined) {
       delete process.env.BLUENOTE_ROOT

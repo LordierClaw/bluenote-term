@@ -17,6 +17,7 @@ test("CLI storage and UX workflow stays consistent through the real bin/bn.ts en
       namingVersion: number
       relativePath: string
       title: string
+      type: "normal" | "draft" | "archived"
       updatedAt: string
     }
 
@@ -46,6 +47,7 @@ test("CLI storage and UX workflow stays consistent through the real bin/bn.ts en
 
     assert.equal(await readFile(path.join(harness.rootPath, firstRelativePath), "utf8"), "Alpha normal body")
     const firstSidecar = await readSidecar(firstKey)
+    assert.equal(firstSidecar.type, "normal")
     assert.equal(firstSidecar.key, firstKey)
     assert.equal(firstSidecar.title, "Workflow Alpha")
     assert.equal(firstSidecar.description, "Alpha normal body")
@@ -60,6 +62,14 @@ test("CLI storage and UX workflow stays consistent through the real bin/bn.ts en
     const draftRelativePath = draftResult.stdout.match(/Path: (draft\/draft-[a-z0-9]{6}\.md)/)?.[1]
     assert.ok(draftRelativePath)
     assert.equal(await readFile(path.join(harness.rootPath, draftRelativePath), "utf8"), "Quick draft body")
+    const draftKey = path.basename(draftRelativePath, ".md")
+    const draftSidecar = await readSidecar(draftKey)
+    assert.equal(draftSidecar.type, "draft")
+
+    const archiveDraftResult = harness.runBin(["archive", draftKey])
+    assert.equal(archiveDraftResult.exitCode, 1)
+    assert.equal(archiveDraftResult.stdout, "")
+    assert.match(archiveDraftResult.stderr, /Cannot archive non-normal note/)
 
     const noBodyResult = harness.runBin(["new"])
     assert.equal(noBodyResult.exitCode, 1)
@@ -75,7 +85,19 @@ test("CLI storage and UX workflow stays consistent through the real bin/bn.ts en
     const listResult = runOk("bn list", ["list"])
     assert.match(listResult.stdout, new RegExp(`Workflow Alpha\\t${harness.escapeForRegExp(firstKey)}\\tAlpha normal body\\tnote/${harness.escapeForRegExp(firstKey)}\\.md`))
     assert.match(listResult.stdout, new RegExp(`Workflow Beta\\t${harness.escapeForRegExp(secondKey)}\\tBeta normal body\\tnote/${harness.escapeForRegExp(secondKey)}\\.md`))
-    assert.match(listResult.stdout, /draft-[a-z0-9]{6}\tdraft-[a-z0-9]{6}\tQuick draft body\tdraft\/draft-[a-z0-9]{6}\.md/)
+    assert.doesNotMatch(listResult.stdout, /draft-[a-z0-9]{6}\tdraft-[a-z0-9]{6}\tQuick draft body\tdraft\/draft-[a-z0-9]{6}\.md/)
+
+    const listDraftsResult = runOk("bn list --drafts", ["list", "--drafts"])
+    assert.match(listDraftsResult.stdout, new RegExp(`Workflow Alpha\\t${harness.escapeForRegExp(firstKey)}\\tAlpha normal body\\tnote/${harness.escapeForRegExp(firstKey)}\\.md`))
+    assert.match(listDraftsResult.stdout, /draft-[a-z0-9]{6}\tdraft-[a-z0-9]{6}\tQuick draft body\tdraft\/draft-[a-z0-9]{6}\.md/)
+
+    const draftEditorScriptPath = await harness.writeFakeEditorScript("Edited draft body mentions comet flags.\n")
+    const draftEditResult = runOk("bn edit draft", ["edit", draftKey], { EDITOR: draftEditorScriptPath })
+    assert.equal(draftEditResult.stdout, `Edited note: draft/${draftKey}.md\n`)
+    assert.equal(await readFile(path.join(harness.rootPath, draftRelativePath), "utf8"), "Edited draft body mentions comet flags.\n")
+
+    const showDraftResult = runOk("bn show draft", ["show", draftKey])
+    assert.match(showDraftResult.stdout, /Edited draft body mentions comet flags\./)
 
     const searchResult = runOk("bn search workflow beta", ["search", "workflow beta"])
     assert.match(searchResult.stdout, /Workflow Beta/)
@@ -115,13 +137,18 @@ test("CLI storage and UX workflow stays consistent through the real bin/bn.ts en
     const archiveResult = runOk("bn archive renamed", ["archive", renamedKey])
     assert.match(archiveResult.stdout, new RegExp(`Archived note: \.data/archive/${harness.escapeForRegExp(renamedKey)}\\.md`))
 
-    const archiveShowResult = harness.runBin(["show", `.data/archive/${renamedKey}.md`])
-    assert.equal(archiveShowResult.exitCode, 1)
-    assert.equal(archiveShowResult.stdout, "")
-    assert.match(archiveShowResult.stderr, /Could not find a note matching selector/)
+    const archiveShowResult = runOk("bn show archived exact path", ["show", `.data/archive/${renamedKey}.md`])
+    assert.match(archiveShowResult.stdout, new RegExp(`^Path: \.data/archive/${harness.escapeForRegExp(renamedKey)}\\.md$`, "m"))
     const archivedSidecar = await readSidecar(renamedKey)
+    assert.equal(archivedSidecar.type, "archived")
     assert.equal(archivedSidecar.relativePath, `.data/archive/${renamedKey}.md`)
     assert.match(archivedSidecar.archivedAt ?? "", /^\d{4}-\d{2}-\d{2}T/)
+
+    const postArchiveDefaultList = runOk("bn list after archive hides archived", ["list"])
+    assert.doesNotMatch(postArchiveDefaultList.stdout, new RegExp(harness.escapeForRegExp(renamedKey)))
+
+    const allListResult = runOk("bn list --all after archive", ["list", "--all"])
+    assert.match(allListResult.stdout, new RegExp(`Workflow Beta Renamed\\t${harness.escapeForRegExp(renamedKey)}\\t# Workflow Beta … mentions aurora signals\\.\\t\\.data/archive/${harness.escapeForRegExp(renamedKey)}\\.md`))
 
     const deleteResult = runOk("bn delete first", ["delete", firstKey, "--force"])
     assert.match(deleteResult.stdout, new RegExp(`Deleted note: note/${harness.escapeForRegExp(firstKey)}\\.md`))
@@ -130,13 +157,16 @@ test("CLI storage and UX workflow stays consistent through the real bin/bn.ts en
     await assert.rejects(() => access(path.join(harness.rootPath, ".data", "notes", `${firstKey}.json`)), { code: "ENOENT" })
 
     const rebuildResult = runOk("bn rebuild", ["rebuild"])
-    assert.equal(rebuildResult.stdout, "Rebuilt indexes for 1 note(s).\n")
+    assert.equal(rebuildResult.stdout, "Rebuilt indexes for 2 note(s).\n")
 
     await access(path.join(harness.rootPath, ".data", "metadata.sqlite"))
     await access(path.join(harness.rootPath, ".data", "search-index.json"))
 
     const finalListResult = runOk("bn list after archive and delete", ["list"])
-    assert.match(finalListResult.stdout, /draft-[a-z0-9]{6}\tdraft-[a-z0-9]{6}\tQuick draft body\tdraft\/draft-[a-z0-9]{6}\.md/)
+    assert.equal(finalListResult.stdout, "")
+
+    const finalDraftsListResult = runOk("bn list --drafts after archive and delete", ["list", "--drafts"])
+    assert.match(finalDraftsListResult.stdout, /draft-[a-z0-9]{6}\tdraft-[a-z0-9]{6}\tEdited draft body mentions comet flags\.\tdraft\/draft-[a-z0-9]{6}\.md/)
 
     const finalSearchResult = runOk("bn search aurora signals", ["search", "aurora", "signals"])
     assert.equal(finalSearchResult.stdout, 'No notes matched "aurora signals".\n')

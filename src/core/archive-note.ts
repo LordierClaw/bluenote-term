@@ -21,7 +21,7 @@ export interface ArchiveNoteSummary {
 }
 
 function isArchivedNote(note: ParsedNote): boolean {
-  return note.frontmatter.archivedAt !== undefined || note.sourcePath.startsWith(joinPortableRelativePath("notes", "archive") + "/")
+  return note.frontmatter.archivedAt !== undefined || note.sourcePath.startsWith(joinPortableRelativePath(".data", "archive") + "/")
 }
 
 function throwArchiveValidationError(stage: "before" | "after", sourcePath: string, validationErrors: string[]): never {
@@ -41,6 +41,12 @@ export function archiveNote(options: ArchiveNoteOptions): ArchiveNoteSummary {
   if (isArchivedNote(selected)) {
     throw new UsageError(`Note '${selected.sourcePath}' is already archived.`, {
       hint: "Choose an active note from bn list instead.",
+    })
+  }
+
+  if (!selected.sourcePath.startsWith("note/")) {
+    throw new UsageError(`Cannot archive non-normal note '${selected.sourcePath}'.`, {
+      hint: "Only normal notes under note/ can be archived.",
     })
   }
 

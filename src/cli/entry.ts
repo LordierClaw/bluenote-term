@@ -15,6 +15,7 @@ import { rebuildIndexes, type RebuildIndexesOptions } from "../core/rebuild-inde
 import { searchNotes, type SearchNoteMatch } from "../core/search-notes"
 import { showNote } from "../core/show-note"
 import { desktopClipboard, type ClipboardRuntime } from "../platform/clipboard"
+import type { NoteVisibility } from "../core/note-visibility"
 import { runTuiCli } from "../tui/app"
 import { runAiCli, type AiCliRuntimeOptions } from "./ai"
 
@@ -57,6 +58,87 @@ function readFlagValue(args: string[], flagName: string): string | undefined {
   }
 
   return value
+}
+
+function parseVisibilityArgs(args: string[]): { args: string[]; visibility: NoteVisibility } {
+  let visibility: NoteVisibility = "normal"
+  let index = 0
+
+  for (; index < args.length; index += 1) {
+    const arg = args[index]
+
+    if (arg === "--drafts") {
+      if (visibility === "all") {
+        throw new UsageError("Choose either --drafts or --all, not both.", {
+          hint: "Use --drafts for normal + draft notes, or --all to include archived notes.",
+        })
+      }
+
+      visibility = "drafts"
+      continue
+    }
+
+    if (arg === "--all") {
+      if (visibility === "drafts") {
+        throw new UsageError("Choose either --drafts or --all, not both.", {
+          hint: "Use --drafts for normal + draft notes, or --all to include archived notes.",
+        })
+      }
+
+      visibility = "all"
+      continue
+    }
+
+    break
+  }
+
+  return { args: args.slice(index), visibility }
+}
+
+function parseSelectorArgs(command: string, args: string[], options: { requireForce?: boolean } = {}): { selector: string; force: boolean } {
+  const selectors: string[] = []
+  let force = false
+
+  for (const arg of args) {
+    if (arg === "--drafts" || arg === "--all") {
+      throw new UsageError(`${command} does not accept ${arg}.`, {
+        hint: `Run bn ${command} <key|path>${options.requireForce ? " --force" : ""}.`,
+      })
+    }
+
+    if (arg === "--force") {
+      if (!options.requireForce) {
+        throw new UsageError(`${command} does not accept --force.`, {
+          hint: `Run bn ${command} <key|path>.`,
+        })
+      }
+
+      force = true
+      continue
+    }
+
+    if (arg.startsWith("--")) {
+      throw new UsageError(`Unknown option for ${command}: ${arg}.`, {
+        hint: `Run bn ${command} <key|path>${options.requireForce ? " --force" : ""}.`,
+      })
+    }
+
+    selectors.push(arg)
+  }
+
+  if (selectors.length === 0) {
+    throw new UsageError(`Missing required selector for ${command}.`, {
+      hint: `Run bn ${command} <key|path>${options.requireForce ? " --force" : ""}.`,
+    })
+  }
+
+  if (selectors.length > 1) {
+    throw new UsageError(`Too many selectors for ${command}.`, {
+      hint: `Run bn ${command} <key|path>${options.requireForce ? " --force" : ""}.`,
+    })
+  }
+
+  return { selector: selectors[0], force }
 }
 
 interface ParsedNewArgs {
@@ -193,9 +275,9 @@ export function formatHelp(version: string): string {
     "  init         Initialize the managed BlueNote root",
     "  new          [--title <title>] [--path note/<folder>] [--clipboard] <body>",
     "               Create a draft from body text or clipboard; --path creates a normal note",
-    "  list         List active notes as title, key, description, and path",
+    "  list         [--drafts|--all]  List notes as title, key, description, and path",
     "  show         <key|path>  Print a matching note summary and body",
-    "  search       <query>          Search indexed notes",
+    "  search       [--drafts|--all] <query>  Search indexed notes",
     "  edit         <key|path>  Open a matching note in $EDITOR",
     "  archive      <key|path>  Archive a matching note",
     "  delete       <key|path> --force  Permanently remove a matching note and sidecar",
@@ -316,13 +398,7 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
     }
 
     if (command === "edit") {
-      const selector = commandArgs[0]
-
-      if (!selector) {
-        throw new UsageError("Missing required selector for edit.", {
-          hint: "Run bn edit <key|path>.",
-        })
-      }
+      const { selector } = parseSelectorArgs("edit", commandArgs)
 
       const summary = editNote({ selector })
       const renameLine =
@@ -338,13 +414,7 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
     }
 
     if (command === "archive") {
-      const selector = commandArgs[0]
-
-      if (!selector) {
-        throw new UsageError("Missing required selector for archive.", {
-          hint: "Run bn archive <key|path>.",
-        })
-      }
+      const { selector } = parseSelectorArgs("archive", commandArgs)
 
       const summary = archiveNote({ selector })
 
@@ -356,17 +426,11 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
     }
 
     if (command === "delete") {
-      const selector = commandArgs[0]
-
-      if (!selector) {
-        throw new UsageError("Missing required selector for delete.", {
-          hint: "Run bn delete <key|path> --force.",
-        })
-      }
+      const { selector, force } = parseSelectorArgs("delete", commandArgs, { requireForce: true })
 
       const summary = deleteNote({
         selector,
-        force: commandArgs.includes("--force"),
+        force,
       })
 
       return {
@@ -377,7 +441,14 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
     }
 
     if (command === "list") {
-      const summaries = listNotes()
+      const parsedVisibility = parseVisibilityArgs(commandArgs)
+      if (parsedVisibility.args.length > 0) {
+        throw new UsageError(`Unknown option for list: ${parsedVisibility.args[0]}.`, {
+          hint: "Run bn list [--drafts|--all].",
+        })
+      }
+
+      const summaries = listNotes({ visibility: parsedVisibility.visibility })
       const stdout = summaries
         .map((summary) => `${summary.title}\t${summary.key}\t${summary.description}\t${summary.relativePath}`)
         .join("\n")
@@ -390,15 +461,16 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
     }
 
     if (command === "search") {
-      const query = commandArgs.join(" ").trim()
+      const parsedVisibility = parseVisibilityArgs(commandArgs)
+      const query = parsedVisibility.args.join(" ").trim()
 
       if (query === "") {
         throw new UsageError("Missing required query for search.", {
-          hint: 'Run bn search "keywords".',
+          hint: 'Run bn search [--drafts|--all] "keywords".',
         })
       }
 
-      const matches = searchNotes(query)
+      const matches = searchNotes(query, { visibility: parsedVisibility.visibility })
 
       return {
         exitCode: 0,
@@ -408,13 +480,7 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
     }
 
     if (command === "show") {
-      const selector = commandArgs[0]
-
-      if (!selector) {
-        throw new UsageError("Missing required selector for show.", {
-          hint: "Run bn show <key|path>.",
-        })
-      }
+      const { selector } = parseSelectorArgs("show", commandArgs)
 
       const shown = showNote({ selector })
 

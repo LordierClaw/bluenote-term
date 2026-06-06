@@ -6,8 +6,9 @@ import { createSidecarRepository } from "../storage/sidecar-repository"
 import { selectNote } from "./select-note"
 import { createNoteRepository } from "../storage/note-repository"
 import { createNoteDescription } from "../domain/note-description"
+import type { NoteVisibilityOptions } from "./note-visibility"
 
-export interface ShowNoteOptions extends ResolveBlueNoteRootOptions {
+export interface ShowNoteOptions extends ResolveBlueNoteRootOptions, NoteVisibilityOptions {
   selector: string
 }
 
@@ -23,7 +24,7 @@ export function showNote(options: ShowNoteOptions): ShowNoteSummary {
   const rootPath = resolveBlueNoteRoot(options)
   const repository = createNoteRepository(rootPath)
   const sidecars = createSidecarRepository(rootPath)
-  const selected = selectNote({ repository, selector: options.selector })
+  const selected = selectNote({ repository, selector: options.selector, visibility: options.visibility })
   const sidecarPath = sidecars.getSidecarPath(selected.frontmatter.id)
 
   if (!existsSync(sidecarPath)) {

@@ -244,7 +244,7 @@ git add src/cli/entry.ts src/platform tests/unit/cli/entry.test.ts tests/e2e/cli
 
 ---
 
-## Task 5: Visibility flags for list/search/show/edit/delete and archive storage
+## Task 5: Visibility flags for list/search and archive storage
 
 **Files:**
 - Modify: `src/core/list-notes.ts`
@@ -262,9 +262,9 @@ git add src/cli/entry.ts src/platform tests/unit/cli/entry.test.ts tests/e2e/cli
 
 **Step 1: Write failing tests**
 - Default `list/search/show/edit/delete` sees normal notes only.
-- `--drafts` includes normal + drafts.
-- `--all` includes normal + drafts + archived.
-- `bn edit --drafts <selector>` can edit a draft through injected editor.
+- `bn list --drafts` and `bn search --drafts <query>` include normal + drafts.
+- `bn list --all` and `bn search --all <query>` include normal + drafts + archived.
+- `show`, `edit`, and `delete` do not accept `--drafts` or `--all`; those commands accept an exact selector for any note type without extra visibility flags.
 - Archive moves normal note file to `.data/archive/<key>.md` and updates sidecar to `type: "archived"`, non-null `archivedAt`.
 - Archived notes do not appear by default after archive.
 
@@ -275,9 +275,9 @@ bun test tests/unit/core/list-notes.test.ts tests/unit/core/search-notes.test.ts
 ```
 
 **Step 3: Implement**
-- Introduce a `NoteVisibility` or type-filter option.
-- Thread visibility through list/search/select/show/edit/delete.
-- Parse `--drafts` and `--all` in CLI commands.
+- Introduce a `NoteVisibility` or type-filter option for list/search and shared selector internals where useful.
+- Thread visibility through list/search only at the CLI surface; keep show/edit/delete free of visibility flags and allow exact selectors to resolve any note type.
+- Parse `--drafts` and `--all` only for `list` and `search` CLI commands.
 - Refactor archive to hidden flat `.data/archive/<key>.md` path.
 - Preserve sidecar metadata and update indexes after archive/delete/edit changes.
 
