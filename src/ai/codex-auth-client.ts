@@ -368,14 +368,15 @@ export function createCodexAuthClient(options: CodexAuthClientOptions = {}): Cod
 
     async refreshAuth(auth, refreshOptions = {}) {
       throwIfAborted(refreshOptions.signal)
+      const form = new URLSearchParams({
+        client_id: auth.clientId || clientId,
+        grant_type: "refresh_token",
+        refresh_token: auth.refreshToken,
+      })
       const response = await request(`${issuer}/oauth/token`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          client_id: auth.clientId || clientId,
-          grant_type: "refresh_token",
-          refresh_token: auth.refreshToken,
-        }),
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body: form.toString(),
       }, refreshOptions.signal)
       const body = await tryReadJson(response)
       const secrets = [auth.accessToken, auth.refreshToken, auth.idToken]

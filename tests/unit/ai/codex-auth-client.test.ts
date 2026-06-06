@@ -319,6 +319,8 @@ test("refreshes access tokens with refresh token and updates expiry", async () =
 
   const refreshed = await client.refreshAuth(existingAuth())
 
+  assert.equal(new Headers(calls[0]?.init.headers).get("content-type"), "application/x-www-form-urlencoded")
+  assert.equal(typeof calls[0]?.init.body, "string")
   assert.deepEqual(calls[0]?.body, {
     client_id: clientId,
     grant_type: "refresh_token",
