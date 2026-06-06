@@ -66,6 +66,185 @@ test("repository list reads typed normal sidecars produced by create", async () 
   }
 })
 
+test("repository creates a draft note under draft with a typed sidecar", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-draft-"))
+
+  try {
+    const repository = createNoteRepository(rootPath)
+    const created = repository.create({
+      frontmatter: {
+        ...FIXED_FRONTMATTER,
+        id: "draft-000zzz",
+        title: "draft-000zzz",
+      },
+      body: "Draft body.\n",
+      destination: { type: "draft" },
+    })
+
+    assert.equal(created.relativePath, "draft/draft-000zzz.md")
+    assert.equal(created.notePath, path.join(rootPath, "draft", "draft-000zzz.md"))
+
+    const sidecar = JSON.parse(await readFile(path.join(getStateNotesPath(rootPath), "draft-000zzz.json"), "utf8"))
+    assert.equal(sidecar.type, "draft")
+    assert.equal(sidecar.key, "draft-000zzz")
+    assert.equal(sidecar.title, "draft-000zzz")
+    assert.equal(sidecar.relativePath, "draft/draft-000zzz.md")
+    assert.equal(await readFile(created.notePath, "utf8"), "Draft body.\n")
+
+    const notes = repository.list()
+    assert.equal(notes.length, 1)
+    assert.equal(notes[0]?.sourcePath, "draft/draft-000zzz.md")
+    assert.equal(notes[0]?.frontmatter.id, "draft-000zzz")
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("repository creates a normal note in an existing note destination folder", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-normal-destination-"))
+
+  try {
+    await mkdir(path.join(rootPath, "note", "work"), { recursive: true })
+    const repository = createNoteRepository(rootPath)
+    const created = repository.create({
+      frontmatter: FIXED_FRONTMATTER,
+      body: "Normal body.\n",
+      destination: { type: "normal", folderRelativePath: "note/work" },
+    })
+
+    assert.equal(created.relativePath, "note/work/note-123.md")
+    assert.equal(created.notePath, path.join(rootPath, "note", "work", "note-123.md"))
+
+    const sidecar = JSON.parse(await readFile(path.join(getStateNotesPath(rootPath), "note-123.json"), "utf8"))
+    assert.equal(sidecar.type, "normal")
+    assert.equal(sidecar.relativePath, "note/work/note-123.md")
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("repository rejects normal creation without an existing note destination folder", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-normal-missing-folder-"))
+
+  try {
+    const repository = createNoteRepository(rootPath)
+
+    assert.throws(
+      () =>
+        repository.create({
+          frontmatter: FIXED_FRONTMATTER,
+          body: "",
+          destination: { type: "normal", folderRelativePath: "note/missing" },
+        }),
+      (error) => {
+        assert.ok(error instanceof UsageError)
+        assert.match(error.message, /Could not create note 'note[\\/]missing[\\/]note-123\.md'\./)
+        assert.match(error.hint ?? "", /existing folder under note/i)
+        return true
+      },
+    )
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("repository rejects normal creation when a note destination folder escapes through a symlink", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-normal-symlink-"))
+  const externalPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-outside-"))
+
+  try {
+    await mkdir(path.join(rootPath, "note"), { recursive: true })
+    await symlink(externalPath, path.join(rootPath, "note", "escape"), "dir")
+    const repository = createNoteRepository(rootPath)
+
+    assert.throws(
+      () =>
+        repository.create({
+          frontmatter: FIXED_FRONTMATTER,
+          body: "",
+          destination: { type: "normal", folderRelativePath: "note/escape" },
+        }),
+      (error) => {
+        assert.ok(error instanceof UsageError)
+        assert.match(error.message, /Could not create note 'note[\\/]escape[\\/]note-123\.md'\./)
+        assert.match(error.hint ?? "", /existing folder under note/i)
+        return true
+      },
+    )
+
+    await assert.rejects(access(path.join(externalPath, "note-123.md")))
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+    await rm(externalPath, { recursive: true, force: true })
+  }
+})
+
+test("repository rejects normal creation under draft", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-normal-draft-folder-"))
+
+  try {
+    await mkdir(path.join(rootPath, "draft"), { recursive: true })
+    const repository = createNoteRepository(rootPath)
+
+    assert.throws(
+      () =>
+        repository.create({
+          frontmatter: FIXED_FRONTMATTER,
+          body: "",
+          destination: { type: "normal", folderRelativePath: "draft" },
+        }),
+      (error) => {
+        assert.ok(error instanceof UsageError)
+        assert.match(error.message, /Could not create note 'draft[\\/]note-123\.md'\./)
+        assert.match(error.hint ?? "", /existing folder under note/i)
+        return true
+      },
+    )
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("repository enforces global key uniqueness across note, draft, and sidecars", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-global-key-"))
+
+  try {
+    const repository = createNoteRepository(rootPath)
+    repository.create({
+      frontmatter: {
+        ...FIXED_FRONTMATTER,
+        id: "shared-key",
+        title: "shared-key",
+      },
+      body: "Draft body.\n",
+      destination: { type: "draft" },
+    })
+
+    assert.equal(repository.keyExists("shared-key"), true)
+    await mkdir(path.join(rootPath, "note"), { recursive: true })
+    assert.throws(
+      () =>
+        repository.create({
+          frontmatter: {
+            ...FIXED_FRONTMATTER,
+            id: "shared-key",
+            title: "Normal title",
+          },
+          body: "Normal body.\n",
+          destination: { type: "normal", folderRelativePath: "note" },
+        }),
+      (error) => {
+        assert.ok(error instanceof UsageError)
+        assert.match(error.message, /Could not create note 'note[\\/]shared-key\.md'\./)
+        assert.match(error.hint ?? "", /same basename\/key already exists/i)
+        return true
+      },
+    )
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
 test("repository archive writes an archived sidecar type", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-archive-type-"))
 

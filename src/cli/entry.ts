@@ -182,6 +182,8 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
 
       const summary = createNote({
         title,
+        type: "normal",
+        destinationFolder: "note",
         ...runtime.createNoteOptions,
       })
 

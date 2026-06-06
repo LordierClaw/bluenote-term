@@ -15,7 +15,7 @@ test("formatHelp lists the public commands without removed command or release-st
   assert.match(help, /--help/)
   assert.match(help, /--version/)
   assert.match(help, /init\s+Initialize the managed BlueNote root/)
-  assert.match(help, /new\s+--title <title>\s+Create a new note in notes\/inbox and print its key\/path/)
+  assert.match(help, /new\s+--title <title>\s+Create a new note in note\/ and print its key\/path/)
   assert.match(help, /list\s+List active notes as title, key, description, and path/)
   assert.match(help, /show\s+<key\|path>\s+Print a matching note summary and body/)
   assert.match(help, /search\s+<query>/)
@@ -106,8 +106,8 @@ test("runCli accepts injected create-note dependencies for deterministic new-not
 
     assert.equal(result.exitCode, 0)
     assert.equal(result.stderr, "")
-    assert.equal(result.stdout, "Created note\nKey: example-51u7i0\nPath: notes/inbox/example-51u7i0.md\n")
-    assert.equal(await readFile(path.join(rootPath, "notes", "inbox", "example-51u7i0.md"), "utf8"), "")
+    assert.equal(result.stdout, "Created note\nKey: example-51u7i0\nPath: note/example-51u7i0.md\n")
+    assert.equal(await readFile(path.join(rootPath, "note", "example-51u7i0.md"), "utf8"), "")
   } finally {
     if (previousRoot === undefined) {
       delete process.env.BLUENOTE_ROOT

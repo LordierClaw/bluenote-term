@@ -1,5 +1,5 @@
 import path from "node:path"
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs"
 
 import { UsageError } from "../core/errors"
 import { createNoteDescription } from "../domain/note-description"
@@ -11,12 +11,17 @@ import { parsePlainNote, serializePlainNote } from "./plain-note"
 import { createSidecarRepository } from "./sidecar-repository"
 import type { NoteSidecar, NoteType } from "./sidecar-schema"
 import { replaceNoteBodyAtomically } from "./atomic-note-writer"
-import { getArchiveNotePath, getInboxNotePath, getNotesPath } from "./root-layout"
+import { getArchiveNotePath, getDraftNotesPath, getInboxNotePath, getNormalNotesPath } from "./root-layout"
 
 export interface CreateStoredNoteInput {
   frontmatter: NoteFrontmatter
   body: string
+  destination?: CreateStoredNoteDestination
 }
+
+export type CreateStoredNoteDestination =
+  | { type: "draft" }
+  | { type: "normal"; folderRelativePath: string }
 
 export interface StoredNoteRecord {
   notePath: string
@@ -142,6 +147,61 @@ function notePathFromRelativePath(rootPath: string, relativePath: string): strin
   return assertPathInsideRoot(rootPath, path.join(rootPath, relativePath))
 }
 
+function normalizeInputRelativePath(relativePath: string): string {
+  return relativePath.replace(/\\/g, "/").replace(/^\.\//, "")
+}
+
+function destinationFolderIsUsableNormalFolder(normalNotesPath: string, candidateFolderPath: string): boolean {
+  if (!existsSync(candidateFolderPath) || !statSync(candidateFolderPath).isDirectory()) {
+    return false
+  }
+
+  try {
+    assertPathInsideRoot(realpathSync(normalNotesPath), realpathSync(candidateFolderPath))
+    return true
+  } catch {
+    return false
+  }
+}
+
+function resolveCreateNotePath(
+  rootPath: string,
+  frontmatter: NoteFrontmatter,
+  destination?: CreateStoredNoteDestination,
+): { notePath: string; relativePath: string } {
+  if (destination?.type === "draft") {
+    const draftPath = getDraftNotesPath(rootPath)
+    const notePath = assertPathInsideRoot(draftPath, path.join(draftPath, `${frontmatter.id}.md`))
+
+    return { notePath, relativePath: toRootRelativePath(rootPath, notePath) }
+  }
+
+  if (destination?.type === "normal") {
+    const normalizedFolderRelativePath = normalizeInputRelativePath(destination.folderRelativePath)
+    const candidateFolderPath = assertPathInsideRoot(rootPath, path.join(rootPath, normalizedFolderRelativePath))
+    const normalNotesPath = getNormalNotesPath(rootPath)
+    const relativePath = joinPortableRelativePath(normalizedFolderRelativePath, `${frontmatter.id}.md`)
+
+    if (
+      !normalizedFolderRelativePath.startsWith("note") ||
+      (normalizedFolderRelativePath !== "note" && !normalizedFolderRelativePath.startsWith("note/")) ||
+      !destinationFolderIsUsableNormalFolder(normalNotesPath, candidateFolderPath)
+    ) {
+      throw new UsageError(`Could not create note '${relativePath}'.`, {
+        hint: "Choose an existing folder under note/ for normal note creation.",
+      })
+    }
+
+    const notePath = assertPathInsideRoot(normalNotesPath, path.join(candidateFolderPath, `${frontmatter.id}.md`))
+
+    return { notePath, relativePath: toRootRelativePath(rootPath, notePath) }
+  }
+
+  const notePath = getInboxNotePath(rootPath, frontmatter.id)
+
+  return { notePath, relativePath: toRootRelativePath(rootPath, notePath) }
+}
+
 function createPlainNoteMarkdown(relativePath: string, body: string): string {
   return serializePlainNote({
     body,
@@ -150,14 +210,15 @@ function createPlainNoteMarkdown(relativePath: string, body: string): string {
 }
 
 function noteKeyExists(rootPath: string, key: string): boolean {
-  const notesPath = getNotesPath(rootPath)
   const notePaths: string[] = []
 
-  if (!existsSync(notesPath)) {
-    return false
-  }
+  for (const notesPath of [getNormalNotesPath(rootPath), getDraftNotesPath(rootPath)]) {
+    if (!existsSync(notesPath)) {
+      continue
+    }
 
-  collectMarkdownFiles(rootPath, notesPath, notePaths)
+    collectMarkdownFiles(rootPath, notesPath, notePaths)
+  }
 
   return notePaths.some((notePath) => keyFromNotePath(notePath) === key)
 }
@@ -239,13 +300,16 @@ export function createNoteRepository(rootPath: string): NoteRepository {
       const canonicalFrontmatter = validateNoteFrontmatter(input.frontmatter, getCreateValidationSourcePath(input.frontmatter))
       assertCreateFrontmatterIsSupported(canonicalFrontmatter)
 
-      const notePath = getInboxNotePath(normalizedRootPath, canonicalFrontmatter.id)
-      const relativePath = toRootRelativePath(normalizedRootPath, notePath)
+      const { notePath, relativePath } = resolveCreateNotePath(
+        normalizedRootPath,
+        canonicalFrontmatter,
+        input.destination,
+      )
       const sidecarPath = sidecars.getSidecarPath(canonicalFrontmatter.id)
 
       if (existsSync(notePath) || existsSync(sidecarPath) || noteKeyExists(normalizedRootPath, canonicalFrontmatter.id)) {
         throw new UsageError(`Could not create note '${relativePath}'.`, {
-          hint: "A note with the same basename/key already exists somewhere under notes/ or in sidecar metadata. Use a different id or remove/archive the existing note first.",
+          hint: "A note with the same basename/key already exists somewhere under note/, draft/, or in sidecar metadata. Use a different id or remove/archive the existing note first.",
         })
       }
 
@@ -651,15 +715,16 @@ export function createNoteRepository(rootPath: string): NoteRepository {
     },
 
     listNotePaths() {
-      const notesPath = getNotesPath(normalizedRootPath)
       const notePaths: string[] = []
 
-      if (!existsSync(notesPath)) {
-        return []
-      }
-
       try {
-        collectMarkdownFiles(normalizedRootPath, notesPath, notePaths)
+        for (const notesPath of [getNormalNotesPath(normalizedRootPath), getDraftNotesPath(normalizedRootPath)]) {
+          if (!existsSync(notesPath)) {
+            continue
+          }
+
+          collectMarkdownFiles(normalizedRootPath, notesPath, notePaths)
+        }
       } catch (error) {
         wrapRepositoryError("list", NOTES_RELATIVE_PATH, error)
       }

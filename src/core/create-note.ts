@@ -3,17 +3,19 @@ import { existsSync, readdirSync } from "node:fs"
 
 import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions } from "../config/root"
 import { enqueueDescribeNoteIfAiEnabled } from "../ai/enqueue-describe-note"
-import { IndexValidationFailedError } from "./errors"
+import { IndexValidationFailedError, UsageError } from "./errors"
 import { createNoteDescription } from "../domain/note-description"
-import { createNoteKey } from "../domain/note-key"
+import { createDraftNoteKey, createNoteKey } from "../domain/note-key"
 import { rebuildIndexes } from "./rebuild-indexes"
 import { systemClock, type Clock } from "../platform/clock"
 import { createNoteRepository } from "../storage/note-repository"
 import { ensureManagedRoot, getStateNotesPath } from "../storage/root-layout"
 
 export interface CreateNoteOptions extends ResolveBlueNoteRootOptions {
-  title: string
+  type?: "draft" | "normal"
+  title?: string
   body?: string
+  destinationFolder?: string
   clock?: Clock
   randomSource?: () => number
 }
@@ -65,22 +67,60 @@ export function createNote(options: CreateNoteOptions): CreateNoteSummary {
   const timestamp = clock.now().toISOString()
   const repository = createNoteRepository(rootPath)
   const existingKeys = listExistingCreateKeys(rootPath, repository)
-  const key = createNoteKey(options.title, {
-    isUnique: (candidate) => !existingKeys.has(candidate),
-    randomSource: options.randomSource,
-  })
+  const type = options.type ?? "draft"
+  let title: string
+  let key: string
+  let destination: { type: "draft" } | { type: "normal"; folderRelativePath: string }
+
+  if (type === "normal") {
+    if (options.title === undefined || options.title.trim().length === 0) {
+      throw new UsageError("Normal note creation requires a title.", {
+        hint: "Pass a title when creating a normal note.",
+      })
+    }
+
+    const destinationFolder = options.destinationFolder
+    if (destinationFolder === undefined || destinationFolder.trim().length === 0) {
+      throw new UsageError("Normal note creation requires a destination folder under note/.", {
+        hint: "Pass an existing note/... folder as the normal note destination.",
+      })
+    }
+
+    title = options.title
+    key = createNoteKey(title, {
+      isUnique: (candidate) => !existingKeys.has(candidate),
+      randomSource: options.randomSource,
+    })
+    destination = { type: "normal", folderRelativePath: destinationFolder }
+  } else if (options.title === undefined || options.title.trim().length === 0) {
+    key = createDraftNoteKey({
+      isUnique: (candidate) => !existingKeys.has(candidate),
+      randomSource: options.randomSource,
+    })
+    title = key
+    destination = { type: "draft" }
+  } else {
+    title = options.title
+    key = createNoteKey(title, {
+      isUnique: (candidate) => !existingKeys.has(candidate),
+      randomSource: options.randomSource,
+    })
+    destination = { type: "draft" }
+  }
+
   const description = createNoteDescription(options.body ?? "")
   const created = repository.create({
     frontmatter: {
       id: key,
       schemaVersion: 1,
-      title: options.title,
+      title,
       mode: "plain",
       tags: [],
       createdAt: timestamp,
       updatedAt: timestamp,
     },
     body: options.body ?? "",
+    destination,
   })
 
   const rebuildSummary = rebuildIndexes({ override: rootPath })
@@ -96,7 +136,7 @@ export function createNote(options: CreateNoteOptions): CreateNoteSummary {
 
   enqueueAiDescriptionAfterCreate(rootPath, {
     key,
-    title: options.title,
+    title,
     description,
     body: options.body ?? "",
     relativePath: created.relativePath,
@@ -105,7 +145,7 @@ export function createNote(options: CreateNoteOptions): CreateNoteSummary {
 
   return {
     key,
-    title: options.title,
+    title,
     description,
     rootPath,
     notePath: created.notePath,
