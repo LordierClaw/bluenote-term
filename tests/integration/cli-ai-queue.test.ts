@@ -8,6 +8,7 @@ import { enqueueDescribeNoteJob, markDescribeNoteJobFailedIfContentHashMatches }
 import { readDescribeNotePrompt } from "../../src/ai/prompt-repository"
 import { runCliAsync } from "../../src/cli/entry"
 import type { AiTextGenerationClient } from "../../src/ai/provider"
+import { CodexTextGenerationClientError } from "../../src/ai/codex-client"
 import pkg from "../../package.json"
 
 const SUBPROCESS_HEAVY_TIMEOUT_MS = 45_000
@@ -334,6 +335,48 @@ test("bn ai process-queue leaves Codex jobs pending without consuming attempts w
 
     const firstResult = await runAiWithoutInjectedClient(harness.rootPath, ["ai", "process-queue"])
     const secondResult = await runAiWithoutInjectedClient(harness.rootPath, ["ai", "process-queue"])
+
+    assert.notEqual(firstResult.exitCode, 0)
+    assert.equal(firstResult.stderr, "")
+    assert.match(firstResult.stdout, /Processed AI queue: 0 applied, 0 failed, 1 remaining\./)
+    assert.notEqual(secondResult.exitCode, 0)
+    assert.equal(secondResult.stderr, "")
+    assert.match(secondResult.stdout, /Processed AI queue: 0 applied, 0 failed, 1 remaining\./)
+
+    const queue = JSON.parse(await readFile(path.join(harness.rootPath, ".data", "ai", "queue.json"), "utf8"))
+    assert.equal(queue.jobs.length, 1)
+    assert.equal(queue.jobs[0].key, key)
+    assert.equal(queue.jobs[0].status, "pending")
+    assert.equal(queue.jobs[0].attempts, 0)
+    assert.equal(queue.jobs[0].lastError, null)
+  } finally {
+    await harness.cleanup()
+  }
+}, SUBPROCESS_HEAVY_TIMEOUT_MS)
+
+test("bn ai process-queue leaves Codex jobs pending without consuming attempts when auth refresh fails", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-ai-process-queue-codex-refresh-failure-")
+
+  try {
+    const key = await createQueuedNote(harness, "Codex Refresh Failure Process Note", "0x99999999")
+
+    const setConfig = harness.run([
+      "ai",
+      "config",
+      "set",
+      "--provider",
+      "codex",
+      "--model",
+      "gpt-5.1-codex",
+    ])
+    assert.equal(setConfig.exitCode, 0)
+
+    const firstResult = await runInjectedAi(harness.rootPath, ["ai", "process-queue"], async () => {
+      throw new CodexTextGenerationClientError("Codex auth refresh failed: Codex token refresh failed with status 400: invalid_grant. Run bn ai codex auth login.")
+    })
+    const secondResult = await runInjectedAi(harness.rootPath, ["ai", "process-queue"], async () => {
+      throw new CodexTextGenerationClientError("Codex auth refresh failed: Codex token refresh failed with status 400: invalid_grant. Run bn ai codex auth login.")
+    })
 
     assert.notEqual(firstResult.exitCode, 0)
     assert.equal(firstResult.stderr, "")

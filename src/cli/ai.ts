@@ -10,6 +10,7 @@ import type { OpenAiCompatibleFetch } from "../ai/openai-compatible-client"
 import type { AiQueueJob } from "../ai/queue-repository"
 import { dropDescribeNoteJobIfNoteMissing, listPendingAiJobs, listRetryableAiJobs, markDescribeNoteJobFailedIfContentHashMatches } from "../ai/queue-service"
 import { CodexAuthClientError, createCodexAuthClient, type CodexAuthClientOptions } from "../ai/codex-auth-client"
+import { CodexTextGenerationClientError } from "../ai/codex-client"
 import { createCodexAuthRepository, formatCodexAuthStatus } from "../ai/codex-auth-repository"
 
 export interface AiCliRuntimeOptions {
@@ -268,6 +269,22 @@ function providerFailureError(error: unknown, secrets: string[] = []): UsageErro
   })
 }
 
+function isCodexProviderSetupBlocked(error: unknown): boolean {
+  if (error instanceof CodexProviderSetupRequiredError) {
+    return true
+  }
+
+  if (!(error instanceof CodexTextGenerationClientError)) {
+    return false
+  }
+
+  const message = error.message.toLowerCase()
+  return message.includes("codex auth setup is required")
+    || message.includes("codex auth refresh failed")
+    || message.includes("codex auth is expired")
+    || message.includes("run bn ai codex auth login")
+}
+
 async function runConfigCommand(args: string[]): Promise<CliResult> {
   const [subcommand, ...subcommandArgs] = args
   const rootPath = getConfiguredRootPath()
@@ -468,7 +485,7 @@ export async function runAiCli(args: string[], runtime: AiCliRuntimeOptions = {}
           }
         }
       } catch (error) {
-        if (error instanceof CodexProviderSetupRequiredError) {
+        if (isCodexProviderSetupBlocked(error)) {
           setupBlocked = true
           continue
         }
