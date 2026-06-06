@@ -20,8 +20,8 @@ import { assertPathInsideRoot } from "../platform/path-safety"
 export const MANAGED_ROOT_LAYOUT = [
   "note",
   "draft",
-  path.join(STATE_DIRECTORY, "archive"),
   STATE_DIRECTORY,
+  path.join(STATE_DIRECTORY, "archive"),
   STATE_NOTES_DIRECTORY,
   STATE_RECOVERY_DIRECTORY,
   STATE_TMP_DIRECTORY,
@@ -100,9 +100,9 @@ export function getInboxNotePath(rootPath: string, key: string): string {
 }
 
 export function getNormalNotePath(rootPath: string, key: string): string {
-  const inboxPath = getNormalNotesPath(rootPath)
+  const normalNotesPath = getNormalNotesPath(rootPath)
 
-  return assertPathInsideRoot(inboxPath, path.join(inboxPath, `${key}.md`))
+  return assertPathInsideRoot(normalNotesPath, path.join(normalNotesPath, `${key}.md`))
 }
 
 export function getArchiveNotePath(rootPath: string, key: string): string {

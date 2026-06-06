@@ -238,6 +238,32 @@ test("bn rebuild exits 2 and reports a sidecar whose note file is missing", asyn
   }
 })
 
+test("bn rebuild rejects orphaned sidecars whose relative path escapes the managed root", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-rebuild-outside-sidecar-")
+
+  try {
+    await harness.writeNote(
+      path.join(".data", "notes", "outside-note.json"),
+      sidecarJson({
+        key: "outside-note",
+        title: "Outside Note",
+        description: "Should not be resolved outside root",
+        relativePath: path.join("..", "outside-note.md"),
+      }),
+    )
+
+    const result = harness.run(["rebuild"])
+
+    assert.equal(result.exitCode, 2)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Validation failed while rebuilding indexes\./)
+    assert.match(result.stderr, /Target path '.+' is outside the managed root '.+'\./)
+    assert.doesNotMatch(result.stderr, /points to missing note/)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
 test("bn rebuild exits 2 and reports sidecar key and path mismatches", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-rebuild-mismatch-")
 

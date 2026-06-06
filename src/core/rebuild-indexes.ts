@@ -11,6 +11,7 @@ import { createNoteRepository, type StoredNoteRecord } from "../storage/note-rep
 import type { ParsedNote } from "../storage/note-schema"
 import { ensureManagedRoot, getArchiveNotesPath } from "../storage/root-layout"
 import { migrateLegacyAppStateToData } from "../storage/app-state-migration"
+import { assertPathInsideRoot } from "../platform/path-safety"
 
 export interface RebuildIndexesOptions extends ResolveBlueNoteRootOptions {
   testHooks?: {
@@ -91,6 +92,12 @@ function readLegacyFrontmatterNote(rawNote: string, relativePath: string) {
   } catch {
     return null
   }
+}
+
+function pathIsInsideDirectory(directoryPath: string, targetPath: string): boolean {
+  const relativePath = path.relative(path.resolve(directoryPath), path.resolve(targetPath))
+
+  return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
 }
 
 export function rebuildIndexes(options: RebuildIndexesOptions = {}): RebuildIndexesSummary {
@@ -186,10 +193,10 @@ export function rebuildIndexes(options: RebuildIndexesOptions = {}): RebuildInde
 
       try {
         const sidecar = sidecars.read(sidecarKey)
-        const sidecarNotePath = path.join(rootPath, sidecar.relativePath)
+        const sidecarNotePath = assertPathInsideRoot(rootPath, path.join(rootPath, sidecar.relativePath))
         const archiveNotesPath = getArchiveNotesPath(rootPath)
 
-        if (existsSync(sidecarNotePath) && path.relative(archiveNotesPath, sidecarNotePath).split(path.sep)[0] !== "..") {
+        if (pathIsInsideDirectory(archiveNotesPath, sidecarNotePath) && existsSync(sidecarNotePath)) {
           continue
         }
 

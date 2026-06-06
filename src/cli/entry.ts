@@ -69,7 +69,7 @@ export function formatHelp(version: string): string {
     "  --help       Show this message",
     "  --version    Print the current version",
     "  init         Initialize the managed BlueNote root",
-    "  new          --title <title>  Create a new note in notes/inbox and print its key/path",
+    "  new          --title <title>  Create a new note in note/ and print its key/path",
     "  list         List active notes as title, key, description, and path",
     "  show         <key|path>  Print a matching note summary and body",
     "  search       <query>          Search indexed notes",

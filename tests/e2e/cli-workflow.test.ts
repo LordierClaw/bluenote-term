@@ -3,8 +3,17 @@ import assert from "node:assert/strict"
 import path from "node:path"
 import { access, readFile } from "node:fs/promises"
 
-import { createManagedRootHarness, type CliRunResult } from "../helpers/cli"
+import { createManagedRootHarness, runCli, type CliRunResult } from "../helpers/cli"
 import { noteMarkdown, timestampFieldPattern } from "../helpers/note-fixtures"
+
+test("CLI help describes the Phase 7 note layout for new notes", () => {
+  const result = runCli(["--help"])
+
+  assert.equal(result.exitCode, 0)
+  assert.equal(result.stderr, "")
+  assert.doesNotMatch(result.stdout, /notes\/inbox/)
+  assert.match(result.stdout, /Create a new note in note\//)
+})
 
 test("CLI workflow stays consistent across init, create, rebuild, list, search, show, edit, and archive", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-e2e-")
