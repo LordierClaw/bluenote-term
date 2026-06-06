@@ -193,6 +193,13 @@ export function rebuildIndexes(options: RebuildIndexesOptions = {}): RebuildInde
 
       try {
         const sidecar = sidecars.read(sidecarKey)
+
+        if (path.isAbsolute(sidecar.relativePath)) {
+          throw new UsageError(
+            `Sidecar '${path.join(STATE_NOTES_DIRECTORY, `${sidecarKey}.json`)}' declares absolute relativePath '${sidecar.relativePath}'.`,
+          )
+        }
+
         const sidecarNotePath = assertPathInsideRoot(rootPath, path.join(rootPath, sidecar.relativePath))
         const archiveNotesPath = getArchiveNotesPath(rootPath)
 

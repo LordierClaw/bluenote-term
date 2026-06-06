@@ -264,6 +264,35 @@ test("bn rebuild rejects orphaned sidecars whose relative path escapes the manag
   }
 })
 
+test("bn rebuild rejects orphaned sidecars whose relative path is absolute", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-rebuild-absolute-sidecar-")
+
+  try {
+    await harness.writeNote(
+      path.join(".data", "notes", "absolute-note.json"),
+      sidecarJson({
+        key: "absolute-note",
+        title: "Absolute Note",
+        description: "Absolute paths are not portable metadata",
+        relativePath: "/tmp/outside-note.md",
+      }),
+    )
+
+    const result = harness.run(["rebuild"])
+
+    assert.equal(result.exitCode, 2)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Validation failed while rebuilding indexes\./)
+    assert.match(
+      result.stderr,
+      /Sidecar '\.data[\\/]notes[\\/]absolute-note\.json' declares absolute relativePath '\/tmp\/outside-note\.md'\./,
+    )
+    assert.doesNotMatch(result.stderr, /points to missing note 'tmp[\\/]outside-note\.md'/)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
 test("bn rebuild exits 2 and reports sidecar key and path mismatches", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-rebuild-mismatch-")
 
