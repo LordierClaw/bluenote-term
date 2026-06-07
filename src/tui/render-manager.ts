@@ -198,7 +198,7 @@ type BrowserishRow = ManagerBrowserRow | ManagerItem
 
 function currentPathLabel(path: string | null | undefined): string {
   const normalized = (path ?? "").replace(/^\/+|\/+$/gu, "")
-  return normalized ? normalized : "notes/"
+  return normalized ? normalized : "note/"
 }
 
 function basenameLabel(path: string | null | undefined): string {
@@ -1091,6 +1091,14 @@ export function routeManagerKey(sequence: string, controller: WorkspaceControlle
     }
     if ((mode === "manager.move" || mode === "manager.saveDraftAs") && (sequence === "\u001b[B" || sequence === "j")) {
       controller.moveManagerSelection("down")
+      return true
+    }
+    if ((mode === "manager.move" || mode === "manager.saveDraftAs") && sequence === "\u001b[C") {
+      controller.openFocusedManagerFolder()
+      return true
+    }
+    if ((mode === "manager.move" || mode === "manager.saveDraftAs") && sequence === "\u001b[D") {
+      controller.goToManagerParent({ preserveActionMode: true })
       return true
     }
     if (sequence === "\r" || sequence === "\n") {

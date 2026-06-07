@@ -243,8 +243,13 @@ function allBrowserItems(noteSummaries: readonly NoteManagerSummary[], userFolde
     const area = item.relativePath.split("/").filter(Boolean)[0]
     return area === "note" || area === "draft"
   })
+  const hasPhaseSevenFolders = userFolderPaths.some((folderPath) => {
+    const area = normalizeRelativePath(folderPath).split("/").filter(Boolean)[0]
+    return area === "note" || area === "draft"
+  })
   const hasLegacyNotes = noteItems.some((item) => item.relativePath.split("/").filter(Boolean)[0] === "notes")
-  if (hasPhaseSevenAreas) {
+  if (hasPhaseSevenAreas || hasPhaseSevenFolders) {
+    folderPaths.add("draft")
     folderPaths.add("note")
   }
   if (hasPhaseSevenAreas && hasLegacyNotes) {

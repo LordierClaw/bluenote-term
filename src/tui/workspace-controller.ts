@@ -142,6 +142,8 @@ export interface WorkspaceController {
   focusManagerItem: (index: number) => void
   moveManagerSelection: (direction: MoveManagerSelectionDirection, options?: { wrap?: boolean }) => void
   openFocusedManagerItem: (options?: WorkspaceActionOptions) => WorkspaceActionResult
+  openFocusedManagerFolder: () => WorkspaceActionResult
+  goToManagerParent: (options?: { preserveActionMode?: boolean }) => WorkspaceActionResult
   showManager: () => WorkspaceActionResult
   showEditor: () => WorkspaceActionResult
   updateEditorBody: (body: string) => void
@@ -1547,15 +1549,26 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       }
 
       if (focused.type === "folder") {
+        const previousMode = state.mode
+        const previousActionDraft = state.manager.actionDraft
         const opened = openManagerBrowserItem(state.manager, { showNote: deps.showNote })
         if (opened.type === "folder") {
-          state = clearManagerFilterState({
+          const shouldPreserveActionMode = previousActionDraft
+            && (previousMode === "manager.move" || previousMode === "manager.saveDraftAs")
+          const nextState = clearManagerFilterState({
             ...state,
             screen: "manager",
             mode: "manager.browse",
             search: null,
             manager: opened.state,
           })
+          state = shouldPreserveActionMode
+            ? {
+                ...nextState,
+                mode: previousMode,
+                manager: { ...nextState.manager, actionDraft: previousActionDraft },
+              }
+            : nextState
           applyManagerBrowserModel()
         }
         return ok()
@@ -1584,6 +1597,35 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       return ok()
     },
 
+    openFocusedManagerFolder: () => {
+      const focused = focusedManagerBrowserItem(state.manager).item
+      if (!focused || focused.type !== "folder") {
+        return ok()
+      }
+      return controller.openFocusedManagerItem()
+    },
+
+    goToManagerParent: (options = {}) => {
+      if (state.screen !== "manager") {
+        return ok()
+      }
+      const previousMode = state.mode
+      const previousActionDraft = state.manager.actionDraft
+      const nextManager = goToManagerParent(state.manager)
+      const shouldPreserveActionMode = options.preserveActionMode === true
+        && previousActionDraft
+        && (previousMode === "manager.move" || previousMode === "manager.saveDraftAs")
+      state = {
+        ...state,
+        mode: shouldPreserveActionMode ? previousMode : "manager.browse",
+        manager: shouldPreserveActionMode
+          ? { ...nextManager, actionDraft: previousActionDraft }
+          : nextManager,
+      }
+      applyManagerBrowserModel()
+      return ok()
+    },
+
     goBack: () => {
       if (state.screen === "search" || state.mode === "editor.find" || state.mode === "editor.replace" || state.mode === "manager.filter" || state.mode === "manager.create" || state.mode === "manager.rename" || state.mode === "manager.move" || state.mode === "manager.saveDraftAs" || state.mode === "manager.deleteConfirm") {
         state = closeTransientMode(state)
@@ -1597,13 +1639,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       }
 
       if (state.screen === "manager") {
-        const nextManager = goToManagerParent(state.manager)
-        state = {
-          ...state,
-          mode: "manager.browse",
-          manager: nextManager,
-        }
-        applyManagerBrowserModel()
+        return controller.goToManagerParent()
       }
 
       if (state.screen === "editor") {
@@ -1850,7 +1886,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
           : moveManagerNote(
               draft.sourceKey ?? "",
               draft.sourceRelativePath ?? "",
-              focusedActionItem?.type === "folder" ? focusedActionItem.relativePath : draft.input,
+              focusedActionItem?.type === "folder" ? focusedActionItem.relativePath : state.manager.currentFolderPath || draft.input,
             )
       if (draft.kind !== "saveDraftAs") {
         state = {

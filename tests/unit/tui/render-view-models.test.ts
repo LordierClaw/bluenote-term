@@ -123,7 +123,7 @@ describe("TUI render view models", () => {
     assert.equal(vm.title, "")
     assert.deepEqual(vm.dashboard, {
       productLabel: "BlueNote",
-      workspaceLabel: "Workspace · notes/",
+      workspaceLabel: "Workspace · note/",
       summaryLabel: "2 items · Ready",
       orientation: "Browse your local Markdown workspace.",
       primaryActions: ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview", "[r] Rename", "[m] Move"],
@@ -136,7 +136,7 @@ describe("TUI render view models", () => {
       bottomPath: "Currently open: Daily Plan",
       styleIntent: "textPrimary",
     })
-    assert.equal(vm.panels.layout1.title, "notes/")
+    assert.equal(vm.panels.layout1.title, "note/")
     assert.equal(vm.panels.layout2.title, "")
     assert.equal(vm.status, "Ready")
     assert.deepEqual(vm.shortcutHints, [
@@ -159,7 +159,7 @@ describe("TUI render view models", () => {
       visible: true,
       sheetTitle: "New folder",
       description: "Create a folder in this workspace.",
-      destinationLabel: "Create in: notes/",
+      destinationLabel: "Create in: note/",
       inputLabel: "Folder name:",
       title: "Project Plan",
       status: "Title required",
@@ -236,12 +236,12 @@ describe("TUI render view models", () => {
 
     assert.deepEqual(emptyVm.layout1.emptyState, {
       title: "No items here yet",
-      body: "Search your workspace from notes/ or choose another folder.",
+      body: "Search your workspace from note/ or choose another folder.",
       actions: ["[Ctrl+P] Search"],
       styleIntent: "mutedText",
     })
     assert.deepEqual(emptyVm.panels, {
-      layout1: { title: "notes/", styleIntent: "borderFocus" },
+      layout1: { title: "note/", styleIntent: "borderFocus" },
       layout2: { title: "", styleIntent: "borderSubtle" },
     })
     assert.deepEqual(emptyVm.layout2.preview, {
@@ -429,7 +429,7 @@ describe("TUI render view models", () => {
       styleIntent: "textPrimary",
     })
     assert.deepEqual(vm.panels, {
-      layout1: { title: "notes/", styleIntent: "borderFocus" },
+      layout1: { title: "note/", styleIntent: "borderFocus" },
       layout2: { title: "projects", styleIntent: "borderSubtle" },
     })
     assert.match(vm.shortcuts.join(" "), /\[Ctrl\+P\] Search/u)
@@ -1525,6 +1525,7 @@ describe("TUI render view models", () => {
         showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "alpha beta" }),
         searchNotes: () => [],
       })
+      controller.focusManagerItem(1)
       assert.equal(controller.openFocusedManagerItem().blocked, false)
       assert.equal(controller.openFocusedManagerItem().blocked, false)
       controller.openEditorFind()
@@ -1669,6 +1670,7 @@ describe("TUI render view models", () => {
         showNote: () => ({ ...baseState.editor!.note }),
         searchNotes: () => [],
       })
+      controller.focusManagerItem(1)
       controller.openFocusedManagerItem()
       controller.openManagerCreate()
       controller.updateManagerCreateTitle("Project Plan")
@@ -1896,7 +1898,7 @@ describe("TUI render view models", () => {
       assert.doesNotMatch(renderedStatusText, /Command unavailable|\/archive/u)
 
       controller.cancelSearch()
-      controller.focusManagerItem(0)
+      controller.focusManagerItem(1)
       controller.openFocusedManagerItem()
       controller.openSearch("/new")
       const dangerRoot = renderSearchEverythingScreen({ renderer, controller })

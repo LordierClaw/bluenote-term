@@ -340,6 +340,79 @@ describe("TUI workspace controller", () => {
     )
   })
 
+  test("manager root keeps Phase 7 note and draft areas visible even when draft is empty", () => {
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries.filter((summary) => !summary.relativePath.startsWith("draft/")),
+      listNoteFolders: () => ["note"],
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+      initialNote: phaseSevenNotesByKey["alpha-note"],
+    }).deps)
+
+    controller.showManager()
+    assert.equal(controller.getState().manager.currentFolderPath, "note/work")
+    controller.goBack()
+    controller.goBack()
+
+    assert.deepEqual(
+      controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`),
+      ["folder:draft", "folder:note"],
+    )
+    assert.equal(buildManagerViewModel(controller.getState()).panels.layout1.title, "note/")
+  })
+
+  test("save draft as folder chooser keeps its sheet open while arrowing through folders", () => {
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work", "note/work/projects"],
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+      initialNote: phaseSevenNotesByKey["newer-draft"],
+    }).deps)
+
+    controller.openSaveDraftAs()
+    assert.equal(controller.getState().mode, "manager.saveDraftAs")
+    assert.equal(controller.getState().manager.currentFolderPath, "note")
+
+    assert.equal(routeManagerKey("\u001b[C", controller), true)
+    assert.equal(controller.getState().mode, "manager.saveDraftAs")
+    assert.equal(controller.getState().manager.currentFolderPath, "note/work")
+
+    assert.equal(routeManagerKey("\u001b[D", controller), true)
+    assert.equal(controller.getState().mode, "manager.saveDraftAs")
+    assert.equal(controller.getState().manager.currentFolderPath, "note")
+  })
+
+  test("save draft as folder chooser ignores ArrowRight on note rows", () => {
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work"],
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+      initialNote: phaseSevenNotesByKey["newer-draft"],
+    }).deps)
+
+    controller.openSaveDraftAs()
+    assert.equal(routeManagerKey("\u001b[C", controller), true)
+    assert.equal(controller.getState().manager.currentFolderPath, "note/work")
+    controller.focusManagerItem(1)
+
+    assert.equal(routeManagerKey("\u001b[C", controller), true)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().mode, "manager.saveDraftAs")
+    assert.equal(controller.getState().editor?.note.key, "newer-draft")
+    assert.equal(controller.getState().manager.currentFolderPath, "note/work")
+  })
+
+  test("manager root label uses the Phase 7 root instead of legacy notes", () => {
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work"],
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+    }).deps)
+
+    controller.goBack()
+    assert.equal(controller.getState().manager.currentFolderPath, "")
+    assert.equal(buildManagerViewModel(controller.getState()).panels.layout1.title, "note/")
+  })
+
   test("manager create-folder action is available only under note folders and creates only a folder", async () => {
     let folders = ["note/work"]
     const createFolderCalls: string[] = []
@@ -2838,6 +2911,63 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.submitManagerAction().blocked, false)
     assert.equal(calls.at(-1), "move-note:alpha-note:note/work/projects")
     assert.equal(controller.getState().manager.status, "Moved")
+  })
+
+  test("manager move folder chooser ignores ArrowRight on note rows", () => {
+    const calls: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work", "note/work/projects"],
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+      moveNote: (selector, destinationFolder) => {
+        calls.push(`move-note:${selector}:${destinationFolder}`)
+        return phaseSevenNotesByKey["alpha-note"]
+      },
+    }).deps)
+
+    openManagerFolderPath(controller, "note/work")
+    const alphaIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === "alpha-note")
+    assert.notEqual(alphaIndex, -1)
+    controller.focusManagerItem(alphaIndex)
+    controller.openManagerMove()
+
+    assert.equal(routeManagerKey("\u001b[C", controller), true)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().mode, "manager.move")
+    assert.equal(controller.getState().editor, null)
+    assert.deepEqual(calls, [])
+  })
+
+  test("manager move prompt submits the current folder after folder navigation", () => {
+    const calls: string[] = []
+    const movedNote: TuiNote = { ...phaseSevenNotesByKey["alpha-note"], relativePath: "note/work/projects/alpha.md" }
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work", "note/work/projects"],
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+      moveNote: (selector, destinationFolder) => {
+        calls.push(`move-note:${selector}:${destinationFolder}`)
+        return movedNote
+      },
+    }).deps)
+
+    openManagerFolderPath(controller, "note/work")
+    const alphaIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === "alpha-note")
+    assert.notEqual(alphaIndex, -1)
+    controller.focusManagerItem(alphaIndex)
+    controller.openManagerMove()
+    const projectsFolderIndex = controller.getState().manager.items.findIndex((item) => item.type === "folder" && item.relativePath === "note/work/projects")
+    assert.notEqual(projectsFolderIndex, -1)
+    controller.focusManagerItem(projectsFolderIndex)
+    assert.equal(routeManagerKey("\u001b[C", controller), true)
+    assert.equal(controller.getState().mode, "manager.move")
+    assert.equal(controller.getState().manager.currentFolderPath, "note/work/projects")
+    const noteIndex = controller.getState().manager.items.findIndex((item) => item.type === "note")
+    assert.notEqual(noteIndex, -1)
+    controller.focusManagerItem(noteIndex)
+
+    assert.equal(controller.submitManagerAction().blocked, false)
+    assert.equal(calls.at(-1), "move-note:alpha-note:note/work/projects")
   })
 
   test("save draft as opens a manager folder chooser with the draft title prefilled", () => {

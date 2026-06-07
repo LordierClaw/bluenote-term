@@ -80,6 +80,14 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
       calls.push("openFocusedManagerItem")
       return { blocked: false }
     },
+    openFocusedManagerFolder: () => {
+      calls.push("openFocusedManagerFolder")
+      return { blocked: false }
+    },
+    goToManagerParent: () => {
+      calls.push("goToManagerParent")
+      return { blocked: false }
+    },
     showManager: () => {
       calls.push("showManager")
       state.screen = "manager"
@@ -1373,6 +1381,8 @@ describe("TUI render keyboard routing", () => {
     assert.equal(routeManagerKey("!", controller), true)
     assert.equal(routeManagerKey("\u001b[A", controller), true)
     assert.equal(routeManagerKey("\u001b[B", controller), true)
+    assert.equal(routeManagerKey("\u001b[C", controller), true)
+    assert.equal(routeManagerKey("\u001b[D", controller), true)
     assert.equal(routeManagerKey("\r", controller), true)
     assert.equal(routeManagerKey("\u001b", controller), true)
 
@@ -1380,6 +1390,8 @@ describe("TUI render keyboard routing", () => {
       "updateManagerActionInput:Draft!",
       "moveManagerSelection:up",
       "moveManagerSelection:down",
+      "openFocusedManagerFolder",
+      "goToManagerParent",
       "submitManagerAction",
       "cancelManagerAction",
     ])

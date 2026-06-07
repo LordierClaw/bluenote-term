@@ -477,7 +477,7 @@ describe("TUI workspace workflows", () => {
     assert.deepEqual(controller.goBack(), { blocked: false })
     const rootRows = controller.getState().manager.items.map((item) => item.relativePath)
     assert.equal(rootRows.includes("note"), true)
-    assert.equal(rootRows.includes("draft"), false)
+    assert.equal(rootRows.includes("draft"), true)
   })
 
   test("loads manager rows after creating derived indexes for a freshly initialized root", async () => {
