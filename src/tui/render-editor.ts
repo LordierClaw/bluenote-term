@@ -888,6 +888,10 @@ export function routeEditorKey(sequence: string, controller: WorkspaceController
     case "\u0013":
       void controller.saveEditor().then(() => onInvalidate?.()).catch(() => onInvalidate?.())
       return true
+    case "\u001bs":
+    case "\u001bS":
+      controller.openSaveDraftAs()
+      return true
     case "\u001a":
       if (state.mode !== "editor.body") return false
       controller.undoEditor()

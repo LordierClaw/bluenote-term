@@ -117,6 +117,7 @@ export interface WorkspaceControllerDependencies {
   renameNote?: (selector: string, title: string) => TuiNote
   renameFolder?: (folderRelativePath: string, nextName: string) => void
   moveNote?: (selector: string, destinationFolder: string) => TuiNote
+  promoteDraft?: (selector: string, title: string, destinationFolder: string) => TuiNote
   deleteNote?: (selector: string) => void
   rebuildIndexes?: () => void
   persistEditorBody?: SaveEditorBufferDependencies["persist"]
@@ -164,6 +165,7 @@ export interface WorkspaceController {
   cancelManagerCreate: () => void
   openManagerRename: () => void
   openManagerMove: () => void
+  openSaveDraftAs: () => WorkspaceActionResult
   updateManagerActionInput: (input: string) => void
   submitManagerAction: () => WorkspaceActionResult
   cancelManagerAction: () => void
@@ -235,6 +237,10 @@ function cloneSearchResult(result: SearchEverythingResult): SearchEverythingResu
   }
 
   return { ...result }
+}
+
+function isDraftRelativePath(relativePath: string | undefined): boolean {
+  return (relativePath ?? "").replaceAll("\\", "/").startsWith("draft/")
 }
 
 function cloneStateSnapshot(source: TuiState): TuiState {
@@ -1171,7 +1177,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   function searchCommandContext(): SearchEverythingCommandContext {
     const screen = state.search?.previousScreen ?? (state.screen === "search" ? "manager" : state.screen)
     if (screen === "editor") {
-      return { screen }
+      return { screen, activeEditorIsDraft: isDraftRelativePath(state.editor?.note.relativePath) }
     }
     const focused = state.manager.items[state.manager.focusedIndex]
     return {
@@ -1340,6 +1346,52 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     }
   }
 
+  function promoteManagerDraft(sourceKey: string, sourceRelativePath: string, title: string, destinationFolder: string): WorkspaceActionResult {
+    const normalizedDestination = normalizeWorkspaceRelativePath(destinationFolder)
+    const trimmedTitle = title.trim()
+    if (!trimmedTitle) {
+      setManagerStatus("Title required")
+      applyManagerBrowserModel()
+      return ok()
+    }
+    if (!deps.promoteDraft) {
+      setManagerStatus("Save draft as unavailable")
+      applyManagerBrowserModel()
+      return ok()
+    }
+    try {
+      const promoted = deps.promoteDraft(sourceKey, trimmedTitle, normalizedDestination)
+      clearManagerPreviewCache()
+      deps.rebuildIndexes?.()
+      refreshManager()
+      setEditorNote(promoted)
+      state = {
+        ...state,
+        manager: {
+          ...state.manager,
+          actionDraft: null,
+          status: null,
+        },
+      }
+      setManagerStatus("Draft saved as normal note")
+      applyManagerBrowserModel()
+      return ok()
+    } catch (error) {
+      clearManagerPreviewCache()
+      const status = error instanceof Error ? error.message : "Save draft as failed"
+      setManagerStatus(status)
+      state = {
+        ...state,
+        manager: {
+          ...state.manager,
+          actionDraft: state.manager.actionDraft ? { ...state.manager.actionDraft, status } : null,
+        },
+      }
+      applyManagerBrowserModel()
+      return ok()
+    }
+  }
+
   const controller: WorkspaceController = {
     getState: () => cloneStateSnapshot(state),
 
@@ -1435,7 +1487,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     },
 
     goBack: () => {
-      if (state.screen === "search" || state.mode === "editor.find" || state.mode === "editor.replace" || state.mode === "manager.filter" || state.mode === "manager.create" || state.mode === "manager.deleteConfirm") {
+      if (state.screen === "search" || state.mode === "editor.find" || state.mode === "editor.replace" || state.mode === "manager.filter" || state.mode === "manager.create" || state.mode === "manager.rename" || state.mode === "manager.move" || state.mode === "manager.saveDraftAs" || state.mode === "manager.deleteConfirm") {
         state = closeTransientMode(state)
         if (state.screen === "manager") {
           applyManagerBrowserModel()
@@ -1606,9 +1658,64 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       applyManagerBrowserModel()
     },
 
+    openSaveDraftAs: () => {
+      const draft = state.editor?.note
+      if (draft && isDraftRelativePath(draft.relativePath) && editorRequiresDestructiveConfirmation(state.editor)) {
+        if (state.search) {
+          state = closeSearchEverything(state)
+        }
+        state = {
+          ...state,
+          screen: "editor",
+          mode: "editor.body",
+          editor: state.editor ? { ...state.editor, statusMessage: "Save the current draft before Save As" } : state.editor,
+        }
+        return dirtyBlocked()
+      }
+      if (!draft || !isDraftRelativePath(draft.relativePath)) {
+        if (state.search) {
+          state = closeSearchEverything(state)
+        }
+        if (state.editor) {
+          state = {
+            ...state,
+            screen: "editor",
+            mode: "editor.body",
+            editor: { ...state.editor, statusMessage: "Save draft as is only available for drafts" },
+          }
+        } else {
+          setManagerStatus("Save draft as is only available for drafts")
+          applyManagerBrowserModel()
+        }
+        return ok()
+      }
+      state = {
+        ...state,
+        screen: "manager",
+        mode: "manager.saveDraftAs",
+        search: null,
+        manager: {
+          ...state.manager,
+          currentFolderPath: "note",
+          hoveredPath: null,
+          focusedIndex: 0,
+          status: null,
+          actionDraft: {
+            kind: "saveDraftAs",
+            input: draft.title,
+            status: null,
+            sourceKey: draft.key,
+            sourceRelativePath: draft.relativePath,
+          },
+        },
+      }
+      applyManagerBrowserModel()
+      return ok()
+    },
+
     updateManagerActionInput: (input) => {
       const draft = state.manager.actionDraft
-      if (!draft || (state.mode !== "manager.rename" && state.mode !== "manager.move")) {
+      if (!draft || (state.mode !== "manager.rename" && state.mode !== "manager.move" && state.mode !== "manager.saveDraftAs")) {
         return
       }
       if (draft.kind === "move") {
@@ -1635,21 +1742,30 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       const focusedActionItem = focusedManagerBrowserItem(state.manager).item
       const result = draft.kind === "rename"
         ? controller.renameFocusedManagerItem(draft.input)
-        : moveManagerNote(
-            draft.sourceKey ?? "",
-            draft.sourceRelativePath ?? "",
-            focusedActionItem?.type === "folder" ? focusedActionItem.relativePath : draft.input,
-          )
-      state = {
-        ...state,
-        mode: "manager.browse",
-        manager: {
-          ...state.manager,
-          items: state.manager.items.map((item) => ({ ...item })),
-          actionDraft: null,
-        },
+        : draft.kind === "saveDraftAs"
+          ? promoteManagerDraft(
+              draft.sourceKey ?? "",
+              draft.sourceRelativePath ?? "",
+              draft.input,
+              focusedActionItem?.type === "folder" ? focusedActionItem.relativePath : state.manager.currentFolderPath || "note",
+            )
+          : moveManagerNote(
+              draft.sourceKey ?? "",
+              draft.sourceRelativePath ?? "",
+              focusedActionItem?.type === "folder" ? focusedActionItem.relativePath : draft.input,
+            )
+      if (draft.kind !== "saveDraftAs") {
+        state = {
+          ...state,
+          mode: "manager.browse",
+          manager: {
+            ...state.manager,
+            items: state.manager.items.map((item) => ({ ...item })),
+            actionDraft: null,
+          },
+        }
+        applyManagerBrowserModel()
       }
-      applyManagerBrowserModel()
       return result
     },
 
@@ -2434,6 +2550,13 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         }
         void controller.saveEditor()
         return ok()
+      }
+
+      if (commandName === "/save-draft-as") {
+        if (state.search) {
+          state = closeSearchEverything(state)
+        }
+        return controller.openSaveDraftAs()
       }
 
       if (commandName === "/copy-all") {

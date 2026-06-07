@@ -2840,6 +2840,120 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().manager.status, "Moved")
   })
 
+  test("save draft as opens a manager folder chooser with the draft title prefilled", () => {
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work", "note/work/projects"],
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+      initialNote: phaseSevenNotesByKey["newer-draft"],
+    }).deps)
+
+    assert.deepEqual(controller.openSaveDraftAs(), { blocked: false })
+
+    const state = controller.getState()
+    assert.equal(state.screen, "manager")
+    assert.equal(state.mode, "manager.saveDraftAs")
+    assert.equal(state.manager.currentFolderPath, "note")
+    assert.equal(state.manager.actionDraft?.kind, "saveDraftAs")
+    assert.equal(state.manager.actionDraft?.input, "Newer Draft")
+    assert.equal(state.manager.actionDraft?.sourceKey, "newer-draft")
+    assert.deepEqual(state.manager.items.map((item) => `${item.type}:${item.relativePath}`), ["folder:note/work"])
+  })
+
+  test("save draft as promotes to the selected existing note folder and returns to the editor", () => {
+    const promoted: TuiNote = {
+      key: "project-draft-000000",
+      title: "Project Draft",
+      description: "New normal note.",
+      relativePath: "note/work/project-draft-000000.md",
+      body: "Newer Draft body",
+    }
+    const calls: string[] = []
+    const latestOpened: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work", "note/work/projects"],
+      showNote: (selector) => selector === promoted.key ? promoted : phaseSevenNotesByKey[selector],
+      initialNote: phaseSevenNotesByKey["newer-draft"],
+      promoteDraft: (selector, title, destinationFolder) => {
+        calls.push(`promote:${selector}:${title}:${destinationFolder}`)
+        return promoted
+      },
+      rebuildIndexes: () => calls.push("rebuild"),
+      recordLatestOpenedNote: (note) => latestOpened.push(note.relativePath),
+    }).deps)
+
+    controller.openSaveDraftAs()
+    controller.focusManagerItem(0)
+    controller.updateManagerActionInput("Project Draft")
+    assert.deepEqual(controller.submitManagerAction(), { blocked: false })
+
+    assert.deepEqual(calls, ["promote:newer-draft:Project Draft:note/work", "rebuild"])
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().mode, "editor.body")
+    assert.equal(controller.getState().editor?.note.relativePath, "note/work/project-draft-000000.md")
+    assert.equal(controller.getState().manager.actionDraft, null)
+    assert.deepEqual(latestOpened.at(-1), "note/work/project-draft-000000.md")
+  })
+
+  test("save draft as refuses dirty draft buffers instead of promoting stale disk content", () => {
+    const calls: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work"],
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+      initialNote: phaseSevenNotesByKey["newer-draft"],
+      promoteDraft: (selector, title, destinationFolder) => {
+        calls.push(`promote:${selector}:${title}:${destinationFolder}`)
+        return phaseSevenNotesByKey["alpha-note"]
+      },
+    }).deps)
+
+    controller.updateEditorBody("Unsaved draft buffer")
+
+    assert.deepEqual(controller.openSaveDraftAs(), { blocked: true, reason: "dirty-editor" })
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().mode, "editor.body")
+    assert.equal(controller.getState().editor?.body, "Unsaved draft buffer")
+    assert.equal(controller.getState().editor?.statusMessage, "Save the current draft before Save As")
+    assert.deepEqual(calls, [])
+  })
+
+  test("save draft as is status-only for normal notes", () => {
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work"],
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+      initialNote: phaseSevenNotesByKey["alpha-note"],
+    }).deps)
+
+    assert.deepEqual(controller.openSaveDraftAs(), { blocked: false })
+
+    const state = controller.getState()
+    assert.equal(state.screen, "editor")
+    assert.equal(state.mode, "editor.body")
+    assert.equal(state.editor?.statusMessage, "Save draft as is only available for drafts")
+  })
+
+  test("save draft as closes from command search and can be cancelled with goBack", () => {
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work"],
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+      initialNote: phaseSevenNotesByKey["newer-draft"],
+    }).deps)
+
+    controller.openSearch("/save-draft-as")
+    assert.deepEqual(controller.runCommand("/save-draft-as"), { blocked: false })
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().mode, "manager.saveDraftAs")
+
+    assert.deepEqual(controller.goBack(), { blocked: false })
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().manager.actionDraft, null)
+  })
+
   test("manager create keeps prompt recoverable when folder create or refresh fails", async () => {
     const failingCreateController = createWorkspaceController(createDeps({
       listNotes: () => phaseSevenSummaries,

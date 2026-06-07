@@ -5,6 +5,7 @@ export type TuiMode =
   | "manager.create"
   | "manager.rename"
   | "manager.move"
+  | "manager.saveDraftAs"
   | "manager.deleteConfirm"
   | "editor.body"
   | "editor.find"
@@ -74,7 +75,7 @@ export interface ManagerCreateDraft {
 }
 
 export interface ManagerActionDraft {
-  kind: "rename" | "move"
+  kind: "rename" | "move" | "saveDraftAs"
   input: string
   status: string | null
   sourceKey?: string
@@ -566,6 +567,21 @@ export function closeTransientMode(state: TuiState): TuiState {
       return clearManagerFilter(state)
     case "manager.create":
       return cancelManagerCreate(state)
+    case "manager.rename":
+    case "manager.move":
+    case "manager.saveDraftAs":
+      return {
+        ...state,
+        screen: "manager",
+        mode: "manager.browse",
+        manager: {
+          ...state.manager,
+          items: cloneManagerItems(state.manager.items),
+          status: null,
+          actionDraft: null,
+        },
+        search: null,
+      }
     case "manager.deleteConfirm":
       return cancelManagerDeleteConfirm(state)
     default:

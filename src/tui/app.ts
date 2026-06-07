@@ -19,6 +19,7 @@ import { deleteNote } from "../core/delete-note"
 import { IndexUnavailableError } from "../core/errors"
 import { listNotes } from "../core/list-notes"
 import { moveNote } from "../core/move-note"
+import { promoteDraft } from "../core/promote-draft"
 import { rebuildIndexes } from "../core/rebuild-indexes"
 import { renameNote } from "../core/rename-note"
 import { updateIndexedNote } from "../index/index-store"
@@ -282,6 +283,11 @@ function moveTuiNote(rootPath: string, selector: string, destinationFolder: stri
   return showTuiNote(rootPath, moved.key)
 }
 
+function promoteTuiDraft(rootPath: string, selector: string, title: string, destinationFolder: string, clock: Clock): TuiNote {
+  const promoted = promoteDraft({ override: rootPath, selector, title, destinationFolder, updatedAt: clock.now().toISOString() })
+  return showTuiNote(rootPath, promoted.key)
+}
+
 function ensureTuiIndexes(rootPath: string): void {
   try {
     listNotes({ override: rootPath })
@@ -539,6 +545,7 @@ export function createDefaultWorkspaceController(options: DefaultWorkspaceContro
     renameNote: (selector, title) => renameTuiNote(rootPath, selector, title, clock),
     renameFolder: (folderRelativePath, nextName) => renameTuiNoteFolder(rootPath, folderRelativePath, nextName),
     moveNote: (selector, destinationFolder) => moveTuiNote(rootPath, selector, destinationFolder),
+    promoteDraft: (selector, title, destinationFolder) => promoteTuiDraft(rootPath, selector, title, destinationFolder, clock),
     deleteNote: (selector) => {
       deleteNote({ override: rootPath, selector, force: true })
     },
@@ -670,6 +677,7 @@ export function routeWorkspaceKey(
     state.mode !== "manager.create" &&
     state.mode !== "manager.rename" &&
     state.mode !== "manager.move" &&
+    state.mode !== "manager.saveDraftAs" &&
     state.mode !== "manager.deleteConfirm"
   ) {
     const quit = controller.requestQuit()

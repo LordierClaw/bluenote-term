@@ -580,21 +580,25 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
         actions: ["[Enter] Create", "[Esc] Cancel"],
       }
     : undefined
-  const actionPrompt = (state.mode === "manager.rename" || state.mode === "manager.move") && state.manager.actionDraft
+  const actionPrompt = (state.mode === "manager.rename" || state.mode === "manager.move" || state.mode === "manager.saveDraftAs") && state.manager.actionDraft
     ? {
         visible: true as const,
         inputId: `bluenote-manager-${state.manager.actionDraft.kind}-input`,
-        sheetTitle: state.manager.actionDraft.kind === "rename" ? "Rename" : "Move note",
-        description: state.manager.actionDraft.kind === "rename" ? "Rename the selected folder or note." : "Choose an existing note/ folder, then press Enter to move the selected normal note.",
-        inputLabel: state.manager.actionDraft.kind === "rename" ? "New name:" : "Selected destination:",
+        sheetTitle: state.manager.actionDraft.kind === "rename" ? "Rename" : state.manager.actionDraft.kind === "saveDraftAs" ? "Save draft as" : "Move note",
+        description: state.manager.actionDraft.kind === "rename"
+          ? "Rename the selected folder or note."
+          : state.manager.actionDraft.kind === "saveDraftAs"
+            ? "Choose an existing note/ folder and edit the destination title."
+            : "Choose an existing note/ folder, then press Enter to move the selected normal note.",
+        inputLabel: state.manager.actionDraft.kind === "rename" ? "New name:" : state.manager.actionDraft.kind === "saveDraftAs" ? "Title:" : "Selected destination:",
         title: state.manager.actionDraft.input,
-        placeholder: state.manager.actionDraft.kind === "rename" ? "New title or folder name…" : "Select a folder row",
+        placeholder: state.manager.actionDraft.kind === "rename" ? "New title or folder name…" : state.manager.actionDraft.kind === "saveDraftAs" ? "Destination title…" : "Select a folder row",
         status: state.manager.actionDraft.status,
         focused: true as const,
         styleIntent: "borderFocus" as const,
         surfaceIntent: "surfacePanelRaised" as const,
         statusIntent: (state.manager.actionDraft.status ? "warning" : "mutedText") as TuiColorIntent,
-        actions: [state.manager.actionDraft.kind === "rename" ? "[Enter] Rename" : "[Enter] Move", "[Esc] Cancel"],
+        actions: [state.manager.actionDraft.kind === "rename" ? "[Enter] Rename" : state.manager.actionDraft.kind === "saveDraftAs" ? "[Enter] Save as" : "[Enter] Move", "[↑/↓] Folder", "[Esc] Cancel"],
       }
     : undefined
   const deletePrompt = state.mode === "manager.deleteConfirm" && state.manager.deleteDraft
@@ -1074,18 +1078,18 @@ export function routeManagerKey(sequence: string, controller: WorkspaceControlle
     }
   }
 
-  if (controller.getState().mode === "manager.rename" || controller.getState().mode === "manager.move") {
+  if (controller.getState().mode === "manager.rename" || controller.getState().mode === "manager.move" || controller.getState().mode === "manager.saveDraftAs") {
     const mode = controller.getState().mode
     const currentInput = controller.getState().manager.actionDraft?.input ?? ""
     if (sequence === "\u001b" || sequence === "\u001b[") {
       controller.cancelManagerAction()
       return true
     }
-    if (mode === "manager.move" && (sequence === "\u001b[A" || sequence === "k")) {
+    if ((mode === "manager.move" || mode === "manager.saveDraftAs") && (sequence === "\u001b[A" || sequence === "k")) {
       controller.moveManagerSelection("up")
       return true
     }
-    if (mode === "manager.move" && (sequence === "\u001b[B" || sequence === "j")) {
+    if ((mode === "manager.move" || mode === "manager.saveDraftAs") && (sequence === "\u001b[B" || sequence === "j")) {
       controller.moveManagerSelection("down")
       return true
     }

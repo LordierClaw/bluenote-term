@@ -23,6 +23,7 @@ export interface SearchEverythingCommandContext {
   screen: Exclude<TuiScreen, "search">
   managerSelection?: SearchEverythingManagerSelection
   managerCanCreateFolder?: boolean
+  activeEditorIsDraft?: boolean
 }
 
 export interface SearchEverythingResultOptions {
@@ -162,6 +163,13 @@ export const TUI_COMMANDS: readonly TuiCommandDefinition[] = [
     description: "Save the active editor buffer",
     usage: "/save",
     shortcut: TUI_SHORTCUTS.editorSave.key,
+    contexts: ["editor"],
+  },
+  {
+    name: "/save-draft-as",
+    description: "Save the active draft as a normal note in an existing note folder",
+    usage: "/save-draft-as",
+    shortcut: "Alt+S",
     contexts: ["editor"],
   },
   {
@@ -662,6 +670,9 @@ function commandAvailableForContext(command: TuiCommandDefinition, context: Sear
   }
   if (command.name === "/ai-describe") {
     return context.screen === "editor" || (context.screen === "manager" && context.managerSelection === "note")
+  }
+  if (command.name === "/save-draft-as") {
+    return context.screen === "editor" && context.activeEditorIsDraft === true
   }
   return true
 }

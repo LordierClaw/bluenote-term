@@ -131,6 +131,10 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
     cancelManagerCreate: () => calls.push("cancelManagerCreate"),
     openManagerRename: () => calls.push("openManagerRename"),
     openManagerMove: () => calls.push("openManagerMove"),
+    openSaveDraftAs: () => {
+      calls.push("openSaveDraftAs")
+      return { blocked: false }
+    },
     updateManagerActionInput: (input) => calls.push(`updateManagerActionInput:${input}`),
     submitManagerAction: () => {
       calls.push("submitManagerAction")
@@ -239,6 +243,14 @@ describe("TUI render keyboard routing", () => {
 
     assert.equal(routeEditorKey("\u0013", controller), true)
     assert.deepEqual(calls, ["saveEditor"])
+  })
+
+  test("editor Alt+S opens save draft as", () => {
+    const { controller, calls } = createController("editor")
+
+    assert.equal(routeEditorKey("\u001bs", controller), true)
+    assert.equal(routeEditorKey("\u001bS", controller), true)
+    assert.deepEqual(calls, ["openSaveDraftAs", "openSaveDraftAs"])
   })
 
   test("editor Ctrl+F enters editor find mode from the body", () => {
@@ -1260,7 +1272,7 @@ describe("TUI render keyboard routing", () => {
     assert.deepEqual(calls, ["updateManagerCreateTitle:Quiq"])
   })
 
-  test("workspace route leaves q inside manager rename and move prompts", () => {
+  test("workspace route leaves q inside manager rename, move, and save-draft-as prompts", () => {
     const rename = createController("manager")
     rename.controller.getState().mode = "manager.rename"
     rename.controller.getState().manager.actionDraft = { kind: "rename", input: "Qu", status: null }
@@ -1274,6 +1286,13 @@ describe("TUI render keyboard routing", () => {
 
     assert.deepEqual(routeWorkspaceKey("q", move.controller, () => {}), { handled: true })
     assert.deepEqual(move.calls, [])
+
+    const saveDraftAs = createController("manager")
+    saveDraftAs.controller.getState().mode = "manager.saveDraftAs"
+    saveDraftAs.controller.getState().manager.actionDraft = { kind: "saveDraftAs", input: "Qu", status: null, sourceKey: "draft-abc123", sourceRelativePath: "draft/draft-abc123.md" }
+
+    assert.deepEqual(routeWorkspaceKey("q", saveDraftAs.controller, () => {}), { handled: true })
+    assert.deepEqual(saveDraftAs.calls, ["updateManagerActionInput:Quq"])
   })
 
   test("workspace route still handles manager Esc, q, and Ctrl+C when an edited note is dirty", () => {
@@ -1339,6 +1358,26 @@ describe("TUI render keyboard routing", () => {
       "clearManagerFilter",
       "goBack",
       "goBack",
+    ])
+  })
+
+  test("manager save-draft-as route edits title, selects folders, submits, and cancels", () => {
+    const { controller, calls } = createController("manager")
+    controller.getState().mode = "manager.saveDraftAs"
+    controller.getState().manager.actionDraft = { kind: "saveDraftAs", input: "Draft", status: null, sourceKey: "draft-abc123", sourceRelativePath: "draft/draft-abc123.md" }
+
+    assert.equal(routeManagerKey("!", controller), true)
+    assert.equal(routeManagerKey("\u001b[A", controller), true)
+    assert.equal(routeManagerKey("\u001b[B", controller), true)
+    assert.equal(routeManagerKey("\r", controller), true)
+    assert.equal(routeManagerKey("\u001b", controller), true)
+
+    assert.deepEqual(calls, [
+      "updateManagerActionInput:Draft!",
+      "moveManagerSelection:up",
+      "moveManagerSelection:down",
+      "submitManagerAction",
+      "cancelManagerAction",
     ])
   })
 

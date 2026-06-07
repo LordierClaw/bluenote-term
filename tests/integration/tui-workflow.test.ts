@@ -331,6 +331,53 @@ describe("TUI workspace workflows", () => {
     ])
   })
 
+  test("default controller saves the open draft as a normal note in a selected note folder", async () => {
+    const draft = createNote({
+      override: rootPath,
+      type: "draft",
+      body: "draft body to promote",
+      randomSource: () => 333333,
+      clock: fixedClock("2026-06-05T00:00:00.000Z"),
+    })
+    await mkdir(path.join(rootPath, "note", "work"), { recursive: true })
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: draft.relativePath,
+      openedAt: "2026-06-05T12:00:00.000Z",
+    })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clock: fixedClock("2026-06-06T00:00:00.000Z"),
+      cleanupStaleAtomicTemps: () => {},
+    })
+
+    assert.equal(controller.getState().editor?.note.relativePath, draft.relativePath)
+    assert.deepEqual(controller.openSaveDraftAs(), { blocked: false })
+    assert.equal(controller.getState().mode, "manager.saveDraftAs")
+    assert.equal(controller.getState().manager.actionDraft?.input, draft.title)
+    assert.equal(controller.getState().manager.items[0]?.relativePath, "note/work")
+
+    controller.updateManagerActionInput("Saved Draft")
+    assert.deepEqual(controller.submitManagerAction(), { blocked: false })
+
+    const promoted = controller.getState().editor?.note
+    assert.ok(promoted)
+    assert.equal(promoted.title, "Saved Draft")
+    assert.match(promoted.key, /^saved-draft-[a-z0-9]{6}$/u)
+    assert.equal(promoted.relativePath, `note/work/${promoted.key}.md`)
+    assert.equal(await readFile(path.join(rootPath, promoted.relativePath), "utf8"), "draft body to promote")
+    await assert.rejects(readFile(path.join(rootPath, draft.relativePath), "utf8"))
+    await assert.rejects(readFile(path.join(rootPath, ".data", "notes", `${draft.key}.json`), "utf8"))
+
+    const sidecar = JSON.parse(await readFile(path.join(rootPath, ".data", "notes", `${promoted.key}.json`), "utf8"))
+    assert.equal(sidecar.type, "normal")
+    assert.equal(sidecar.title, "Saved Draft")
+    assert.equal(sidecar.relativePath, promoted.relativePath)
+    assert.equal(sidecar.updatedAt, "2026-06-06T00:00:00.000Z")
+    assert.equal(createLatestOpenedNoteRepository(rootPath).read()?.relativePath, promoted.relativePath)
+    assert.equal(showNote({ override: rootPath, selector: promoted.key }).relativePath, promoted.relativePath)
+  })
+
   test("loads manager rows after creating derived indexes for a freshly initialized root", async () => {
     const freshRootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-tui-fresh-root-"))
 
