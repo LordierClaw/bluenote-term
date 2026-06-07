@@ -671,6 +671,7 @@ Add focused regressions for the newly approved follow-up contract:
 5. In `draft/`, Move shortcut/help is hidden and invoking the move action is a no-op/status-only guard; drafts can leave `draft/` only through Save Draft As Normal.
 6. At Manager virtual root, the visible root/chrome label is the managed root absolute path, not `note/`, `note/draft`, `note/note`, or legacy `notes/`; root rows still list `draft` and `note` child areas.
 7. Existing Save Draft As and normal-note Move chooser regressions remain green: action-mode ArrowLeft/ArrowRight navigates folders without closing the sheet, and ArrowRight on note rows does not open the note.
+8. Follow-up UX contract: when the Manager create box opens in default **New note** mode, the visible prompt/action row must include a Tab shortcut hint for toggling to folder creation (for example `[Tab] Folder`). The hint must also stay accurate after toggling into folder mode (for example `[Tab] Note`).
 
 **Step 2: Run tests — confirm fail**
 
@@ -684,6 +685,7 @@ Expected: FAIL because `n` is currently folder-oriented, no dedicated quick-draf
 - Refactor Manager create state from folder-only to an action that can choose/create a normal note or folder under `note/`.
 - Reuse existing note creation services instead of duplicating storage writes; normal notes must remain under `note/...` and drafts under `draft/`.
 - Add a quick-new-draft command/shortcut with explicit render help text in the contexts where it is supported.
+- Ensure the Manager create prompt visibly advertises the Tab toggle while open: default New note mode shows a folder-toggle hint and toggled New folder mode shows a note-toggle hint.
 - Hide/guard Move in `draft/`; keep Save Draft As Normal available for drafts.
 - Thread managed-root absolute path into the manager view model/root label path without changing stored note relative paths.
 - Keep current action-mode folder chooser fixes intact.
