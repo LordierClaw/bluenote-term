@@ -465,6 +465,19 @@ describe("TUI workspace workflows", () => {
     assert.equal(sidecar.updatedAt, "2026-06-06T00:00:00.000Z")
     assert.equal(createLatestOpenedNoteRepository(rootPath).read()?.relativePath, promoted.relativePath)
     assert.equal(showNote({ override: rootPath, selector: promoted.key }).relativePath, promoted.relativePath)
+
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    assert.equal(controller.getState().manager.currentFolderPath, "note/work")
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "note" && item.key === promoted.key), true)
+
+    assert.deepEqual(controller.goBack(), { blocked: false })
+    assert.equal(controller.getState().manager.currentFolderPath, "note")
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "folder" && item.relativePath === "note/work"), true)
+
+    assert.deepEqual(controller.goBack(), { blocked: false })
+    const rootRows = controller.getState().manager.items.map((item) => item.relativePath)
+    assert.equal(rootRows.includes("note"), true)
+    assert.equal(rootRows.includes("draft"), false)
   })
 
   test("loads manager rows after creating derived indexes for a freshly initialized root", async () => {

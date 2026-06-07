@@ -546,6 +546,9 @@ export function createDefaultWorkspaceController(options: DefaultWorkspaceContro
     renameFolder: (folderRelativePath, nextName) => renameTuiNoteFolder(rootPath, folderRelativePath, nextName),
     moveNote: (selector, destinationFolder) => moveTuiNote(rootPath, selector, destinationFolder),
     promoteDraft: (selector, title, destinationFolder) => promoteTuiDraft(rootPath, selector, title, destinationFolder, clock),
+    rebuildIndexes: () => {
+      rebuildIndexes({ override: rootPath })
+    },
     deleteNote: (selector) => {
       deleteNote({ override: rootPath, selector, force: true })
     },
