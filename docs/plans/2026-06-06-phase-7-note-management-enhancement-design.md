@@ -127,10 +127,12 @@ Draft folder ordering:
 
 Manager actions:
 
-- Create folder: available anywhere inside `note/`, including nested folders; unavailable in `draft/`.
+- Create action (`n`): opens a chooser/prompt that can create either a normal note or a folder when inside `note/`. Folder creation is unavailable in `draft/`; note creation from Manager creates a normal note in the current `note/...` folder.
 - Rename folder: allowed for custom folders anywhere inside `note/`; not allowed for `note/` root or `draft/`; update affected note sidecars partially.
 - Rename note title: derive new key/filename from the new title and keep title/key/filename synchronized.
-- Move note: allowed only for normal notes under `note/`; destination chooser selects existing folders under `note/`; drafts leave `draft/` only through Save Draft As Normal.
+- Move note: allowed only for normal notes under `note/`; destination chooser selects existing folders under `note/`; drafts leave `draft/` only through Save Draft As Normal, so the Move shortcut must not appear or run in `draft/`.
+- Quick new draft: TUI provides a direct shortcut from Manager and/or Editor to create and open a new generated draft under `draft/` without going through Manager folder creation.
+- Manager root display: the manager's virtual root is not named `note/draft`, `note/note`, or legacy `notes/`. At the root level, TUI chrome labels the workspace by the managed root's absolute path while still listing `draft` and `note` as child areas.
 
 ## Save Draft As Normal
 

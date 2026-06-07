@@ -646,7 +646,64 @@ git add README.md docs src/cli/entry.ts tests && git commit -m "docs: align phas
 
 ---
 
-## Task 13: Final independent reviews and full gate
+## Task 13: Manager creation, quick draft, draft-folder restrictions, and root label follow-up
+
+**Files:**
+- Modify: `src/tui/workspace-controller.ts`
+- Modify: `src/tui/render-manager.ts`
+- Modify: `src/tui/render-editor.ts` or nearby editor shortcut wiring if the quick-draft shortcut is editor-visible
+- Modify: `src/tui/adapters/note-manager-adapter.ts` if root-label data needs managed-root context
+- Modify: `src/tui/state.ts` if new prompt state is needed
+- Modify: `src/tui/app.ts` if default controller dependencies need a create-draft/create-normal-note runtime adapter
+- Test: `tests/unit/tui/workspace-controller.test.ts`
+- Test: `tests/unit/tui/render-routing.test.ts`
+- Test: `tests/unit/tui/render-view-models.test.ts`
+- Test: `tests/unit/tui/render-manager.test.ts`
+- Test: `tests/integration/tui-workflow.test.ts`
+
+**Step 1: Write failing tests**
+Add focused regressions for the newly approved follow-up contract:
+
+1. Manager `n` action under `note/` offers both **new note** and **new folder**, not folder-only behavior.
+2. Manager-created notes are normal notes in the current `note/...` folder, use a typed title/body prompt or minimal title prompt per current TUI conventions, update sidecar metadata, refresh indexes, and open the created note or leave a clear status according to the final prompt design.
+3. Manager `n` in `draft/` does not offer folder creation; it should either offer quick new draft only or defer to the dedicated quick-draft shortcut, but must not create custom folders under `draft/`.
+4. A dedicated quick-new-draft shortcut from Manager and/or Editor creates a generated `draft-{random}` draft under `draft/`, opens it in Editor, and updates latest-opened.
+5. In `draft/`, Move shortcut/help is hidden and invoking the move action is a no-op/status-only guard; drafts can leave `draft/` only through Save Draft As Normal.
+6. At Manager virtual root, the visible root/chrome label is the managed root absolute path, not `note/`, `note/draft`, `note/note`, or legacy `notes/`; root rows still list `draft` and `note` child areas.
+7. Existing Save Draft As and normal-note Move chooser regressions remain green: action-mode ArrowLeft/ArrowRight navigates folders without closing the sheet, and ArrowRight on note rows does not open the note.
+
+**Step 2: Run tests — confirm fail**
+
+```bash
+bun test tests/unit/tui/workspace-controller.test.ts tests/unit/tui/render-routing.test.ts tests/unit/tui/render-view-models.test.ts tests/unit/tui/render-manager.test.ts tests/integration/tui-workflow.test.ts --test-name-pattern "manager n|quick draft|draft move|root label|save draft as folder chooser|move folder chooser"
+```
+
+Expected: FAIL because `n` is currently folder-oriented, no dedicated quick-draft shortcut exists, draft-folder move visibility is incomplete, and root chrome still needs absolute-root labeling.
+
+**Step 3: Implement**
+- Refactor Manager create state from folder-only to an action that can choose/create a normal note or folder under `note/`.
+- Reuse existing note creation services instead of duplicating storage writes; normal notes must remain under `note/...` and drafts under `draft/`.
+- Add a quick-new-draft command/shortcut with explicit render help text in the contexts where it is supported.
+- Hide/guard Move in `draft/`; keep Save Draft As Normal available for drafts.
+- Thread managed-root absolute path into the manager view model/root label path without changing stored note relative paths.
+- Keep current action-mode folder chooser fixes intact.
+
+**Step 4: Run tests — confirm pass**
+
+```bash
+bun test tests/unit/tui/workspace-controller.test.ts tests/unit/tui/render-routing.test.ts tests/unit/tui/render-view-models.test.ts tests/unit/tui/render-manager.test.ts tests/integration/tui-workflow.test.ts
+bun run typecheck
+```
+
+**Step 5: Commit**
+
+```bash
+git add src/tui tests/unit/tui tests/integration/tui-workflow.test.ts && git commit -m "feat: refine manager note and draft actions"
+```
+
+---
+
+## Task 14: Final independent reviews and full gate
 
 **Files:**
 - No planned code changes unless reviewers find blockers.
@@ -684,6 +741,10 @@ Review focus:
 - No duplicated path filtering logic that can drift.
 - No hidden blocking AI/provider calls in save/autosave/open flows.
 - TUI input mappings are runtime-wired, not controller-only.
+- Manager `n` supports both note and folder creation under `note/` without enabling folder creation under `draft/`.
+- Quick-new-draft shortcut opens a generated draft and updates latest-opened.
+- Draft folder hides/guards Move while preserving Save Draft As Normal.
+- Manager root chrome labels the absolute managed root path rather than virtual `note/`/`draft` names.
 
 **Step 4: Fix blockers with TDD**
 For each blocker:
