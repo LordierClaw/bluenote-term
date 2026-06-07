@@ -1,5 +1,5 @@
 import path from "node:path"
-import { mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 
 import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions, STATE_RECOVERY_DIRECTORY } from "../config/root"
 import { createNoteKey } from "../domain/note-key"
@@ -33,6 +33,18 @@ function buildRecoveryArtifactPath(rootPath: string, previousKey: string, nextKe
   const safePreviousKey = previousKey.replace(/[^a-z0-9-]+/gi, "-")
   const safeNextKey = nextKey.replace(/[^a-z0-9-]+/gi, "-")
   return path.join(rootPath, STATE_RECOVERY_DIRECTORY, `${Date.now()}-${safePreviousKey}-to-${safeNextKey}.json`)
+}
+
+function updateLatestOpenedPathIfMatched(rootPath: string, previousRelativePath: string, nextRelativePath: string): void {
+  const latestPath = path.join(rootPath, ".data", "latest-opened-note.json")
+  try {
+    const latest = JSON.parse(readFileSync(latestPath, "utf8")) as { relativePath?: unknown }
+    if (latest.relativePath === previousRelativePath) {
+      writeFileSync(latestPath, JSON.stringify({ ...latest, relativePath: nextRelativePath }, null, 2) + "\n", "utf8")
+    }
+  } catch {
+    // Best-effort state repair; rename success should not depend on optional UI state.
+  }
 }
 
 export function renameNote(options: RenameNoteOptions): RenameNoteSummary {
@@ -82,6 +94,8 @@ export function renameNote(options: RenameNoteOptions): RenameNoteSummary {
     } catch {
       // Best-effort cleanup: a stale recovery artifact is safer than reporting a successful rename as failed.
     }
+
+    updateLatestOpenedPathIfMatched(rootPath, renamed.previousRelativePath, renamed.relativePath)
 
     return renamed
   } catch (error) {

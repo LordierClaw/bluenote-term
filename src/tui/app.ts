@@ -18,7 +18,9 @@ import { createNote } from "../core/create-note"
 import { deleteNote } from "../core/delete-note"
 import { IndexUnavailableError } from "../core/errors"
 import { listNotes } from "../core/list-notes"
+import { moveNote } from "../core/move-note"
 import { rebuildIndexes } from "../core/rebuild-indexes"
+import { renameNote } from "../core/rename-note"
 import { updateIndexedNote } from "../index/index-store"
 import { searchNotes } from "../core/search-notes"
 import { showNote } from "../core/show-note"
@@ -256,6 +258,28 @@ function createTuiNoteFolder(rootPath: string, folderRelativePath: string): void
   }
 
   mkdirSync(path.join(getNotesPath(rootPath), ...parts.slice(1)), { recursive: true })
+}
+
+function renameTuiNote(rootPath: string, selector: string, title: string, clock: Clock): TuiNote {
+  const currentNote = showTuiNote(rootPath, selector)
+  const renamed = renameNote({
+    override: rootPath,
+    selector,
+    title,
+    body: currentNote.body,
+    updatedAt: clock.now().toISOString(),
+  })
+
+  return showTuiNote(rootPath, renamed.key)
+}
+
+function renameTuiNoteFolder(rootPath: string, folderRelativePath: string, nextName: string): void {
+  createNoteRepository(rootPath).renameFolder(folderRelativePath, nextName)
+}
+
+function moveTuiNote(rootPath: string, selector: string, destinationFolder: string): TuiNote {
+  const moved = moveNote({ override: rootPath, selector, destinationFolder })
+  return showTuiNote(rootPath, moved.key)
 }
 
 function ensureTuiIndexes(rootPath: string): void {
@@ -512,6 +536,9 @@ export function createDefaultWorkspaceController(options: DefaultWorkspaceContro
     showNote: (selector) => showTuiNote(rootPath, selector),
     searchNotes: (query) => searchNotes(query, { override: rootPath, visibility: "drafts" }),
     createFolder: (folderRelativePath) => createTuiNoteFolder(rootPath, folderRelativePath),
+    renameNote: (selector, title) => renameTuiNote(rootPath, selector, title, clock),
+    renameFolder: (folderRelativePath, nextName) => renameTuiNoteFolder(rootPath, folderRelativePath, nextName),
+    moveNote: (selector, destinationFolder) => moveTuiNote(rootPath, selector, destinationFolder),
     deleteNote: (selector) => {
       deleteNote({ override: rootPath, selector, force: true })
     },
@@ -637,7 +664,14 @@ export function routeWorkspaceKey(
     return { handled: true, exit: !quit.blocked || undefined }
   }
 
-  if (sequence === "q" && state.mode !== "manager.filter" && state.mode !== "manager.create" && state.mode !== "manager.deleteConfirm") {
+  if (
+    sequence === "q" &&
+    state.mode !== "manager.filter" &&
+    state.mode !== "manager.create" &&
+    state.mode !== "manager.rename" &&
+    state.mode !== "manager.move" &&
+    state.mode !== "manager.deleteConfirm"
+  ) {
     const quit = controller.requestQuit()
     if (!quit.blocked) {
       onExit()

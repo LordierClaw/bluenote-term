@@ -230,8 +230,14 @@ function commandResult(name: "/new" | "/archive" | "/delete" | "/rebuild" | "/qu
 
 function openManagerFolderPath(controller: ReturnType<typeof createWorkspaceController>, folderPath: string): void {
   controller.showManager()
-  if (controller.getState().manager.currentFolderPath !== "") {
+  let safety = 0
+  while (controller.getState().manager.currentFolderPath !== "" && safety < 20) {
     controller.goBack()
+    safety += 1
+  }
+
+  if (folderPath === "") {
+    return
   }
 
   const directFolderIndex = controller.getState().manager.items.findIndex((item) => item.type === "folder" && item.relativePath === folderPath)
@@ -2632,6 +2638,206 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().editor?.body, "Unsaved draft")
     assert.equal(controller.getState().manager.items.some((item) => item.type === "folder" && item.relativePath === "note/work/new-folder"), true)
     assert.deepEqual(calls.filter((call) => call.startsWith("create-folder:")), ["create-folder:note/work/new-folder"])
+  })
+
+  test("manager rename note updates an open editor and latest-opened while staying in manager", () => {
+    let summaries = [...phaseSevenSummaries]
+    const renamedNote: TuiNote = {
+      key: "renamed-alpha",
+      title: "Renamed Alpha",
+      description: "First normal note.",
+      relativePath: "note/work/renamed-alpha.md",
+      body: "Renamed Alpha body",
+    }
+    const latestOpened: string[] = []
+    const { deps, calls } = createDeps({
+      listNotes: () => summaries,
+      listNoteFolders: () => ["note/work"],
+      showNote: (selector) => selector === "renamed-alpha" ? renamedNote : phaseSevenNotesByKey[selector],
+      renameNote: (selector, title) => {
+        calls.push(`rename-note:${selector}:${title}`)
+        summaries = summaries.map((summary) => summary.key === selector
+          ? {
+              ...summary,
+              key: renamedNote.key,
+              title: renamedNote.title,
+              relativePath: renamedNote.relativePath,
+            }
+          : summary)
+        return renamedNote
+      },
+      rebuildIndexes: () => calls.push("rebuild"),
+      recordLatestOpenedNote: (note) => latestOpened.push(note.relativePath),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openManagerFolderPath(controller, "note/work")
+    const alphaIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === "alpha-note")
+    assert.notEqual(alphaIndex, -1)
+    controller.focusManagerItem(alphaIndex)
+    controller.openFocusedManagerItem()
+    controller.showManager()
+    openManagerFolderPath(controller, "note/work")
+    controller.focusManagerItem(controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === "alpha-note"))
+
+    const result = controller.renameFocusedManagerItem("Renamed Alpha")
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().editor?.note.key, "renamed-alpha")
+    assert.equal(controller.getState().editor?.note.relativePath, "note/work/renamed-alpha.md")
+    assert.equal(controller.getState().manager.status, "Renamed")
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "note" && item.key === "renamed-alpha"), true)
+    assert.deepEqual(calls.filter((call) => call.startsWith("rename-note:") || call === "rebuild"), ["rename-note:alpha-note:Renamed Alpha", "rebuild"])
+    assert.equal(latestOpened.at(-1), "note/work/renamed-alpha.md")
+  })
+
+  test("manager rename folder refreshes affected note rows without allowing protected folders", () => {
+    let folders = ["note/work", "note/work/projects"]
+    let summaries = [...phaseSevenSummaries]
+    const { deps, calls } = createDeps({
+      listNotes: () => summaries,
+      listNoteFolders: () => folders,
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+      renameFolder: (folderRelativePath, nextName) => {
+        calls.push(`rename-folder:${folderRelativePath}:${nextName}`)
+        folders = folders.map((folder) => folder === folderRelativePath ? "note/renamed-work" : folder.replace(/^note\/work\//u, "note/renamed-work/"))
+        summaries = summaries.map((summary) => summary.relativePath.startsWith("note/work/")
+          ? { ...summary, relativePath: summary.relativePath.replace(/^note\/work\//u, "note/renamed-work/") }
+          : summary)
+      },
+      rebuildIndexes: () => calls.push("rebuild"),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openManagerFolderPath(controller, "note")
+    const workFolderIndex = controller.getState().manager.items.findIndex((item) => item.type === "folder" && item.relativePath === "note/work")
+    assert.notEqual(workFolderIndex, -1)
+    controller.focusManagerItem(workFolderIndex)
+
+    assert.equal(controller.renameFocusedManagerItem("Renamed Work").blocked, false)
+
+    assert.equal(controller.getState().manager.status, "Renamed")
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "folder" && item.relativePath === "note/renamed-work"), true)
+    assert.deepEqual(calls.filter((call) => call.startsWith("rename-folder:") || call === "rebuild"), ["rename-folder:note/work:Renamed Work", "rebuild"])
+
+    openManagerFolderPath(controller, "draft")
+    assert.equal(controller.renameFocusedManagerItem("Nope").blocked, false)
+    assert.notEqual(calls.at(-1), "rename-folder:draft:Nope")
+  })
+
+  test("manager rename folder updates an open contained note and latest-opened path", () => {
+    let folders = ["note/work", "note/work/projects"]
+    let summaries = [...phaseSevenSummaries]
+    let notesByKey = { ...phaseSevenNotesByKey }
+    const latestOpened: string[] = []
+    const { deps } = createDeps({
+      listNotes: () => summaries,
+      listNoteFolders: () => folders,
+      showNote: (selector) => notesByKey[selector],
+      recordLatestOpenedNote: (note) => latestOpened.push(note.relativePath),
+      renameFolder: (folderRelativePath, nextName) => {
+        assert.equal(folderRelativePath, "note/work")
+        assert.equal(nextName, "Renamed Work")
+        folders = folders.map((folder) => folder === folderRelativePath ? "note/renamed-work" : folder.replace(/^note\/work\//u, "note/renamed-work/"))
+        summaries = summaries.map((summary) => summary.relativePath.startsWith("note/work/")
+          ? { ...summary, relativePath: summary.relativePath.replace(/^note\/work\//u, "note/renamed-work/") }
+          : summary)
+        notesByKey = Object.fromEntries(Object.entries(notesByKey).map(([key, note]) => [
+          key,
+          note.relativePath.startsWith("note/work/")
+            ? { ...note, relativePath: note.relativePath.replace(/^note\/work\//u, "note/renamed-work/") }
+            : note,
+        ]))
+      },
+    })
+    const controller = createWorkspaceController(deps)
+
+    openManagerFolderPath(controller, "note/work")
+    const alphaIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === "alpha-note")
+    assert.notEqual(alphaIndex, -1)
+    controller.focusManagerItem(alphaIndex)
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    assert.equal(controller.getState().editor?.note.relativePath, "note/work/alpha.md")
+    assert.equal(latestOpened.at(-1), "note/work/alpha.md")
+
+    controller.showManager()
+    openManagerFolderPath(controller, "note")
+    const workFolderIndex = controller.getState().manager.items.findIndex((item) => item.type === "folder" && item.relativePath === "note/work")
+    assert.notEqual(workFolderIndex, -1)
+    controller.focusManagerItem(workFolderIndex)
+
+    assert.equal(controller.renameFocusedManagerItem("Renamed Work").blocked, false)
+
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().editor?.note.relativePath, "note/renamed-work/alpha.md")
+    assert.equal(latestOpened.at(-1), "note/renamed-work/alpha.md")
+  })
+
+  test("manager move normal note refreshes rows and rejects draft destinations", () => {
+    let summaries = [...phaseSevenSummaries]
+    const movedNote: TuiNote = {
+      ...phaseSevenNotesByKey["alpha-note"],
+      relativePath: "note/work/projects/alpha.md",
+    }
+    const { deps, calls } = createDeps({
+      listNotes: () => summaries,
+      listNoteFolders: () => ["note/work", "note/work/projects"],
+      showNote: (selector) => selector === "alpha-note" ? movedNote : phaseSevenNotesByKey[selector],
+      moveNote: (selector, destinationFolder) => {
+        calls.push(`move-note:${selector}:${destinationFolder}`)
+        if (destinationFolder.startsWith("draft")) {
+          throw new Error("invalid destination")
+        }
+        summaries = summaries.map((summary) => summary.key === selector ? { ...summary, relativePath: "note/work/projects/alpha.md" } : summary)
+        return movedNote
+      },
+      rebuildIndexes: () => calls.push("rebuild"),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openManagerFolderPath(controller, "note/work")
+    const alphaIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === "alpha-note")
+    assert.notEqual(alphaIndex, -1)
+    controller.focusManagerItem(alphaIndex)
+
+    assert.equal(controller.moveFocusedManagerNote("note/work/projects").blocked, false)
+    assert.equal(controller.getState().manager.status, "Moved")
+    assert.deepEqual(calls.filter((call) => call.startsWith("move-note:") || call === "rebuild"), ["move-note:alpha-note:note/work/projects", "rebuild"])
+
+    openManagerFolderPath(controller, "note/work/projects")
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "note" && item.key === "alpha-note"), true)
+
+    assert.equal(controller.moveFocusedManagerNote("draft").blocked, false)
+    assert.equal(controller.getState().manager.status, "invalid destination")
+  })
+
+  test("manager move prompt selects an existing folder destination", () => {
+    const calls: string[] = []
+    const movedNote: TuiNote = { ...phaseSevenNotesByKey["alpha-note"], relativePath: "note/work/projects/alpha.md" }
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work", "note/work/projects"],
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+      moveNote: (selector, destinationFolder) => {
+        calls.push(`move-note:${selector}:${destinationFolder}`)
+        return movedNote
+      },
+    }).deps)
+
+    openManagerFolderPath(controller, "note/work")
+    const alphaIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === "alpha-note")
+    assert.notEqual(alphaIndex, -1)
+    controller.focusManagerItem(alphaIndex)
+    controller.openManagerMove()
+    const projectsFolderIndex = controller.getState().manager.items.findIndex((item) => item.type === "folder" && item.relativePath === "note/work/projects")
+    assert.notEqual(projectsFolderIndex, -1)
+    controller.focusManagerItem(projectsFolderIndex)
+
+    assert.equal(controller.submitManagerAction().blocked, false)
+    assert.equal(calls.at(-1), "move-note:alpha-note:note/work/projects")
+    assert.equal(controller.getState().manager.status, "Moved")
   })
 
   test("manager create keeps prompt recoverable when folder create or refresh fails", async () => {

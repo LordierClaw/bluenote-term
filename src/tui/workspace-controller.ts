@@ -114,6 +114,9 @@ export interface WorkspaceControllerDependencies {
   showNote: (selector: string) => TuiNote
   searchNotes: (query: string) => readonly SearchNoteMatch[]
   createFolder?: (folderRelativePath: string) => void
+  renameNote?: (selector: string, title: string) => TuiNote
+  renameFolder?: (folderRelativePath: string, nextName: string) => void
+  moveNote?: (selector: string, destinationFolder: string) => TuiNote
   deleteNote?: (selector: string) => void
   rebuildIndexes?: () => void
   persistEditorBody?: SaveEditorBufferDependencies["persist"]
@@ -159,9 +162,16 @@ export interface WorkspaceController {
   updateManagerCreateTitle: (title: string) => void
   submitManagerCreate: () => Promise<WorkspaceActionResult>
   cancelManagerCreate: () => void
+  openManagerRename: () => void
+  openManagerMove: () => void
+  updateManagerActionInput: (input: string) => void
+  submitManagerAction: () => WorkspaceActionResult
+  cancelManagerAction: () => void
   openManagerDeleteConfirmation: () => void
   confirmManagerDelete: () => Promise<WorkspaceActionResult>
   cancelManagerDelete: () => void
+  renameFocusedManagerItem: (titleOrFolderName: string) => WorkspaceActionResult
+  moveFocusedManagerNote: (destinationFolder: string) => WorkspaceActionResult
   setManagerFilter: (query: string) => void
   updateManagerFilter: (query: string) => void
   clearManagerFilter: () => void
@@ -234,6 +244,7 @@ function cloneStateSnapshot(source: TuiState): TuiState {
       ...source.manager,
       items: source.manager.items.map(cloneManagerItem),
       createDraft: source.manager.createDraft ? { ...source.manager.createDraft } : null,
+      actionDraft: source.manager.actionDraft ? { ...source.manager.actionDraft } : null,
       deleteDraft: source.manager.deleteDraft ? { ...source.manager.deleteDraft } : null,
     },
     editor: source.editor
@@ -1111,6 +1122,31 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     }
   }
 
+  function updateOpenEditorNotePreservingScreen(note: TuiNote): void {
+    if (!state.editor) {
+      return
+    }
+
+    const openedNote = toTuiNote(note)
+    state = {
+      ...state,
+      editor: {
+        ...state.editor,
+        note: openedNote,
+        body: openedNote.body,
+        savedBody: openedNote.body,
+        dirty: false,
+        autosaveStatus: "saved",
+        statusMessage: null,
+      },
+    }
+    try {
+      deps.recordLatestOpenedNote?.(openedNote)
+    } catch {
+      // Latest-opened state is a best-effort startup hint; renames/moves must not depend on it.
+    }
+  }
+
   function openNoteByKey(key: string, options: WorkspaceActionOptions = {}): WorkspaceActionResult {
     if (editorRequiresDestructiveConfirmation(state.editor) && state.editor?.note.key === key) {
       state = {
@@ -1276,6 +1312,32 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       selectionEnd: result.selection.end,
       preferredColumn: null,
     })
+  }
+
+  function moveManagerNote(sourceKey: string, sourceRelativePath: string, destinationFolder: string): WorkspaceActionResult {
+    const normalizedDestination = normalizeWorkspaceRelativePath(destinationFolder)
+    if (!deps.moveNote) {
+      setManagerStatus("Move note unavailable")
+      applyManagerBrowserModel()
+      return ok()
+    }
+    try {
+      const moved = deps.moveNote(sourceKey, normalizedDestination)
+      if (state.editor?.note.key === sourceKey || state.editor?.note.relativePath === sourceRelativePath) {
+        updateOpenEditorNotePreservingScreen(moved)
+      }
+      clearManagerPreviewCache()
+      deps.rebuildIndexes?.()
+      refreshManager()
+      setManagerStatus("Moved")
+      applyManagerBrowserModel()
+      return ok()
+    } catch (error) {
+      clearManagerPreviewCache()
+      setManagerStatus(error instanceof Error ? error.message : "Move failed")
+      applyManagerBrowserModel()
+      return ok()
+    }
   }
 
   const controller: WorkspaceController = {
@@ -1494,6 +1556,119 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       applyManagerBrowserModel()
     },
 
+    openManagerRename: () => {
+      const focused = focusedManagerBrowserItem(state.manager).item
+      if (!focused) {
+        setManagerStatus("Rename target required")
+        applyManagerBrowserModel()
+        return
+      }
+      state = {
+        ...state,
+        screen: "manager",
+        mode: "manager.rename",
+        manager: {
+          ...state.manager,
+          items: state.manager.items.map((item) => ({ ...item })),
+          status: null,
+          actionDraft: { kind: "rename", input: focused.title, status: null },
+        },
+        search: null,
+      }
+      applyManagerBrowserModel()
+    },
+
+    openManagerMove: () => {
+      const focused = focusedManagerBrowserItem(state.manager).item
+      if (!focused || focused.type !== "note") {
+        setManagerStatus("Move note unavailable")
+        applyManagerBrowserModel()
+        return
+      }
+      state = {
+        ...state,
+        screen: "manager",
+        mode: "manager.move",
+        manager: {
+          ...state.manager,
+          items: state.manager.items.map((item) => ({ ...item })),
+          status: null,
+          actionDraft: {
+            kind: "move",
+            input: state.manager.currentFolderPath || "note",
+            status: null,
+            sourceKey: focused.key,
+            sourceRelativePath: focused.relativePath,
+          },
+        },
+        search: null,
+      }
+      applyManagerBrowserModel()
+    },
+
+    updateManagerActionInput: (input) => {
+      const draft = state.manager.actionDraft
+      if (!draft || (state.mode !== "manager.rename" && state.mode !== "manager.move")) {
+        return
+      }
+      if (draft.kind === "move") {
+        return
+      }
+      state = {
+        ...state,
+        screen: "manager",
+        manager: {
+          ...state.manager,
+          items: state.manager.items.map((item) => ({ ...item })),
+          actionDraft: { ...draft, input, status: null },
+        },
+        search: null,
+      }
+      applyManagerBrowserModel()
+    },
+
+    submitManagerAction: () => {
+      const draft = state.manager.actionDraft
+      if (!draft) {
+        return ok()
+      }
+      const focusedActionItem = focusedManagerBrowserItem(state.manager).item
+      const result = draft.kind === "rename"
+        ? controller.renameFocusedManagerItem(draft.input)
+        : moveManagerNote(
+            draft.sourceKey ?? "",
+            draft.sourceRelativePath ?? "",
+            focusedActionItem?.type === "folder" ? focusedActionItem.relativePath : draft.input,
+          )
+      state = {
+        ...state,
+        mode: "manager.browse",
+        manager: {
+          ...state.manager,
+          items: state.manager.items.map((item) => ({ ...item })),
+          actionDraft: null,
+        },
+      }
+      applyManagerBrowserModel()
+      return result
+    },
+
+    cancelManagerAction: () => {
+      state = {
+        ...state,
+        screen: "manager",
+        mode: "manager.browse",
+        manager: {
+          ...state.manager,
+          items: state.manager.items.map((item) => ({ ...item })),
+          status: null,
+          actionDraft: null,
+        },
+        search: null,
+      }
+      applyManagerBrowserModel()
+    },
+
     openManagerDeleteConfirmation: () => {
       const focused = state.manager.items[state.manager.focusedIndex]
       const activeEditorItem: ManagerItem | undefined = state.editor
@@ -1568,6 +1743,71 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     cancelManagerDelete: () => {
       state = cancelManagerDeleteConfirmState(state)
       applyManagerBrowserModel()
+    },
+
+    renameFocusedManagerItem: (titleOrFolderName) => {
+      const focused = focusedManagerBrowserItem(state.manager).item
+      const nextName = titleOrFolderName.trim()
+      if (!focused || !nextName) {
+        setManagerStatus("Rename target required")
+        applyManagerBrowserModel()
+        return ok()
+      }
+      if (editorRequiresDestructiveConfirmation(state.editor)) {
+        setManagerStatus(dirtyEditorManagerStatus)
+        applyManagerBrowserModel()
+        return dirtyBlocked()
+      }
+      try {
+        if (focused.type === "folder") {
+          if (!deps.renameFolder) {
+            setManagerStatus("Rename folder unavailable")
+            applyManagerBrowserModel()
+            return ok()
+          }
+          deps.renameFolder(focused.relativePath, nextName)
+          if (state.editor?.note.relativePath === focused.relativePath || state.editor?.note.relativePath.startsWith(`${focused.relativePath}/`)) {
+            updateOpenEditorNotePreservingScreen(deps.showNote(state.editor.note.key))
+          }
+        } else {
+          if (!deps.renameNote) {
+            setManagerStatus("Rename note unavailable")
+            applyManagerBrowserModel()
+            return ok()
+          }
+          const renamed = deps.renameNote(focused.key, nextName)
+          if (state.editor?.note.key === focused.key || state.editor?.note.relativePath === focused.relativePath) {
+            updateOpenEditorNotePreservingScreen(renamed)
+          }
+        }
+        clearManagerPreviewCache()
+        deps.rebuildIndexes?.()
+        refreshManager()
+        setManagerStatus("Renamed")
+        applyManagerBrowserModel()
+        return ok()
+      } catch (error) {
+        clearManagerPreviewCache()
+        setManagerStatus(error instanceof Error ? error.message : "Rename failed")
+        applyManagerBrowserModel()
+        return ok()
+      }
+    },
+
+    moveFocusedManagerNote: (destinationFolder) => {
+      const focused = focusedManagerBrowserItem(state.manager).item
+      const normalizedDestination = normalizeWorkspaceRelativePath(destinationFolder)
+      if (!focused || focused.type !== "note") {
+        setManagerStatus("Move note unavailable")
+        applyManagerBrowserModel()
+        return ok()
+      }
+      if (editorRequiresDestructiveConfirmation(state.editor)) {
+        setManagerStatus(dirtyEditorManagerStatus)
+        applyManagerBrowserModel()
+        return dirtyBlocked()
+      }
+      return moveManagerNote(focused.key, focused.relativePath, normalizedDestination)
     },
 
     setManagerFilter: (query) => {

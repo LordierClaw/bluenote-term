@@ -3,6 +3,8 @@ export type TuiMode =
   | "manager.browse"
   | "manager.filter"
   | "manager.create"
+  | "manager.rename"
+  | "manager.move"
   | "manager.deleteConfirm"
   | "editor.body"
   | "editor.find"
@@ -61,6 +63,7 @@ export interface ManagerState {
   filterQuery?: string
   status?: string | null
   createDraft?: ManagerCreateDraft | null
+  actionDraft?: ManagerActionDraft | null
   deleteDraft?: ManagerDeleteDraft | null
   canCreateFolder?: boolean
 }
@@ -68,6 +71,14 @@ export interface ManagerState {
 export interface ManagerCreateDraft {
   title: string
   status: string | null
+}
+
+export interface ManagerActionDraft {
+  kind: "rename" | "move"
+  input: string
+  status: string | null
+  sourceKey?: string
+  sourceRelativePath?: string
 }
 
 export interface ManagerDeleteDraft {
@@ -197,6 +208,7 @@ function cloneManagerState(manager: ManagerState): ManagerState {
     filterQuery: manager.filterQuery ?? "",
     status: manager.status ?? null,
     createDraft: manager.createDraft ? { ...manager.createDraft } : null,
+    actionDraft: manager.actionDraft ? { ...manager.actionDraft } : null,
     deleteDraft: manager.deleteDraft ? { ...manager.deleteDraft } : null,
     canCreateFolder: manager.canCreateFolder ?? false,
   }
@@ -229,6 +241,7 @@ const defaultManagerState = (): ManagerState => ({
   filterQuery: "",
   status: null,
   createDraft: null,
+  actionDraft: null,
   deleteDraft: null,
   canCreateFolder: false,
 })

@@ -472,3 +472,127 @@ test("syncEditedNote rolls back the body with the atomic writer when sidecar per
     await rm(rootPath, { recursive: true, force: true })
   }
 })
+
+test("repository renames a normal note title, path, key, and sidecar while preserving existing metadata", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-rename-normal-"))
+
+  try {
+    await mkdir(path.join(rootPath, "note", "work"), { recursive: true })
+    await mkdir(getStateNotesPath(rootPath), { recursive: true })
+    await writeFile(path.join(rootPath, "note", "work", "old-title.md"), "Old body.\n", "utf8")
+    await writeFile(path.join(getStateNotesPath(rootPath), "old-title.json"), JSON.stringify({
+      type: "normal", key: "old-title", title: "Old Title", description: "Preserved description", relativePath: "note/work/old-title.md", createdAt: "2026-06-01T00:00:00.000Z", updatedAt: "2026-06-02T00:00:00.000Z", archivedAt: null, namingVersion: 1, ai: { description: { lastProcessedAt: "2026-06-03T00:00:00.000Z" } },
+    }, null, 2) + "\n", "utf8")
+
+    const repository = createNoteRepository(rootPath)
+    const renamed = repository.rename(path.join(rootPath, "note", "work", "old-title.md"), {
+      nextKey: "new-title",
+      title: "New Title",
+      body: "New body.\n",
+      updatedAt: "2026-06-04T00:00:00.000Z",
+    })
+
+    assert.equal(renamed.relativePath, "note/work/new-title.md")
+    await assert.rejects(access(path.join(rootPath, "note", "work", "old-title.md")))
+    await assert.rejects(access(path.join(getStateNotesPath(rootPath), "old-title.json")))
+    assert.equal(await readFile(path.join(rootPath, "note", "work", "new-title.md"), "utf8"), "New body.\n")
+    const sidecar = JSON.parse(await readFile(path.join(getStateNotesPath(rootPath), "new-title.json"), "utf8"))
+    assert.equal(sidecar.key, "new-title")
+    assert.equal(sidecar.title, "New Title")
+    assert.equal(sidecar.relativePath, "note/work/new-title.md")
+    assert.equal(sidecar.createdAt, "2026-06-01T00:00:00.000Z")
+    assert.equal(sidecar.description, "Preserved description")
+    assert.deepEqual(sidecar.ai, { description: { lastProcessedAt: "2026-06-03T00:00:00.000Z" } })
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("repository renames a custom note folder and only updates affected sidecar paths", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-rename-folder-"))
+
+  try {
+    await mkdir(path.join(rootPath, "note", "work", "nested"), { recursive: true })
+    await mkdir(path.join(rootPath, "note", "other"), { recursive: true })
+    await mkdir(getStateNotesPath(rootPath), { recursive: true })
+    await writeFile(path.join(rootPath, "note", "work", "a.md"), "A\n", "utf8")
+    await writeFile(path.join(rootPath, "note", "work", "nested", "b.md"), "B\n", "utf8")
+    await writeFile(path.join(rootPath, "note", "other", "c.md"), "C\n", "utf8")
+    for (const [key, relativePath] of [["a", "note/work/a.md"], ["b", "note/work/nested/b.md"], ["c", "note/other/c.md"]] as const) {
+      await writeFile(path.join(getStateNotesPath(rootPath), `${key}.json`), JSON.stringify({
+        type: "normal", key, title: key, description: key, relativePath, createdAt: "2026-06-01T00:00:00.000Z", updatedAt: "2026-06-01T00:00:00.000Z", archivedAt: null, namingVersion: 1,
+      }, null, 2) + "\n", "utf8")
+    }
+
+    const repository = createNoteRepository(rootPath)
+    repository.renameFolder("note/work", "client")
+
+    assert.equal(JSON.parse(await readFile(path.join(getStateNotesPath(rootPath), "a.json"), "utf8")).relativePath, "note/client/a.md")
+    assert.equal(JSON.parse(await readFile(path.join(getStateNotesPath(rootPath), "b.json"), "utf8")).relativePath, "note/client/nested/b.md")
+    assert.equal(JSON.parse(await readFile(path.join(getStateNotesPath(rootPath), "c.json"), "utf8")).relativePath, "note/other/c.md")
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("repository rejects protected folder renames", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-rename-folder-reject-"))
+
+  try {
+    const repository = createNoteRepository(rootPath)
+    assert.throws(() => repository.renameFolder("note", "renamed"), UsageError)
+    assert.throws(() => repository.renameFolder("draft", "renamed"), UsageError)
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("repository rolls back folder rename when sidecar updates fail", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-rename-folder-rollback-"))
+
+  try {
+    const repository = createNoteRepository(rootPath)
+    await mkdir(path.join(rootPath, "note", "work"), { recursive: true })
+    const created = repository.create({
+      frontmatter: { ...FIXED_FRONTMATTER, id: "work-note", title: "Work note" },
+      body: "Work body.\n",
+      destination: { type: "normal", folderRelativePath: "note/work" },
+    })
+    await writeFile(path.join(getStateNotesPath(rootPath), "broken.json"), "{not valid json", "utf8")
+
+    assert.throws(
+      () => repository.renameFolder("note/work", "renamed-work"),
+      UsageError,
+    )
+
+    await access(path.join(rootPath, "note", "work"))
+    await assert.rejects(access(path.join(rootPath, "note", "renamed-work")))
+    assert.equal(repository.read(created.notePath).frontmatter.id, "work-note")
+    const sidecar = JSON.parse(await readFile(path.join(getStateNotesPath(rootPath), "work-note.json"), "utf8"))
+    assert.equal(sidecar.relativePath, "note/work/work-note.md")
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("repository move updates sidecar relativePath and updatedAt together", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-move-updated-at-"))
+
+  try {
+    const repository = createNoteRepository(rootPath)
+    await mkdir(path.join(rootPath, "note", "work", "projects"), { recursive: true })
+    const created = repository.create({
+      frontmatter: { ...FIXED_FRONTMATTER, id: "move-note", title: "Move note", updatedAt: "2026-05-21T10:15:00.000Z" },
+      body: "Move body.\n",
+      destination: { type: "normal", folderRelativePath: "note/work" },
+    })
+
+    repository.moveNote(created.notePath, "note/work/projects", "2026-06-07T10:00:00.000Z")
+
+    const sidecar = JSON.parse(await readFile(path.join(getStateNotesPath(rootPath), "move-note.json"), "utf8"))
+    assert.equal(sidecar.relativePath, "note/work/projects/move-note.md")
+    assert.equal(sidecar.updatedAt, "2026-06-07T10:00:00.000Z")
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})

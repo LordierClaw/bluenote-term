@@ -129,12 +129,28 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
       return { blocked: false }
     },
     cancelManagerCreate: () => calls.push("cancelManagerCreate"),
+    openManagerRename: () => calls.push("openManagerRename"),
+    openManagerMove: () => calls.push("openManagerMove"),
+    updateManagerActionInput: (input) => calls.push(`updateManagerActionInput:${input}`),
+    submitManagerAction: () => {
+      calls.push("submitManagerAction")
+      return { blocked: false }
+    },
+    cancelManagerAction: () => calls.push("cancelManagerAction"),
     openManagerDeleteConfirmation: () => calls.push("openManagerDeleteConfirmation"),
     confirmManagerDelete: async () => {
       calls.push("confirmManagerDelete")
       return { blocked: false }
     },
     cancelManagerDelete: () => calls.push("cancelManagerDelete"),
+    renameFocusedManagerItem: (titleOrFolderName) => {
+      calls.push(`renameFocusedManagerItem:${titleOrFolderName}`)
+      return { blocked: false }
+    },
+    moveFocusedManagerNote: (destinationFolder) => {
+      calls.push(`moveFocusedManagerNote:${destinationFolder}`)
+      return { blocked: false }
+    },
     setManagerFilter: (query) => calls.push(`setManagerFilter:${query}`),
     updateManagerFilter: (query) => calls.push(`updateManagerFilter:${query}`),
     clearManagerFilter: () => calls.push("clearManagerFilter"),
@@ -1244,6 +1260,22 @@ describe("TUI render keyboard routing", () => {
     assert.deepEqual(calls, ["updateManagerCreateTitle:Quiq"])
   })
 
+  test("workspace route leaves q inside manager rename and move prompts", () => {
+    const rename = createController("manager")
+    rename.controller.getState().mode = "manager.rename"
+    rename.controller.getState().manager.actionDraft = { kind: "rename", input: "Qu", status: null }
+
+    assert.deepEqual(routeWorkspaceKey("q", rename.controller, () => {}), { handled: true })
+    assert.deepEqual(rename.calls, ["updateManagerActionInput:Quq"])
+
+    const move = createController("manager")
+    move.controller.getState().mode = "manager.move"
+    move.controller.getState().manager.actionDraft = { kind: "move", input: "note", status: null, sourceKey: "daily-plan", sourceRelativePath: "notes/daily-plan.md" }
+
+    assert.deepEqual(routeWorkspaceKey("q", move.controller, () => {}), { handled: true })
+    assert.deepEqual(move.calls, [])
+  })
+
   test("workspace route still handles manager Esc, q, and Ctrl+C when an edited note is dirty", () => {
     const controller = createWorkspaceController({
       listNotes: () => [
@@ -1445,8 +1477,9 @@ describe("TUI render keyboard routing", () => {
       assert.notEqual(topbar?.border, true)
       assert.deepEqual(topbar?.fg?.toInts?.(), [248, 250, 252, 255])
       assert.notEqual(footer?.border, true)
-      assert.equal(footerText, "[Enter] Open  [/] Filter  [n] New  [Ctrl+P] Search  [Esc] Back  [p] Preview")
+      assert.equal(footerText, "[Enter] Open  [/] Filter  [Ctrl+P] Search  [Esc] Back  [p] Preview  [r] Rename  [m] Move")
       assert.deepEqual(footerChunks.filter((chunk: { text?: string }) => /^\[[^\]]+\]$/u.test(chunk.text ?? "")).map((chunk: any) => chunk.fg?.toInts?.()), [
+        [56, 189, 248, 255],
         [56, 189, 248, 255],
         [56, 189, 248, 255],
         [56, 189, 248, 255],

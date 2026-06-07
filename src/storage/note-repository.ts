@@ -1,5 +1,5 @@
 import path from "node:path"
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs"
 
 import { UsageError } from "../core/errors"
 import { createNoteDescription } from "../domain/note-description"
@@ -11,7 +11,7 @@ import { parsePlainNote, serializePlainNote } from "./plain-note"
 import { createSidecarRepository } from "./sidecar-repository"
 import type { NoteSidecar, NoteType } from "./sidecar-schema"
 import { replaceNoteBodyAtomically } from "./atomic-note-writer"
-import { getArchiveNotePath, getArchiveNotesPath, getDraftNotesPath, getInboxNotePath, getNormalNotesPath } from "./root-layout"
+import { getArchiveNotePath, getArchiveNotesPath, getDraftNotesPath, getInboxNotePath, getNormalNotesPath, getStateNotesPath } from "./root-layout"
 
 export interface CreateStoredNoteInput {
   frontmatter: NoteFrontmatter
@@ -50,6 +50,8 @@ export interface NoteRepository {
   readRaw(notePath: string): string
   syncEditedNote(notePath: string, input: SyncStoredNoteInput): StoredNoteRecord
   rename(notePath: string, input: RenameStoredNoteInput): RenamedStoredNoteRecord
+  renameFolder(folderRelativePath: string, nextName: string): { previousRelativePath: string; relativePath: string }
+  moveNote(notePath: string, destinationFolderRelativePath: string, updatedAt?: string): RenamedStoredNoteRecord
   keyExists(key: string): boolean
   archive(notePath: string, archivedAt: string): StoredNoteRecord
   delete(notePath: string): StoredNoteRecord
@@ -291,6 +293,68 @@ function buildExistingSidecar(note: ParsedNote): NoteSidecar {
   return buildSidecar(note.frontmatter, note.sourcePath, note.body, note.frontmatter.archivedAt ?? null)
 }
 
+function normalizeFolderRelativePath(relativePath: string): string {
+  return normalizeInputRelativePath(relativePath).replace(/^\/+|\/+$/g, "")
+}
+
+function assertNormalFolderRelativePath(rootPath: string, folderRelativePath: string): { relativePath: string; folderPath: string } {
+  const normalizedFolderRelativePath = normalizeFolderRelativePath(folderRelativePath)
+  const normalNotesPath = getNormalNotesPath(rootPath)
+  const folderPath = assertPathInsideRoot(rootPath, path.join(rootPath, normalizedFolderRelativePath))
+
+  if (
+    (normalizedFolderRelativePath !== "note" && !normalizedFolderRelativePath.startsWith("note/"))
+    || normalizedFolderRelativePath.split("/").some((part) => part.startsWith("."))
+    || !destinationFolderIsUsableNormalFolder(normalNotesPath, folderPath)
+  ) {
+    throw new UsageError(`Could not move note to '${normalizedFolderRelativePath}'.`, {
+      hint: "Choose an existing folder under note/.",
+    })
+  }
+
+  return { relativePath: normalizedFolderRelativePath, folderPath }
+}
+
+function listSidecarKeys(rootPath: string): string[] {
+  const stateNotesPath = getStateNotesPath(rootPath)
+  if (!existsSync(stateNotesPath)) {
+    return []
+  }
+
+  return readdirSync(stateNotesPath)
+    .filter((entry) => entry.endsWith(".json"))
+    .map((entry) => path.basename(entry, ".json"))
+}
+
+function assertCustomNormalFolderRename(rootPath: string, folderRelativePath: string, nextName: string): { previousRelativePath: string; nextRelativePath: string; previousPath: string; nextPath: string } {
+  const previousRelativePath = normalizeFolderRelativePath(folderRelativePath)
+  const nextSegment = folderNameFromInput(nextName)
+  const parts = previousRelativePath.split("/").filter(Boolean)
+
+  if (parts.length < 2 || parts[0] !== "note" || !nextSegment || nextSegment.startsWith(".") || nextSegment.includes("/")) {
+    throw new UsageError(`Could not rename folder '${previousRelativePath}'.`, {
+      hint: "Only custom folders under note/ can be renamed.",
+    })
+  }
+
+  const parentRelativePath = parts.slice(0, -1).join("/")
+  const nextRelativePath = joinPortableRelativePath(parentRelativePath, nextSegment)
+  const previousPath = assertPathInsideRoot(rootPath, path.join(rootPath, previousRelativePath))
+  const nextPath = assertPathInsideRoot(rootPath, path.join(rootPath, nextRelativePath))
+
+  if (!destinationFolderIsUsableNormalFolder(getNormalNotesPath(rootPath), previousPath) || existsSync(nextPath)) {
+    throw new UsageError(`Could not rename folder '${previousRelativePath}'.`, {
+      hint: "Choose an existing custom note folder and a free destination name.",
+    })
+  }
+
+  return { previousRelativePath, nextRelativePath, previousPath, nextPath }
+}
+
+function folderNameFromInput(input: string): string {
+  return input.trim().replaceAll("\\", "/").split("/").filter(Boolean).at(-1)?.trim() ?? ""
+}
+
 export function createNoteRepository(rootPath: string): NoteRepository {
   const normalizedRootPath = path.resolve(rootPath)
   const sidecars = createSidecarRepository(normalizedRootPath)
@@ -477,7 +541,6 @@ export function createNoteRepository(rootPath: string): NoteRepository {
         ...existingSidecar,
         key: input.nextKey,
         title: input.title,
-        description: deriveDescription(input.body),
         relativePath: nextRelativePath,
         updatedAt: input.updatedAt,
       }
@@ -559,6 +622,131 @@ export function createNoteRepository(rootPath: string): NoteRepository {
         relativePath: nextRelativePath,
         previousKey,
         key: input.nextKey,
+        previousRelativePath,
+      }
+    },
+
+    renameFolder(folderRelativePath, nextName) {
+      const renameTarget = assertCustomNormalFolderRename(normalizedRootPath, folderRelativePath, nextName)
+      const affectedSidecars: Array<{ previous: NoteSidecar; next: NoteSidecar }> = []
+      let renamedFolder = false
+      const writtenSidecars: NoteSidecar[] = []
+
+      try {
+        for (const key of listSidecarKeys(normalizedRootPath)) {
+          const sidecar = sidecars.read(key)
+          if (
+            sidecar.type === "normal" &&
+            (sidecar.relativePath === renameTarget.previousRelativePath || sidecar.relativePath.startsWith(`${renameTarget.previousRelativePath}/`))
+          ) {
+            affectedSidecars.push({
+              previous: sidecar,
+              next: {
+                ...sidecar,
+                relativePath: joinPortableRelativePath(
+                  renameTarget.nextRelativePath,
+                  sidecar.relativePath.slice(renameTarget.previousRelativePath.length).replace(/^\//, ""),
+                ),
+              },
+            })
+          }
+        }
+
+        renameSync(renameTarget.previousPath, renameTarget.nextPath)
+        renamedFolder = true
+
+        for (const { next } of affectedSidecars) {
+          sidecars.write(next)
+          writtenSidecars.push(next)
+        }
+      } catch (error) {
+        const rollbackErrors: unknown[] = []
+        for (const written of [...writtenSidecars].reverse()) {
+          const previous = affectedSidecars.find((entry) => entry.previous.key === written.key)?.previous
+          if (previous) {
+            try {
+              sidecars.write(previous)
+            } catch (rollbackError) {
+              rollbackErrors.push(rollbackError)
+            }
+          }
+        }
+        if (renamedFolder) {
+          try {
+            renameSync(renameTarget.nextPath, renameTarget.previousPath)
+          } catch (rollbackError) {
+            rollbackErrors.push(rollbackError)
+          }
+        }
+        if (error instanceof UsageError && rollbackErrors.length === 0) {
+          throw error
+        }
+        throw new UsageError(`Could not rename folder '${renameTarget.previousRelativePath}'.`, {
+          hint: "Ensure the folder and note sidecars are writable inside BLUENOTE_ROOT.",
+          cause: rollbackErrors.length > 0
+            ? new AggregateError([error, ...rollbackErrors], "Folder rename failed and rollback also failed.")
+            : error,
+        })
+      }
+
+      return {
+        previousRelativePath: renameTarget.previousRelativePath,
+        relativePath: renameTarget.nextRelativePath,
+      }
+    },
+
+    moveNote(notePath, destinationFolderRelativePath, updatedAt) {
+      const normalizedNotePath = assertPathInsideRoot(normalizedRootPath, notePath)
+      const previousRelativePath = toRootRelativePath(normalizedRootPath, normalizedNotePath)
+      const existing = this.read(normalizedNotePath)
+      const previousKey = existing.frontmatter.id
+      const previousSidecarPath = sidecars.getSidecarPath(previousKey)
+      const existingSidecar = existsSync(previousSidecarPath) ? sidecars.read(previousKey) : buildExistingSidecar(existing)
+      const destination = assertNormalFolderRelativePath(normalizedRootPath, destinationFolderRelativePath)
+
+      if (existingSidecar.type !== "normal" || existing.frontmatter.archivedAt !== undefined || !previousRelativePath.startsWith("note/")) {
+        throw new UsageError(`Could not move note '${previousRelativePath}'.`, {
+          hint: "Only normal notes under note/ can be moved.",
+        })
+      }
+
+      const nextRelativePath = joinPortableRelativePath(destination.relativePath, path.basename(previousRelativePath))
+      const nextNotePath = assertPathInsideRoot(normalizedRootPath, path.join(normalizedRootPath, nextRelativePath))
+      if (nextNotePath !== normalizedNotePath && existsSync(nextNotePath)) {
+        throw new UsageError(`Could not move note '${previousRelativePath}'.`, {
+          hint: "A note file already exists in the destination folder.",
+        })
+      }
+
+      let movedNoteFile = false
+      try {
+        if (nextNotePath !== normalizedNotePath) {
+          renameSync(normalizedNotePath, nextNotePath)
+          movedNoteFile = true
+        }
+        sidecars.write({ ...existingSidecar, relativePath: nextRelativePath, updatedAt: updatedAt ?? existingSidecar.updatedAt })
+      } catch (error) {
+        const rollbackErrors: unknown[] = []
+        if (movedNoteFile) {
+          try {
+            renameSync(nextNotePath, normalizedNotePath)
+          } catch (rollbackError) {
+            rollbackErrors.push(rollbackError)
+          }
+        }
+        throw new UsageError(`Could not move note '${previousRelativePath}'.`, {
+          hint: "Ensure the note and its sidecar are writable inside BLUENOTE_ROOT.",
+          cause: rollbackErrors.length > 0
+            ? new AggregateError([error, ...rollbackErrors], "Move failed and rollback also failed.")
+            : error,
+        })
+      }
+
+      return {
+        notePath: nextNotePath,
+        relativePath: nextRelativePath,
+        previousKey,
+        key: previousKey,
         previousRelativePath,
       }
     },

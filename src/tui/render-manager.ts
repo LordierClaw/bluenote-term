@@ -164,6 +164,21 @@ export interface ManagerViewModel {
     statusIntent: TuiColorIntent
     actions: string[]
   }
+  actionPrompt?: {
+    visible: true
+    inputId: string
+    sheetTitle: string
+    description: string
+    inputLabel: string
+    title: string
+    placeholder: string
+    status: string | null
+    focused: true
+    styleIntent: TuiColorIntent
+    surfaceIntent: TuiColorIntent
+    statusIntent: TuiColorIntent
+    actions: string[]
+  }
   deletePrompt?: {
     visible: true
     key: string
@@ -330,6 +345,13 @@ function managerShortcutHints(state: TuiState, previewHidden: boolean, width?: n
     ]
   }
 
+  if (state.mode === "manager.rename" || state.mode === "manager.move") {
+    return [
+      { key: "Enter", action: state.mode === "manager.rename" ? "Rename" : "Move", priority: "primary" },
+      { key: "Esc", action: "Cancel", priority: "primary" },
+    ]
+  }
+
   if (state.mode === "manager.deleteConfirm") {
     return [
       { key: "y", action: "Delete", priority: "primary" },
@@ -344,6 +366,8 @@ function managerShortcutHints(state: TuiState, previewHidden: boolean, width?: n
     { ...TUI_SHORTCUTS.globalSearch, priority: "primary" },
     { ...TUI_SHORTCUTS.managerBack, priority: "primary" },
     { ...TUI_SHORTCUTS.managerPreview, priority: "primary" },
+    { key: "r", action: "Rename", priority: "secondary" },
+    { key: "m", action: "Move", priority: "secondary" },
   ]
   if (typeof width === "number" && width < MANAGER_PREVIEW_NARROW_WIDTH) {
     return primary
@@ -556,6 +580,23 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
         actions: ["[Enter] Create", "[Esc] Cancel"],
       }
     : undefined
+  const actionPrompt = (state.mode === "manager.rename" || state.mode === "manager.move") && state.manager.actionDraft
+    ? {
+        visible: true as const,
+        inputId: `bluenote-manager-${state.manager.actionDraft.kind}-input`,
+        sheetTitle: state.manager.actionDraft.kind === "rename" ? "Rename" : "Move note",
+        description: state.manager.actionDraft.kind === "rename" ? "Rename the selected folder or note." : "Choose an existing note/ folder, then press Enter to move the selected normal note.",
+        inputLabel: state.manager.actionDraft.kind === "rename" ? "New name:" : "Selected destination:",
+        title: state.manager.actionDraft.input,
+        placeholder: state.manager.actionDraft.kind === "rename" ? "New title or folder name…" : "Select a folder row",
+        status: state.manager.actionDraft.status,
+        focused: true as const,
+        styleIntent: "borderFocus" as const,
+        surfaceIntent: "surfacePanelRaised" as const,
+        statusIntent: (state.manager.actionDraft.status ? "warning" : "mutedText") as TuiColorIntent,
+        actions: [state.manager.actionDraft.kind === "rename" ? "[Enter] Rename" : "[Enter] Move", "[Esc] Cancel"],
+      }
+    : undefined
   const deletePrompt = state.mode === "manager.deleteConfirm" && state.manager.deleteDraft
     ? {
         visible: true as const,
@@ -613,6 +654,7 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
     shortcutHints,
     shortcuts: shortcutHintLabels(shortcutHints),
     createPrompt,
+    actionPrompt,
     deletePrompt,
   }
 }
@@ -876,6 +918,60 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     root.add(createBar)
     createInput.focus()
   }
+  if (vm.actionPrompt) {
+    const actionBar = new BoxRenderable(options.renderer, {
+      id: "bluenote-manager-action-bar",
+      flexDirection: "column",
+      width: "100%",
+      height: 6,
+      border: true,
+      borderColor: tuiTheme[vm.actionPrompt.styleIntent],
+      title: vm.actionPrompt.sheetTitle,
+    })
+    actionBar.add(new TextRenderable(options.renderer, {
+      id: "bluenote-manager-action-copy",
+      content: vm.actionPrompt.description,
+      height: 1,
+      fg: tuiTheme.textSecondary,
+    }))
+    actionBar.add(new TextRenderable(options.renderer, {
+      id: "bluenote-manager-action-input-label",
+      content: vm.actionPrompt.inputLabel,
+      height: 1,
+      fg: tuiTheme.textPrimary,
+    }))
+    const actionInput = new InputRenderable(options.renderer, {
+      id: vm.actionPrompt.inputId,
+      value: vm.actionPrompt.title,
+      placeholder: vm.actionPrompt.placeholder,
+      width: "70%",
+    })
+    const actionStatus = new TextRenderable(options.renderer, {
+      id: "bluenote-manager-action-status",
+      content: vm.actionPrompt.status ?? " ",
+      height: 1,
+      fg: tuiTheme[vm.actionPrompt.statusIntent],
+    })
+    const actionHint = new TextRenderable(options.renderer, {
+      id: "bluenote-manager-action-hints",
+      content: vm.actionPrompt.actions.join("  "),
+      height: 1,
+      fg: tuiTheme.mutedText,
+    })
+    actionInput.on(InputRenderableEvents.INPUT, () => {
+      options.controller.updateManagerActionInput(actionInput.value)
+      options.onInvalidate?.()
+    })
+    actionInput.on(InputRenderableEvents.CHANGE, () => {
+      options.controller.updateManagerActionInput(actionInput.value)
+      options.onInvalidate?.()
+    })
+    actionBar.add(actionInput)
+    actionBar.add(actionStatus)
+    actionBar.add(actionHint)
+    root.add(actionBar)
+    actionInput.focus()
+  }
   if (vm.deletePrompt) {
     const deleteBar = new BoxRenderable(options.renderer, {
       id: "bluenote-manager-delete-confirm",
@@ -978,6 +1074,38 @@ export function routeManagerKey(sequence: string, controller: WorkspaceControlle
     }
   }
 
+  if (controller.getState().mode === "manager.rename" || controller.getState().mode === "manager.move") {
+    const mode = controller.getState().mode
+    const currentInput = controller.getState().manager.actionDraft?.input ?? ""
+    if (sequence === "\u001b" || sequence === "\u001b[") {
+      controller.cancelManagerAction()
+      return true
+    }
+    if (mode === "manager.move" && (sequence === "\u001b[A" || sequence === "k")) {
+      controller.moveManagerSelection("up")
+      return true
+    }
+    if (mode === "manager.move" && (sequence === "\u001b[B" || sequence === "j")) {
+      controller.moveManagerSelection("down")
+      return true
+    }
+    if (sequence === "\r" || sequence === "\n") {
+      controller.submitManagerAction()
+      return true
+    }
+    if (mode === "manager.move") {
+      return true
+    }
+    if (sequence === "\u007f" || sequence === "\b") {
+      controller.updateManagerActionInput(currentInput.slice(0, -1))
+      return true
+    }
+    if (sequence.length === 1 && sequence >= " " && sequence !== "\u007f") {
+      controller.updateManagerActionInput(`${currentInput}${sequence}`)
+      return true
+    }
+  }
+
   if (controller.getState().mode === "manager.filter") {
     const currentQuery = controller.getState().manager.filterQuery ?? ""
     if (sequence === "\u001b[A") {
@@ -1036,6 +1164,12 @@ export function routeManagerKey(sequence: string, controller: WorkspaceControlle
       return true
     case "n":
       controller.openManagerCreate()
+      return true
+    case "r":
+      controller.openManagerRename()
+      return true
+    case "m":
+      controller.openManagerMove()
       return true
     case "d":
       controller.openManagerDeleteConfirmation()
