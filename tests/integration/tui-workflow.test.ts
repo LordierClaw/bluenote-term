@@ -331,6 +331,57 @@ describe("TUI workspace workflows", () => {
     ])
   })
 
+  test("runtime Ctrl+PageDown and Ctrl+PageUp switch editor notes in the same folder", async () => {
+    await mkdir(path.join(rootPath, "note", "work"), { recursive: true })
+    const alpha = createNote({
+      override: rootPath,
+      type: "normal",
+      title: "Alpha",
+      body: "alpha body",
+      destinationFolder: "note/work",
+      randomSource: () => 111111,
+      clock: fixedClock("2026-06-01T00:00:00.000Z"),
+    })
+    const beta = createNote({
+      override: rootPath,
+      type: "normal",
+      title: "Beta",
+      body: "beta body",
+      destinationFolder: "note/work",
+      randomSource: () => 222222,
+      clock: fixedClock("2026-06-02T00:00:00.000Z"),
+    })
+    createNote({
+      override: rootPath,
+      type: "normal",
+      title: "Other",
+      body: "other body",
+      destinationFolder: "note",
+      randomSource: () => 333333,
+      clock: fixedClock("2026-06-03T00:00:00.000Z"),
+    })
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: alpha.relativePath,
+      openedAt: "2026-06-04T12:00:00.000Z",
+    })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clock: fixedClock("2026-06-04T12:00:00.000Z"),
+      cleanupStaleAtomicTemps: () => {},
+    })
+
+    assert.equal(controller.getState().editor?.note.relativePath, alpha.relativePath)
+    assert.deepEqual(routeWorkspaceKey("\u001b[6;5~", controller, () => {}), { handled: true })
+    assert.equal(controller.getState().editor?.note.relativePath, beta.relativePath)
+    assert.equal(controller.getState().editor?.noteSwitchIndicator?.label, "02/02")
+    assert.deepEqual(createLatestOpenedNoteRepository(rootPath).read()?.relativePath, beta.relativePath)
+
+    assert.deepEqual(routeWorkspaceKey("\u001b[5;5~", controller, () => {}), { handled: true })
+    assert.equal(controller.getState().editor?.note.relativePath, alpha.relativePath)
+    assert.equal(controller.getState().editor?.noteSwitchIndicator?.label, "01/02")
+  })
+
   test("default controller saves the open draft as a normal note in a selected note folder", async () => {
     const draft = createNote({
       override: rootPath,

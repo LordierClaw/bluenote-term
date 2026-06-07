@@ -173,6 +173,10 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
     replaceAllEditorMatches: () => calls.push("replaceAllEditorMatches"),
     undoEditor: () => calls.push("undoEditor"),
     redoEditor: () => calls.push("redoEditor"),
+    switchEditorNote: (direction) => {
+      calls.push(`switchEditorNote:${direction}`)
+      return { blocked: false }
+    },
     requestQuit: () => {
       calls.push("requestQuit")
       return { blocked: false }

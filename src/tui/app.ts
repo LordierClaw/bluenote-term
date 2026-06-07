@@ -653,6 +653,14 @@ export function routeWorkspaceKey(
   if (state.screen === "editor") {
     const handled = routeEditorKey(sequence, controller, onExit, onInvalidate)
     if (handled) return { handled: true }
+    if (sequence === "\u001b[6;5~") {
+      controller.switchEditorNote("next")
+      return { handled: true }
+    }
+    if (sequence === "\u001b[5;5~") {
+      controller.switchEditorNote("previous")
+      return { handled: true }
+    }
     if (sequence === "\u0003") {
       const quit = controller.requestQuit()
       if (!quit.blocked) {

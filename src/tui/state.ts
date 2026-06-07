@@ -106,8 +106,13 @@ export interface EditorBufferState {
   activeFindIndex?: number | null
   autosaveStatus?: AutosaveStatus
   statusMessage?: string | null
+  noteSwitchIndicator?: EditorNoteSwitchIndicatorState | null
   undoStack?: EditorHistorySnapshot[]
   redoStack?: EditorHistorySnapshot[]
+}
+
+export interface EditorNoteSwitchIndicatorState {
+  label: string
 }
 
 export interface EditorHistorySnapshot {
@@ -330,6 +335,7 @@ export function openEditorForNote(state: TuiState, note: TuiNote): TuiState {
       activeFindIndex: null,
       autosaveStatus: "idle",
       statusMessage: null,
+      noteSwitchIndicator: null,
       undoStack: [],
       redoStack: [],
     },

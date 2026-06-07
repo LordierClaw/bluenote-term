@@ -2,6 +2,7 @@ import type { ClipboardModel, ClipboardOperationResult, EditorCursorDirection, E
 import { advanceEditorFindState, backspaceAtEditorCursor, deleteAtEditorCursor, findInEditorBody, insertTextAtEditorCursor, moveEditorCursor, pasteText, replaceAllMatches, replaceCurrentMatch, replaceEditorBody } from "./adapters/editor-buffer-adapter"
 import {
   buildManagerBrowserModel,
+  buildManagerFolderPreviewRows,
   canCreateManagerFolderAt,
   focusedManagerBrowserItem,
   goToManagerParent,
@@ -125,6 +126,7 @@ export interface WorkspaceControllerDependencies {
   recordLatestOpenedNote?: (note: TuiNote) => void
   autosaveScheduler?: WorkspaceDebounceScheduler
   aiIdleScheduler?: WorkspaceDebounceScheduler
+  transientIndicatorScheduler?: WorkspaceDebounceScheduler
   clipboard?: ClipboardModel
   initialAiStatus?: AiStatusState
   aiActions?: WorkspaceAiActions
@@ -192,6 +194,7 @@ export interface WorkspaceController {
   replaceAllEditorMatches: () => void
   undoEditor: () => void
   redoEditor: () => void
+  switchEditorNote: (direction: "next" | "previous", options?: WorkspaceActionOptions) => WorkspaceActionResult
   requestQuit: (options?: WorkspaceActionOptions) => WorkspaceActionResult
   dispose: () => void
   startAiStartupScan: () => void
@@ -257,6 +260,7 @@ function cloneStateSnapshot(source: TuiState): TuiState {
       ? {
           ...source.editor,
           note: toTuiNote(source.editor.note),
+          noteSwitchIndicator: source.editor.noteSwitchIndicator ? { ...source.editor.noteSwitchIndicator } : null,
           undoStack: source.editor.undoStack?.map((snapshot) => ({ ...snapshot })) ?? [],
           redoStack: source.editor.redoStack?.map((snapshot) => ({ ...snapshot })) ?? [],
         }
@@ -375,6 +379,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   let searchResults: SearchEverythingResult[] = []
   let autosaveTimer: unknown = null
   let aiIdleTimer: unknown = null
+  let noteSwitchIndicatorTimer: unknown = null
   let aiIdleGeneration = 0
   let aiIdlePendingSelector: string | null = null
   let disposed = false
@@ -387,6 +392,10 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
   }
   const aiIdleScheduler: WorkspaceDebounceScheduler = deps.aiIdleScheduler ?? {
+    setTimeout: (callback, delay) => globalThis.setTimeout(callback, delay),
+    clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
+  }
+  const transientIndicatorScheduler: WorkspaceDebounceScheduler = deps.transientIndicatorScheduler ?? {
     setTimeout: (callback, delay) => globalThis.setTimeout(callback, delay),
     clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
   }
@@ -455,6 +464,40 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       autosaveScheduler.clearTimeout(autosaveTimer)
       autosaveTimer = null
     }
+  }
+
+  function clearNoteSwitchIndicatorTimer(): void {
+    if (noteSwitchIndicatorTimer !== null) {
+      transientIndicatorScheduler.clearTimeout(noteSwitchIndicatorTimer)
+      noteSwitchIndicatorTimer = null
+    }
+  }
+
+  function scheduleNoteSwitchIndicator(label: string): void {
+    clearNoteSwitchIndicatorTimer()
+    if (!state.editor) return
+    state = {
+      ...state,
+      editor: {
+        ...state.editor,
+        noteSwitchIndicator: { label },
+      },
+    }
+    notifyAutosaveStateChange()
+    noteSwitchIndicatorTimer = transientIndicatorScheduler.setTimeout(() => {
+      noteSwitchIndicatorTimer = null
+      if (disposed || state.editor?.noteSwitchIndicator?.label !== label) {
+        return
+      }
+      state = {
+        ...state,
+        editor: {
+          ...state.editor,
+          noteSwitchIndicator: null,
+        },
+      }
+      notifyAutosaveStateChange()
+    }, 2_000)
   }
 
   function clearAiIdleTimer(options: { clearPending?: boolean } = {}): void {
@@ -1172,6 +1215,61 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     queuePendingAiIdleWorkBeforeOpeningNote(key)
     setEditorNote(deps.showNote(key))
     return ok()
+  }
+
+  function folderPathForNoteRelativePath(relativePath: string | undefined): string {
+    const normalized = (relativePath ?? "").replaceAll("\\", "/").replace(/\/+/gu, "/").replace(/^\/+|\/+$/gu, "")
+    const parts = normalized.split("/").filter(Boolean)
+    return parts.length <= 1 ? "" : parts.slice(0, -1).join("/")
+  }
+
+  function noteSwitchLabel(index: number, total: number): string {
+    const width = Math.max(2, String(total).length)
+    return `${String(index + 1).padStart(width, "0")}/${String(total).padStart(width, "0")}`
+  }
+
+  function switchEditorNote(direction: "next" | "previous", options: WorkspaceActionOptions = {}): WorkspaceActionResult {
+    const editor = state.editor
+    if (!editor) {
+      return ok()
+    }
+
+    const folderPath = folderPathForNoteRelativePath(editor.note.relativePath)
+    const rows = buildManagerFolderPreviewRows(noteSummaries, folderPath, editor.note.key).filter((row) => row.type === "note")
+    if (rows.length === 0) {
+      return ok()
+    }
+
+    const currentIndex = rows.findIndex((row) => row.key === editor.note.key)
+    if (currentIndex === -1) {
+      return ok()
+    }
+
+    if (rows.length === 1) {
+      scheduleNoteSwitchIndicator(noteSwitchLabel(currentIndex, rows.length))
+      return ok()
+    }
+
+    const nextIndex = direction === "next"
+      ? (currentIndex + 1) % rows.length
+      : (currentIndex - 1 + rows.length) % rows.length
+    const next = rows[nextIndex]
+    if (!next) {
+      return ok()
+    }
+
+    const result = openNoteByKey(next.key, options)
+    if (!result.blocked) {
+      state = {
+        ...state,
+        manager: {
+          ...state.manager,
+          currentFolderPath: folderPath,
+        },
+      }
+      scheduleNoteSwitchIndicator(noteSwitchLabel(nextIndex, rows.length))
+    }
+    return result
   }
 
   function searchCommandContext(): SearchEverythingCommandContext {
@@ -2188,6 +2286,8 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       }, { recordHistory: false })
     },
 
+    switchEditorNote,
+
     showManager: () => {
       const selectorLeavingEditor = state.screen === "editor" ? state.editor?.note.key ?? null : null
       const anchoredFolderPath = managerFolderForNotePath(state.editor?.note.relativePath) ?? state.manager.currentFolderPath ?? ""
@@ -2493,6 +2593,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       disposed = true
       clearAutosaveTimer()
       clearAiIdleTimer()
+      clearNoteSwitchIndicatorTimer()
       autosaveStateChangeHandler = null
     },
 

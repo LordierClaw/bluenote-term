@@ -4945,4 +4945,109 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().editor?.dirty, false)
     assert.equal(controller.getState().editor?.autosaveStatus, "saved")
   })
+
+  test("editor shortcut switches to next and previous notes within current normal folder order", () => {
+    const indicatorScheduler = createFakeScheduler()
+    const invalidations: string[] = []
+    const shown: string[] = []
+    const latestOpened: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work", "note/work/projects", "note/work/archive"],
+      showNote: (selector) => {
+        shown.push(selector)
+        return phaseSevenNotesByKey[selector]
+      },
+      recordLatestOpenedNote: (note) => latestOpened.push(note.key),
+      transientIndicatorScheduler: indicatorScheduler,
+      onAutosaveStateChange: () => invalidations.push(controller.getState().editor?.noteSwitchIndicator?.label ?? "cleared"),
+    }).deps)
+
+    openManagerFolderPath(controller, "note/work")
+    controller.focusManagerItem(controller.getState().manager.items.findIndex((item) => item.key === "alpha-note"))
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+
+    assert.deepEqual(controller.switchEditorNote("next"), { blocked: false })
+    assert.equal(controller.getState().editor?.note.key, "zebra-note")
+    assert.equal(controller.getState().manager.currentFolderPath, "note/work")
+    assert.equal(controller.getState().editor?.noteSwitchIndicator?.label, "02/02")
+    const switchSnapshot = controller.getState()
+    switchSnapshot.editor!.noteSwitchIndicator!.label = "corrupt"
+    assert.equal(controller.getState().editor?.noteSwitchIndicator?.label, "02/02")
+    assert.deepEqual(invalidations.slice(-1), ["02/02"])
+
+    assert.deepEqual(controller.switchEditorNote("previous"), { blocked: false })
+    assert.equal(controller.getState().editor?.note.key, "alpha-note")
+    assert.equal(controller.getState().editor?.noteSwitchIndicator?.label, "01/02")
+    assert.deepEqual(invalidations.slice(-1), ["01/02"])
+    assert.deepEqual(shown.slice(-2), ["zebra-note", "alpha-note"])
+    assert.deepEqual(latestOpened.slice(-2), ["zebra-note", "alpha-note"])
+
+    assert.equal(indicatorScheduler.activeTasks().at(-1)?.delay, 2_000)
+    indicatorScheduler.runNext()
+    assert.equal(controller.getState().editor?.noteSwitchIndicator, null)
+    assert.deepEqual(invalidations.slice(-1), ["cleared"])
+  })
+
+  test("editor same-folder switching skips folders and does not leave current folder", () => {
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work", "note/work/projects", "note/work/archive"],
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+    }).deps)
+
+    openManagerFolderPath(controller, "note/work")
+    controller.focusManagerItem(controller.getState().manager.items.findIndex((item) => item.key === "zebra-note"))
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+
+    assert.equal(controller.switchEditorNote("next").blocked, false)
+    assert.equal(controller.getState().editor?.note.key, "alpha-note")
+    assert.equal(controller.getState().manager.currentFolderPath, "note/work")
+    assert.notEqual(controller.getState().editor?.note.key, "nested-note")
+  })
+
+  test("editor same-folder switching follows draft createdAt-desc ordering", () => {
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work", "note/work/projects"],
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+    }).deps)
+
+    openManagerFolderPath(controller, "draft")
+    controller.focusManagerItem(controller.getState().manager.items.findIndex((item) => item.key === "newer-draft"))
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+
+    assert.equal(controller.switchEditorNote("next").blocked, false)
+    assert.equal(controller.getState().editor?.note.key, "older-draft")
+    assert.equal(controller.getState().editor?.noteSwitchIndicator?.label, "02/02")
+    assert.equal(controller.switchEditorNote("previous").blocked, false)
+    assert.equal(controller.getState().editor?.note.key, "newer-draft")
+    assert.equal(controller.getState().editor?.noteSwitchIndicator?.label, "01/02")
+  })
+
+  test("editor same-folder switching is blocked by dirty replacement protection and queues pending AI work", async () => {
+    const aiScheduler = createFakeScheduler()
+    const enqueued: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work"],
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+      aiIdleScheduler: aiScheduler,
+      initialAiStatus: { kind: "connected", model: "test" },
+      aiActions: { enqueueNote: (selector) => { enqueued.push(selector); return { queued: enqueued.length } } },
+      persistEditorBody: (note, body) => ({ ...note, body }),
+    }).deps)
+
+    openManagerFolderPath(controller, "note/work")
+    controller.focusManagerItem(controller.getState().manager.items.findIndex((item) => item.key === "alpha-note"))
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    controller.updateEditorBody("dirty")
+    assert.deepEqual(controller.switchEditorNote("next"), { blocked: true, reason: "dirty-editor" })
+    assert.equal(controller.getState().editor?.note.key, "alpha-note")
+
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+    assert.equal(aiScheduler.activeTasks().length, 1)
+    assert.equal(controller.switchEditorNote("next", { confirmed: true }).blocked, false)
+    assert.deepEqual(enqueued, ["alpha-note"])
+  })
 })
