@@ -1486,6 +1486,35 @@ describe("TUI render keyboard routing", () => {
     }
   })
 
+  test("manager renderer shows Tab toggle hint in the create box", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const { controller } = createController("manager")
+      const state = controller.getState()
+      state.mode = "manager.create"
+      state.manager.currentFolderPath = "note/work"
+      state.manager.canCreateFolder = true
+      state.manager.createDraft = { title: "Client", status: null, kind: "note" }
+
+      const screen = renderManagerScreen({ renderer, controller, width: 80 })
+      renderer.root.add(screen)
+      const createHints = findById(screen, "bluenote-manager-create-hints") as { content?: any } | undefined
+      const hintText = createHints?.content?.chunks?.map((chunk: { text?: string }) => chunk.text ?? "").join("") || createHints?.content || ""
+
+      assert.equal(hintText, "[Enter] Create  [Tab] Folder  [Esc] Cancel")
+
+      state.manager.createDraft = { title: "Client", status: null, kind: "folder" }
+      const folderScreen = renderManagerScreen({ renderer, controller, width: 80 })
+      renderer.root.add(folderScreen)
+      const folderCreateHints = findById(folderScreen, "bluenote-manager-create-hints") as { content?: any } | undefined
+      const folderHintText = folderCreateHints?.content?.chunks?.map((chunk: { text?: string }) => chunk.text ?? "").join("") || folderCreateHints?.content || ""
+
+      assert.equal(folderHintText, "[Enter] Create  [Tab] Note  [Esc] Cancel")
+    } finally {
+      renderer.destroy()
+    }
+  })
+
   test("manager renderer prints simplified topbar and currently-open footer label", async () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {

@@ -903,9 +903,14 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
       height: 1,
       fg: tuiTheme[vm.createPrompt.statusIntent],
     })
+    const createToggleAction = vm.createPrompt.actions.find((action) => action.startsWith("[Tab] "))?.replace("[Tab] ", "") ?? "Folder"
     const createHint = new TextRenderable(options.renderer, {
       id: "bluenote-manager-create-hints",
-      content: renderShortcutHints([{ key: "Enter", action: "Create" }, { key: "Esc", action: "Cancel" }]),
+      content: renderShortcutHints([
+        { key: "Enter", action: "Create" },
+        { key: "Tab", action: createToggleAction },
+        { key: "Esc", action: "Cancel" },
+      ]),
       height: 1,
       fg: tuiTheme.mutedText,
     })

@@ -1546,7 +1546,7 @@ describe("TUI render view models", () => {
       controller.openManagerCreate()
       controller.updateManagerCreateTitle("Draft")
       managerRoot = renderManagerScreen({ renderer, controller })
-      assert.deepEqual(chunkTextsForId(managerRoot, "bluenote-manager-create-hints"), ["[Enter]", " Create", "  ", "[Esc]", " Cancel"])
+      assert.deepEqual(chunkTextsForId(managerRoot, "bluenote-manager-create-hints"), ["[Enter]", " Create", "  ", "[Tab]", " Folder", "  ", "[Esc]", " Cancel"])
 
       controller.cancelManagerCreate()
       controller.openManagerDeleteConfirmation()
