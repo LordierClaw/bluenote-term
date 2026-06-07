@@ -541,6 +541,7 @@ export function createNoteRepository(rootPath: string): NoteRepository {
         ...existingSidecar,
         key: input.nextKey,
         title: input.title,
+        description: deriveDescription(input.body),
         relativePath: nextRelativePath,
         updatedAt: input.updatedAt,
       }

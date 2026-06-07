@@ -95,7 +95,7 @@ test("renameNote renames the key, file, and sidecar and reports the previous and
     assert.equal(sidecar.key, "renamed-title-00000a")
     assert.equal(sidecar.title, "Renamed Title")
     assert.equal(sidecar.relativePath, "note/work/renamed-title-00000a.md")
-    assert.equal(sidecar.description, "Original Title Body before rename.")
+    assert.equal(sidecar.description, "# Renamed Title Body after rename.")
     assert.deepEqual(sidecar.ai, { description: { lastProcessedAt: "2026-06-03T00:00:00.000Z" } })
     assert.equal(sidecar.updatedAt, "2026-05-21T12:45:00.000Z")
   } finally {

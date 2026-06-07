@@ -4,6 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import { mkdtemp, rm, readFile, access, readdir, writeFile, mkdir } from "node:fs/promises"
 import { existsSync, mkdirSync } from "node:fs"
+import { createCliRenderer } from "@opentui/core"
 
 import { createAiConfigRepository } from "../../src/ai/config-repository"
 import { createCodexAuthRepository } from "../../src/ai/codex-auth-repository"
@@ -15,7 +16,7 @@ import { listNotes } from "../../src/core/list-notes"
 import { rebuildIndexes } from "../../src/core/rebuild-indexes"
 import { showNote } from "../../src/core/show-note"
 import { buildSearchEverythingPreview, type SearchEverythingContentResult } from "../../src/tui/adapters/search-everything-adapter"
-import { createDefaultWorkspaceController, createDesktopClipboardModel, routeWorkspaceKey } from "../../src/tui/app"
+import { createDefaultWorkspaceController, createDesktopClipboardModel, routeWorkspaceKey, startTuiWorkspace } from "../../src/tui/app"
 import { buildEditorViewModel } from "../../src/tui/render-editor"
 import { routeManagerKey } from "../../src/tui/render-manager"
 import { createWorkspaceController } from "../../src/tui/workspace-controller"
@@ -295,6 +296,43 @@ describe("TUI workspace workflows", () => {
     assert.ok(opened?.relativePath.startsWith("draft/"))
     assert.equal(createLatestOpenedNoteRepository(rootPath).read()?.relativePath, opened?.relativePath)
     await access(path.join(rootPath, opened?.relativePath ?? "missing"))
+  })
+
+  test("OpenTUI lifecycle starts on the latest-opened editor and quits cleanly from editor input", async () => {
+    const restoredNote = createNote({
+      override: rootPath,
+      title: "Lifecycle Restore",
+      body: "restored lifecycle body",
+      clock: fixedClock("2026-06-05T12:00:00.000Z"),
+    })
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: restoredNote.relativePath,
+      openedAt: "2026-06-05T12:00:00.000Z",
+    })
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clock: fixedClock("2026-06-06T12:00:00.000Z"),
+      cleanupStaleAtomicTemps: () => {},
+    })
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+
+    try {
+      const running = await startTuiWorkspace({ renderer, controller })
+      assert.equal(controller.getState().screen, "editor")
+      assert.equal(controller.getState().editor?.note.relativePath, restoredNote.relativePath)
+      assert.equal(renderer.isDestroyed, false)
+
+      assert.deepEqual(routeWorkspaceKey("\u0003", controller, running.destroy), { handled: true, exit: true })
+      assert.equal(renderer.isDestroyed, true)
+      assert.deepEqual(createLatestOpenedNoteRepository(rootPath).read(), {
+        relativePath: restoredNote.relativePath,
+        openedAt: "2026-06-06T12:00:00.000Z",
+      })
+    } finally {
+      if (!renderer.isDestroyed) {
+        renderer.destroy()
+      }
+    }
   })
 
   test("default manager orders real draft notes by created date descending", () => {

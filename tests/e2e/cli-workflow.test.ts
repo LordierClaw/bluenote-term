@@ -1,7 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 import path from "node:path"
-import { access, readFile } from "node:fs/promises"
+import { access, mkdir, readFile } from "node:fs/promises"
 
 import { createManagedRootHarness, runCli, type CliRunResult } from "../helpers/cli"
 import { noteMarkdown, timestampFieldPattern } from "../helpers/note-fixtures"
@@ -14,6 +14,107 @@ test("CLI help describes the Phase 7 note layout for new notes", () => {
   assert.doesNotMatch(result.stdout, /notes\/inbox/)
   assert.match(result.stdout, /Create a draft from body text or clipboard/)
 })
+
+test("real bin CLI covers draft, named draft, normal note, search visibility, and archive storage", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-bin-phase7-")
+
+  const runOk = (step: string, args: string[], extraEnv?: Record<string, string | undefined>): CliRunResult => {
+    const result = harness.runBin(args, extraEnv)
+
+    assert.equal(result.exitCode, 0, `${step} should exit 0`)
+    assert.equal(result.stderr, "", `${step} should not write stderr`)
+
+    return result
+  }
+
+  const createdNote = (stdout: string): { key: string; relativePath: string } => {
+    const match = stdout.match(/^Created note\nKey: (?<key>.+)\nPath: (?<relativePath>.+\.md)\n$/)
+    assert.ok(match?.groups, `unexpected create output: ${stdout}`)
+    return { key: match.groups.key, relativePath: match.groups.relativePath }
+  }
+
+  const readSidecar = async (key: string) => JSON.parse(await readFile(path.join(harness.rootPath, ".data", "notes", `${key}.json`), "utf8")) as {
+    archivedAt: string | null
+    key: string
+    relativePath: string
+    title: string
+    type: "draft" | "normal" | "archived"
+  }
+
+  try {
+    const initResult = runOk("bn init", ["init"], {
+      BLUENOTE_TEST_NOW: undefined,
+      BLUENOTE_TEST_RANDOM_SEQUENCE: undefined,
+      BLUENOTE_TEST_REBUILD_FAIL_SIDECAR_SCAN: undefined,
+      BLUENOTE_TEST_MIGRATE_FAIL_REBUILD_WRITE: undefined,
+    })
+    assert.match(initResult.stdout, new RegExp(`Initialized BlueNote root: ${harness.escapeForRegExp(harness.rootPath)}`))
+
+    await mkdir(path.join(harness.rootPath, "note", "work"), { recursive: true })
+
+    const quickDraft = createdNote(runOk("bn new draft body", ["new", "draft body"]).stdout)
+    assert.match(quickDraft.key, /^draft-[a-z0-9]{6}$/)
+    assert.equal(quickDraft.relativePath, `draft/${quickDraft.key}.md`)
+    assert.equal(await readFile(path.join(harness.rootPath, quickDraft.relativePath), "utf8"), "draft body")
+    const quickDraftSidecar = await readSidecar(quickDraft.key)
+    assert.equal(quickDraftSidecar.key, quickDraft.key)
+    assert.equal(quickDraftSidecar.relativePath, quickDraft.relativePath)
+    assert.equal(quickDraftSidecar.title, quickDraft.key)
+    assert.equal(quickDraftSidecar.type, "draft")
+    assert.equal(quickDraftSidecar.archivedAt, null)
+
+    const namedDraft = createdNote(runOk("bn new named draft", ["new", "--title", "Named Draft", "draft body"]).stdout)
+    assert.match(namedDraft.key, /^named-draft-[a-z0-9]{6}$/)
+    assert.equal(namedDraft.relativePath, `draft/${namedDraft.key}.md`)
+    assert.equal(await readFile(path.join(harness.rootPath, namedDraft.relativePath), "utf8"), "draft body")
+    const namedDraftSidecar = await readSidecar(namedDraft.key)
+    assert.equal(namedDraftSidecar.type, "draft")
+    assert.equal(namedDraftSidecar.title, "Named Draft")
+    assert.equal(namedDraftSidecar.relativePath, namedDraft.relativePath)
+
+    const normal = createdNote(runOk("bn new normal note/work", ["new", "--path", "note/work", "--title", "Meeting", "normal body"]).stdout)
+    assert.match(normal.key, /^meeting-[a-z0-9]{6}$/)
+    assert.equal(normal.relativePath, `note/work/${normal.key}.md`)
+    assert.equal(await readFile(path.join(harness.rootPath, normal.relativePath), "utf8"), "normal body")
+    const normalSidecar = await readSidecar(normal.key)
+    assert.equal(normalSidecar.type, "normal")
+    assert.equal(normalSidecar.title, "Meeting")
+    assert.equal(normalSidecar.relativePath, normal.relativePath)
+
+    const listResult = runOk("bn list", ["list"])
+    assert.match(listResult.stdout, new RegExp(`Meeting\\t${harness.escapeForRegExp(normal.key)}\\tnormal body\\tnote/work/${harness.escapeForRegExp(normal.key)}\\.md`))
+    assert.doesNotMatch(listResult.stdout, new RegExp(harness.escapeForRegExp(quickDraft.key)))
+    assert.doesNotMatch(listResult.stdout, new RegExp(harness.escapeForRegExp(namedDraft.key)))
+
+    const listDraftsResult = runOk("bn list --drafts", ["list", "--drafts"])
+    assert.match(listDraftsResult.stdout, new RegExp(`Meeting\\t${harness.escapeForRegExp(normal.key)}\\tnormal body\\tnote/work/${harness.escapeForRegExp(normal.key)}\\.md`))
+    assert.match(listDraftsResult.stdout, new RegExp(`${harness.escapeForRegExp(quickDraft.key)}\\t${harness.escapeForRegExp(quickDraft.key)}\\tdraft body\\tdraft/${harness.escapeForRegExp(quickDraft.key)}\\.md`))
+    assert.match(listDraftsResult.stdout, new RegExp(`Named Draft\\t${harness.escapeForRegExp(namedDraft.key)}\\tdraft body\\tdraft/${harness.escapeForRegExp(namedDraft.key)}\\.md`))
+
+    const searchNormalResult = runOk("bn search normal body", ["search", "normal", "body"])
+    assert.match(searchNormalResult.stdout, /Meeting/)
+    assert.match(searchNormalResult.stdout, new RegExp(`key: ${harness.escapeForRegExp(normal.key)}`))
+    assert.doesNotMatch(searchNormalResult.stdout, new RegExp(harness.escapeForRegExp(namedDraft.key)))
+
+    const searchDraftsResult = runOk("bn search --drafts draft body", ["search", "--drafts", "draft", "body"])
+    assert.match(searchDraftsResult.stdout, new RegExp(`key: ${harness.escapeForRegExp(quickDraft.key)}`))
+    assert.match(searchDraftsResult.stdout, new RegExp(`key: ${harness.escapeForRegExp(namedDraft.key)}`))
+
+    const archiveResult = runOk("bn archive normal", ["archive", normal.key])
+    assert.equal(archiveResult.stdout, `Archived note: .data/archive/${normal.key}.md\n`)
+    assert.equal(await Bun.file(path.join(harness.rootPath, normal.relativePath)).exists(), false)
+    assert.equal(await readFile(path.join(harness.rootPath, ".data", "archive", `${normal.key}.md`), "utf8"), "normal body")
+    const archivedSidecar = await readSidecar(normal.key)
+    assert.equal(archivedSidecar.type, "archived")
+    assert.equal(archivedSidecar.relativePath, `.data/archive/${normal.key}.md`)
+    assert.match(archivedSidecar.archivedAt ?? "", /^\d{4}-\d{2}-\d{2}T/)
+
+    assert.doesNotMatch(runOk("bn list after archive", ["list"]).stdout, new RegExp(harness.escapeForRegExp(normal.key)))
+    assert.equal(runOk("bn search normal body after archive", ["search", "normal", "body"]).stdout, 'No notes matched "normal body".\n')
+  } finally {
+    await harness.cleanup()
+  }
+}, 45_000)
 
 test("CLI workflow stays consistent across init, create, rebuild, list, search, show, edit, and archive", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-e2e-")

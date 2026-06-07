@@ -473,7 +473,7 @@ test("syncEditedNote rolls back the body with the atomic writer when sidecar per
   }
 })
 
-test("repository renames a normal note title, path, key, and sidecar while preserving existing metadata", async () => {
+test("repository renames a normal note title, path, key, and sidecar while preserving durable metadata", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-rename-normal-"))
 
   try {
@@ -501,7 +501,7 @@ test("repository renames a normal note title, path, key, and sidecar while prese
     assert.equal(sidecar.title, "New Title")
     assert.equal(sidecar.relativePath, "note/work/new-title.md")
     assert.equal(sidecar.createdAt, "2026-06-01T00:00:00.000Z")
-    assert.equal(sidecar.description, "Preserved description")
+    assert.equal(sidecar.description, "New body.")
     assert.deepEqual(sidecar.ai, { description: { lastProcessedAt: "2026-06-03T00:00:00.000Z" } })
   } finally {
     await rm(rootPath, { recursive: true, force: true })
