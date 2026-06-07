@@ -202,6 +202,7 @@ describe("TUI screen state", () => {
     assert.equal(creating.mode, "manager.create")
     assert.deepEqual(creating.manager.createDraft, {
       title: "",
+      kind: "note",
       status: null,
     })
 

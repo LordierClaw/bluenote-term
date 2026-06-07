@@ -114,6 +114,9 @@ export interface WorkspaceControllerDependencies {
   listNoteFolders?: () => readonly string[]
   showNote: (selector: string) => TuiNote
   searchNotes: (query: string) => readonly SearchNoteMatch[]
+  managedRootPath?: string
+  createNote?: (title: string, destinationFolder: string) => TuiNote
+  createDraft?: () => TuiNote
   createFolder?: (folderRelativePath: string) => void
   renameNote?: (selector: string, title: string) => TuiNote
   renameFolder?: (folderRelativePath: string, nextName: string) => void
@@ -164,11 +167,13 @@ export interface WorkspaceController {
   goBack: () => WorkspaceActionResult
   openManagerFilter: () => void
   openManagerCreate: () => void
+  toggleManagerCreateKind: () => void
+  quickNewDraft: () => WorkspaceActionResult
   updateManagerCreateTitle: (title: string) => void
   submitManagerCreate: () => Promise<WorkspaceActionResult>
   cancelManagerCreate: () => void
   openManagerRename: () => void
-  openManagerMove: () => void
+  openManagerMove: () => WorkspaceActionResult
   openSaveDraftAs: () => WorkspaceActionResult
   updateManagerActionInput: (input: string) => void
   submitManagerAction: () => WorkspaceActionResult
@@ -377,7 +382,10 @@ function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
 export function createWorkspaceController(deps: WorkspaceControllerDependencies): WorkspaceController {
   let noteSummaries: readonly NoteManagerSummary[] = []
   let userFolderPaths: readonly string[] = []
-  let state = createInitialTuiState({ ai: deps.initialAiStatus })
+  let state = createInitialTuiState({
+    ai: deps.initialAiStatus,
+    manager: { managedRootPath: deps.managedRootPath ?? null },
+  })
   let searchResults: SearchEverythingResult[] = []
   let autosaveTimer: unknown = null
   let aiIdleTimer: unknown = null
@@ -1665,13 +1673,77 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
     openManagerCreate: () => {
       const currentFolderPath = state.manager.currentFolderPath ?? ""
+      const parts = normalizeWorkspaceRelativePath(currentFolderPath).split("/").filter(Boolean)
+      if (parts[0] === "draft") {
+        setManagerStatus("New draft shortcut creates drafts; folders are unavailable in draft")
+        applyManagerBrowserModel()
+        return
+      }
       if (!canCreateManagerFolderAt(currentFolderPath)) {
-        setManagerStatus(currentFolderPath.split("/").filter(Boolean)[0] === "draft" ? "Folder creation is unavailable in draft" : "Folder creation is unavailable here")
+        setManagerStatus("Note creation is unavailable here")
         applyManagerBrowserModel()
         return
       }
       state = openManagerCreateState(state)
       applyManagerBrowserModel()
+    },
+
+    toggleManagerCreateKind: () => {
+      if (state.mode !== "manager.create" || !state.manager.createDraft) {
+        return
+      }
+      if (!canCreateManagerFolderAt(state.manager.currentFolderPath)) {
+        state = setManagerCreateStatus(state, "Folder creation is unavailable here")
+        applyManagerBrowserModel()
+        return
+      }
+      state = {
+        ...state,
+        manager: {
+          ...state.manager,
+          createDraft: {
+            ...state.manager.createDraft,
+            kind: state.manager.createDraft.kind === "folder" ? "note" : "folder",
+            status: null,
+          },
+        },
+      }
+      applyManagerBrowserModel()
+    },
+
+    quickNewDraft: () => {
+      if (editorRequiresDestructiveConfirmation(state.editor)) {
+        const status = "Save or discard current changes before creating a new draft"
+        if (state.editor) {
+          state = { ...state, editor: { ...state.editor, statusMessage: status } }
+          setManagerStatus(status)
+        } else {
+          setManagerStatus(status)
+          applyManagerBrowserModel()
+        }
+        return dirtyBlocked()
+      }
+      if (!deps.createDraft) {
+        setManagerStatus("Create draft unavailable")
+        applyManagerBrowserModel()
+        return ok()
+      }
+      try {
+        const created = deps.createDraft()
+        deps.rebuildIndexes?.()
+        refreshManager()
+        setEditorNote(created)
+        return ok()
+      } catch (error) {
+        const status = error instanceof Error ? error.message : "Create draft failed"
+        if (state.editor) {
+          state = { ...state, editor: { ...state.editor, statusMessage: status } }
+        } else {
+          setManagerStatus(status)
+          applyManagerBrowserModel()
+        }
+        return ok()
+      }
     },
 
     updateManagerCreateTitle: (title) => {
@@ -1681,22 +1753,41 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
     submitManagerCreate: async () => {
       const title = state.manager.createDraft?.title.trim() ?? ""
+      const createKind = state.manager.createDraft?.kind ?? "note"
       if (!title) {
-        state = setManagerCreateStatus(state, "Folder name required")
+        state = setManagerCreateStatus(state, createKind === "folder" ? "Folder name required" : "Title required")
         applyManagerBrowserModel()
         return ok()
       }
 
       const parentFolderPath = normalizeWorkspaceRelativePath(state.manager.currentFolderPath)
-      const isFolderCreate = canCreateManagerFolderAt(parentFolderPath)
-
-      if (!isFolderCreate) {
-        state = setManagerCreateStatus(state, "Folder creation is unavailable here")
+      if (!canCreateManagerFolderAt(parentFolderPath)) {
+        state = setManagerCreateStatus(state, createKind === "folder" ? "Folder creation is unavailable here" : "Note creation is unavailable here")
         applyManagerBrowserModel()
         return ok()
       }
 
       try {
+        if (createKind === "note") {
+          if (editorRequiresDestructiveConfirmation(state.editor)) {
+            state = setManagerCreateStatus(state, "Save or discard current changes before creating a note")
+            applyManagerBrowserModel()
+            return dirtyBlocked()
+          }
+          if (!deps.createNote) {
+            state = setManagerCreateStatus(state, "Create note unavailable")
+            applyManagerBrowserModel()
+            return ok()
+          }
+          const created = deps.createNote(title, parentFolderPath)
+          clearManagerPreviewCache()
+          deps.rebuildIndexes?.()
+          refreshManager()
+          state = cancelManagerCreateState(state)
+          setEditorNote(created)
+          return ok()
+        }
+
         const folderName = folderNameSegmentFromTitle(title)
         if (!folderName) {
           state = setManagerCreateStatus(state, "Folder name required")
@@ -1731,7 +1822,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         return ok()
       } catch {
         clearManagerPreviewCache()
-        state = setManagerCreateStatus(state, "Create folder failed")
+        state = setManagerCreateStatus(state, createKind === "folder" ? "Create folder failed" : "Create note failed")
         applyManagerBrowserModel()
         return ok()
       }
@@ -1769,7 +1860,12 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       if (!focused || focused.type !== "note") {
         setManagerStatus("Move note unavailable")
         applyManagerBrowserModel()
-        return
+        return ok()
+      }
+      if (isDraftRelativePath(focused.relativePath)) {
+        setManagerStatus("Use Save Draft As to move drafts into note folders")
+        applyManagerBrowserModel()
+        return ok()
       }
       state = {
         ...state,
@@ -1790,6 +1886,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         search: null,
       }
       applyManagerBrowserModel()
+      return ok()
     },
 
     openSaveDraftAs: () => {

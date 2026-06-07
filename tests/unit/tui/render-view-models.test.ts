@@ -126,7 +126,7 @@ describe("TUI render view models", () => {
       workspaceLabel: "Workspace · note/",
       summaryLabel: "2 items · Ready",
       orientation: "Browse your local Markdown workspace.",
-      primaryActions: ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview", "[r] Rename", "[m] Move"],
+      primaryActions: ["[Enter] Open", "[/] Filter", "[n] New", "[N] New Draft", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview", "[r] Rename", "[m] Move"],
     })
     assert.deepEqual(vm.topbar, {
       leftTitle: "BlueNote",
@@ -143,13 +143,14 @@ describe("TUI render view models", () => {
       { key: "Enter", action: "Open", priority: "primary" },
       { key: "/", action: "Filter", priority: "primary" },
       { key: "n", action: "New", priority: "primary" },
+      { key: "N", action: "New Draft", priority: "primary" },
       { key: "Ctrl+P", action: "Search", priority: "primary" },
       { key: "Esc", action: "Back", priority: "primary" },
       { key: "p", action: "Preview", priority: "primary" },
       { key: "r", action: "Rename", priority: "secondary" },
       { key: "m", action: "Move", priority: "secondary" },
     ])
-    assert.deepEqual(vm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview", "[r] Rename", "[m] Move"])
+    assert.deepEqual(vm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New", "[N] New Draft", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview", "[r] Rename", "[m] Move"])
     const creatingVm = buildManagerViewModel({
       ...baseState,
       mode: "manager.create",
@@ -157,19 +158,19 @@ describe("TUI render view models", () => {
     })
     assert.deepEqual(creatingVm.createPrompt, {
       visible: true,
-      sheetTitle: "New folder",
-      description: "Create a folder in this workspace.",
+      sheetTitle: "New note",
+      description: "Create a Markdown note in this workspace.",
       destinationLabel: "Create in: note/",
-      inputLabel: "Folder name:",
+      inputLabel: "Title:",
       title: "Project Plan",
       status: "Title required",
       inputId: "bluenote-manager-create-title",
-      placeholder: "Folder name…",
+      placeholder: "Note title…",
       focused: true,
       styleIntent: "borderFocus",
       surfaceIntent: "surfacePanelRaised",
       statusIntent: "warning",
-      actions: ["[Enter] Create", "[Esc] Cancel"],
+      actions: ["[Enter] Create", "[Tab] Folder", "[Esc] Cancel"],
     })
     assert.equal(Number(creatingVm.createPrompt?.focused), 1)
     const deletingVm = buildManagerViewModel({
@@ -274,15 +275,16 @@ describe("TUI render view models", () => {
       { key: "Enter", action: "Open", priority: "primary" },
       { key: "/", action: "Filter", priority: "primary" },
       { key: "n", action: "New", priority: "primary" },
+      { key: "N", action: "New Draft", priority: "primary" },
       { key: "Ctrl+P", action: "Search", priority: "primary" },
       { key: "Esc", action: "Back", priority: "primary" },
       { key: "p", action: "Preview", priority: "primary" },
       { key: "r", action: "Rename", priority: "secondary" },
       { key: "m", action: "Move", priority: "secondary" },
     ])
-    assert.deepEqual(wideVm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview", "[r] Rename", "[m] Move"])
+    assert.deepEqual(wideVm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New", "[N] New Draft", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview", "[r] Rename", "[m] Move"])
     assert.ok(wideVm.shortcuts.every((hint) => /^\[[^\]]+\] [A-Z?]/u.test(hint)), wideVm.shortcuts.join(" | "))
-    assert.deepEqual(narrowVm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview", "[r] Rename", "[m] Move"])
+    assert.deepEqual(narrowVm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New", "[N] New Draft", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview", "[r] Rename", "[m] Move"])
     assert.doesNotMatch([...wideVm.shortcuts, ...narrowVm.shortcuts].join(" "), /\[\?\] More/u)
     assert.doesNotMatch(narrowVm.shortcuts.join(" "), /Delete|Quit/u)
     assert.deepEqual(filteringVm.shortcutHints, [

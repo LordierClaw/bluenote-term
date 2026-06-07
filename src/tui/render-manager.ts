@@ -196,9 +196,9 @@ export interface ManagerViewModel {
 
 type BrowserishRow = ManagerBrowserRow | ManagerItem
 
-function currentPathLabel(path: string | null | undefined): string {
+function currentPathLabel(path: string | null | undefined, managedRootPath?: string | null): string {
   const normalized = (path ?? "").replace(/^\/+|\/+$/gu, "")
-  return normalized ? normalized : "note/"
+  return normalized ? normalized : (managedRootPath?.trim() || "note/")
 }
 
 function basenameLabel(path: string | null | undefined): string {
@@ -363,11 +363,12 @@ function managerShortcutHints(state: TuiState, previewHidden: boolean, width?: n
     { ...TUI_SHORTCUTS.managerOpen, priority: "primary" },
     { ...TUI_SHORTCUTS.managerFilter, priority: "primary" },
     ...(state.manager.canCreateFolder ? [{ ...TUI_SHORTCUTS.managerNew, priority: "primary" as const }] : []),
+    { ...TUI_SHORTCUTS.quickNewDraft, priority: "primary" },
     { ...TUI_SHORTCUTS.globalSearch, priority: "primary" },
     { ...TUI_SHORTCUTS.managerBack, priority: "primary" },
     { ...TUI_SHORTCUTS.managerPreview, priority: "primary" },
     { key: "r", action: "Rename", priority: "secondary" },
-    { key: "m", action: "Move", priority: "secondary" },
+    ...((state.manager.currentFolderPath ?? "").split("/").filter(Boolean)[0] === "draft" ? [] : [{ key: "m", action: "Move", priority: "secondary" as const }]),
   ]
   if (typeof width === "number" && width < MANAGER_PREVIEW_NARROW_WIDTH) {
     return primary
@@ -560,24 +561,24 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
   const bottomPath = currentOpenNoteLabel(state)
   const aiStatus = buildAiStatusViewModel(state.ai, options.width)
 
-  const currentPath = currentPathLabel(currentFolderPath)
-  const isFolderCreatePrompt = state.manager.canCreateFolder === true
+  const currentPath = currentPathLabel(currentFolderPath, state.manager.managedRootPath)
+  const createKind = state.manager.createDraft?.kind ?? "note"
   const createPrompt = state.mode === "manager.create"
     ? {
         visible: true as const,
         inputId: "bluenote-manager-create-title",
-        sheetTitle: isFolderCreatePrompt ? "New folder" : "New note",
-        description: isFolderCreatePrompt ? "Create a folder in this workspace." : "Create a Markdown note in this workspace.",
+        sheetTitle: createKind === "folder" ? "New folder" : "New note",
+        description: createKind === "folder" ? "Create a folder in this workspace." : "Create a Markdown note in this workspace.",
         destinationLabel: `Create in: ${currentPath}`,
-        inputLabel: isFolderCreatePrompt ? "Folder name:" : "Title:",
+        inputLabel: createKind === "folder" ? "Folder name:" : "Title:",
         title: state.manager.createDraft?.title ?? "",
-        placeholder: isFolderCreatePrompt ? "Folder name…" : "Note title…",
+        placeholder: createKind === "folder" ? "Folder name…" : "Note title…",
         status: state.manager.createDraft?.status ?? null,
         focused: true as const,
         styleIntent: "borderFocus" as const,
         surfaceIntent: "surfacePanelRaised" as const,
         statusIntent: (state.manager.createDraft?.status ? "warning" : "mutedText") as TuiColorIntent,
-        actions: ["[Enter] Create", "[Esc] Cancel"],
+        actions: createKind === "folder" ? ["[Enter] Create", "[Tab] Note", "[Esc] Cancel"] : ["[Enter] Create", "[Tab] Folder", "[Esc] Cancel"],
       }
     : undefined
   const actionPrompt = (state.mode === "manager.rename" || state.mode === "manager.move" || state.mode === "manager.saveDraftAs") && state.manager.actionDraft
@@ -1064,6 +1065,10 @@ export function routeManagerKey(sequence: string, controller: WorkspaceControlle
       controller.cancelManagerCreate()
       return true
     }
+    if (sequence === "\t" || sequence === "\u001b[Z") {
+      controller.toggleManagerCreateKind()
+      return true
+    }
     if (sequence === "\r" || sequence === "\n") {
       void controller.submitManagerCreate()
       return true
@@ -1176,6 +1181,9 @@ export function routeManagerKey(sequence: string, controller: WorkspaceControlle
       return true
     case "n":
       controller.openManagerCreate()
+      return true
+    case "N":
+      controller.quickNewDraft()
       return true
     case "r":
       controller.openManagerRename()

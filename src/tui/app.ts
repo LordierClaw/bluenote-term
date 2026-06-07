@@ -542,6 +542,15 @@ export function createDefaultWorkspaceController(options: DefaultWorkspaceContro
     showNote: (selector) => showTuiNote(rootPath, selector),
     searchNotes: (query) => searchNotes(query, { override: rootPath, visibility: "drafts" }),
     createFolder: (folderRelativePath) => createTuiNoteFolder(rootPath, folderRelativePath),
+    createNote: (title, destinationFolder) => {
+      const created = createNote({ override: rootPath, type: "normal", title, destinationFolder, body: "", clock, enqueueAi: false })
+      return showTuiNote(rootPath, created.key)
+    },
+    createDraft: () => {
+      const created = createNote({ override: rootPath, type: "draft", body: "", clock, enqueueAi: false })
+      return showTuiNote(rootPath, created.key)
+    },
+    managedRootPath: rootPath,
     renameNote: (selector, title) => renameTuiNote(rootPath, selector, title, clock),
     renameFolder: (folderRelativePath, nextName) => renameTuiNoteFolder(rootPath, folderRelativePath, nextName),
     moveNote: (selector, destinationFolder) => moveTuiNote(rootPath, selector, destinationFolder),

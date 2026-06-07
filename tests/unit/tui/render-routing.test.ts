@@ -131,6 +131,11 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
     },
     openManagerFilter: () => calls.push("openManagerFilter"),
     openManagerCreate: () => calls.push("openManagerCreate"),
+    toggleManagerCreateKind: () => calls.push("toggleManagerCreateKind"),
+    quickNewDraft: () => {
+      calls.push("quickNewDraft")
+      return { blocked: false }
+    },
     updateManagerCreateTitle: (title) => calls.push(`updateManagerCreateTitle:${title}`),
     submitManagerCreate: async () => {
       calls.push("submitManagerCreate")
@@ -138,7 +143,10 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
     },
     cancelManagerCreate: () => calls.push("cancelManagerCreate"),
     openManagerRename: () => calls.push("openManagerRename"),
-    openManagerMove: () => calls.push("openManagerMove"),
+    openManagerMove: () => {
+      calls.push("openManagerMove")
+      return { blocked: false }
+    },
     openSaveDraftAs: () => {
       calls.push("openSaveDraftAs")
       return { blocked: false }
@@ -1338,6 +1346,7 @@ describe("TUI render keyboard routing", () => {
       ["\u001b", "goBack"],
       ["\u001b[", "goBack"],
       ["n", "openManagerCreate"],
+      ["N", "quickNewDraft"],
       ["d", "openManagerDeleteConfirmation"],
       ["/", "openManagerFilter"],
       ["\u0006", "openManagerFilter"],
@@ -1532,8 +1541,9 @@ describe("TUI render keyboard routing", () => {
       assert.notEqual(topbar?.border, true)
       assert.deepEqual(topbar?.fg?.toInts?.(), [248, 250, 252, 255])
       assert.notEqual(footer?.border, true)
-      assert.equal(footerText, "[Enter] Open  [/] Filter  [Ctrl+P] Search  [Esc] Back  [p] Preview  [r] Rename  [m] Move")
+      assert.equal(footerText, "[Enter] Open  [/] Filter  [N] New Draft  [Ctrl+P] Search  [Esc] Back  [p] Preview  [r] Rename  [m] Move")
       assert.deepEqual(footerChunks.filter((chunk: { text?: string }) => /^\[[^\]]+\]$/u.test(chunk.text ?? "")).map((chunk: any) => chunk.fg?.toInts?.()), [
+        [56, 189, 248, 255],
         [56, 189, 248, 255],
         [56, 189, 248, 255],
         [56, 189, 248, 255],
@@ -1793,12 +1803,14 @@ describe("TUI render keyboard routing", () => {
     controller.getState().manager.createDraft = { title: "Ne", status: null }
 
     assert.equal(routeManagerKey("w", controller), true)
+    assert.equal(routeManagerKey("\t", controller), true)
     assert.equal(routeManagerKey("\u007f", controller), true)
     assert.equal(routeManagerKey("\r", controller), true)
     assert.equal(routeManagerKey("\u001b", controller), true)
     assert.equal(routeManagerKey("\u001b[", controller), true)
     assert.deepEqual(calls, [
       "updateManagerCreateTitle:New",
+      "toggleManagerCreateKind",
       "updateManagerCreateTitle:N",
       "submitManagerCreate",
       "cancelManagerCreate",

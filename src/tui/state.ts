@@ -67,9 +67,11 @@ export interface ManagerState {
   actionDraft?: ManagerActionDraft | null
   deleteDraft?: ManagerDeleteDraft | null
   canCreateFolder?: boolean
+  managedRootPath?: string | null
 }
 
 export interface ManagerCreateDraft {
+  kind?: "note" | "folder"
   title: string
   status: string | null
 }
@@ -217,6 +219,7 @@ function cloneManagerState(manager: ManagerState): ManagerState {
     actionDraft: manager.actionDraft ? { ...manager.actionDraft } : null,
     deleteDraft: manager.deleteDraft ? { ...manager.deleteDraft } : null,
     canCreateFolder: manager.canCreateFolder ?? false,
+    managedRootPath: manager.managedRootPath ?? null,
   }
 }
 
@@ -250,6 +253,7 @@ const defaultManagerState = (): ManagerState => ({
   actionDraft: null,
   deleteDraft: null,
   canCreateFolder: false,
+  managedRootPath: null,
 })
 
 export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}): TuiState {
@@ -419,7 +423,7 @@ export function openManagerCreate(state: TuiState): TuiState {
       ...state.manager,
       items: cloneManagerItems(state.manager.items),
       status: null,
-      createDraft: { title: "", status: null },
+      createDraft: { kind: "note", title: "", status: null },
     },
     search: null,
   }
@@ -438,7 +442,7 @@ export function setManagerCreateTitle(state: TuiState, title: string): TuiState 
       ...state.manager,
       items: cloneManagerItems(state.manager.items),
       status: null,
-      createDraft: { title, status: null },
+      createDraft: { kind: state.manager.createDraft?.kind ?? "note", title, status: null },
     },
     search: null,
   }
@@ -457,6 +461,7 @@ export function setManagerCreateStatus(state: TuiState, status: string | null): 
       ...state.manager,
       items: cloneManagerItems(state.manager.items),
       createDraft: {
+        kind: state.manager.createDraft?.kind ?? "note",
         title: state.manager.createDraft?.title ?? "",
         status,
       },

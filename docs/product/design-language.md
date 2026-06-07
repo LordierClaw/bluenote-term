@@ -106,10 +106,10 @@ Example create sheet:
 
 ```text
 New note
-Create in: notes/inbox
+Create in: note/work
 Title: Project plan draft_
 
-[Enter] Create    [Esc] Cancel
+[Enter] Create    [Tab] Folder    [Esc] Cancel
 ```
 
 Example delete sheet:
@@ -181,7 +181,7 @@ Rules:
 - Note rows are title-first; key/path/date are muted.
 - Root/home explains where the user is and suggests next actions.
 - Preview is a structured card: folder previews show item lists, while note previews emphasize title and content excerpt without metadata rows.
-- Footer shows prioritized actions: `[Enter] Open`, `[/] Filter`, `[n] New`, `[Ctrl+P] Search`, `[Esc] Back`.
+- Footer shows prioritized actions: `[Enter] Open`, `[/] Filter`, `[n] New`, `[N] New Draft`, `[Ctrl+P] Search`, `[Esc] Back`.
 
 ### Editor
 

@@ -499,6 +499,7 @@ describe("TUI workspace workflows", () => {
       )
       openManagerFolderPath(controller, "note")
       controller.openManagerCreate()
+      controller.toggleManagerCreateKind()
       controller.updateManagerCreateTitle("client-a")
       assert.equal((await controller.submitManagerCreate()).blocked, false)
       await access(path.join(freshRootPath, "note", "client-a"))
@@ -2049,6 +2050,7 @@ describe("TUI workspace workflows", () => {
     if (controller.getState().manager.currentFolderPath !== "") controller.goBack()
     openManagerFolderPath(controller, "note")
     controller.openManagerCreate()
+    controller.toggleManagerCreateKind()
     controller.updateManagerCreateTitle("TUI Created Folder")
     const result = await controller.submitManagerCreate()
 
@@ -2079,6 +2081,7 @@ describe("TUI workspace workflows", () => {
     controller.showManager()
     controller.setManagerPreviewVisible(false)
     controller.openManagerCreate()
+    controller.toggleManagerCreateKind()
     controller.updateManagerCreateTitle("Blocked Dirty Create")
 
     const result = await controller.submitManagerCreate()
@@ -2375,6 +2378,7 @@ describe("TUI workspace workflows", () => {
     assert.equal(controller.getState().screen, "manager")
     assert.equal(controller.getState().mode, "manager.create")
 
+    controller.toggleManagerCreateKind()
     controller.updateManagerCreateTitle("Created From Search")
     assert.equal((await controller.submitManagerCreate()).blocked, false)
     assert.equal(controller.getState().manager.items.some((item) => item.type === "folder" && item.relativePath === "note/Created From Search"), true)

@@ -29,12 +29,32 @@ describe("manager renderer view model", () => {
     assert.doesNotMatch(buildManagerViewModel(draftState).layout1.emptyState?.body ?? "", /Create a note|Create a folder/)
   })
 
-  test("labels the manager create prompt as folder creation without note metadata", () => {
+  test("labels the manager create prompt as note-first with folder toggle", () => {
     const state = createInitialTuiState({
       manager: {
         currentFolderPath: "note/work/projects",
         canCreateFolder: true,
-        createDraft: { title: "client-a", status: null },
+        createDraft: { title: "client-a", status: null, kind: "note" },
+      },
+    })
+    state.mode = "manager.create"
+
+    const prompt = buildManagerViewModel(state).createPrompt
+
+    assert.equal(prompt?.sheetTitle, "New note")
+    assert.equal(prompt?.description, "Create a Markdown note in this workspace.")
+    assert.equal(prompt?.destinationLabel, "Create in: note/work/projects")
+    assert.equal(prompt?.inputLabel, "Title:")
+    assert.equal(prompt?.placeholder, "Note title…")
+    assert.deepEqual(prompt?.actions, ["[Enter] Create", "[Tab] Folder", "[Esc] Cancel"])
+  })
+
+  test("labels the manager create prompt as folder creation after toggling kind", () => {
+    const state = createInitialTuiState({
+      manager: {
+        currentFolderPath: "note/work/projects",
+        canCreateFolder: true,
+        createDraft: { title: "client-a", status: null, kind: "folder" },
       },
     })
     state.mode = "manager.create"
@@ -46,5 +66,6 @@ describe("manager renderer view model", () => {
     assert.equal(prompt?.destinationLabel, "Create in: note/work/projects")
     assert.equal(prompt?.inputLabel, "Folder name:")
     assert.equal(prompt?.placeholder, "Folder name…")
+    assert.deepEqual(prompt?.actions, ["[Enter] Create", "[Tab] Note", "[Esc] Cancel"])
   })
 })

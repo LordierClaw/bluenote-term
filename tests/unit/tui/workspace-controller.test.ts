@@ -429,6 +429,7 @@ describe("TUI workspace controller", () => {
     openManagerFolderPath(controller, "note/work")
     controller.openManagerCreate()
     assert.equal(controller.getState().mode, "manager.create")
+    controller.toggleManagerCreateKind()
     controller.updateManagerCreateTitle("client-a")
     assert.equal((await controller.submitManagerCreate()).blocked, false)
 
@@ -445,7 +446,7 @@ describe("TUI workspace controller", () => {
     openManagerFolderPath(controller, "draft")
     controller.openManagerCreate()
     assert.equal(controller.getState().mode, "manager.browse")
-    assert.equal(controller.getState().manager.status, "Folder creation is unavailable in draft")
+    assert.match(controller.getState().manager.status ?? "", /draft/i)
 
     const legacySummaries = [...phaseSevenSummaries, { key: "legacy-daily", title: "Legacy Daily", description: "Legacy", relativePath: "notes/inbox/daily.md" }]
     const legacyController = createWorkspaceController(createDeps({
@@ -457,6 +458,209 @@ describe("TUI workspace controller", () => {
     legacyController.openManagerCreate()
     assert.equal(legacyController.getState().mode, "manager.browse")
     assert.match(legacyController.getState().manager.status ?? "", /unavailable/)
+  })
+
+  test("manager n under note creates a normal note by default, records latest opened, and opens it", async () => {
+    const createdNote: TuiNote = {
+      key: "client-brief",
+      title: "Client Brief",
+      description: "",
+      relativePath: "note/work/client-brief.md",
+      body: "",
+    }
+    const calls: string[] = []
+    const latestOpened: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work"],
+      showNote: (selector) => selector === createdNote.key ? createdNote : phaseSevenNotesByKey[selector],
+      createNote: (title, destinationFolder) => {
+        calls.push(`create-note:${title}:${destinationFolder}`)
+        return createdNote
+      },
+      rebuildIndexes: () => calls.push("rebuild"),
+      recordLatestOpenedNote: (note) => latestOpened.push(note.relativePath),
+    }).deps)
+
+    openManagerFolderPath(controller, "note/work")
+    controller.openManagerCreate()
+    assert.equal(controller.getState().mode, "manager.create")
+    assert.equal(controller.getState().manager.createDraft?.kind, "note")
+    controller.updateManagerCreateTitle("Client Brief")
+
+    assert.equal((await controller.submitManagerCreate()).blocked, false)
+
+    assert.deepEqual(calls, ["create-note:Client Brief:note/work", "rebuild"])
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().mode, "editor.body")
+    assert.equal(controller.getState().editor?.note.relativePath, "note/work/client-brief.md")
+    assert.deepEqual(latestOpened, ["note/work/client-brief.md"])
+  })
+
+  test("manager n under note does not replace a dirty editor without confirmation", async () => {
+    const createdNote: TuiNote = {
+      key: "client-brief",
+      title: "Client Brief",
+      description: "",
+      relativePath: "note/work/client-brief.md",
+      body: "",
+    }
+    const calls: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work"],
+      showNote: (selector) => selector === createdNote.key ? createdNote : phaseSevenNotesByKey[selector],
+      createNote: (title, destinationFolder) => {
+        calls.push(`create-note:${title}:${destinationFolder}`)
+        return createdNote
+      },
+      rebuildIndexes: () => calls.push("rebuild"),
+    }).deps)
+
+    openManagerFolderPath(controller, "note/work")
+    const alphaIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === "alpha-note")
+    assert.notEqual(alphaIndex, -1)
+    controller.focusManagerItem(alphaIndex)
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    controller.updateEditorBody("Unsaved alpha body")
+    controller.showManager()
+    controller.openManagerCreate()
+    controller.updateManagerCreateTitle("Client Brief")
+
+    assert.deepEqual(await controller.submitManagerCreate(), { blocked: true, reason: "dirty-editor" })
+
+    assert.deepEqual(calls, [])
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().mode, "manager.create")
+    assert.equal(controller.getState().editor?.note.key, "alpha-note")
+    assert.equal(controller.getState().editor?.body, "Unsaved alpha body")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.match(controller.getState().manager.createDraft?.status ?? "", /save or discard/i)
+  })
+
+  test("manager n under note can be toggled to create a folder", async () => {
+    let folders = ["note/work"]
+    const calls: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => folders,
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+      createFolder: (folderRelativePath) => {
+        calls.push(`create-folder:${folderRelativePath}`)
+        folders = [...folders, folderRelativePath]
+      },
+      rebuildIndexes: () => calls.push("rebuild"),
+    }).deps)
+
+    openManagerFolderPath(controller, "note/work")
+    controller.openManagerCreate()
+    assert.equal(routeManagerKey("\t", controller), true)
+    assert.equal(controller.getState().manager.createDraft?.kind, "folder")
+    controller.updateManagerCreateTitle("Client A")
+    assert.equal((await controller.submitManagerCreate()).blocked, false)
+
+    assert.deepEqual(calls, ["create-folder:note/work/Client A", "rebuild"])
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().manager.currentFolderPath, "note/work")
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "folder" && item.relativePath === "note/work/Client A"), true)
+  })
+
+  test("manager n in draft does not offer folder creation", () => {
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work"],
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+    }).deps)
+
+    openManagerFolderPath(controller, "draft")
+    controller.openManagerCreate()
+
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.match(controller.getState().manager.status ?? "", /draft/i)
+  })
+
+  test("quick new draft creates a generated draft, opens it, and records latest opened", () => {
+    const createdDraft: TuiNote = {
+      key: "draft-abc123",
+      title: "draft-abc123",
+      description: "",
+      relativePath: "draft/draft-abc123.md",
+      body: "",
+    }
+    const calls: string[] = []
+    const latestOpened: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work"],
+      showNote: (selector) => selector === createdDraft.key ? createdDraft : phaseSevenNotesByKey[selector],
+      createDraft: () => {
+        calls.push("create-draft")
+        return createdDraft
+      },
+      rebuildIndexes: () => calls.push("rebuild"),
+      recordLatestOpenedNote: (note) => latestOpened.push(note.relativePath),
+    }).deps)
+
+    assert.deepEqual(controller.quickNewDraft(), { blocked: false })
+
+    assert.deepEqual(calls, ["create-draft", "rebuild"])
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().mode, "editor.body")
+    assert.equal(controller.getState().editor?.note.relativePath, "draft/draft-abc123.md")
+    assert.deepEqual(latestOpened, ["draft/draft-abc123.md"])
+  })
+
+  test("quick new draft does not replace a dirty editor without confirmation", () => {
+    const createdDraft: TuiNote = {
+      key: "draft-abc123",
+      title: "draft-abc123",
+      description: "",
+      relativePath: "draft/draft-abc123.md",
+      body: "",
+    }
+    const calls: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work"],
+      showNote: (selector) => selector === createdDraft.key ? createdDraft : phaseSevenNotesByKey[selector],
+      createDraft: () => {
+        calls.push("create-draft")
+        return createdDraft
+      },
+      rebuildIndexes: () => calls.push("rebuild"),
+    }).deps)
+
+    openManagerFolderPath(controller, "note/work")
+    const alphaIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === "alpha-note")
+    assert.notEqual(alphaIndex, -1)
+    controller.focusManagerItem(alphaIndex)
+    assert.equal(controller.openFocusedManagerItem().blocked, false)
+    controller.updateEditorBody("Unsaved alpha body")
+
+    assert.deepEqual(controller.quickNewDraft(), { blocked: true, reason: "dirty-editor" })
+
+    assert.deepEqual(calls, [])
+    assert.equal(controller.getState().editor?.note.key, "alpha-note")
+    assert.equal(controller.getState().editor?.body, "Unsaved alpha body")
+    assert.equal(controller.getState().editor?.dirty, true)
+    assert.match(controller.getState().editor?.statusMessage ?? "", /save or discard/i)
+  })
+
+  test("manager root chrome can use the managed absolute root label while rows stay draft and note", () => {
+    const managedRootPath = path.join(os.tmpdir(), "bluenote-managed-root-label")
+    const controller = createWorkspaceController(createDeps({
+      managedRootPath,
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work"],
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+    }).deps)
+
+    controller.goBack()
+
+    assert.equal(controller.getState().manager.currentFolderPath, "")
+    assert.deepEqual(controller.getState().manager.items.map((item) => item.relativePath), ["draft", "note"])
+    assert.equal(buildManagerViewModel(controller.getState()).panels.layout1.title, managedRootPath)
+    assert.equal(buildManagerViewModel(controller.getState()).dashboard.workspaceLabel, `Workspace · ${managedRootPath}`)
   })
 
   test("initial TUI manager preview visibility defaults to visible", () => {
@@ -2656,6 +2860,7 @@ describe("TUI workspace controller", () => {
 
     openManagerFolderPath(controller, "note/work")
     controller.openManagerCreate()
+    controller.toggleManagerCreateKind()
     assert.equal(controller.getState().mode, "manager.create")
     const createVm = buildManagerViewModel(controller.getState())
     assert.equal(createVm.createPrompt?.inputId, "bluenote-manager-create-title")
@@ -2701,6 +2906,7 @@ describe("TUI workspace controller", () => {
     openManagerFolderPath(controller, "note/work")
     controller.setManagerPreviewVisible(false)
     controller.openManagerCreate()
+    controller.toggleManagerCreateKind()
     controller.updateManagerCreateTitle("new-folder")
 
     const result = await controller.submitManagerCreate()
@@ -2884,6 +3090,30 @@ describe("TUI workspace controller", () => {
 
     assert.equal(controller.moveFocusedManagerNote("draft").blocked, false)
     assert.equal(controller.getState().manager.status, "invalid destination")
+  })
+
+  test("manager move is guarded for draft notes even if shortcut is invoked", () => {
+    const calls: string[] = []
+    const controller = createWorkspaceController(createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work"],
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+      moveNote: (selector, destinationFolder) => {
+        calls.push(`move-note:${selector}:${destinationFolder}`)
+        return phaseSevenNotesByKey[selector]
+      },
+    }).deps)
+
+    openManagerFolderPath(controller, "draft")
+    const draftIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.relativePath.startsWith("draft/"))
+    assert.notEqual(draftIndex, -1)
+    controller.focusManagerItem(draftIndex)
+
+    assert.deepEqual(controller.openManagerMove(), { blocked: false })
+
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.match(controller.getState().manager.status ?? "", /save draft as/i)
+    assert.deepEqual(calls, [])
   })
 
   test("manager move prompt selects an existing folder destination", () => {
@@ -3095,6 +3325,7 @@ describe("TUI workspace controller", () => {
     }).deps)
     openManagerFolderPath(failingCreateController, "note/work")
     failingCreateController.openManagerCreate()
+    failingCreateController.toggleManagerCreateKind()
     failingCreateController.updateManagerCreateTitle("broken-folder")
 
     await failingCreateController.submitManagerCreate()
@@ -3113,6 +3344,7 @@ describe("TUI workspace controller", () => {
     }).deps)
     openManagerFolderPath(failingRefreshController, "note/work")
     failingRefreshController.openManagerCreate()
+    failingRefreshController.toggleManagerCreateKind()
     failingRefreshController.updateManagerCreateTitle("broken-rebuild")
 
     await failingRefreshController.submitManagerCreate()
@@ -3141,6 +3373,7 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Cached body before failed create"])
 
     controller.openManagerCreate()
+    controller.toggleManagerCreateKind()
     controller.updateManagerCreateTitle("broken-partial-create")
     await controller.submitManagerCreate()
 
@@ -3161,6 +3394,7 @@ describe("TUI workspace controller", () => {
 
     openManagerFolderPath(controller, "note/work")
     controller.openManagerCreate()
+    controller.toggleManagerCreateKind()
     assert.equal(controller.getState().mode, "manager.create")
     controller.updateManagerCreateTitle("   ")
     const result = await controller.submitManagerCreate()
