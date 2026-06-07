@@ -67,22 +67,20 @@ function extractKey(stdout: string): string {
 }
 
 async function createQueuedNote(harness: Awaited<ReturnType<typeof createManagedRootHarness>>, title: string, random: string) {
-  const createResult = harness.run(["new", "--title", title], {
+  const body = `${title} body.\n`
+  const createResult = harness.run(["new", "--path", "note", "--title", title, body], {
     BLUENOTE_TEST_NOW: "2026-06-01T00:00:00.000Z",
     BLUENOTE_TEST_RANDOM_SEQUENCE: random,
   })
   assert.equal(createResult.exitCode, 0)
   const key = extractKey(createResult.stdout)
-  const body = `${title} body.\n`
-  await Bun.write(path.join(harness.rootPath, "notes", "inbox", `${key}.md`), body)
-  assert.equal(harness.run(["rebuild"]).exitCode, 0)
   const prompt = readDescribeNotePrompt(harness.rootPath)
   enqueueDescribeNoteJob(harness.rootPath, {
     key,
-    relativePath: `notes/inbox/${key}.md`,
+    relativePath: `note/${key}.md`,
     title,
     body,
-    currentDescription: "",
+    currentDescription: body.trim(),
     promptHash: prompt.hash,
   })
   return key
@@ -100,8 +98,8 @@ test("bn ai queue lists pending jobs", async () => {
     assert.equal(result.exitCode, 0)
     assert.equal(result.stderr, "")
     assert.match(result.stdout, /Pending AI jobs: 2/)
-    assert.match(result.stdout, new RegExp(`describe-note\\s+${firstKey}\\s+notes/inbox/${firstKey}\\.md`))
-    assert.match(result.stdout, new RegExp(`describe-note\\s+${secondKey}\\s+notes/inbox/${secondKey}\\.md`))
+    assert.match(result.stdout, new RegExp(`describe-note\\s+${firstKey}\\s+note/${firstKey}\\.md`))
+    assert.match(result.stdout, new RegExp(`describe-note\\s+${secondKey}\\s+note/${secondKey}\\.md`))
   } finally {
     await harness.cleanup()
   }
@@ -141,7 +139,7 @@ test("bn ai process-queue --limit 2 processes only two jobs and prints a summary
     const thirdSidecar = JSON.parse(await readFile(path.join(harness.rootPath, ".data", "notes", `${keys[2]}.json`), "utf8"))
     assert.equal(firstSidecar.description, "AI summary 1.")
     assert.equal(secondSidecar.description, "AI summary 2.")
-    assert.equal(thirdSidecar.description, "")
+    assert.equal(thirdSidecar.description, "Third Process Note body.")
 
     const queue = JSON.parse(await readFile(path.join(harness.rootPath, ".data", "ai", "queue.json"), "utf8"))
     assert.deepEqual(queue.jobs.map((job: { key: string }) => job.key), [keys[2]])
@@ -456,11 +454,11 @@ test("bn ai process-queue leaves refreshed newer jobs pending when an older prov
 
     const result = await runInjectedAi(harness.rootPath, ["ai", "process-queue"], async () => {
       const refreshedBody = "Fresh body queued while an older provider call fails.\n"
-      await Bun.write(path.join(harness.rootPath, "notes", "inbox", `${key}.md`), refreshedBody)
+      await Bun.write(path.join(harness.rootPath, "note", `${key}.md`), refreshedBody)
       assert.equal(harness.run(["rebuild"]).exitCode, 0)
       enqueueDescribeNoteJob(harness.rootPath, {
         key,
-        relativePath: `notes/inbox/${key}.md`,
+        relativePath: `note/${key}.md`,
         title: "Stale Failure Note",
         body: refreshedBody,
         currentDescription: "",

@@ -126,7 +126,7 @@ describe("TUI render view models", () => {
       workspaceLabel: "Workspace · notes/",
       summaryLabel: "2 items · Ready",
       orientation: "Browse your local Markdown workspace.",
-      primaryActions: ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview"],
+      primaryActions: ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview", "[r] Rename", "[m] Move"],
     })
     assert.deepEqual(vm.topbar, {
       leftTitle: "BlueNote",
@@ -146,8 +146,10 @@ describe("TUI render view models", () => {
       { key: "Ctrl+P", action: "Search", priority: "primary" },
       { key: "Esc", action: "Back", priority: "primary" },
       { key: "p", action: "Preview", priority: "primary" },
+      { key: "r", action: "Rename", priority: "secondary" },
+      { key: "m", action: "Move", priority: "secondary" },
     ])
-    assert.deepEqual(vm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview"])
+    assert.deepEqual(vm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview", "[r] Rename", "[m] Move"])
     const creatingVm = buildManagerViewModel({
       ...baseState,
       mode: "manager.create",
@@ -275,10 +277,12 @@ describe("TUI render view models", () => {
       { key: "Ctrl+P", action: "Search", priority: "primary" },
       { key: "Esc", action: "Back", priority: "primary" },
       { key: "p", action: "Preview", priority: "primary" },
+      { key: "r", action: "Rename", priority: "secondary" },
+      { key: "m", action: "Move", priority: "secondary" },
     ])
-    assert.deepEqual(wideVm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview"])
+    assert.deepEqual(wideVm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview", "[r] Rename", "[m] Move"])
     assert.ok(wideVm.shortcuts.every((hint) => /^\[[^\]]+\] [A-Z?]/u.test(hint)), wideVm.shortcuts.join(" | "))
-    assert.deepEqual(narrowVm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview"])
+    assert.deepEqual(narrowVm.shortcuts, ["[Enter] Open", "[/] Filter", "[n] New", "[Ctrl+P] Search", "[Esc] Back", "[p] Preview", "[r] Rename", "[m] Move"])
     assert.doesNotMatch([...wideVm.shortcuts, ...narrowVm.shortcuts].join(" "), /\[\?\] More/u)
     assert.doesNotMatch(narrowVm.shortcuts.join(" "), /Delete|Quit/u)
     assert.deepEqual(filteringVm.shortcutHints, [
@@ -685,6 +689,7 @@ describe("TUI render view models", () => {
       metadataIntent: "mutedText",
       statusLabel: "Saved",
       wrapLabel: "Wrap on",
+      noteSwitchIndicator: null,
     })
     assert.deepEqual(vm.body, {
       inputId: "bluenote-editor-body-input",

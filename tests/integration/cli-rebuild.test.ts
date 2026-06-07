@@ -205,7 +205,7 @@ test("bn rebuild preserves archived sidecar notes in derived artifacts without s
 
     assert.equal(result.exitCode, 0)
     assert.equal(result.stderr, "")
-    assert.match(result.stdout, /Rebuilt indexes for 0 note\(s\)\./)
+    assert.match(result.stdout, /Rebuilt indexes for 1 note\(s\)\./)
 
     const store = loadIndexStore(harness.rootPath)
     assert.deepEqual(store.listSummaries(), [])

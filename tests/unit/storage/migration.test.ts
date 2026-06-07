@@ -104,7 +104,7 @@ test("detectStorageFormat classifies empty, old, new, and mixed managed roots", 
     assert.deepEqual(detectStorageFormat(newRoot), {
       kind: "new-format",
       legacyNoteCount: 0,
-      plainNoteCount: 1,
+      plainNoteCount: 2,
       sidecarCount: 2,
     })
     assert.deepEqual(detectStorageFormat(mixedRoot), {
@@ -144,7 +144,7 @@ test("detectStorageFormat classifies archived-only migrated roots as new-format"
     assert.deepEqual(detectStorageFormat(rootPath), {
       kind: "new-format",
       legacyNoteCount: 0,
-      plainNoteCount: 0,
+      plainNoteCount: 1,
       sidecarCount: 1,
     })
   } finally {
@@ -174,7 +174,7 @@ test("detectStorageFormat rejects active plain notes that are missing sidecars",
     assert.deepEqual(detectStorageFormat(rootPath), {
       kind: "mixed-format",
       legacyNoteCount: 0,
-      plainNoteCount: 1,
+      plainNoteCount: 2,
       sidecarCount: 1,
     })
   } finally {
@@ -182,7 +182,7 @@ test("detectStorageFormat rejects active plain notes that are missing sidecars",
   }
 })
 
-test("detectStorageFormat rejects draft sidecars until draft repository support is enabled", async () => {
+test("detectStorageFormat accepts draft sidecars in Phase 7 layout", async () => {
   const rootPath = await createRoot("bluenote-migration-draft-sidecar-")
   const draftRelativePath = "draft/draft-a8k2p9.md"
 
@@ -201,9 +201,9 @@ test("detectStorageFormat rejects draft sidecars until draft repository support 
     )
 
     assert.deepEqual(detectStorageFormat(rootPath), {
-      kind: "mixed-format",
+      kind: "new-format",
       legacyNoteCount: 0,
-      plainNoteCount: 0,
+      plainNoteCount: 1,
       sidecarCount: 1,
     })
   } finally {
@@ -352,6 +352,16 @@ test("migrateLegacyStorage converts legacy frontmatter notes into plain notes, s
 
     const store = loadIndexStore(rootPath)
     assert.deepEqual(store.listAllSummaries(), [
+      {
+        key: archiveKey,
+        id: archiveKey,
+        title: "Archived Rollback Checklist",
+        description: createNoteDescription(archiveBody),
+        relativePath: migratedArchiveRelativePath,
+        createdAt: LEGACY_CREATED_AT,
+        updatedAt: LEGACY_ARCHIVED_AT,
+        archivedAt: LEGACY_ARCHIVED_AT,
+      },
       {
         key: inboxKey,
         id: inboxKey,

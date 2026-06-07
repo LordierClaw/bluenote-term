@@ -43,7 +43,8 @@ test("bn new enqueues a describe-note job when AI is configured", async () => {
     assert.equal(harness.run(["init"]).exitCode, 0)
     await configureAi(harness.rootPath, harness.run)
 
-    const result = harness.run(["new", "--title", "Queued New Note"], {
+    const body = "Queued new note body."
+    const result = harness.run(["new", "--path", "note", "--title", "Queued New Note", body], {
       BLUENOTE_TEST_NOW: "2026-06-01T00:00:00.000Z",
     })
 
@@ -55,9 +56,9 @@ test("bn new enqueues a describe-note job when AI is configured", async () => {
     assert.equal(queue.jobs.length, 1)
     assert.equal(queue.jobs[0].kind, "describe-note")
     assert.equal(queue.jobs[0].key, key)
-    assert.equal(queue.jobs[0].relativePath, `notes/inbox/${key}.md`)
+    assert.equal(queue.jobs[0].relativePath, `note/${key}.md`)
     assert.equal(queue.jobs[0].status, "pending")
-    assert.equal(queue.jobs[0].contentHash, hashDescribeNoteContent({ title: "Queued New Note", body: "", currentDescription: "" }))
+    assert.equal(queue.jobs[0].contentHash, hashDescribeNoteContent({ title: "Queued New Note", body, currentDescription: body }))
     assert.match(queue.jobs[0].promptHash, /^sha256:[a-f0-9]{64}$/)
   } finally {
     await harness.cleanup()
@@ -70,7 +71,7 @@ test("bn edit refreshes a describe-note job after body changes", async () => {
   try {
     assert.equal(harness.run(["init"]).exitCode, 0)
     await configureAi(harness.rootPath, harness.run)
-    const created = harness.run(["new", "--title", "Editable Queue Note"], {
+    const created = harness.run(["new", "--path", "note", "--title", "Editable Queue Note", "Initial editable body."], {
       BLUENOTE_TEST_NOW: "2026-06-01T00:00:00.000Z",
     })
     assert.equal(created.exitCode, 0)
@@ -97,7 +98,7 @@ test("bn edit refreshes a describe-note job after body changes", async () => {
       body: editedBody,
       currentDescription: createNoteDescription(editedBody),
     }))
-    assert.equal(await readFile(path.join(harness.rootPath, "notes", "inbox", `${key}.md`), "utf8"), editedBody)
+    assert.equal(await readFile(path.join(harness.rootPath, "note", `${key}.md`), "utf8"), editedBody)
   } finally {
     await harness.cleanup()
   }
@@ -108,14 +109,14 @@ test("no AI config leaves normal new workflow unchanged and does not create queu
 
   try {
     assert.equal(harness.run(["init"]).exitCode, 0)
-    const result = harness.run(["new", "--title", "No AI Note"], {
+    const result = harness.run(["new", "--path", "note", "--title", "No AI Note", "No AI body."], {
       BLUENOTE_TEST_NOW: "2026-06-01T00:00:00.000Z",
     })
 
     assert.equal(result.exitCode, 0)
     assert.equal(result.stderr, "")
     const key = extractKey(result.stdout)
-    assert.match(result.stdout, new RegExp(`^Created note\\nKey: ${harness.escapeForRegExp(key)}\\nPath: notes/inbox/${harness.escapeForRegExp(key)}\\.md\\n$`))
+    assert.match(result.stdout, new RegExp(`^Created note\\nKey: ${harness.escapeForRegExp(key)}\\nPath: note/${harness.escapeForRegExp(key)}\\.md\\n$`))
     assert.equal(existsSync(path.join(harness.rootPath, ".data", "ai", "queue.json")), false)
   } finally {
     await harness.cleanup()
@@ -131,14 +132,14 @@ test("queue write failure warns but does not fail a CLI note save", async () => 
     await rm(path.join(harness.rootPath, ".data", "ai", "queue.json"), { force: true })
     await mkdir(path.join(harness.rootPath, ".data", "ai", "queue.json"))
 
-    const result = harness.run(["new", "--title", "Queue Failure Still Saves"], {
+    const result = harness.run(["new", "--path", "note", "--title", "Queue Failure Still Saves", "Queue failure body."], {
       BLUENOTE_TEST_NOW: "2026-06-01T00:00:00.000Z",
     })
 
     assert.equal(result.exitCode, 0)
     assert.match(result.stderr, /Warning: could not enqueue AI description refresh/i)
     const key = extractKey(result.stdout)
-    assert.equal(await readFile(path.join(harness.rootPath, "notes", "inbox", `${key}.md`), "utf8"), "")
+    assert.equal(await readFile(path.join(harness.rootPath, "note", `${key}.md`), "utf8"), "Queue failure body.")
   } finally {
     await harness.cleanup()
   }
@@ -150,14 +151,14 @@ test("bn edit does not enqueue or refresh when the note body and title are uncha
   try {
     assert.equal(harness.run(["init"]).exitCode, 0)
     await configureAi(harness.rootPath, harness.run)
-    const created = harness.run(["new", "--title", "Unchanged Queue Note"], {
+    const created = harness.run(["new", "--path", "note", "--title", "Unchanged Queue Note", "Unchanged body."], {
       BLUENOTE_TEST_NOW: "2026-06-01T00:00:00.000Z",
     })
     assert.equal(created.exitCode, 0)
     const key = extractKey(created.stdout)
     const initialQueue = await readQueue(harness.rootPath)
 
-    const editor = await harness.writeFakeEditorScript("")
+    const editor = await harness.writeFakeEditorScript("Unchanged body.")
     const result = harness.run(["edit", key], {
       EDITOR: editor,
       BLUENOTE_TEST_NOW: "2026-06-01T00:05:00.000Z",
@@ -177,7 +178,7 @@ test("bn edit rename replaces stale old-key describe-note job", async () => {
   try {
     assert.equal(harness.run(["init"]).exitCode, 0)
     await configureAi(harness.rootPath, harness.run)
-    const created = harness.run(["new", "--title", "Old Queue Title"], {
+    const created = harness.run(["new", "--path", "note", "--title", "Old Queue Title", "Old queue body."], {
       BLUENOTE_TEST_NOW: "2026-06-01T00:00:00.000Z",
     })
     assert.equal(created.exitCode, 0)
@@ -196,7 +197,7 @@ test("bn edit rename replaces stale old-key describe-note job", async () => {
     assert.equal(queue.jobs.length, 1)
     assert.notEqual(queue.jobs[0].key, oldKey)
     assert.match(queue.jobs[0].key, /^renamed-queue-title(?:-[a-z0-9]+)?$/)
-    assert.equal(queue.jobs[0].relativePath, `notes/inbox/${queue.jobs[0].key}.md`)
+    assert.equal(queue.jobs[0].relativePath, `note/${queue.jobs[0].key}.md`)
   } finally {
     await harness.cleanup()
   }
@@ -207,7 +208,7 @@ test("no AI config leaves normal edit workflow unchanged and does not create que
 
   try {
     assert.equal(harness.run(["init"]).exitCode, 0)
-    const created = harness.run(["new", "--title", "No AI Edit Note"])
+    const created = harness.run(["new", "--path", "note", "--title", "No AI Edit Note", "Initial no AI edit body."])
     assert.equal(created.exitCode, 0)
     const key = extractKey(created.stdout)
     const editor = await harness.writeFakeEditorScript("Edited without AI")
@@ -216,7 +217,7 @@ test("no AI config leaves normal edit workflow unchanged and does not create que
     assert.equal(result.exitCode, 0)
     assert.equal(result.stderr, "")
     assert.equal(existsSync(path.join(harness.rootPath, ".data", "ai", "queue.json")), false)
-    assert.equal(await readFile(path.join(harness.rootPath, "notes", "inbox", `${key}.md`), "utf8"), "Edited without AI")
+    assert.equal(await readFile(path.join(harness.rootPath, "note", `${key}.md`), "utf8"), "Edited without AI")
   } finally {
     await harness.cleanup()
   }
@@ -227,7 +228,7 @@ test("queue write failure warns but does not fail a CLI edit save", async () => 
 
   try {
     assert.equal(harness.run(["init"]).exitCode, 0)
-    const created = harness.run(["new", "--title", "Edit Queue Failure Still Saves"])
+    const created = harness.run(["new", "--path", "note", "--title", "Edit Queue Failure Still Saves", "Initial queue failure edit body."])
     assert.equal(created.exitCode, 0)
     const key = extractKey(created.stdout)
     await configureAi(harness.rootPath, harness.run)
@@ -239,7 +240,7 @@ test("queue write failure warns but does not fail a CLI edit save", async () => 
 
     assert.equal(result.exitCode, 0)
     assert.match(result.stderr, /Warning: could not enqueue AI description refresh/i)
-    assert.equal(await readFile(path.join(harness.rootPath, "notes", "inbox", `${key}.md`), "utf8"), "Edited despite queue failure")
+    assert.equal(await readFile(path.join(harness.rootPath, "note", `${key}.md`), "utf8"), "Edited despite queue failure")
   } finally {
     await harness.cleanup()
   }

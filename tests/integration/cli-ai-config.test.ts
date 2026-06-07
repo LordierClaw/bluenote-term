@@ -425,7 +425,7 @@ test("bn ai describe reports a helpful error when AI config is missing", async (
   const harness = await createManagedRootHarness("bluenote-cli-ai-missing-config-")
 
   try {
-    const createResult = harness.run(["new", "--title", "Needs AI"], {
+    const createResult = harness.run(["new", "Missing config body", "--path", "note", "--title", "Needs AI"], {
       BLUENOTE_TEST_NOW: "2026-06-01T00:00:00.000Z",
       BLUENOTE_TEST_RANDOM_SEQUENCE: "0x12345678",
     })

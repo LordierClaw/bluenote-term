@@ -196,6 +196,7 @@ test("listNotes prefers derived index summaries when available", async () => {
       {
         key: "moonbeam-title",
         title: "Moonbeam Launch",
+        createdAt: "2026-05-21T10:15:00.000Z",
         description: "Status review",
         relativePath: "note/moonbeam-title.md",
       },

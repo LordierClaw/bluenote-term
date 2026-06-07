@@ -30,7 +30,7 @@ async function expectMissing(filePath: string): Promise<void> {
 
 test("replaceNoteBodyAtomically replaces a target note body and leaves note files as plain Markdown", async () => {
   await withManagedRoot(async (rootPath) => {
-    const notePath = path.join(rootPath, "notes", "inbox", "target.md")
+    const notePath = path.join(rootPath, "note", "target.md")
     await writeFile(notePath, "old body\n", "utf8")
 
     replaceNoteBodyAtomically(rootPath, notePath, "# Title\n\nnew body\n")
@@ -42,7 +42,7 @@ test("replaceNoteBodyAtomically replaces a target note body and leaves note file
 
 test("replaceNoteBodyAtomically creates its temp file only under the managed .data/tmp writer namespace", async () => {
   await withManagedRoot(async (rootPath) => {
-    const notePath = path.join(rootPath, "notes", "inbox", "target.md")
+    const notePath = path.join(rootPath, "note", "target.md")
     const observedRenameSources: string[] = []
     await writeFile(notePath, "old body\n", "utf8")
 
@@ -84,7 +84,7 @@ test("replaceNoteBodyAtomically rejects target paths outside the managed root", 
 
 test("replaceNoteBodyAtomically leaves original note body unchanged and removes temp file when temp write fails", async () => {
   await withManagedRoot(async (rootPath) => {
-    const notePath = path.join(rootPath, "notes", "inbox", "target.md")
+    const notePath = path.join(rootPath, "note", "target.md")
     await writeFile(notePath, "original body\n", "utf8")
 
     assert.throws(
@@ -106,7 +106,7 @@ test("replaceNoteBodyAtomically leaves original note body unchanged and removes 
 
 test("replaceNoteBodyAtomically leaves original note body unchanged and removes temp file when rename fails", async () => {
   await withManagedRoot(async (rootPath) => {
-    const notePath = path.join(rootPath, "notes", "inbox", "target.md")
+    const notePath = path.join(rootPath, "note", "target.md")
     await writeFile(notePath, "original body\n", "utf8")
 
     assert.throws(
@@ -128,7 +128,7 @@ test("replaceNoteBodyAtomically leaves original note body unchanged and removes 
 
 test("replaceNoteBodyAtomically rejects symlinked note parent directories before writing outside the root", async () => {
   await withManagedRoot(async (rootPath) => {
-    const inboxPath = path.join(rootPath, "notes", "inbox")
+    const inboxPath = path.join(rootPath, "note")
     const outsideNoteRoot = await mkdtemp(path.join(os.tmpdir(), "bluenote-atomic-note-writer-target-outside-"))
     const outsideNotePath = path.join(outsideNoteRoot, "target.md")
     await rm(inboxPath, { recursive: true, force: true })
@@ -153,7 +153,7 @@ test("replaceNoteBodyAtomically rejects symlinked note parent directories before
 
 test("replaceNoteBodyAtomically rejects symlinked BlueNote temp directories before writing outside the root", async () => {
   await withManagedRoot(async (rootPath) => {
-    const notePath = path.join(rootPath, "notes", "inbox", "target.md")
+    const notePath = path.join(rootPath, "note", "target.md")
     const outsideTempRoot = await mkdtemp(path.join(os.tmpdir(), "bluenote-atomic-note-writer-outside-"))
     await rm(getStateTmpPath(rootPath), { recursive: true, force: true })
     symlinkSync(outsideTempRoot, getStateTmpPath(rootPath), "dir")
@@ -209,7 +209,7 @@ test("cleanupStaleAtomicNoteWriterTemps removes only stale BlueNote writer temp 
     const nestedDirectory = path.join(tempPath, `${ATOMIC_NOTE_WRITER_TEMP_PREFIX}directory.tmp`)
     const unrelatedTemp = path.join(tempPath, "editor-swap.tmp")
     const normalMarkdownNote = path.join(tempPath, `${ATOMIC_NOTE_WRITER_TEMP_PREFIX}not-a-temp.md`)
-    const realNote = path.join(rootPath, "notes", "inbox", `${ATOMIC_NOTE_WRITER_TEMP_PREFIX}stale.tmp.md`)
+    const realNote = path.join(rootPath, "note", `${ATOMIC_NOTE_WRITER_TEMP_PREFIX}stale.tmp.md`)
 
     await writeFile(staleWriterTemp, "stale temp", "utf8")
     await mkdir(nestedDirectory)

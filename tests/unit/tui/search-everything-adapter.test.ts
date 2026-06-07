@@ -630,13 +630,19 @@ describe("TUI Search Everything adapter", () => {
   test("filters slash-prefixed command results to working editor commands from editor search", () => {
     assert.deepEqual(
       TUI_COMMANDS.map((command) => command.name),
-      ["/new", "/delete", "/ai-describe", "/ai-process-queue", "/ai-status", "/find", "/replace", "/save", "/copy-all", "/replace-all", "/paste"],
+      ["/new", "/delete", "/ai-describe", "/ai-process-queue", "/ai-status", "/find", "/replace", "/save", "/save-draft-as", "/copy-all", "/replace-all", "/paste"],
     )
 
     const results = buildSearchEverythingResults("/", createDeps(), { commandContext: { screen: "editor" } })
     assert.deepEqual(
       results.filter((result) => result.kind === "command").map((result) => result.name),
       ["/ai-describe", "/ai-process-queue", "/ai-status", "/find", "/replace", "/save", "/copy-all", "/replace-all", "/paste"],
+    )
+
+    const draftResults = buildSearchEverythingResults("/", createDeps(), { commandContext: { screen: "editor", activeEditorIsDraft: true } })
+    assert.deepEqual(
+      draftResults.filter((result) => result.kind === "command").map((result) => result.name),
+      ["/ai-describe", "/ai-process-queue", "/ai-status", "/find", "/replace", "/save", "/save-draft-as", "/copy-all", "/replace-all", "/paste"],
     )
 
     const maintenanceResults = buildSearchEverythingResults("/re", createDeps(), { commandContext: { screen: "editor" } })

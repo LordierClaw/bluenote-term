@@ -39,6 +39,7 @@ async function writePlainNoteWithSidecar(
         createdAt: "2026-05-21T10:15:00.000Z",
         updatedAt: "2026-05-21T10:15:00.000Z",
         archivedAt: null,
+        type: relativePath.startsWith("draft/") ? "draft" : "normal",
         namingVersion: 1,
       },
       null,
@@ -50,7 +51,7 @@ async function writePlainNoteWithSidecar(
 
 test("bn edit <selector> updates sidecar metadata and rebuilds derived state after a body edit", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-edit-")
-  const relativePath = "notes/journal/edit-with-key.md"
+  const relativePath = "note/journal/edit-with-key.md"
   const sidecarPath = path.join(harness.rootPath, ".data", "notes", "edit-with-key.json")
   const updatedBody = "Updated sidecar body with zebra tokens.\n"
 
@@ -72,7 +73,7 @@ test("bn edit <selector> updates sidecar metadata and rebuilds derived state aft
 
     assert.equal(editResult.exitCode, 0)
     assert.equal(editResult.stderr, "")
-    assert.match(editResult.stdout, /Edited note: notes[\\/]journal[\\/]edit-with-key\.md/)
+    assert.match(editResult.stdout, /Edited note: note[\\/]journal[\\/]edit-with-key\.md/)
 
     const sidecar = JSON.parse(await readFile(sidecarPath, "utf8")) as {
       createdAt: string
@@ -107,7 +108,7 @@ test("bn edit <selector> updates sidecar metadata and rebuilds derived state aft
 
     const searchResult = harness.run(["search", "zebra tokens"])
     assert.equal(searchResult.exitCode, 0)
-    assert.match(searchResult.stdout, /Editable Sidecar Note\n\s+key: edit-with-key\n\s+path: notes[\\/]journal[\\/]edit-with-key\.md\n\s+match: description/)
+    assert.match(searchResult.stdout, /Editable Sidecar Note\n\s+key: edit-with-key\n\s+path: note[\\/]journal[\\/]edit-with-key\.md\n\s+match: description/)
   } finally {
     await harness.cleanup()
   }
@@ -115,7 +116,7 @@ test("bn edit <selector> updates sidecar metadata and rebuilds derived state aft
 
 test("bn edit renames the note key, file, and sidecar when the markdown heading title changes", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-edit-rename-")
-  const relativePath = "notes/inbox/original-note.md"
+  const relativePath = "note/original-note.md"
   const updatedBody = "# Renamed Title\n\nBody after rename with nebula tokens.\n"
 
   try {
@@ -136,12 +137,12 @@ test("bn edit renames the note key, file, and sidecar when the markdown heading 
 
     assert.equal(editResult.exitCode, 0)
     assert.equal(editResult.stderr, "")
-    assert.match(editResult.stdout, /Edited note: notes[\\/]inbox[\\/]renamed-title-[a-z0-9]{6}\.md/)
+    assert.match(editResult.stdout, /Edited note: note[\\/]renamed-title-[a-z0-9]{6}\.md/)
     const renamedKeyMatch = editResult.stdout.match(/Renamed key: original-note -> (renamed-title-[a-z0-9]{6})/)
     assert.ok(renamedKeyMatch)
 
     const newKey = renamedKeyMatch[1]
-    const newRelativePath = `notes/inbox/${newKey}.md`
+    const newRelativePath = `note/${newKey}.md`
 
     await assert.rejects(() => access(path.join(harness.rootPath, relativePath)))
     await assert.rejects(() => access(path.join(harness.rootPath, ".data", "notes", "original-note.json")))
@@ -176,12 +177,12 @@ test("bn edit fails when $EDITOR is unset even if the parent environment defines
 
   try {
     await harness.writeNote(
-      "notes/inbox/present.md",
+      "note/present-note.md",
       noteMarkdown({ id: "present-note", title: "Present Note", body: "Visible body.\n" }),
     )
 
     process.env.EDITOR = "/bin/true"
-    const result = harness.run(["edit", "present"], { EDITOR: undefined })
+    const result = harness.run(["edit", "present-note"], { EDITOR: undefined })
 
     assert.equal(result.exitCode, 1)
     assert.equal(result.stdout, "")

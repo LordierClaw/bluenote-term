@@ -454,6 +454,7 @@ describe("TUI note manager adapter", () => {
       filename: "root-note.md",
       title: "Root Note",
       description: "A top-level note.",
+      createdAt: undefined,
       columns: { filename: "root-note.md", title: "Root Note", description: "A top-level note." },
       rowStyleIntent: "note",
       focused: false,

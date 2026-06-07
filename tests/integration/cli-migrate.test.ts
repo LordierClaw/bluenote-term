@@ -32,7 +32,7 @@ test("bn migrate converts legacy frontmatter notes into plain notes, sidecars, a
     assert.match(result.stdout, /Key map: 123e4567-e89b-12d3-a456-426614174000 -> cli-migration-note-51u7i0/)
 
     assert.equal(
-      await readFile(path.join(harness.rootPath, "notes", "inbox", "cli-migration-note-51u7i0.md"), "utf8"),
+      await readFile(path.join(harness.rootPath, "note", "cli-migration-note-51u7i0.md"), "utf8"),
       "CLI migration body mentions orbit transfer windows.\n",
     )
 
@@ -52,15 +52,16 @@ test("bn migrate returns a calm no-op message for already migrated roots", async
   const harness = await createManagedRootHarness("bluenote-cli-migrate-noop-")
 
   try {
-    await harness.writeNote("notes/inbox/already-migrated-51u7i0.md", "Already migrated body.\n")
+    await harness.writeNote("note/already-migrated-51u7i0.md", "Already migrated body.\n")
     await harness.writeNote(
       path.join(".data", "notes", "already-migrated-51u7i0.json"),
       JSON.stringify(
         {
+          type: "normal",
           key: "already-migrated-51u7i0",
           title: "Already Migrated",
           description: "Already migrated body.",
-          relativePath: "notes/inbox/already-migrated-51u7i0.md",
+          relativePath: "note/already-migrated-51u7i0.md",
           createdAt: "2026-05-21T10:15:00.000Z",
           updatedAt: "2026-05-21T10:15:00.000Z",
           archivedAt: null,
@@ -121,7 +122,7 @@ test("bn migrate reports a clean rollback error when rebuild cannot write derive
         updatedAt: "2026-05-22T11:30:00.000Z",
       }),
     )
-    await assert.rejects(() => access(path.join(harness.rootPath, "notes", "inbox", "rollback-recovery-note-51u7i0.md")))
+    await assert.rejects(() => access(path.join(harness.rootPath, "note", "rollback-recovery-note-51u7i0.md")))
     await assert.rejects(() => access(path.join(harness.rootPath, ".data", "notes", "rollback-recovery-note-51u7i0.json")))
     await assert.rejects(() => access(path.join(harness.rootPath, ".data", "metadata.sqlite")))
     await assert.rejects(() => access(path.join(harness.rootPath, ".data", "search-index.json")))
@@ -134,7 +135,7 @@ test("bn migrate fails hard on unsafe already-migrated roots", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-migrate-unsafe-")
 
   try {
-    await harness.writeNote("notes/inbox/unsafe-note-51u7i0.md", "Unsafe migrated body.\n")
+    await harness.writeNote("note/unsafe-note-51u7i0.md", "Unsafe migrated body.\n")
     await harness.writeNote(path.join(".data", "notes", "unsafe-note-51u7i0.json"), "{ not-valid-json\n")
 
     const result = harness.run(["migrate"], {
@@ -162,15 +163,16 @@ test("bn migrate fails hard on mixed-format roots", async () => {
         body: "Legacy mixed body.\n",
       }),
     )
-    await harness.writeNote("notes/inbox/already-migrated-51u7i0.md", "Already migrated body.\n")
+    await harness.writeNote("note/already-migrated-51u7i0.md", "Already migrated body.\n")
     await harness.writeNote(
       path.join(".data", "notes", "already-migrated-51u7i0.json"),
       JSON.stringify(
         {
+          type: "normal",
           key: "already-migrated-51u7i0",
           title: "Already Migrated",
           description: "Already migrated body.",
-          relativePath: "notes/inbox/already-migrated-51u7i0.md",
+          relativePath: "note/already-migrated-51u7i0.md",
           createdAt: "2026-05-21T10:15:00.000Z",
           updatedAt: "2026-05-21T10:15:00.000Z",
           archivedAt: null,
@@ -214,8 +216,9 @@ test("bn migrate reports conflict when .state and .data contain different sideca
   const harness = await createManagedRootHarness("bluenote-cli-migrate-state-conflict-")
 
   try {
-    const relativePath = "notes/inbox/conflict-note.md"
+    const relativePath = "note/conflict-note.md"
     const baseSidecar = {
+      type: "normal",
       key: "conflict-note",
       title: "Conflict Note",
       description: "Canonical data description.",

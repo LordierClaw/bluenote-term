@@ -145,7 +145,7 @@ test("note with no AI description lastProcessedAt enqueues one describe-note job
     assert.equal(queue.jobs.length, 1)
     assert.equal(queue.jobs[0]?.kind, "describe-note")
     assert.equal(queue.jobs[0]?.key, "project-notes")
-    assert.equal(queue.jobs[0]?.relativePath, "notes/inbox/project-notes.md")
+    assert.equal(queue.jobs[0]?.relativePath, "note/project-notes.md")
   })
 })
 
@@ -179,7 +179,7 @@ test("missing sidecar falls back to frontmatter note data and enqueues stale des
     const key = "legacy-frontmatter-note"
     const notePath = getInboxNotePath(rootPath, key)
     writeFileSync(notePath, serializeNoteFile({
-      sourcePath: `notes/inbox/${key}.md`,
+      sourcePath: `note/${key}.md`,
       frontmatter: {
         id: key,
         schemaVersion: 1,
@@ -207,7 +207,7 @@ test("missing sidecar falls back to frontmatter note data and enqueues stale des
     assert.equal(queue.jobs.length, 1)
     assert.equal(queue.jobs[0]?.kind, "describe-note")
     assert.equal(queue.jobs[0]?.key, key)
-    assert.equal(queue.jobs[0]?.relativePath, `notes/inbox/${key}.md`)
+    assert.equal(queue.jobs[0]?.relativePath, `note/${key}.md`)
   })
 })
 
