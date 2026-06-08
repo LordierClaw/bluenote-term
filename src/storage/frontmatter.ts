@@ -1,8 +1,7 @@
-import { createRequire } from "node:module"
-
 import { InvalidFrontmatterError } from "../core/errors"
 import { parsePlainNote, serializePlainNote } from "./plain-note"
 import { type NoteFrontmatter, type ParsedNote, validateNoteFrontmatter } from "./note-schema"
+import yaml from "js-yaml"
 
 type YamlApi = {
   load(input: string, options: { schema: unknown }): unknown
@@ -15,8 +14,7 @@ type YamlApi = {
   JSON_SCHEMA: unknown
 }
 
-const require = createRequire(import.meta.url)
-const yaml = require("js-yaml") as YamlApi
+const yamlApi = yaml as YamlApi
 
 const FRONTMATTER_PATTERN = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/
 
@@ -46,7 +44,7 @@ export function parseNoteFile(markdownText: string, sourcePath: string): ParsedN
   let loadedFrontmatter: unknown
 
   try {
-    loadedFrontmatter = yaml.load(rawFrontmatter, { schema: yaml.JSON_SCHEMA })
+    loadedFrontmatter = yamlApi.load(rawFrontmatter, { schema: yamlApi.JSON_SCHEMA })
   } catch (error) {
     throw new InvalidFrontmatterError(`Invalid frontmatter in ${sourcePath}: could not parse YAML.`, {
       cause: error,
@@ -65,11 +63,11 @@ export function serializeNoteFile(parsedNote: ParsedNote): string {
     validateNoteFrontmatter(parsedNote.frontmatter, parsedNote.sourcePath),
   )
   const body = serializePlainNote(parsedNote)
-  const serializedFrontmatter = yaml.dump(frontmatter, {
+  const serializedFrontmatter = yamlApi.dump(frontmatter, {
     indent: 2,
     lineWidth: -1,
     noRefs: true,
-    schema: yaml.JSON_SCHEMA,
+    schema: yamlApi.JSON_SCHEMA,
   })
 
   return `---\n${serializedFrontmatter}---\n${body}`

@@ -35,9 +35,10 @@ function getPlatformRelease(): PlatformRelease {
   throw new Error(`Unsupported release platform: ${platform}/${arch}. Supported platforms: win32/x64, linux/x64.`)
 }
 
-function run(command: string, args: string[], options: { capture?: boolean } = {}): string {
+function run(command: string, args: string[], options: { capture?: boolean; cwd?: string } = {}): string {
   console.log(`$ ${[command, ...args].join(" ")}`)
   const result = spawnSync(command, args, {
+    cwd: options.cwd,
     encoding: "utf8",
     shell: false,
     stdio: options.capture ? "pipe" : "inherit",
@@ -137,7 +138,7 @@ function validateArchive(release: PlatformRelease, archiveName: string): void {
     throw new Error(`Release archive validation failed: missing README ${extractedReadme}`)
   }
 
-  const helpOutput = run(extractedExecutable, ["--help"], { capture: true })
+  const helpOutput = run(extractedExecutable, ["--help"], { capture: true, cwd: extractedRoot })
   if (!helpOutput.includes("BlueNote v")) {
     throw new Error("Release archive validation failed: extracted executable --help output did not contain 'BlueNote v'.")
   }
