@@ -5,6 +5,14 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      release_version:
+        description: "Release version to use for dry-run artifact names. Must match package.json, for example v0.3.0."
+        required: true
+        default: "v0.3.0"
+
+env:
+  BLUENOTE_RELEASE_VERSION: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.release_version }}
 
 permissions:
   contents: write
@@ -35,10 +43,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bluenote-windows-x64
-          path: |
-            dist/release/bn.exe
-            dist/release/sql-wasm.wasm
-            dist/release/bluenote-windows-x64.zip
+          path: dist/release/bluenote-${{ env.BLUENOTE_RELEASE_VERSION }}-windows-x64.zip
           if-no-files-found: error
 
   build-linux:
@@ -66,7 +71,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: bluenote-linux-x64
-          path: dist/release/bluenote-linux-x64.tar.gz
+          path: dist/release/bluenote-${{ env.BLUENOTE_RELEASE_VERSION }}-linux-x64.tar.gz
           if-no-files-found: error
 
   release:
@@ -88,10 +93,8 @@ jobs:
           set -euo pipefail
           cd dist/release-assets
           sha256sum \
-            bluenote-windows-x64/bn.exe \
-            bluenote-windows-x64/sql-wasm.wasm \
-            bluenote-windows-x64/bluenote-windows-x64.zip \
-            bluenote-linux-x64/bluenote-linux-x64.tar.gz \
+            bluenote-windows-x64/bluenote-${{ env.BLUENOTE_RELEASE_VERSION }}-windows-x64.zip \
+            bluenote-linux-x64/bluenote-${{ env.BLUENOTE_RELEASE_VERSION }}-linux-x64.tar.gz \
             | sed 's#bluenote-windows-x64/##; s#bluenote-linux-x64/##' \
             > SHA256SUMS.txt
           cat SHA256SUMS.txt
@@ -109,7 +112,5 @@ jobs:
           generate_release_notes: true
           body_path: dist/release-assets/RELEASE_NOTES.md
           files: |
-            dist/release-assets/bluenote-windows-x64/bn.exe
-            dist/release-assets/bluenote-windows-x64/sql-wasm.wasm
-            dist/release-assets/bluenote-windows-x64/bluenote-windows-x64.zip
-            dist/release-assets/bluenote-linux-x64/bluenote-linux-x64.tar.gz
+            dist/release-assets/bluenote-windows-x64/bluenote-${{ env.BLUENOTE_RELEASE_VERSION }}-windows-x64.zip
+            dist/release-assets/bluenote-linux-x64/bluenote-${{ env.BLUENOTE_RELEASE_VERSION }}-linux-x64.tar.gz

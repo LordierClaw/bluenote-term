@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process"
-import { chmodSync, copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 
 const releaseRoot = path.resolve("dist", "release")
@@ -8,6 +8,7 @@ const verifyRoot = path.join(releaseRoot, "verify")
 const packageRoot = path.join(workRoot, "bluenote")
 const sqlWasmFilename = "sql-wasm.wasm"
 const sqlWasmSourcePath = path.resolve("node_modules", "sql.js", "dist", sqlWasmFilename)
+const releaseVersionPattern = /^v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/
 
 interface PlatformRelease {
   platformId: "windows-x64" | "linux-x64"
@@ -15,14 +16,42 @@ interface PlatformRelease {
   archiveNames: readonly [string, ...string[]]
 }
 
-function getPlatformRelease(): PlatformRelease {
+function deriveReleaseVersion(): string {
+  const packageJson = JSON.parse(readFileSync(path.resolve("package.json"), "utf8")) as { version: string }
+  const packageVersion = `v${packageJson.version}`
+  const explicitVersion = process.env.BLUENOTE_RELEASE_VERSION?.trim()
+  if (explicitVersion) {
+    return validateReleaseVersion(explicitVersion, packageVersion)
+  }
+
+  const githubRefName = process.env.GITHUB_REF_NAME?.trim()
+  if (githubRefName?.startsWith("v")) {
+    return validateReleaseVersion(githubRefName, packageVersion)
+  }
+
+  return validateReleaseVersion(packageVersion, packageVersion)
+}
+
+function validateReleaseVersion(version: string, packageVersion: string): string {
+  if (!releaseVersionPattern.test(version)) {
+    throw new Error(`Invalid release version '${version}'. Expected a semver tag like v0.3.0.`)
+  }
+
+  if (version !== packageVersion) {
+    throw new Error(`Release version ${version} does not match package.json version ${packageVersion}.`)
+  }
+
+  return version
+}
+
+function getPlatformRelease(version: string): PlatformRelease {
   const { platform, arch } = process
 
   if (platform === "win32" && arch === "x64") {
     return {
       platformId: "windows-x64",
       executableName: "bn.exe",
-      archiveNames: ["bluenote-windows-x64.zip"],
+      archiveNames: [`bluenote-${version}-windows-x64.zip`],
     }
   }
 
@@ -30,7 +59,7 @@ function getPlatformRelease(): PlatformRelease {
     return {
       platformId: "linux-x64",
       executableName: "bn",
-      archiveNames: ["bluenote-linux-x64.tar.gz"],
+      archiveNames: [`bluenote-${version}-linux-x64.tar.gz`],
     }
   }
 
@@ -103,15 +132,6 @@ function archivePackage(release: PlatformRelease): void {
   }
 }
 
-function publishStandaloneExecutable(release: PlatformRelease, executablePath: string): void {
-  if (release.platformId !== "windows-x64") {
-    return
-  }
-
-  copyFileSync(executablePath, path.join(releaseRoot, release.executableName))
-  copyFileSync(path.join(packageRoot, sqlWasmFilename), path.join(releaseRoot, sqlWasmFilename))
-}
-
 function validateArchive(release: PlatformRelease, archiveName: string): void {
   const archivePath = path.join(releaseRoot, archiveName)
   const extractedRoot = path.join(verifyRoot, release.platformId)
@@ -154,13 +174,14 @@ function validateArchive(release: PlatformRelease, archiveName: string): void {
 }
 
 function main(): void {
-  const release = getPlatformRelease()
+  const version = deriveReleaseVersion()
+  const release = getPlatformRelease(version)
   const executablePath = path.join(packageRoot, release.executableName)
   const archivePaths = release.archiveNames.map((archiveName) => path.join(releaseRoot, archiveName))
 
-  console.log(`Packaging BlueNote for ${release.platformId}`)
+  console.log(`Packaging BlueNote ${version} for ${release.platformId}`)
 
-  rmSync(workRoot, { recursive: true, force: true })
+  rmSync(releaseRoot, { recursive: true, force: true })
   mkdirSync(packageRoot, { recursive: true })
 
   run("bun", ["build", "./bin/bn.ts", "--compile", "--outfile", executablePath])
@@ -178,7 +199,6 @@ function main(): void {
     throw new Error("Packaged executable smoke check failed: --help output did not contain 'BlueNote v'.")
   }
 
-  publishStandaloneExecutable(release, executablePath)
   archivePackage(release)
 
   for (const archivePath of archivePaths) {

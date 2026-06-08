@@ -195,18 +195,39 @@ test("current docs document the Phase 6 opt-in AI description workflow", async (
   assert.match(phaseDoc, /TUI startup recovery scans sidecar `updatedAt` against `ai\.description\.lastProcessedAt`/)
 })
 
-test("release workflow publishes the SQL.js WASM companion everywhere it is needed", async () => {
+test("release workflow publishes only versioned archive assets with the SQL.js WASM companion inside", async () => {
   const [releaseWorkflow, releaseDocs] = await Promise.all([
     readWorkspaceFile(".github/workflows/release.yml"),
     readWorkspaceFile("docs/workflow/releases.md"),
   ])
 
-  assert.match(releaseWorkflow, /dist\/release\/sql-wasm\.wasm/)
-  assert.match(releaseWorkflow, /bluenote-windows-x64\/sql-wasm\.wasm/)
-  assert.match(releaseWorkflow, /dist\/release-assets\/bluenote-windows-x64\/sql-wasm\.wasm/)
-  assert.match(releaseDocs, /`sql-wasm\.wasm` — SQL\.js runtime companion file required next to a directly downloaded `bn\.exe`/)
-  assert.match(releaseDocs, /The ZIP asset is the safer default because it already keeps the companion file next to the executable/)
-  assert.match(releaseDocs, /Get-FileHash \.\\sql-wasm\.wasm -Algorithm SHA256/)
+  assert.match(releaseWorkflow, /release_version:/)
+  assert.match(
+    releaseWorkflow,
+    /BLUENOTE_RELEASE_VERSION:\s*\$\{\{ startsWith\(github\.ref, 'refs\/tags\/'\) && github\.ref_name \|\| inputs\.release_version \}\}/,
+  )
+  assert.match(releaseWorkflow, /dist\/release\/bluenote-\$\{\{ env\.BLUENOTE_RELEASE_VERSION \}\}-windows-x64\.zip/)
+  assert.match(releaseWorkflow, /dist\/release\/bluenote-\$\{\{ env\.BLUENOTE_RELEASE_VERSION \}\}-linux-x64\.tar\.gz/)
+  assert.match(releaseWorkflow, /dist\/release-assets\/bluenote-windows-x64\/bluenote-\$\{\{ env\.BLUENOTE_RELEASE_VERSION \}\}-windows-x64\.zip/)
+  assert.match(releaseWorkflow, /dist\/release-assets\/bluenote-linux-x64\/bluenote-\$\{\{ env\.BLUENOTE_RELEASE_VERSION \}\}-linux-x64\.tar\.gz/)
+  assert.doesNotMatch(releaseWorkflow, /dist\/release-assets\/bluenote-windows-x64\/bn\.exe/)
+  assert.doesNotMatch(releaseWorkflow, /dist\/release-assets\/bluenote-windows-x64\/sql-wasm\.wasm/)
+  assert.doesNotMatch(releaseWorkflow, /dist\/release\/bn\.exe/)
+  assert.doesNotMatch(releaseWorkflow, /dist\/release\/sql-wasm\.wasm/)
+
+  assert.match(releaseDocs, /`bluenote-v0\.3\.0-windows-x64\.zip`/)
+  assert.match(releaseDocs, /`bluenote-v0\.3\.0-linux-x64\.tar\.gz`/)
+  assert.match(releaseDocs, /sql-wasm\.wasm.*next to.*bn\.exe.*bn/s)
+  assert.doesNotMatch(releaseDocs, /directly downloaded `bn\.exe`/)
+  assert.doesNotMatch(releaseDocs, /Get-FileHash \.\\sql-wasm\.wasm -Algorithm SHA256/)
+})
+
+test("package version matches the current release asset version", async () => {
+  const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as {
+    version?: string
+  }
+
+  assert.equal(packageJson.version, "0.3.0")
 })
 
 test("project verification commands cover CLI plus import-only OpenTUI checks", async () => {
