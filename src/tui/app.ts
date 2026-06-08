@@ -190,6 +190,7 @@ function renameTuiNote(rootPath: string, selector: string, title: string, clock:
     title,
     body: currentNote.body,
     updatedAt: clock.now().toISOString(),
+    visibility: currentNote.relativePath.startsWith("draft/") ? "drafts" : "normal",
   })
 
   return showTuiNote(rootPath, renamed.key)

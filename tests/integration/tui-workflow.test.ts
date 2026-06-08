@@ -431,6 +431,42 @@ describe("TUI workspace workflows", () => {
     assert.equal(controller.getState().manager.items.some((item) => item.key === draft.key), false)
   })
 
+  test("default manager rename preserves draft visibility for draft notes", () => {
+    const draft = createNote({
+      override: rootPath,
+      type: "draft",
+      body: "draft rename body",
+      randomSource: () => 444444,
+      clock: fixedClock("2026-06-03T00:00:00.000Z"),
+    })
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: draft.relativePath,
+      openedAt: "2026-06-03T12:00:00.000Z",
+    })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clock: fixedClock("2026-06-04T00:00:00.000Z"),
+      cleanupStaleAtomicTemps: () => {},
+    })
+
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    assert.equal(controller.getState().manager.currentFolderPath, "draft")
+    const draftIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === draft.key)
+    assert.notEqual(draftIndex, -1)
+    controller.focusManagerItem(draftIndex)
+
+    const result = controller.renameFocusedManagerItem("Renamed Draft")
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().manager.status, "Renamed")
+    const renamed = controller.getState().manager.items.find((item) => item.type === "note" && item.title === "Renamed Draft")
+    assert.ok(renamed)
+    assert.equal(renamed.relativePath.startsWith("draft/"), true)
+    assert.equal(existsSync(path.join(rootPath, draft.relativePath)), false)
+    assert.equal(showNote({ override: rootPath, selector: renamed.key, visibility: "drafts" }).relativePath, renamed.relativePath)
+  })
+
   test("runtime Ctrl+PageDown and Ctrl+PageUp switch editor notes in the same folder", async () => {
     await mkdir(path.join(rootPath, "note", "work"), { recursive: true })
     const alpha = createNote({
