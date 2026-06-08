@@ -830,6 +830,10 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     previewBodyCache.clear()
   }
 
+  function managerRenameDisplayName(item: ManagerItem): string {
+    return item.type === "folder" ? item.filename : item.title
+  }
+
   function setManagerStatus(status: string | null): void {
     state = {
       ...state,
@@ -1855,7 +1859,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
           ...state.manager,
           items: state.manager.items.map((item) => ({ ...item })),
           status: null,
-          actionDraft: { kind: "rename", input: focused.title, status: null },
+          actionDraft: { kind: "rename", input: managerRenameDisplayName(focused), status: null },
         },
         search: null,
       }
@@ -2107,7 +2111,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         applyManagerBrowserModel()
         return ok()
       }
-      if (nextName === focused.title) {
+      if (nextName === managerRenameDisplayName(focused)) {
         setManagerStatus("Rename unchanged")
         applyManagerBrowserModel()
         return ok()

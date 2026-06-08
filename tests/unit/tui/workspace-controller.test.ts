@@ -2996,6 +2996,34 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(calls.filter((call) => call.startsWith("rename-note:") || call === "rebuild"), [])
   })
 
+  test("manager same-name folder rename is a no-op seeded from the folder filename", () => {
+    const { deps, calls } = createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work"],
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+      renameFolder: (folderRelativePath, nextName) => {
+        calls.push(`rename-folder:${folderRelativePath}:${nextName}`)
+      },
+      rebuildIndexes: () => calls.push("rebuild"),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openManagerFolderPath(controller, "note")
+    const workFolderIndex = controller.getState().manager.items.findIndex((item) => item.type === "folder" && item.relativePath === "note/work")
+    assert.notEqual(workFolderIndex, -1)
+    controller.focusManagerItem(workFolderIndex)
+
+    controller.openManagerRename()
+    assert.equal(controller.getState().manager.actionDraft?.input, "work")
+
+    const result = controller.renameFocusedManagerItem(" work ")
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().manager.status, "Rename unchanged")
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "folder" && item.relativePath === "note/work"), true)
+    assert.deepEqual(calls.filter((call) => call.startsWith("rename-folder:") || call === "rebuild"), [])
+  })
+
   test("manager rename folder refreshes affected note rows without allowing protected folders", () => {
     let folders = ["note/work", "note/work/projects"]
     let summaries = [...phaseSevenSummaries]
