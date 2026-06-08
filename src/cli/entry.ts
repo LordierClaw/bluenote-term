@@ -170,11 +170,11 @@ function parseNewArgs(args: string[]): ParsedNewArgs {
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index]
 
-    if (arg === "--title") {
+    if (arg === "--title" || arg === "-t") {
       const value = args[index + 1]
 
-      if (value === undefined || value.startsWith("--")) {
-        throw new UsageError("Missing value for --title.", { hint: 'Pass --title "...".' })
+      if (value === undefined || value.startsWith("-")) {
+        throw new UsageError(`Missing value for ${arg}.`, { hint: 'Pass --title "..." or -t "...".' })
       }
 
       title = value

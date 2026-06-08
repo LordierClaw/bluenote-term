@@ -167,6 +167,35 @@ test("runCli creates a title-derived draft when --title and positional body are 
   }
 })
 
+test("runCli creates a title-derived draft when -t and positional body are provided", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-entry-new-title-short-draft-"))
+  const previousRoot = process.env.BLUENOTE_ROOT
+
+  process.env.BLUENOTE_ROOT = rootPath
+
+  try {
+    const result = runCli(["new", "-t", "Idea", "Draft body"], "0.1.0", {
+      createNoteOptions: {
+        clock: { now: () => new Date("2026-05-24T12:00:00.000Z") },
+        randomSource: () => 0x12345678,
+      },
+    })
+
+    assert.equal(result.exitCode, 0)
+    assert.equal(result.stderr, "")
+    assert.equal(result.stdout, "Created note\nKey: idea-51u7i0\nPath: draft/idea-51u7i0.md\n")
+    assert.equal(await readFile(path.join(rootPath, "draft", "idea-51u7i0.md"), "utf8"), "Draft body")
+  } finally {
+    if (previousRoot === undefined) {
+      delete process.env.BLUENOTE_ROOT
+    } else {
+      process.env.BLUENOTE_ROOT = previousRoot
+    }
+
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
 test("runCli creates a normal note under an existing note folder when --path, --title, and body are provided", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-cli-entry-new-normal-"))
   const previousRoot = process.env.BLUENOTE_ROOT
