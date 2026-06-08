@@ -140,10 +140,12 @@ test("CLI storage and UX workflow stays consistent through the real bin/bn.ts en
     assert.match(postEditShowResult.stdout, /Renamed workflow body mentions aurora signals\./)
 
     const archiveResult = runOk("bn archive renamed", ["archive", renamedKey])
-    assert.match(archiveResult.stdout, new RegExp(`Archived note: \.data/archive/${harness.escapeForRegExp(renamedKey)}\\.md`))
+    const archivedRelativePath = `.data/archive/${renamedKey}.md`
+    const escapedArchivedRelativePath = harness.escapeForRegExp(archivedRelativePath)
+    assert.match(archiveResult.stdout, new RegExp(`Archived note: ${escapedArchivedRelativePath}`))
 
-    const archiveShowResult = runOk("bn show archived exact path", ["show", "--all", `.data/archive/${renamedKey}.md`])
-    assert.match(archiveShowResult.stdout, new RegExp(`^Path: \.data/archive/${harness.escapeForRegExp(renamedKey)}\\.md$`, "m"))
+    const archiveShowResult = runOk("bn show archived exact path", ["show", "--all", archivedRelativePath])
+    assert.match(archiveShowResult.stdout, new RegExp(`^Path: ${escapedArchivedRelativePath}$`, "m"))
     const archiveArchivedResult = harness.runBin(["archive", `.data/archive/${renamedKey}.md`])
     assert.equal(archiveArchivedResult.exitCode, 1)
     assert.equal(archiveArchivedResult.stdout, "")
