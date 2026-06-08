@@ -35,7 +35,7 @@ Phase 8.2 expects the headless core package in a sibling checkout for local deve
 ../bluenote-term
 ```
 
-`package.json` currently uses the reproducible Git tag dependency `"@lordierclaw/bluenote-core": "github:LordierClaw/bluenote-core#v0.1.1"` for shared testing. For active local core development, temporarily switch to `"file:../bluenote-core"`, build the sibling core package after core changes, then reinstall/check the terminal client:
+`package.json` currently uses the reproducible Git tag dependency `"@lordierclaw/bluenote-core": "github:LordierClaw/bluenote-core#v0.4.0"` for shared testing. For active local core development, temporarily switch to `"file:../bluenote-core"`, build the sibling core package after core changes, then reinstall/check the terminal client:
 
 ```bash
 cd ../bluenote-core

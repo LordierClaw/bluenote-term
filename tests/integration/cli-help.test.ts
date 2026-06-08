@@ -215,8 +215,8 @@ test("release workflow publishes only versioned archive assets with the SQL.js W
   assert.doesNotMatch(releaseWorkflow, /dist\/release\/bn\.exe/)
   assert.doesNotMatch(releaseWorkflow, /dist\/release\/sql-wasm\.wasm/)
 
-  assert.match(releaseDocs, /`bluenote-v0\.3\.0-windows-x64\.zip`/)
-  assert.match(releaseDocs, /`bluenote-v0\.3\.0-linux-x64\.tar\.gz`/)
+  assert.match(releaseDocs, /`bluenote-v0\.4\.0-windows-x64\.zip`/)
+  assert.match(releaseDocs, /`bluenote-v0\.4\.0-linux-x64\.tar\.gz`/)
   assert.match(releaseDocs, /sql-wasm\.wasm.*next to.*bn\.exe.*bn/s)
   assert.doesNotMatch(releaseDocs, /directly downloaded `bn\.exe`/)
   assert.doesNotMatch(releaseDocs, /Get-FileHash \.\\sql-wasm\.wasm -Algorithm SHA256/)
@@ -227,7 +227,7 @@ test("package version matches the current release asset version", async () => {
     version?: string
   }
 
-  assert.equal(packageJson.version, "0.3.0")
+  assert.equal(packageJson.version, "0.4.0")
 })
 
 test("project verification commands cover CLI plus import-only OpenTUI checks", async () => {

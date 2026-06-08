@@ -1,6 +1,6 @@
 {
   "name": "bluenote-term",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "bin": {
@@ -12,7 +12,7 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "@lordierclaw/bluenote-core": "github:LordierClaw/bluenote-core#v0.1.1",
+    "@lordierclaw/bluenote-core": "github:LordierClaw/bluenote-core#v0.4.0",
     "@opentui/core": "0.2.14",
     "clipboardy": "5.3.1"
   }

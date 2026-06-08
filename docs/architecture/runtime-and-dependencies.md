@@ -10,7 +10,7 @@ Phase 8 introduces the temporary monorepo/package split documented in `docs/phas
 - Keep headless business logic in the sibling `@lordierclaw/bluenote-core` package; it owns storage, search/indexing, domain helpers, and reusable AI services, and terminal code must consume only its public package root.
 - Keep `packages/term` client-only: it owns the Bun CLI entrypoint, TUI/OpenTUI rendering and input, terminal editor launch, clipboard helpers, and client orchestration, and consumes business logic through `@lordierclaw/bluenote-core` public exports.
 - Root `bin/bn.ts` and moved root `src/cli`, `src/tui`, `src/platform`, and editor-flow paths are compatibility shims to preserve existing root scripts/tests while the terminal package shape settles.
-- The current shared-testing dependency is the reproducible Git tag `"@lordierclaw/bluenote-core": "github:LordierClaw/bluenote-core#v0.1.1"`; active local core development may temporarily use `file:../bluenote-core`, and future npm releases should use a semver range such as `^0.1.1`. Do not depend on `#main` for normal releases.
+- The current shared-testing dependency is the reproducible Git tag `"@lordierclaw/bluenote-core": "github:LordierClaw/bluenote-core#v0.4.0"`; active local core development may temporarily use `file:../bluenote-core`, and future npm releases should use a semver range such as `^0.4.0`. Do not depend on `#main` for normal releases.
 - Terminal code must never import from `@lordierclaw/bluenote-core/src/*` or relative paths into `../bluenote-core/src/*`; all core access goes through package exports.
 
 ## Current baseline dependencies
