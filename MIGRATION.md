@@ -16,7 +16,7 @@ This phase is an internal module split only. It must not create or depend on a s
 - [x] Step 1: Create/update this migration tracker.
 - [x] Loop 1: Create workspace structure with `packages/core` and `packages/term`, keeping behavior unchanged.
 - [x] Loop 2: Create a minimal `@bluenote/core` public API/façade without broad behavior changes.
-- [ ] Loop 3: Move pure types/constants/domain helpers into `@bluenote/core`.
+- [x] Loop 3: Move pure types/constants/domain helpers into `@bluenote/core`.
 - [ ] Loop 4: Move workspace/storage/note metadata logic into `@bluenote/core`.
 - [ ] Loop 5: Move note business logic into `@bluenote/core`.
 - [ ] Loop 6: Move search/rebuild/index logic into `@bluenote/core`.
@@ -92,6 +92,12 @@ This phase is an internal module split only. It must not create or depend on a s
 | Loop 2 | `bun test tests/unit/core/public-api.test.ts` | PASS | Public API façade shape and basic create/list/get/search/rebuild workflow passed. |
 | Loop 2 | `bun run typecheck` | PASS | Root TypeScript check passed with `@bluenote/core` path mapping and package sources included. |
 | Loop 2 | `bun run smoke:cli` | PASS | Root CLI smoke script passed; existing CLI behavior stayed working. |
+| Loop 3 RED | `bun test tests/unit/core/package-domain-exports.test.ts` | FAIL (expected) | New package-domain export test failed because `createNoteDescription` and other moved helpers were not exported from `@bluenote/core` yet. |
+| Loop 3 | `bun test tests/unit/core/package-domain-exports.test.ts` | PASS | `@bluenote/core` exports pure domain/platform/error helpers; root shims preserve helper and error class identity. |
+| Loop 3 | `bun test tests/unit/domain tests/unit/core/errors.test.ts tests/unit/platform/path-safety.test.ts tests/unit/core/public-api.test.ts tests/unit/core/package-domain-exports.test.ts` | PASS | Focused moved-helper/domain/error/path-safety/public API slice passed: 18 tests. |
+| Loop 3 | `bun run typecheck` | PASS | Root TypeScript check passed after moving pure helpers and adding compatibility shims. |
+| Loop 3 | `bun run smoke:cli` | PASS | Root CLI smoke script passed after moved-helper shims. |
+| Loop 3 | Boundary search in `packages/core` for `@opentui\|packages/term\|src/tui\|../../term` | PASS | No forbidden terminal/TUI boundary imports found. |
 
 ## Known Risks
 
@@ -102,3 +108,4 @@ This phase is an internal module split only. It must not create or depend on a s
 - TUI manager/search adapters mix view-model logic with core note/search imports; move only the business boundary, not UI state or behavior.
 - Tests and helper paths currently assume a single root package; migration must keep root verification commands working while package-specific tests are introduced gradually.
 - Release packaging may assume root `package.json`, root `bin/bn.ts`, and root `node_modules`; update only after behavior-preserving workspace scaffolding is verified.
+- Loop 3 moved all of `src/core/types.ts` into `@bluenote/core`; this temporarily exposes CLI result/exit-code types from the core package until later loops split terminal-only API surface more precisely.

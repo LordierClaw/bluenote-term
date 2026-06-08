@@ -12,6 +12,14 @@ import { searchNotes, type SearchNoteMatch } from "../../../src/core/search-note
 import { rebuildIndexes, type RebuildIndexesOptions, type RebuildIndexesSummary } from "../../../src/core/rebuild-indexes"
 import type { NoteVisibilityOptions } from "../../../src/core/note-visibility"
 
+export * from "./core/errors"
+export type * from "./core/types"
+export * from "./domain/note-description"
+export * from "./domain/note-key"
+export * from "./platform/clock"
+export * from "./platform/ids"
+export * from "./platform/path-safety"
+
 export type {
   InitRootSummary,
   NoteSummary,
