@@ -20,7 +20,7 @@ This phase is an internal module split only. It must not create or depend on a s
 - [x] Loop 4: Move workspace/storage/note metadata logic into `@bluenote/core`.
 - [x] Loop 5: Move note business logic into `@bluenote/core`.
 - [x] Loop 6: Move search/rebuild/index logic into `@bluenote/core`.
-- [ ] Loop 7: Move reusable AI config/queue/provider business logic into `@bluenote/core`.
+- [x] Loop 7: Move reusable AI config/queue/provider business logic into `@bluenote/core`.
 - [ ] Loop 8: Update CLI/TUI to consume `@bluenote/core` public APIs.
 - [ ] Loop 9: Enforce package boundaries and update current-facing docs.
 
@@ -119,14 +119,20 @@ This phase is an internal module split only. It must not create or depend on a s
 | Loop 6 | `bun run smoke:cli` | PASS | Root CLI smoke script passed after search/rebuild/index move. |
 | Loop 6 | Boundary search in `packages/core` for `@opentui\|packages/term\|src/tui\|../../term` | PASS | No forbidden terminal/TUI boundary imports found. Remaining root imports from `packages/core` are AI enqueue imports intentionally left for Loop 7. |
 | Loop 6 follow-up | `bun test tests/unit/core/package-search-exports.test.ts && bun run typecheck && bun run smoke:cli` | PASS | Strengthened package search test to import index APIs from `@bluenote/core` and verify root shim identity for `loadIndexStore`, `rebuildIndexStore`, `updateIndexedNote`, and `createSearchDocuments`. |
+| Loop 7 RED | `bun test tests/unit/core/package-ai-exports.test.ts` | FAIL (expected) | New package AI export test failed because `maskApiKey` was not exported from `@bluenote/core` yet. |
+| Loop 7 | `bun test tests/unit/core/package-ai-exports.test.ts` | PASS | `@bluenote/core` exports reusable AI config/queue/redaction APIs; representative root shims preserve identity and config/queue repository behavior passed. |
+| Loop 7 | `bun test tests/unit/ai tests/integration/cli-ai-config.test.ts tests/integration/cli-ai-describe.test.ts tests/integration/cli-ai-queue.test.ts tests/integration/cli-ai-queue-mutations.test.ts tests/e2e/ai-description-workflow.test.ts tests/unit/core/package-ai-exports.test.ts tests/unit/core/public-api.test.ts` | PASS | Required AI/config/auth/queue/describe/CLI/e2e/public API regression slice passed: 128 tests. |
+| Loop 7 | `bun run typecheck` | PASS | Root TypeScript check passed after moving AI modules and adding compatibility shims. |
+| Loop 7 | `bun run smoke:cli` | PASS | Root CLI smoke script passed after AI module move. |
+| Loop 7 | Boundary search in `packages/core` for `@opentui\|packages/term\|src/tui\|../../term` | PASS | No forbidden terminal/TUI boundary imports found. |
+| Loop 7 | Search `packages/core/src` for `../../../src/ai` or `../../../../src/ai` imports | PASS | No package-core imports from root AI shims remain. |
 
 ## Known Risks
 
 - `src/tui/app.ts` is large and mixed: OpenTUI runtime, TUI persistence, folder operations, startup note handling, AI status/queue orchestration, and direct storage/core calls are intertwined.
 - `src/core/edit-note.ts` currently mixes business note update behavior with external editor launching; Loop 5 intentionally left it as a root/term-facing module to keep CLI edit compatible, so a careful later split is still required.
 - `packages/core/src/index/index-store.ts` uses `sql.js` and resolves `sql-wasm.wasm` relative to both executable and project paths; package relocation can break release and smoke behavior.
-- Loop 6 moved search/index/rebuild into `@bluenote/core`; note creation in `@bluenote/core` still temporarily imports the root AI enqueue helper until Loop 7 moves AI business modules.
-- AI queue/provider/config/auth modules are business-reusable but sensitive: queue preservation, setup blockers, redaction, prompt hashes, Codex auth, and non-blocking TUI orchestration must remain compatible.
+- Loop 7 moved reusable AI config/provider/auth/queue/description/prompt/log modules into `@bluenote/core`; these modules are sensitive, so future changes must continue preserving queue files, setup blockers, redaction, prompt hashes, Codex auth, and non-blocking TUI orchestration.
 - TUI manager/search adapters mix view-model logic with core note/search imports; move only the business boundary, not UI state or behavior.
 - Tests and helper paths currently assume a single root package; migration must keep root verification commands working while package-specific tests are introduced gradually.
 - Release packaging may assume root `package.json`, root `bin/bn.ts`, and root `node_modules`; update only after behavior-preserving workspace scaffolding is verified.

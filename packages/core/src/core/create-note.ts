@@ -2,7 +2,7 @@ import path from "node:path"
 import { existsSync, readdirSync } from "node:fs"
 
 import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions } from "../config/root"
-import { enqueueDescribeNoteIfAiEnabled } from "../../../../src/ai/enqueue-describe-note"
+import { enqueueDescribeNoteIfAiEnabled } from "../ai/enqueue-describe-note"
 import { IndexValidationFailedError, UsageError } from "./errors"
 import { createNoteDescription } from "../domain/note-description"
 import { createDraftNoteKey, createNoteKey } from "../domain/note-key"
