@@ -55,7 +55,7 @@ bun run ./packages/term/bin/bn.ts --version
 
 ## Known follow-up risks
 
-- `@lordierclaw/bluenote-core` is private and source-based for now; it is not an npm-publishable package contract yet.
-- The `@lordierclaw/bluenote-core` public barrel is intentionally broad during the temporary split and should be narrowed or documented before external consumption.
+- `@lordierclaw/bluenote-core` is a new external package contract. It is consumed locally through `file:../bluenote-core` until a Git tag or npm release is selected.
+- The `@lordierclaw/bluenote-core` public barrel is intentionally broad during the extraction so `bluenote-term` behavior stays compatible. Narrowing the API requires a later explicit design/semver decision.
 - Release packaging should be explicitly revalidated before publishing artifacts because the root bin delegates into `packages/term`, and `sql.js` WASM lookup remains packaging-sensitive.
 - Root compatibility shims should remain until downstream scripts, tests, release packaging, and imports are deliberately migrated.

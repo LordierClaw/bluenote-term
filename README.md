@@ -28,6 +28,27 @@ bun install
 bun run check:env
 ```
 
+Phase 8.2 expects the headless core package in a sibling checkout for local development:
+
+```text
+../bluenote-core
+../bluenote-term
+```
+
+`package.json` uses `"@lordierclaw/bluenote-core": "file:../bluenote-core"`. Build the sibling core package after core changes, then reinstall/check the terminal client:
+
+```bash
+cd ../bluenote-core
+bun install
+bun run build
+
+cd ../bluenote-term
+bun install
+bun run check
+```
+
+See [Development](DEVELOPMENT.md) for local `file:`, reproducible Git tag, and future npm dependency modes. Do not import from `@lordierclaw/bluenote-core/src/*` or relative paths into `../bluenote-core/src/*`.
+
 Run the CLI directly from the repository with:
 
 ```bash
