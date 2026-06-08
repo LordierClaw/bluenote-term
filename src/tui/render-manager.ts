@@ -164,6 +164,21 @@ export interface ManagerViewModel {
     statusIntent: TuiColorIntent
     actions: string[]
   }
+  actionPrompt?: {
+    visible: true
+    inputId: string
+    sheetTitle: string
+    description: string
+    inputLabel: string
+    title: string
+    placeholder: string
+    status: string | null
+    focused: true
+    styleIntent: TuiColorIntent
+    surfaceIntent: TuiColorIntent
+    statusIntent: TuiColorIntent
+    actions: string[]
+  }
   deletePrompt?: {
     visible: true
     key: string
@@ -181,9 +196,9 @@ export interface ManagerViewModel {
 
 type BrowserishRow = ManagerBrowserRow | ManagerItem
 
-function currentPathLabel(path: string | null | undefined): string {
+function currentPathLabel(path: string | null | undefined, managedRootPath?: string | null): string {
   const normalized = (path ?? "").replace(/^\/+|\/+$/gu, "")
-  return normalized ? normalized : "notes/"
+  return normalized ? normalized : (managedRootPath?.trim() || "note/")
 }
 
 function basenameLabel(path: string | null | undefined): string {
@@ -330,6 +345,13 @@ function managerShortcutHints(state: TuiState, previewHidden: boolean, width?: n
     ]
   }
 
+  if (state.mode === "manager.rename" || state.mode === "manager.move") {
+    return [
+      { key: "Enter", action: state.mode === "manager.rename" ? "Rename" : "Move", priority: "primary" },
+      { key: "Esc", action: "Cancel", priority: "primary" },
+    ]
+  }
+
   if (state.mode === "manager.deleteConfirm") {
     return [
       { key: "y", action: "Delete", priority: "primary" },
@@ -340,10 +362,13 @@ function managerShortcutHints(state: TuiState, previewHidden: boolean, width?: n
   const primary: ShortcutHint[] = [
     { ...TUI_SHORTCUTS.managerOpen, priority: "primary" },
     { ...TUI_SHORTCUTS.managerFilter, priority: "primary" },
-    { ...TUI_SHORTCUTS.managerNew, priority: "primary" },
+    ...(state.manager.canCreateFolder ? [{ ...TUI_SHORTCUTS.managerNew, priority: "primary" as const }] : []),
+    { ...TUI_SHORTCUTS.quickNewDraft, priority: "primary" },
     { ...TUI_SHORTCUTS.globalSearch, priority: "primary" },
     { ...TUI_SHORTCUTS.managerBack, priority: "primary" },
     { ...TUI_SHORTCUTS.managerPreview, priority: "primary" },
+    { key: "r", action: "Rename", priority: "secondary" },
+    ...((state.manager.currentFolderPath ?? "").split("/").filter(Boolean)[0] === "draft" ? [] : [{ key: "m", action: "Move", priority: "secondary" as const }]),
   ]
   if (typeof width === "number" && width < MANAGER_PREVIEW_NARROW_WIDTH) {
     return primary
@@ -493,11 +518,21 @@ function previewViewModelFor(preview: ManagerPreviewModel | null | undefined, op
   return notePreview
 }
 
-function emptyStateFor(currentPath: string): ManagerEmptyStateViewModel {
+function emptyStateFor(currentPath: string, canCreateFolder: boolean): ManagerEmptyStateViewModel {
+  const searchAction = shortcutHintLabels([{ ...TUI_SHORTCUTS.globalSearch }])[0]!
+  if (!canCreateFolder) {
+    return {
+      title: "No items here yet",
+      body: `Search your workspace from ${currentPath} or choose another folder.`,
+      actions: [searchAction],
+      styleIntent: "mutedText",
+    }
+  }
+
   return {
-    title: "No notes here yet",
-    body: `Create a note in ${currentPath} or search your workspace.`,
-    actions: [shortcutHintLabels([{ ...TUI_SHORTCUTS.managerNew }])[0]!, shortcutHintLabels([{ ...TUI_SHORTCUTS.globalSearch }])[0]!],
+    title: "No folders here yet",
+    body: `Create a folder in ${currentPath} or search your workspace.`,
+    actions: [shortcutHintLabels([{ ...TUI_SHORTCUTS.managerNew }])[0]!, searchAction],
     styleIntent: "mutedText",
   }
 }
@@ -526,23 +561,45 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
   const bottomPath = currentOpenNoteLabel(state)
   const aiStatus = buildAiStatusViewModel(state.ai, options.width)
 
-  const currentPath = currentPathLabel(currentFolderPath)
+  const currentPath = currentPathLabel(currentFolderPath, state.manager.managedRootPath)
+  const createKind = state.manager.createDraft?.kind ?? "note"
   const createPrompt = state.mode === "manager.create"
     ? {
         visible: true as const,
         inputId: "bluenote-manager-create-title",
-        sheetTitle: "New note",
-        description: "Create a Markdown note in this workspace.",
+        sheetTitle: createKind === "folder" ? "New folder" : "New note",
+        description: createKind === "folder" ? "Create a folder in this workspace." : "Create a Markdown note in this workspace.",
         destinationLabel: `Create in: ${currentPath}`,
-        inputLabel: "Title:",
+        inputLabel: createKind === "folder" ? "Folder name:" : "Title:",
         title: state.manager.createDraft?.title ?? "",
-        placeholder: "Note title…",
+        placeholder: createKind === "folder" ? "Folder name…" : "Note title…",
         status: state.manager.createDraft?.status ?? null,
         focused: true as const,
         styleIntent: "borderFocus" as const,
         surfaceIntent: "surfacePanelRaised" as const,
         statusIntent: (state.manager.createDraft?.status ? "warning" : "mutedText") as TuiColorIntent,
-        actions: ["[Enter] Create", "[Esc] Cancel"],
+        actions: createKind === "folder" ? ["[Enter] Create", "[Tab] Note", "[Esc] Cancel"] : ["[Enter] Create", "[Tab] Folder", "[Esc] Cancel"],
+      }
+    : undefined
+  const actionPrompt = (state.mode === "manager.rename" || state.mode === "manager.move" || state.mode === "manager.saveDraftAs") && state.manager.actionDraft
+    ? {
+        visible: true as const,
+        inputId: `bluenote-manager-${state.manager.actionDraft.kind}-input`,
+        sheetTitle: state.manager.actionDraft.kind === "rename" ? "Rename" : state.manager.actionDraft.kind === "saveDraftAs" ? "Save draft as" : "Move note",
+        description: state.manager.actionDraft.kind === "rename"
+          ? "Rename the selected folder or note."
+          : state.manager.actionDraft.kind === "saveDraftAs"
+            ? "Choose an existing note/ folder and edit the destination title."
+            : "Choose an existing note/ folder, then press Enter to move the selected normal note.",
+        inputLabel: state.manager.actionDraft.kind === "rename" ? "New name:" : state.manager.actionDraft.kind === "saveDraftAs" ? "Title:" : "Selected destination:",
+        title: state.manager.actionDraft.input,
+        placeholder: state.manager.actionDraft.kind === "rename" ? "New title or folder name…" : state.manager.actionDraft.kind === "saveDraftAs" ? "Destination title…" : "Select a folder row",
+        status: state.manager.actionDraft.status,
+        focused: true as const,
+        styleIntent: "borderFocus" as const,
+        surfaceIntent: "surfacePanelRaised" as const,
+        statusIntent: (state.manager.actionDraft.status ? "warning" : "mutedText") as TuiColorIntent,
+        actions: [state.manager.actionDraft.kind === "rename" ? "[Enter] Rename" : state.manager.actionDraft.kind === "saveDraftAs" ? "[Enter] Save as" : "[Enter] Move", "[↑/↓] Folder", "[Esc] Cancel"],
       }
     : undefined
   const deletePrompt = state.mode === "manager.deleteConfirm" && state.manager.deleteDraft
@@ -591,7 +648,7 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
     layout1: {
       rows,
       empty: rows.length === 0,
-      emptyState: rows.length === 0 ? emptyStateFor(currentPath) : null,
+      emptyState: rows.length === 0 ? emptyStateFor(currentPath, state.manager.canCreateFolder === true) : null,
     },
     layout2: {
       preview,
@@ -602,6 +659,7 @@ export function buildManagerViewModel(state: TuiState, browserModel?: ManagerBro
     shortcutHints,
     shortcuts: shortcutHintLabels(shortcutHints),
     createPrompt,
+    actionPrompt,
     deletePrompt,
   }
 }
@@ -845,9 +903,14 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
       height: 1,
       fg: tuiTheme[vm.createPrompt.statusIntent],
     })
+    const createToggleAction = vm.createPrompt.actions.find((action) => action.startsWith("[Tab] "))?.replace("[Tab] ", "") ?? "Folder"
     const createHint = new TextRenderable(options.renderer, {
       id: "bluenote-manager-create-hints",
-      content: renderShortcutHints([{ key: "Enter", action: "Create" }, { key: "Esc", action: "Cancel" }]),
+      content: renderShortcutHints([
+        { key: "Enter", action: "Create" },
+        { key: "Tab", action: createToggleAction },
+        { key: "Esc", action: "Cancel" },
+      ]),
       height: 1,
       fg: tuiTheme.mutedText,
     })
@@ -864,6 +927,60 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     createBar.add(createHint)
     root.add(createBar)
     createInput.focus()
+  }
+  if (vm.actionPrompt) {
+    const actionBar = new BoxRenderable(options.renderer, {
+      id: "bluenote-manager-action-bar",
+      flexDirection: "column",
+      width: "100%",
+      height: 6,
+      border: true,
+      borderColor: tuiTheme[vm.actionPrompt.styleIntent],
+      title: vm.actionPrompt.sheetTitle,
+    })
+    actionBar.add(new TextRenderable(options.renderer, {
+      id: "bluenote-manager-action-copy",
+      content: vm.actionPrompt.description,
+      height: 1,
+      fg: tuiTheme.textSecondary,
+    }))
+    actionBar.add(new TextRenderable(options.renderer, {
+      id: "bluenote-manager-action-input-label",
+      content: vm.actionPrompt.inputLabel,
+      height: 1,
+      fg: tuiTheme.textPrimary,
+    }))
+    const actionInput = new InputRenderable(options.renderer, {
+      id: vm.actionPrompt.inputId,
+      value: vm.actionPrompt.title,
+      placeholder: vm.actionPrompt.placeholder,
+      width: "70%",
+    })
+    const actionStatus = new TextRenderable(options.renderer, {
+      id: "bluenote-manager-action-status",
+      content: vm.actionPrompt.status ?? " ",
+      height: 1,
+      fg: tuiTheme[vm.actionPrompt.statusIntent],
+    })
+    const actionHint = new TextRenderable(options.renderer, {
+      id: "bluenote-manager-action-hints",
+      content: vm.actionPrompt.actions.join("  "),
+      height: 1,
+      fg: tuiTheme.mutedText,
+    })
+    actionInput.on(InputRenderableEvents.INPUT, () => {
+      options.controller.updateManagerActionInput(actionInput.value)
+      options.onInvalidate?.()
+    })
+    actionInput.on(InputRenderableEvents.CHANGE, () => {
+      options.controller.updateManagerActionInput(actionInput.value)
+      options.onInvalidate?.()
+    })
+    actionBar.add(actionInput)
+    actionBar.add(actionStatus)
+    actionBar.add(actionHint)
+    root.add(actionBar)
+    actionInput.focus()
   }
   if (vm.deletePrompt) {
     const deleteBar = new BoxRenderable(options.renderer, {
@@ -953,6 +1070,10 @@ export function routeManagerKey(sequence: string, controller: WorkspaceControlle
       controller.cancelManagerCreate()
       return true
     }
+    if (sequence === "\t" || sequence === "\u001b[Z") {
+      controller.toggleManagerCreateKind()
+      return true
+    }
     if (sequence === "\r" || sequence === "\n") {
       void controller.submitManagerCreate()
       return true
@@ -963,6 +1084,46 @@ export function routeManagerKey(sequence: string, controller: WorkspaceControlle
     }
     if (sequence.length === 1 && sequence >= " " && sequence !== "\u007f") {
       controller.updateManagerCreateTitle(`${currentTitle}${sequence}`)
+      return true
+    }
+  }
+
+  if (controller.getState().mode === "manager.rename" || controller.getState().mode === "manager.move" || controller.getState().mode === "manager.saveDraftAs") {
+    const mode = controller.getState().mode
+    const currentInput = controller.getState().manager.actionDraft?.input ?? ""
+    if (sequence === "\u001b" || sequence === "\u001b[") {
+      controller.cancelManagerAction()
+      return true
+    }
+    if ((mode === "manager.move" || mode === "manager.saveDraftAs") && (sequence === "\u001b[A" || sequence === "k")) {
+      controller.moveManagerSelection("up")
+      return true
+    }
+    if ((mode === "manager.move" || mode === "manager.saveDraftAs") && (sequence === "\u001b[B" || sequence === "j")) {
+      controller.moveManagerSelection("down")
+      return true
+    }
+    if ((mode === "manager.move" || mode === "manager.saveDraftAs") && sequence === "\u001b[C") {
+      controller.openFocusedManagerFolder()
+      return true
+    }
+    if ((mode === "manager.move" || mode === "manager.saveDraftAs") && sequence === "\u001b[D") {
+      controller.goToManagerParent({ preserveActionMode: true })
+      return true
+    }
+    if (sequence === "\r" || sequence === "\n") {
+      controller.submitManagerAction()
+      return true
+    }
+    if (mode === "manager.move") {
+      return true
+    }
+    if (sequence === "\u007f" || sequence === "\b") {
+      controller.updateManagerActionInput(currentInput.slice(0, -1))
+      return true
+    }
+    if (sequence.length === 1 && sequence >= " " && sequence !== "\u007f") {
+      controller.updateManagerActionInput(`${currentInput}${sequence}`)
       return true
     }
   }
@@ -1025,6 +1186,15 @@ export function routeManagerKey(sequence: string, controller: WorkspaceControlle
       return true
     case "n":
       controller.openManagerCreate()
+      return true
+    case "N":
+      controller.quickNewDraft()
+      return true
+    case "r":
+      controller.openManagerRename()
+      return true
+    case "m":
+      controller.openManagerMove()
       return true
     case "d":
       controller.openManagerDeleteConfirmation()

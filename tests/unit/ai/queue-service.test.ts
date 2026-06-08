@@ -322,6 +322,8 @@ test("deleted-note cleanup is narrow and keeps existing-note describe jobs retry
   await withRoot("bluenote-ai-queue-keep-existing-", async (rootPath) => {
     const created = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Existing Queue Note",
       body: "Existing note body.",
       clock: fixedClock("2026-06-01T00:00:00.000Z"),

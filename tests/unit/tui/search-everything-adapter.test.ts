@@ -19,31 +19,31 @@ const noteSummaries = [
     title: "Daily Plan",
     description: "Today priorities and project focus.",
     body: "# Daily Plan\nToday body priorities and project focus.\n",
-    relativePath: "notes/inbox/daily-plan.md",
+    relativePath: "note/inbox/daily-plan.md",
   },
   {
     key: "project-brief",
     title: "Client Launch Brief",
     description: "Marketing rollout plan.",
-    relativePath: "notes/projects/client/brief.md",
+    relativePath: "note/projects/client/brief.md",
   },
   {
     key: "archive-review",
     title: "Archive Review",
     description: "Old ideas to revisit.",
-    relativePath: "notes/archive/archive-review.md",
+    relativePath: "note/archive/archive-review.md",
   },
   {
     key: "a-big-cat",
     title: "A Big Cat",
     description: "Animal notes without a contiguous letter run.",
-    relativePath: "notes/a-big-cat/cat.md",
+    relativePath: "note/a-big-cat/cat.md",
   },
   {
     key: "incident-123",
     title: "Incident 123",
     description: "Follow-up for ticket 123.",
-    relativePath: "notes/incidents/incident-123.md",
+    relativePath: "note/incidents/incident-123.md",
   },
 ]
 
@@ -59,7 +59,7 @@ function createDeps(): SearchEverythingDependencies {
         {
           key: "project-brief",
           title: "Client Launch Brief",
-          relativePath: "notes/projects/client/brief.md",
+          relativePath: "note/projects/client/brief.md",
           match: {
             source: "content",
             label: "content line 7",
@@ -106,15 +106,15 @@ describe("TUI Search Everything adapter", () => {
     const folder = buildSearchEverythingResults("archive", createDeps()).find((result) => result.kind === "folder")
     const command = buildSearchEverythingResults("/find", createDeps()).find((result) => result.kind === "command")
 
-    assert.equal(buildSearchEverythingPreview(note)?.title, "notes/inbox/daily-plan.md")
+    assert.equal(buildSearchEverythingPreview(note)?.title, "note/inbox/daily-plan.md")
     assert.deepEqual(buildSearchEverythingPreview(note)?.lines, ["# Daily Plan", "Today body priorities and project focus."])
     assert.deepEqual(buildSearchEverythingPreview(note)?.sections, [])
 
-    assert.equal(buildSearchEverythingPreview(content)?.title, "notes/projects/client/brief.md")
+    assert.equal(buildSearchEverythingPreview(content)?.title, "note/projects/client/brief.md")
     assert.deepEqual(buildSearchEverythingPreview(content)?.lines, ["...Launch blockers: legal review and design QA..."])
     assert.deepEqual(buildSearchEverythingPreview(content)?.sections, [])
 
-    assert.equal(buildSearchEverythingPreview(folder)?.title, "notes/archive")
+    assert.equal(buildSearchEverythingPreview(folder)?.title, "note/archive")
     assert.deepEqual(buildSearchEverythingPreview(folder)?.lines, ["archive-review.md"])
     assert.deepEqual(buildSearchEverythingPreview(folder)?.sections, [])
 
@@ -139,10 +139,10 @@ describe("TUI Search Everything adapter", () => {
     const note = buildSearchEverythingResults("daily", createDeps()).find((result) => result.kind === "note")
     const preview = buildSearchEverythingPreview(note, "daily")
 
-    assert.equal(preview?.title, "notes/inbox/daily-plan.md")
+    assert.equal(preview?.title, "note/inbox/daily-plan.md")
     assert.deepEqual(preview?.titleText, {
-      text: "notes/inbox/daily-plan.md",
-      highlights: [{ start: 12, end: 17 }],
+      text: "note/inbox/daily-plan.md",
+      highlights: [{ start: 11, end: 16 }],
     })
     assert.deepEqual(preview?.sections, [])
     assert.deepEqual(preview?.sectionsText, [])
@@ -152,10 +152,10 @@ describe("TUI Search Everything adapter", () => {
     const folder = buildSearchEverythingResults("archive", createDeps()).find((result) => result.kind === "folder")
     const preview = buildSearchEverythingPreview(folder, "archive")
 
-    assert.equal(preview?.title, "notes/archive")
+    assert.equal(preview?.title, "note/archive")
     assert.deepEqual(preview?.titleText, {
-      text: "notes/archive",
-      highlights: [{ start: 6, end: 13 }],
+      text: "note/archive",
+      highlights: [{ start: 5, end: 12 }],
     })
     assert.deepEqual(preview?.subtitleText, { text: "" })
   })
@@ -163,20 +163,20 @@ describe("TUI Search Everything adapter", () => {
   test("folder preview lists immediate child folders and files without metadata rows", () => {
     const deps: SearchEverythingDependencies = {
       noteSummaries: [
-        { key: "brief", title: "Brief", description: "", relativePath: "notes/projects/client/brief.md" },
-        { key: "todo", title: "Todo", description: "", relativePath: "notes/projects/client/todo.md" },
-        { key: "research-note", title: "Research", description: "", relativePath: "notes/projects/client/research/note.md" },
-        { key: "roadmap", title: "Roadmap", description: "", relativePath: "notes/projects/roadmap.md" },
+        { key: "brief", title: "Brief", description: "", relativePath: "note/projects/client/brief.md" },
+        { key: "todo", title: "Todo", description: "", relativePath: "note/projects/client/todo.md" },
+        { key: "research-note", title: "Research", description: "", relativePath: "note/projects/client/research/note.md" },
+        { key: "roadmap", title: "Roadmap", description: "", relativePath: "note/projects/roadmap.md" },
       ],
       searchNotes: () => [],
     }
-    const folder = buildSearchEverythingResults("client", deps).find((result) => result.kind === "folder" && result.path === "notes/projects/client")
+    const folder = buildSearchEverythingResults("client", deps).find((result) => result.kind === "folder" && result.path === "note/projects/client")
     const preview = buildSearchEverythingPreview(folder, "client")
 
-    assert.equal(preview?.title, "notes/projects/client")
+    assert.equal(preview?.title, "note/projects/client")
     assert.deepEqual(preview?.titleText, {
-      text: "notes/projects/client",
-      highlights: [{ start: 15, end: 21 }],
+      text: "note/projects/client",
+      highlights: [{ start: 14, end: 20 }],
     })
     assert.deepEqual(preview?.lines, ["research", "brief.md", "todo.md"])
     assert.deepEqual(preview?.sections, [])
@@ -187,27 +187,27 @@ describe("TUI Search Everything adapter", () => {
   test("does not derive folder results from hidden/internal note paths", () => {
     const deps: SearchEverythingDependencies = {
       noteSummaries: [
-        { key: "hidden", title: "Hidden", description: "Internal data.", relativePath: "notes/.data/hidden.md" },
-        { key: "visible", title: "Visible", description: "Visible data note.", relativePath: "notes/data-public/visible.md" },
+        { key: "hidden", title: "Hidden", description: "Internal data.", relativePath: "note/.data/hidden.md" },
+        { key: "visible", title: "Visible", description: "Visible data note.", relativePath: "note/data-public/visible.md" },
       ],
       searchNotes: () => [],
     }
 
     const results = buildSearchEverythingResults("data", deps)
 
-    assert.equal(results.some((result) => result.kind === "folder" && result.path === "notes/.data"), false)
+    assert.equal(results.some((result) => result.kind === "folder" && result.path === "note/.data"), false)
     assert.equal(results.some((result) => result.kind === "folder" && result.previewLines?.length === 0), false)
-    assert.equal(results.some((result) => result.kind === "folder" && result.path === "notes/data-public"), true)
+    assert.equal(results.some((result) => result.kind === "folder" && result.path === "note/data-public"), true)
   })
 
   test("file preview title uses the raw note file path", () => {
     const note = buildSearchEverythingResults("plan", createDeps()).find((result) => result.kind === "note")
     const preview = buildSearchEverythingPreview(note, "plan")
 
-    assert.equal(preview?.title, "notes/inbox/daily-plan.md")
+    assert.equal(preview?.title, "note/inbox/daily-plan.md")
     assert.deepEqual(preview?.titleText, {
-      text: "notes/inbox/daily-plan.md",
-      highlights: [{ start: 18, end: 22 }],
+      text: "note/inbox/daily-plan.md",
+      highlights: [{ start: 17, end: 21 }],
     })
   })
 
@@ -226,7 +226,7 @@ describe("TUI Search Everything adapter", () => {
         {
           key: "project-brief",
           title: "Client Launch Brief",
-          relativePath: "notes/projects/client/brief.md",
+          relativePath: "note/projects/client/brief.md",
           match: {
             source: "content",
             label: "content line 5",
@@ -243,10 +243,10 @@ describe("TUI Search Everything adapter", () => {
     const line = preview?.lines[0] ?? ""
     const matchStart = line.toLowerCase().indexOf("launch blockers")
 
-    assert.equal(preview?.title, "notes/projects/client/brief.md")
+    assert.equal(preview?.title, "note/projects/client/brief.md")
     assert.equal(preview?.lines.length, 1)
     assert.match(line, /legal review creates launch blockers for the client rollout/u)
-    assert.doesNotMatch(line, /Introductory material|Architecture notes/u)
+    assert.doesNotMatch(line, /Introductory material|Architecture note/u)
     assert.deepEqual(preview?.sections, [])
     assert.deepEqual(preview?.sectionsText, [])
     assert.deepEqual(preview?.linesText, [
@@ -270,7 +270,7 @@ describe("TUI Search Everything adapter", () => {
         {
           key: "project-brief",
           title: "Client Launch Brief",
-          relativePath: "notes/projects/client/brief.md",
+          relativePath: "note/projects/client/brief.md",
           match: {
             source: "content",
             label: "content line 3",
@@ -302,7 +302,7 @@ describe("TUI Search Everything adapter", () => {
         {
           key: "project-brief",
           title: "Client Launch Brief",
-          relativePath: "notes/projects/client/brief.md",
+          relativePath: "note/projects/client/brief.md",
           match: {
             source: "content",
             label: "content line 3",
@@ -332,7 +332,7 @@ describe("TUI Search Everything adapter", () => {
         {
           key: "project-brief",
           title: "Client Launch Brief",
-          relativePath: "notes/projects/client/brief.md",
+          relativePath: "note/projects/client/brief.md",
           match: {
             source: "content",
             label: "content line 20",
@@ -358,7 +358,7 @@ describe("TUI Search Everything adapter", () => {
         {
           key: "project-brief",
           title: "Client Launch Brief",
-          relativePath: "notes/projects/client/brief.md",
+          relativePath: "note/projects/client/brief.md",
           match: {
             source: "content",
             label: "content line 1",
@@ -397,14 +397,14 @@ describe("TUI Search Everything adapter", () => {
       filename: "empty.md",
       title: "Empty Note",
       description: "",
-      relativePath: "notes/empty.md",
+      relativePath: "note/empty.md",
       matchedFields: ["filename"],
       label: "Empty Note",
-      detail: "empty.md — notes/empty.md",
+      detail: "empty.md — note/empty.md",
       score: 100,
     }, "empty")
 
-    assert.equal(preview?.title, "notes/empty.md")
+    assert.equal(preview?.title, "note/empty.md")
     assert.deepEqual(preview?.lines, [])
     assert.deepEqual(preview?.sections, [])
     assert.equal(JSON.stringify(preview?.sections), "[]")
@@ -495,9 +495,9 @@ describe("TUI Search Everything adapter", () => {
       id: "content:project-brief:content%20line%207:0",
       key: "project-brief",
       title: "Client Launch Brief",
-      relativePath: "notes/projects/client/brief.md",
+      relativePath: "note/projects/client/brief.md",
       label: "Client Launch Brief",
-      detail: "content line 7 — notes/projects/client/brief.md",
+      detail: "content line 7 — note/projects/client/brief.md",
       score: contentResult?.score,
       matchIndex: 0,
       matchLabel: "content line 7",
@@ -512,7 +512,7 @@ describe("TUI Search Everything adapter", () => {
         {
           key: "project-brief",
           title: "Client Launch Brief",
-          relativePath: "notes/projects/client/brief.md",
+          relativePath: "note/projects/client/brief.md",
           match: {
             source: "content",
             label: "content line 12",
@@ -522,7 +522,7 @@ describe("TUI Search Everything adapter", () => {
         {
           key: "project-brief",
           title: "Client Launch Brief",
-          relativePath: "notes/projects/client/brief.md",
+          relativePath: "note/projects/client/brief.md",
           match: {
             source: "content",
             label: "content line 18",
@@ -555,7 +555,7 @@ describe("TUI Search Everything adapter", () => {
         {
           key: "project-brief",
           title: "Client Launch Brief",
-          relativePath: "notes/projects/client/brief.md",
+          relativePath: "note/projects/client/brief.md",
           match: {
             source: "content",
             label: "content line 7",
@@ -565,7 +565,7 @@ describe("TUI Search Everything adapter", () => {
         {
           key: "project-brief",
           title: "Client Launch Brief",
-          relativePath: "notes/projects/client/brief.md",
+          relativePath: "note/projects/client/brief.md",
           match: {
             source: "content",
             label: "content line 7",
@@ -593,11 +593,11 @@ describe("TUI Search Everything adapter", () => {
       kind: "folder",
       typeLabel: "folder",
       typeIcon: "folder",
-      id: "folder:notes/archive",
-      path: "notes/archive",
+      id: "folder:note/archive",
+      path: "note/archive",
       name: "archive",
       label: "archive/",
-      detail: "1 note in notes/archive",
+      detail: "1 note in note/archive",
       score: folder?.score,
       noteCount: 1,
       previewLines: ["archive-review.md"],
@@ -607,20 +607,20 @@ describe("TUI Search Everything adapter", () => {
   test("returns filesystem-discovered empty user folders in Search Everything folder results", () => {
     const results = buildSearchEverythingResults("empty-client", {
       ...createDeps(),
-      userFolderPaths: ["notes/projects/empty-client", "notes/projects/.hidden-child", "notes/.data"],
+      userFolderPaths: ["note/projects/empty-client", "note/projects/.hidden-child", "note/.data"],
     })
     const folders = results.filter((result) => result.kind === "folder")
 
-    assert.deepEqual(folders.map((folder) => folder.path), ["notes/projects/empty-client"])
+    assert.deepEqual(folders.map((folder) => folder.path), ["note/projects/empty-client"])
     assert.deepEqual(folders[0], {
       kind: "folder",
       typeLabel: "folder",
       typeIcon: "folder",
-      id: "folder:notes/projects/empty-client",
-      path: "notes/projects/empty-client",
+      id: "folder:note/projects/empty-client",
+      path: "note/projects/empty-client",
       name: "empty-client",
       label: "empty-client/",
-      detail: "0 notes in notes/projects/empty-client",
+      detail: "0 notes in note/projects/empty-client",
       score: folders[0]?.score,
       noteCount: 0,
       previewLines: [],
@@ -630,13 +630,19 @@ describe("TUI Search Everything adapter", () => {
   test("filters slash-prefixed command results to working editor commands from editor search", () => {
     assert.deepEqual(
       TUI_COMMANDS.map((command) => command.name),
-      ["/new", "/delete", "/ai-describe", "/ai-process-queue", "/ai-status", "/find", "/replace", "/save", "/copy-all", "/replace-all", "/paste"],
+      ["/new", "/delete", "/ai-describe", "/ai-process-queue", "/ai-status", "/find", "/replace", "/save", "/save-draft-as", "/copy-all", "/replace-all", "/paste"],
     )
 
     const results = buildSearchEverythingResults("/", createDeps(), { commandContext: { screen: "editor" } })
     assert.deepEqual(
       results.filter((result) => result.kind === "command").map((result) => result.name),
       ["/ai-describe", "/ai-process-queue", "/ai-status", "/find", "/replace", "/save", "/copy-all", "/replace-all", "/paste"],
+    )
+
+    const draftResults = buildSearchEverythingResults("/", createDeps(), { commandContext: { screen: "editor", activeEditorIsDraft: true } })
+    assert.deepEqual(
+      draftResults.filter((result) => result.kind === "command").map((result) => result.name),
+      ["/ai-describe", "/ai-process-queue", "/ai-status", "/find", "/replace", "/save", "/save-draft-as", "/copy-all", "/replace-all", "/paste"],
     )
 
     const maintenanceResults = buildSearchEverythingResults("/re", createDeps(), { commandContext: { screen: "editor" } })
@@ -651,11 +657,18 @@ describe("TUI Search Everything adapter", () => {
 
   test("filters slash-prefixed command results to applicable manager commands from manager search", () => {
     const withoutSelection = buildSearchEverythingResults("/", createDeps(), { commandContext: { screen: "manager", managerSelection: "folder" } })
-    assert.deepEqual(withoutSelection.filter((result) => result.kind === "command").map((result) => result.name), ["/new", "/ai-process-queue", "/ai-status"])
+    assert.deepEqual(withoutSelection.filter((result) => result.kind === "command").map((result) => result.name), ["/ai-process-queue", "/ai-status"])
 
-    const withNoteSelection = buildSearchEverythingResults("/", createDeps(), { commandContext: { screen: "manager", managerSelection: "note" } })
+    const withNoteSelection = buildSearchEverythingResults("/", createDeps(), { commandContext: { screen: "manager", managerSelection: "note", managerCanCreateFolder: true } })
     assert.deepEqual(withNoteSelection.filter((result) => result.kind === "command").map((result) => result.name), ["/new", "/delete", "/ai-describe", "/ai-process-queue", "/ai-status"])
     assert.equal(withNoteSelection.some((result) => result.kind === "command" && ["/archive", "/rebuild", "/migrate"].includes(result.name)), false)
+  })
+
+  test("new command metadata advertises folder creation in the current note folder", () => {
+    const newCommand = TUI_COMMANDS.find((command) => command.name === "/new")
+
+    assert.equal(newCommand?.description, "Create a new folder in the current note folder")
+    assert.equal(newCommand?.usage, "/new <folder-name>")
   })
 
   test("clipboard command metadata advertises Mode A terminal-native and whole-note commands", () => {
@@ -688,7 +701,7 @@ describe("TUI Search Everything adapter", () => {
   test("builds previews for highlighted note and content results", () => {
     const notePreview = buildHighlightedSearchEverythingPreview(buildSearchEverythingResults("daily", createDeps()), 0)
     assert.deepEqual(notePreview, {
-      title: "notes/inbox/daily-plan.md",
+      title: "note/inbox/daily-plan.md",
       subtitle: "",
       lines: ["# Daily Plan", "Today body priorities and project focus."],
       sections: [],
@@ -696,7 +709,7 @@ describe("TUI Search Everything adapter", () => {
 
     const contentPreview = buildHighlightedSearchEverythingPreview(buildSearchEverythingResults("launch blockers", createDeps()), 0)
     assert.deepEqual(contentPreview, {
-      title: "notes/projects/client/brief.md",
+      title: "note/projects/client/brief.md",
       subtitle: "",
       lines: ["...Launch blockers: legal review and design QA..."],
       sections: [],

@@ -3,7 +3,8 @@ import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
 import { mkdtemp, rm, readFile, access, readdir, writeFile, mkdir } from "node:fs/promises"
-import { existsSync } from "node:fs"
+import { existsSync, mkdirSync } from "node:fs"
+import { createCliRenderer } from "@opentui/core"
 
 import { createAiConfigRepository } from "../../src/ai/config-repository"
 import { createCodexAuthRepository } from "../../src/ai/codex-auth-repository"
@@ -15,12 +16,13 @@ import { listNotes } from "../../src/core/list-notes"
 import { rebuildIndexes } from "../../src/core/rebuild-indexes"
 import { showNote } from "../../src/core/show-note"
 import { buildSearchEverythingPreview, type SearchEverythingContentResult } from "../../src/tui/adapters/search-everything-adapter"
-import { createDefaultWorkspaceController, createDesktopClipboardModel, routeWorkspaceKey } from "../../src/tui/app"
+import { createDefaultWorkspaceController, createDesktopClipboardModel, routeWorkspaceKey, startTuiWorkspace } from "../../src/tui/app"
 import { buildEditorViewModel } from "../../src/tui/render-editor"
 import { routeManagerKey } from "../../src/tui/render-manager"
 import { createWorkspaceController } from "../../src/tui/workspace-controller"
 import { ATOMIC_NOTE_WRITER_TEMP_PREFIX } from "../../src/storage/atomic-note-writer"
 import { getStateTmpPath } from "../../src/storage/root-layout"
+import { createLatestOpenedNoteRepository } from "../../src/tui/latest-opened-note"
 
 function fixedClock(iso: string) {
   return { now: () => new Date(iso) }
@@ -29,20 +31,45 @@ function fixedClock(iso: string) {
 type DefaultWorkspaceController = ReturnType<typeof createDefaultWorkspaceController>
 
 function openManagerNoteByKey(controller: DefaultWorkspaceController, key: string): void {
-  const rootFolderIndex = controller
-    .getState()
-    .manager.items.findIndex((item) => item.type === "folder" && item.relativePath === "notes/inbox")
+  assert.deepEqual(controller.showManager(), { blocked: false })
 
-  assert.notEqual(rootFolderIndex, -1)
-  controller.focusManagerItem(rootFolderIndex)
-  assert.equal(controller.openFocusedManagerItem().blocked, false)
-  assert.equal(controller.getState().screen, "manager")
-  assert.equal(controller.getState().manager.currentFolderPath, "notes/inbox")
+  const visited = new Set<string>()
+  function openFromCurrentFolder(): boolean {
+    const state = controller.getState()
+    const currentFolderPath = state.manager.currentFolderPath ?? ""
+    if (visited.has(currentFolderPath)) {
+      return false
+    }
+    visited.add(currentFolderPath)
 
-  const noteIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === key)
-  assert.notEqual(noteIndex, -1)
-  controller.focusManagerItem(noteIndex)
-  assert.equal(controller.openFocusedManagerItem().blocked, false)
+    const noteIndex = state.manager.items.findIndex((item) => item.type === "note" && item.key === key)
+    if (noteIndex !== -1) {
+      controller.focusManagerItem(noteIndex)
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+      return true
+    }
+
+    const folders = state.manager.items
+      .map((item, index) => ({ item, index }))
+      .filter(({ item }) => item.type === "folder")
+    for (const { item, index } of folders) {
+      controller.focusManagerItem(index)
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+      if (openFromCurrentFolder()) {
+        return true
+      }
+      assert.equal(controller.goBack().blocked, false)
+      assert.equal(controller.getState().manager.currentFolderPath, currentFolderPath)
+    }
+    return false
+  }
+
+  const openedFromAnchoredFolder = openFromCurrentFolder()
+  const openedFromRoot = openedFromAnchoredFolder
+    ? true
+    : controller.getState().manager.currentFolderPath !== "" && controller.goBack().blocked === false && openFromCurrentFolder()
+
+  assert.equal(openedFromRoot, true, `missing manager note ${key}`)
 }
 
 async function countNoteSidecars(rootPath: string): Promise<number> {
@@ -170,6 +197,11 @@ async function markDescriptionProcessedAt(rootPath: string, key: string, lastPro
 }
 
 function openManagerFolderPath(controller: DefaultWorkspaceController, folderPath: string): void {
+  const normalizedFolderPath = folderPath.replace(/\\/gu, "/").replace(/^\/+|\/+$/gu, "")
+  if (controller.getState().manager.currentFolderPath === normalizedFolderPath) {
+    return
+  }
+
   const directFolderIndex = controller.getState().manager.items.findIndex((item) => item.type === "folder" && item.relativePath === folderPath)
   if (directFolderIndex !== -1) {
     controller.focusManagerItem(directFolderIndex)
@@ -177,7 +209,7 @@ function openManagerFolderPath(controller: DefaultWorkspaceController, folderPat
     return
   }
 
-  const parts = folderPath.split("/").filter(Boolean)
+  const parts = normalizedFolderPath.split("/").filter(Boolean)
   let prefix = ""
 
   for (const part of parts) {
@@ -201,6 +233,351 @@ describe("TUI workspace workflows", () => {
     await rm(rootPath, { recursive: true, force: true })
   })
 
+  test("startup opens recorded note if path exists and openedAt is within TTL", () => {
+    const restoredNote = createNote({
+      override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
+      title: "Restore Me",
+      body: "restored body",
+      clock: fixedClock("2026-06-05T12:00:00.000Z"),
+    })
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: restoredNote.relativePath,
+      openedAt: "2026-06-05T12:00:00.000Z",
+    })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clock: fixedClock("2026-06-06T12:00:00.000Z"),
+      cleanupStaleAtomicTemps: () => {},
+    })
+
+    assert.equal(controller.getState().screen, "editor")
+    assert.equal(controller.getState().editor?.note.relativePath, restoredNote.relativePath)
+    assert.deepEqual(createLatestOpenedNoteRepository(rootPath).read(), {
+      relativePath: restoredNote.relativePath,
+      openedAt: "2026-06-06T12:00:00.000Z",
+    })
+  })
+
+  test("default TUI ignores stale legacy notes tree in Phase 7 manager and startup restore", async () => {
+    await mkdir(path.join(rootPath, "notes", "inbox"), { recursive: true })
+    await writeFile(path.join(rootPath, "notes", "inbox", "legacy-note.md"), "# Legacy Note\n\nOld body", "utf8")
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: "notes/inbox/legacy-note.md",
+      openedAt: "2026-06-06T11:00:00.000Z",
+    })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clock: fixedClock("2026-06-06T12:00:00.000Z"),
+      cleanupStaleAtomicTemps: () => {},
+    })
+
+    assert.equal(controller.getState().editor?.note.relativePath.startsWith("draft/"), true)
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    assert.equal(controller.getState().manager.items.some((item) => item.relativePath.startsWith("notes")), false)
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "note" && item.key === "legacy-note"), false)
+  })
+
+  test("startup creates and opens draft when latest-opened is stale", () => {
+    const staleNote = createNote({
+      override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
+      title: "Stale Restore",
+      body: "stale body",
+      clock: fixedClock("2026-05-01T12:00:00.000Z"),
+    })
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: staleNote.relativePath,
+      openedAt: "2026-05-01T12:00:00.000Z",
+    })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clock: fixedClock("2026-06-06T12:00:00.000Z"),
+      cleanupStaleAtomicTemps: () => {},
+    })
+
+    const opened = controller.getState().editor?.note
+    assert.equal(controller.getState().screen, "editor")
+    assert.ok(opened?.relativePath.startsWith("draft/"))
+    assert.notEqual(opened?.relativePath, staleNote.relativePath)
+    assert.equal(createLatestOpenedNoteRepository(rootPath).read()?.relativePath, opened?.relativePath)
+  })
+
+  test("startup creates and opens draft when latest-opened path is missing", async () => {
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: "note/missing.md",
+      openedAt: "2026-06-06T11:00:00.000Z",
+    })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clock: fixedClock("2026-06-06T12:00:00.000Z"),
+      cleanupStaleAtomicTemps: () => {},
+    })
+
+    const opened = controller.getState().editor?.note
+    assert.equal(controller.getState().screen, "editor")
+    assert.ok(opened?.relativePath.startsWith("draft/"))
+    assert.equal(createLatestOpenedNoteRepository(rootPath).read()?.relativePath, opened?.relativePath)
+    await access(path.join(rootPath, opened?.relativePath ?? "missing"))
+  })
+
+  test("OpenTUI lifecycle starts on the latest-opened editor and quits cleanly from editor input", async () => {
+    const restoredNote = createNote({
+      override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
+      title: "Lifecycle Restore",
+      body: "restored lifecycle body",
+      clock: fixedClock("2026-06-05T12:00:00.000Z"),
+    })
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: restoredNote.relativePath,
+      openedAt: "2026-06-05T12:00:00.000Z",
+    })
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clock: fixedClock("2026-06-06T12:00:00.000Z"),
+      cleanupStaleAtomicTemps: () => {},
+    })
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+
+    try {
+      const running = await startTuiWorkspace({ renderer, controller })
+      assert.equal(controller.getState().screen, "editor")
+      assert.equal(controller.getState().editor?.note.relativePath, restoredNote.relativePath)
+      assert.equal(renderer.isDestroyed, false)
+
+      assert.deepEqual(routeWorkspaceKey("\u0003", controller, running.destroy), { handled: true, exit: true })
+      assert.equal(renderer.isDestroyed, true)
+      assert.deepEqual(createLatestOpenedNoteRepository(rootPath).read(), {
+        relativePath: restoredNote.relativePath,
+        openedAt: "2026-06-06T12:00:00.000Z",
+      })
+    } finally {
+      if (!renderer.isDestroyed) {
+        renderer.destroy()
+      }
+    }
+  })
+
+  test("default manager orders real draft notes by created date descending", () => {
+    const older = createNote({
+      override: rootPath,
+      type: "draft",
+      body: "older draft",
+      randomSource: () => 111111,
+      clock: fixedClock("2026-06-01T00:00:00.000Z"),
+    })
+    const newer = createNote({
+      override: rootPath,
+      type: "draft",
+      body: "newer draft",
+      randomSource: () => 222222,
+      clock: fixedClock("2026-06-03T00:00:00.000Z"),
+    })
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: older.relativePath,
+      openedAt: "2026-06-03T12:00:00.000Z",
+    })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clock: fixedClock("2026-06-04T00:00:00.000Z"),
+      cleanupStaleAtomicTemps: () => {},
+    })
+
+    assert.equal(controller.showManager().blocked, false)
+    assert.equal(controller.getState().manager.currentFolderPath, "draft")
+    assert.deepEqual(controller.getState().manager.items.map((item) => item.relativePath), [
+      newer.relativePath,
+      older.relativePath,
+    ])
+  })
+
+  test("default manager delete removes visible draft notes", async () => {
+    const draft = createNote({
+      override: rootPath,
+      type: "draft",
+      body: "delete this draft",
+      randomSource: () => 333333,
+      clock: fixedClock("2026-06-03T00:00:00.000Z"),
+    })
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: draft.relativePath,
+      openedAt: "2026-06-03T12:00:00.000Z",
+    })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clock: fixedClock("2026-06-04T00:00:00.000Z"),
+      cleanupStaleAtomicTemps: () => {},
+    })
+
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    assert.equal(controller.getState().manager.currentFolderPath, "draft")
+    controller.focusManagerItem(0)
+    controller.openManagerDeleteConfirmation()
+
+    await controller.confirmManagerDelete()
+
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(existsSync(path.join(rootPath, draft.relativePath)), false)
+    assert.equal(controller.getState().manager.items.some((item) => item.key === draft.key), false)
+  })
+
+  test("default manager rename preserves draft visibility for draft notes", () => {
+    const draft = createNote({
+      override: rootPath,
+      type: "draft",
+      body: "draft rename body",
+      randomSource: () => 444444,
+      clock: fixedClock("2026-06-03T00:00:00.000Z"),
+    })
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: draft.relativePath,
+      openedAt: "2026-06-03T12:00:00.000Z",
+    })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clock: fixedClock("2026-06-04T00:00:00.000Z"),
+      cleanupStaleAtomicTemps: () => {},
+    })
+
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    assert.equal(controller.getState().manager.currentFolderPath, "draft")
+    const draftIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === draft.key)
+    assert.notEqual(draftIndex, -1)
+    controller.focusManagerItem(draftIndex)
+
+    const result = controller.renameFocusedManagerItem("Renamed Draft")
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().manager.status, "Renamed")
+    const renamed = controller.getState().manager.items.find((item) => item.type === "note" && item.title === "Renamed Draft")
+    assert.ok(renamed)
+    assert.equal(renamed.relativePath.startsWith("draft/"), true)
+    assert.equal(existsSync(path.join(rootPath, draft.relativePath)), false)
+    assert.equal(showNote({ override: rootPath, selector: renamed.key, visibility: "drafts" }).relativePath, renamed.relativePath)
+  })
+
+  test("runtime Ctrl+PageDown and Ctrl+PageUp switch editor notes in the same folder", async () => {
+    await mkdir(path.join(rootPath, "note", "work"), { recursive: true })
+    const alpha = createNote({
+      override: rootPath,
+      type: "normal",
+      title: "Alpha",
+      body: "alpha body",
+      destinationFolder: "note/work",
+      randomSource: () => 111111,
+      clock: fixedClock("2026-06-01T00:00:00.000Z"),
+    })
+    const beta = createNote({
+      override: rootPath,
+      type: "normal",
+      title: "Beta",
+      body: "beta body",
+      destinationFolder: "note/work",
+      randomSource: () => 222222,
+      clock: fixedClock("2026-06-02T00:00:00.000Z"),
+    })
+    createNote({
+      override: rootPath,
+      type: "normal",
+      title: "Other",
+      body: "other body",
+      destinationFolder: "note",
+      randomSource: () => 333333,
+      clock: fixedClock("2026-06-03T00:00:00.000Z"),
+    })
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: alpha.relativePath,
+      openedAt: "2026-06-04T12:00:00.000Z",
+    })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clock: fixedClock("2026-06-04T12:00:00.000Z"),
+      cleanupStaleAtomicTemps: () => {},
+    })
+
+    assert.equal(controller.getState().editor?.note.relativePath, alpha.relativePath)
+    assert.deepEqual(routeWorkspaceKey("\u001b[6;5~", controller, () => {}), { handled: true })
+    assert.equal(controller.getState().editor?.note.relativePath, beta.relativePath)
+    assert.equal(controller.getState().editor?.noteSwitchIndicator?.label, "02/02")
+    assert.deepEqual(createLatestOpenedNoteRepository(rootPath).read()?.relativePath, beta.relativePath)
+
+    assert.deepEqual(routeWorkspaceKey("\u001b[5;5~", controller, () => {}), { handled: true })
+    assert.equal(controller.getState().editor?.note.relativePath, alpha.relativePath)
+    assert.equal(controller.getState().editor?.noteSwitchIndicator?.label, "01/02")
+  })
+
+  test("default controller saves the open draft as a normal note in a selected note folder", async () => {
+    const draft = createNote({
+      override: rootPath,
+      type: "draft",
+      body: "draft body to promote",
+      randomSource: () => 333333,
+      clock: fixedClock("2026-06-05T00:00:00.000Z"),
+    })
+    await mkdir(path.join(rootPath, "note", "work"), { recursive: true })
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: draft.relativePath,
+      openedAt: "2026-06-05T12:00:00.000Z",
+    })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clock: fixedClock("2026-06-06T00:00:00.000Z"),
+      cleanupStaleAtomicTemps: () => {},
+    })
+
+    assert.equal(controller.getState().editor?.note.relativePath, draft.relativePath)
+    assert.deepEqual(controller.openSaveDraftAs(), { blocked: false })
+    assert.equal(controller.getState().mode, "manager.saveDraftAs")
+    assert.equal(controller.getState().manager.actionDraft?.input, draft.title)
+    assert.equal(controller.getState().manager.items[0]?.relativePath, "note/work")
+
+    controller.updateManagerActionInput("Saved Draft")
+    assert.deepEqual(controller.submitManagerAction(), { blocked: false })
+
+    const promoted = controller.getState().editor?.note
+    assert.ok(promoted)
+    assert.equal(promoted.title, "Saved Draft")
+    assert.match(promoted.key, /^saved-draft-[a-z0-9]{6}$/u)
+    assert.equal(promoted.relativePath, `note/work/${promoted.key}.md`)
+    assert.equal(await readFile(path.join(rootPath, promoted.relativePath), "utf8"), "draft body to promote")
+    await assert.rejects(readFile(path.join(rootPath, draft.relativePath), "utf8"))
+    await assert.rejects(readFile(path.join(rootPath, ".data", "notes", `${draft.key}.json`), "utf8"))
+
+    const sidecar = JSON.parse(await readFile(path.join(rootPath, ".data", "notes", `${promoted.key}.json`), "utf8"))
+    assert.equal(sidecar.type, "normal")
+    assert.equal(sidecar.title, "Saved Draft")
+    assert.equal(sidecar.relativePath, promoted.relativePath)
+    assert.equal(sidecar.updatedAt, "2026-06-06T00:00:00.000Z")
+    assert.equal(createLatestOpenedNoteRepository(rootPath).read()?.relativePath, promoted.relativePath)
+    assert.equal(showNote({ override: rootPath, selector: promoted.key }).relativePath, promoted.relativePath)
+
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    assert.equal(controller.getState().manager.currentFolderPath, "note/work")
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "note" && item.key === promoted.key), true)
+
+    assert.deepEqual(controller.goBack(), { blocked: false })
+    assert.equal(controller.getState().manager.currentFolderPath, "note")
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "folder" && item.relativePath === "note/work"), true)
+
+    assert.deepEqual(controller.goBack(), { blocked: false })
+    const rootRows = controller.getState().manager.items.map((item) => item.relativePath)
+    assert.equal(rootRows.includes("note"), true)
+    assert.equal(rootRows.includes("draft"), true)
+  })
+
   test("loads manager rows after creating derived indexes for a freshly initialized root", async () => {
     const freshRootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-tui-fresh-root-"))
 
@@ -209,54 +586,92 @@ describe("TUI workspace workflows", () => {
 
       const controller = createDefaultWorkspaceController({ rootPath: freshRootPath })
 
-      assert.equal(controller.getState().screen, "manager")
+      assert.equal(controller.getState().screen, "editor")
+      assert.ok(controller.getState().editor?.note.relativePath.startsWith("draft/"))
+      assert.deepEqual(controller.showManager(), { blocked: false })
+      assert.equal(controller.getState().manager.currentFolderPath, "draft")
+      assert.deepEqual(controller.goBack(), { blocked: false })
       assert.deepEqual(
         controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`),
-        ["folder:notes/archive", "folder:notes/inbox", "folder:notes/journal"],
+        ["folder:draft", "folder:note"],
       )
+      openManagerFolderPath(controller, "note")
+      controller.openManagerCreate()
+      controller.toggleManagerCreateKind()
+      controller.updateManagerCreateTitle("client-a")
+      assert.equal((await controller.submitManagerCreate()).blocked, false)
+      await access(path.join(freshRootPath, "note", "client-a"))
+      await assert.rejects(() => access(path.join(freshRootPath, ".data", "notes", "client-a.json")))
+      assert.deepEqual(JSON.parse(await readFile(path.join(freshRootPath, ".data", "config.json"), "utf8")), {
+        latestOpenedNoteTtlDays: 7,
+      })
     } finally {
       await rm(freshRootPath, { recursive: true, force: true })
     }
   })
 
-  test("manager shows filesystem-seeded empty user folders while hiding internal note folders", async () => {
-    await mkdir(path.join(rootPath, "notes", "projects", "empty-client"), { recursive: true })
-    await mkdir(path.join(rootPath, "notes", ".data", "shadow"), { recursive: true })
-    await mkdir(path.join(rootPath, "notes", ".cache", "scratch"), { recursive: true })
-    await mkdir(path.join(rootPath, "notes", "projects", ".hidden-child"), { recursive: true })
+  test("default manager keeps real legacy notes hidden when Phase 7 areas exist", async () => {
+    await mkdir(path.join(rootPath, "notes", "inbox"), { recursive: true })
+    await writeFile(path.join(rootPath, "notes", "inbox", "daily.md"), "---\nid: daily\nschemaVersion: 1\ntitle: Legacy Daily\nmode: note\ntags: []\ncreatedAt: '2026-05-20T10:00:00.000Z'\nupdatedAt: '2026-05-20T10:00:00.000Z'\n---\n\nLegacy body", "utf8")
+    createNote({
+      override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
+      title: "Phase 7 Draft",
+      body: "draft body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+      randomSource: () => 444444,
+    })
     rebuildIndexes({ override: rootPath })
 
     const controller = createDefaultWorkspaceController({ rootPath })
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    if (controller.getState().manager.currentFolderPath !== "") controller.goBack()
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "folder" && item.relativePath === "notes"), false)
+  })
+
+  test("manager shows filesystem-seeded empty user folders while hiding internal note folders", async () => {
+    await mkdir(path.join(rootPath, "note", "projects", "empty-client"), { recursive: true })
+    await mkdir(path.join(rootPath, "note", ".data", "shadow"), { recursive: true })
+    await mkdir(path.join(rootPath, "note", ".cache", "scratch"), { recursive: true })
+    await mkdir(path.join(rootPath, "note", "projects", ".hidden-child"), { recursive: true })
+    rebuildIndexes({ override: rootPath })
+
+    const controller = createDefaultWorkspaceController({ rootPath })
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    if (controller.getState().manager.currentFolderPath !== "") controller.goBack()
 
     assert.deepEqual(
       controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`),
       [
-        "folder:notes/archive",
-        "folder:notes/inbox",
-        "folder:notes/journal",
-        "folder:notes/projects",
+        "folder:draft",
+        "folder:note",
       ],
     )
 
-    openManagerFolderPath(controller, "notes/projects")
+    openManagerFolderPath(controller, "note/projects")
     assert.deepEqual(controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`), [
-      "folder:notes/projects/empty-client",
+      "folder:note/projects/empty-client",
     ])
 
     assert.equal(controller.openFocusedManagerItem().blocked, false)
-    assert.equal(controller.getState().manager.currentFolderPath, "notes/projects/empty-client")
+    assert.equal(controller.getState().manager.currentFolderPath, "note/projects/empty-client")
     assert.equal(controller.getManagerBrowserModel().empty, true)
   })
 
   test("manager filter navigation routes to rows filtered by visible filename and opens the focused note", () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Alpha Filter Target",
       body: "alpha body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
     const second = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Beta Filter Target",
       body: "beta body",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
@@ -294,6 +709,8 @@ describe("TUI workspace workflows", () => {
     const unrelatedTemp = path.join(tempPath, "editor-swap.tmp")
     const normalNote = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Normal Note",
       body: "normal note body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -305,7 +722,8 @@ describe("TUI workspace workflows", () => {
 
     const controller = createDefaultWorkspaceController({ rootPath })
 
-    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().screen, "editor")
+    assert.deepEqual(controller.showManager(), { blocked: false })
     await assert.rejects(() => access(staleWriterTemp))
     assert.equal(await readFile(unrelatedTemp, "utf8"), "unrelated temp")
     assert.equal(await readFile(path.join(rootPath, normalNote.relativePath), "utf8"), "normal note body")
@@ -326,12 +744,16 @@ describe("TUI workspace workflows", () => {
   test("loads manager rows, opens a note, edits body, saves, and persists the plain note file", async () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Daily Ideas",
       body: "Initial body with café",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
     createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Second Note",
       body: "Another note",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
@@ -358,6 +780,8 @@ describe("TUI workspace workflows", () => {
     const aiIdleScheduler = createFakeScheduler()
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "TUI Queued Save",
       body: "Initial TUI body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -396,13 +820,15 @@ describe("TUI workspace workflows", () => {
     assert.equal(queue.jobs.length, 0)
     assert.deepEqual(controller.getState().ai, { kind: "updated", count: 1, queue: { queued: 0, failed: 0 } })
     assert.equal(showNote({ override: rootPath, selector: first.key }).description, "Updated TUI idle summary.")
-    assert.equal(listNotes({ override: rootPath }).some((summary) => summary.key === first.key && summary.description === "Updated TUI idle summary."), true)
+    assert.equal(listNotes({ override: rootPath, visibility: "drafts" }).some((summary) => summary.key === first.key && summary.description === "Updated TUI idle summary."), true)
   })
 
   test("TUI autosave refreshes an existing describe-note job on AI idle when AI is configured", async () => {
     const aiIdleScheduler = createFakeScheduler()
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "TUI Queued Autosave",
       body: "Initial autosave body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -442,6 +868,8 @@ describe("TUI workspace workflows", () => {
   test("TUI save does not enqueue when body is unchanged", async () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "TUI Unchanged Save",
       body: "Stable TUI body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -460,6 +888,8 @@ describe("TUI workspace workflows", () => {
   test("no AI config leaves TUI save and autosave workflows without queue.json", async () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "TUI No AI Save",
       body: "Initial no AI body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -481,6 +911,8 @@ describe("TUI workspace workflows", () => {
     const aiIdleScheduler = createFakeScheduler()
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "TUI Queue Failure Save",
       body: "Initial failure body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -506,6 +938,8 @@ describe("TUI workspace workflows", () => {
     const aiIdleScheduler = createFakeScheduler()
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "TUI Queue Failure Autosave",
       body: "Initial autosave failure body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -530,12 +964,16 @@ describe("TUI workspace workflows", () => {
   test("AI startup scan starts default controller without blocking and enqueues only stale notes", async () => {
     const stale = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Startup Stale Description",
       body: "Stale startup body should be queued.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
     const fresh = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Startup Fresh Description",
       body: "Fresh startup body should not be queued.",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
@@ -555,7 +993,8 @@ describe("TUI workspace workflows", () => {
       },
     })
 
-    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().screen, "editor")
+    assert.ok(controller.getState().editor?.note.relativePath.startsWith("draft/"))
     assert.equal(controller.getState().ai?.kind, "connected")
     assert.equal(existsSync(path.join(rootPath, ".data", "ai", "queue.json")), false)
     assert.equal(aiStartupScheduler.activeTasks().length, 1)
@@ -574,6 +1013,8 @@ describe("TUI workspace workflows", () => {
   test("AI startup scan preserves existing failed queue counts when no stale work is enqueued", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Startup Failed Queue Count",
       body: "Already processed startup body.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -616,6 +1057,8 @@ describe("TUI workspace workflows", () => {
   test("AI startup scan processes already pending queue work when no stale work is enqueued", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Startup Pending Queue",
       body: "Already queued startup body.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -653,6 +1096,8 @@ describe("TUI workspace workflows", () => {
   test("AI startup scan timer is cleared when the default controller is disposed before idle", async () => {
     const stale = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Disposed Startup Scan",
       body: "Disposed startup scan should not leave a pending timer.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -672,6 +1117,8 @@ describe("TUI workspace workflows", () => {
   test("AI startup queued stale notes can still be processed explicitly", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Startup Explicit Process Queue",
       body: "Startup queued body should be processed on command.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -696,12 +1143,14 @@ describe("TUI workspace workflows", () => {
 
     assert.deepEqual(controller.getState().ai, { kind: "updated", count: 1, queue: { queued: 0, failed: 0 } })
     assert.equal(showNote({ override: rootPath, selector: note.key }).description, "Startup processed summary.")
-    assert.equal(listNotes({ override: rootPath }).some((summary) => summary.key === note.key && summary.description === "Startup processed summary."), true)
+    assert.equal(listNotes({ override: rootPath, visibility: "drafts" }).some((summary) => summary.key === note.key && summary.description === "Startup processed summary."), true)
   })
 
   test("AI startup scan attempts Codex refreshable expired auth instead of preflight blocking", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Expired Codex Refreshable Startup",
       body: "Expired access token should still allow refresh-backed startup work.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -735,6 +1184,8 @@ describe("TUI workspace workflows", () => {
   test("AI process queue leaves refreshed newer jobs pending when an older provider call fails", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "TUI Stale Failure Queue",
       body: "Original queued body.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -782,12 +1233,16 @@ describe("TUI workspace workflows", () => {
   test("AI process queue cleans up deleted-note work without blocking TUI interaction", async () => {
     const deletedNote = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Deleted TUI Queue",
       body: "Deleted stale queue body.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
     const existingNote = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Existing TUI Queue",
       body: "Existing queue body.",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
@@ -843,6 +1298,8 @@ describe("TUI workspace workflows", () => {
   test("AI process queue cleans up deleted-note work before Codex auth setup and does not block TUI interaction", async () => {
     const deletedNote = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Deleted Codex Auth Queue",
       body: "Deleted codex auth queue body.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -880,6 +1337,8 @@ describe("TUI workspace workflows", () => {
   test("TUI startup forgets deleted exhausted failed queue jobs before showing AI status", async () => {
     const deletedNote = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Deleted Exhausted Queue",
       body: "Deleted exhausted queue body.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -920,6 +1379,8 @@ describe("TUI workspace workflows", () => {
   test("AI process queue preserves queued jobs without attempts when AI is disabled", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Disabled TUI Queue",
       body: "Disabled AI should not consume queued attempts.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -960,6 +1421,8 @@ describe("TUI workspace workflows", () => {
   test("AI process queue preserves Codex jobs when auth refresh fails without blocking TUI interaction", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "TUI Codex Refresh Failure Queue",
       body: "Codex refresh failure should keep this job pending.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1006,6 +1469,8 @@ describe("TUI workspace workflows", () => {
     const longBody = Array.from({ length: 220 }, (_, index) => `Section ${index}: detailed non-sensitive project notes for retry coverage.`).join("\n")
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Long Retry Nonblocking",
       body: longBody,
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1069,12 +1534,16 @@ describe("TUI workspace workflows", () => {
   test("AI process queue retries existing failed jobs before max attempts", async () => {
     const failedNote = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Existing Failed Queue Count",
       body: "Failed queue body.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
     const pendingNote = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Pending With Failed Queue Count",
       body: "Pending queue body.",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
@@ -1123,6 +1592,8 @@ describe("TUI workspace workflows", () => {
     const longLine = "0123456789abcdefghijklmnopqrstuvwxyz日本語"
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Long Line",
       body: longLine,
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1154,18 +1625,24 @@ describe("TUI workspace workflows", () => {
   test("edit-save-switch-quit workflow persists both edited files", async () => {
     const alphaSummary = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Alpha Summary",
       body: "summary",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
     const alphaSource = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Alpha Source",
       body: "source",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
     })
     const beta = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Beta",
       body: "beta",
       clock: fixedClock("2026-05-26T10:02:00.000Z"),
@@ -1209,6 +1686,8 @@ describe("TUI workspace workflows", () => {
   test("editor Mode A clipboard uses terminal paste plus /copy-all and /replace-all", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Clipboard Flow",
       body: "Alpha Beta Gamma",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1316,6 +1795,8 @@ describe("TUI workspace workflows", () => {
   test("default TUI controller wires a desktop-capable clipboard adapter", () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Default Desktop Clipboard",
       body: "Alpha Beta Gamma",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1341,6 +1822,8 @@ describe("TUI workspace workflows", () => {
   test("editor undo redo shortcuts restore body and shortcut labels are honest", () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Undo Shortcut Flow",
       body: "start",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1372,6 +1855,8 @@ describe("TUI workspace workflows", () => {
   test("editor replace shortcut highlights the active match and replacement flow autosaves to disk", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Replace Flow",
       body: "alpha beta alpha",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1414,6 +1899,8 @@ describe("TUI workspace workflows", () => {
   test("editor replace shortcut starts on find field, accepts needle Tab thread Enter, and autosaves to disk", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Replace Focus Flow",
       body: "alpha needle alpha",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1470,12 +1957,16 @@ describe("TUI workspace workflows", () => {
   test("autosave after editor input persists and manager can switch notes without blocking", async () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Autosave Source",
       body: "Source body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
     const second = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Autosave Switch Target",
       body: "Target body",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
@@ -1535,6 +2026,8 @@ describe("TUI workspace workflows", () => {
   test("autosave keeps saved state when derived-index rebuild fails after note persistence", async () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Post Write Rebuild Failure",
       body: "Original body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1561,6 +2054,8 @@ describe("TUI workspace workflows", () => {
   test("dirty editor state still routes Esc, q, and Ctrl+C from manager", () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Dirty Routing Source",
       body: "Source body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1587,12 +2082,16 @@ describe("TUI workspace workflows", () => {
   test("dirty manager note switch is blocked with a visible status instead of reopening only the same note", () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Dirty Switch Source",
       body: "Source body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
     const second = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Dirty Switch Target",
       body: "Target body",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
@@ -1628,6 +2127,8 @@ describe("TUI workspace workflows", () => {
   test("manual save after cursor-aware editor input persists through core services", async () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Cursor Save",
       body: "Alpha omega",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1658,6 +2159,8 @@ describe("TUI workspace workflows", () => {
   test("manual save refreshes search indexes for the saved note without requiring a full rebuild", async () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Incremental Save Source",
       body: "Original searchable body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1673,7 +2176,11 @@ describe("TUI workspace workflows", () => {
       archivedAt: null,
       namingVersion: 1,
     }), "utf8")
-    const controller = createDefaultWorkspaceController({ rootPath })
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: first.relativePath,
+      openedAt: "2026-05-26T10:02:00.000Z",
+    })
+    const controller = createDefaultWorkspaceController({ rootPath, clock: fixedClock("2026-05-26T10:02:30.000Z") })
 
     openManagerNoteByKey(controller, first.key)
     controller.updateEditorBody("Summary line without token\nSaved body contains lag regression token")
@@ -1689,6 +2196,8 @@ describe("TUI workspace workflows", () => {
   test("manual save atomic pre-write failure keeps TUI editor dirty and leaves note file unchanged", async () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Atomic Failure Save",
       body: "Original body before writer failure",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1714,30 +2223,32 @@ describe("TUI workspace workflows", () => {
     assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), "Original body before writer failure")
   })
 
-  test("manager create prompt creates a real plain Markdown note through core services", async () => {
+  test("manager create prompt creates a real folder under note through core services", async () => {
     const controller = createDefaultWorkspaceController({ rootPath, clock: fixedClock("2026-05-26T10:02:00.000Z") })
+    const sidecarCountBefore = await countNoteSidecars(rootPath)
 
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    if (controller.getState().manager.currentFolderPath !== "") controller.goBack()
+    openManagerFolderPath(controller, "note")
     controller.openManagerCreate()
-    controller.updateManagerCreateTitle("TUI Created Note")
+    controller.toggleManagerCreateKind()
+    controller.updateManagerCreateTitle("TUI Created Folder")
     const result = await controller.submitManagerCreate()
 
     assert.equal(result.blocked, false)
-    assert.equal(controller.getState().screen, "editor")
-    assert.equal(controller.getState().editor?.note.title, "TUI Created Note")
-    assert.equal(controller.getState().editor?.body, "")
-
-    const created = controller.getState().editor!.note
-    const noteText = await readFile(path.join(rootPath, created.relativePath), "utf8")
-    assert.equal(noteText, "")
-    assert.doesNotMatch(noteText, /^---/)
-    await access(path.join(rootPath, ".data", "notes", `${created.key}.json`))
-    assert.equal(showNote({ override: rootPath, selector: created.key }).title, "TUI Created Note")
-    assert.equal(showNote({ override: rootPath, selector: created.key }).body, "")
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(controller.getState().manager.currentFolderPath, "note")
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "folder" && item.relativePath === "note/TUI Created Folder"), true)
+    await access(path.join(rootPath, "note", "TUI Created Folder"))
+    assert.equal(await countNoteSidecars(rootPath), sidecarCountBefore)
   })
 
-  test("manager create prompt stays recoverable and creates no note when hidden preview dirty guard blocks", async () => {
+  test("manager folder create preserves a dirty editor and creates no note sidecar", async () => {
     const existing = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Dirty Guard Existing",
       body: "Original guard body",
       clock: fixedClock("2026-05-26T10:02:30.000Z"),
@@ -1751,22 +2262,25 @@ describe("TUI workspace workflows", () => {
     controller.showManager()
     controller.setManagerPreviewVisible(false)
     controller.openManagerCreate()
+    controller.toggleManagerCreateKind()
     controller.updateManagerCreateTitle("Blocked Dirty Create")
 
     const result = await controller.submitManagerCreate()
 
-    assert.deepEqual(result, { blocked: true, reason: "dirty-editor" })
-    assert.equal(controller.getState().mode, "manager.create")
+    assert.deepEqual(result, { blocked: false })
+    assert.equal(controller.getState().mode, "manager.browse")
     assert.equal(controller.getState().manager.previewVisible, false)
-    assert.equal(controller.getState().manager.createDraft?.title, "Blocked Dirty Create")
-    assert.equal(controller.getState().manager.createDraft?.status, "Save or discard current note first")
     assert.equal(controller.getState().editor?.body, "Unsaved guard body")
+    assert.equal(controller.getState().editor?.dirty, true)
     assert.equal(await countNoteSidecars(rootPath), sidecarCountBefore)
+    await access(path.join(rootPath, "note", "Blocked Dirty Create"))
   })
 
   test("manager delete confirmation removes a real note file and sidecar through core services", async () => {
     const created = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "TUI Delete Target",
       body: "Delete me",
       clock: fixedClock("2026-05-26T10:03:00.000Z"),
@@ -1797,12 +2311,16 @@ describe("TUI workspace workflows", () => {
   test("opens Search Everything from editor, selects a content match, and returns to editor", () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Daily Ideas",
       body: "Needle phrase lives here",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
     const second = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Research Log",
       body: "Alpha beta gamma delta epsilon quokka zeta eta theta iota",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
@@ -1832,12 +2350,16 @@ describe("TUI workspace workflows", () => {
   test("Search Everything exposes and selects every content occurrence for the same note", () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Current Note",
       body: "current body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
     const repeated = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Repeated Occurrences",
       body: "needle on line one\nneedle on line two",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
@@ -1845,7 +2367,7 @@ describe("TUI workspace workflows", () => {
     rebuildIndexes({ override: rootPath })
 
     const controller = createWorkspaceController({
-      listNotes: () => listNotes({ override: rootPath }),
+      listNotes: () => listNotes({ override: rootPath, visibility: "drafts" }),
       showNote: (selector) => showNote({ override: rootPath, selector }),
       searchNotes: () => [
         {
@@ -1891,6 +2413,8 @@ describe("TUI workspace workflows", () => {
   test("Search Everything navigates deeply through many matches and Enter opens the selected visible result", () => {
     const created = Array.from({ length: 16 }, (_, index) => createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: `Many Match ${index.toString().padStart(2, "0")}`,
       body: `sharedtoken body ${index}`,
       clock: fixedClock(`2026-05-26T10:${index.toString().padStart(2, "0")}:00.000Z`),
@@ -1916,20 +2440,25 @@ describe("TUI workspace workflows", () => {
   test("Search Everything can select summary results and cancel when content search index is unavailable", () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Fallback Daily",
       body: "Body text that should not be needed for summary fallback",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
+    mkdirSync(path.join(rootPath, "note", "inbox"), { recursive: true })
     createNote({
       override: rootPath,
+      type: "normal",
       title: "Folder Target",
       body: "Another body",
+      destinationFolder: "note/inbox",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
     })
     rebuildIndexes({ override: rootPath })
 
     const controller = createWorkspaceController({
-      listNotes: () => listNotes({ override: rootPath }),
+      listNotes: () => listNotes({ override: rootPath, visibility: "drafts" }),
       showNote: (selector) => showNote({ override: rootPath, selector }),
       searchNotes: () => {
         throw new Error("simulated index failure")
@@ -1949,7 +2478,7 @@ describe("TUI workspace workflows", () => {
 
     controller.openSearch("")
     controller.updateSearchQuery("inbox")
-    assert.equal(controller.getSearchResults().some((result) => result.kind === "folder" && result.path === "notes/inbox"), true)
+    assert.equal(controller.getSearchResults().some((result) => result.kind === "folder" && result.path === "note/inbox"), true)
     controller.cancelSearch()
     assert.equal(controller.getState().screen, "editor")
   })
@@ -1957,6 +2486,8 @@ describe("TUI workspace workflows", () => {
   test("default Search Everything hides unusable commands and runs shown editor commands", () => {
     createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Default Command Note",
       body: "Command body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1986,6 +2517,8 @@ describe("TUI workspace workflows", () => {
   test("default TUI controller wires /ai-describe to the description service asynchronously", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Default AI Describe",
       body: "Body that the mock provider summarizes.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -2012,13 +2545,15 @@ describe("TUI workspace workflows", () => {
 
     assert.deepEqual(controller.getState().ai, { kind: "updated", key: note.key, queue: { queued: 0, failed: 0 } })
     assert.equal(showNote({ override: rootPath, selector: note.key }).description, "Mock generated summary.")
-    assert.equal(listNotes({ override: rootPath }).some((summary) => summary.key === note.key && summary.description === "Mock generated summary."), true)
+    assert.equal(listNotes({ override: rootPath, visibility: "drafts" }).some((summary) => summary.key === note.key && summary.description === "Mock generated summary."), true)
     assert.equal(controller.getState().manager.items.some((item) => item.type === "note" && item.key === note.key && item.description === "Mock generated summary."), true)
   })
 
-  test("manager Search Everything shows applicable manager commands and runs new/delete prompts", async () => {
-    createNote({
+  test("manager Search Everything shows applicable manager commands and runs folder-create/delete prompts", async () => {
+    const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Command Note",
       body: "Command body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -2026,8 +2561,15 @@ describe("TUI workspace workflows", () => {
     rebuildIndexes({ override: rootPath })
     const controller = createDefaultWorkspaceController({ rootPath })
 
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    if (controller.getState().manager.currentFolderPath !== "") controller.goBack()
     controller.openSearch("/")
-    assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/new", "/ai-process-queue", "/ai-status"])
+    assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/ai-process-queue", "/ai-status"])
+
+    controller.cancelSearch()
+    openManagerFolderPath(controller, "note")
+    controller.openSearch("/")
+    assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/new", "/delete", "/ai-describe", "/ai-process-queue", "/ai-status"])
 
     const newResult = controller.getSearchResults().find((result) => result.kind === "command" && result.name === "/new")
     assert.ok(newResult)
@@ -2035,12 +2577,15 @@ describe("TUI workspace workflows", () => {
     assert.equal(controller.getState().screen, "manager")
     assert.equal(controller.getState().mode, "manager.create")
 
+    controller.toggleManagerCreateKind()
     controller.updateManagerCreateTitle("Created From Search")
     assert.equal((await controller.submitManagerCreate()).blocked, false)
-    assert.equal(controller.getState().editor?.note.title, "Created From Search")
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "folder" && item.relativePath === "note/Created From Search"), true)
+    await access(path.join(rootPath, "note", "Created From Search"))
 
-    controller.showManager()
-    if (controller.getState().manager.currentFolderPath !== "") controller.goBack()
+    const noteIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === note.key)
+    assert.notEqual(noteIndex, -1)
+    controller.focusManagerItem(noteIndex)
     controller.openSearch("/")
     assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/new", "/delete", "/ai-describe", "/ai-process-queue", "/ai-status"])
     const deleteResult = controller.getSearchResults().find((result) => result.kind === "command" && result.name === "/delete")
@@ -2051,6 +2596,6 @@ describe("TUI workspace workflows", () => {
     assert.equal(controller.getState().screen, "manager")
     assert.equal(controller.getState().mode, "manager.deleteConfirm")
     assert.equal((await controller.confirmManagerDelete()).blocked, false)
-    assert.equal(listNotes({ override: rootPath }).some((note) => note.title === "Created From Search"), false)
+    assert.equal(listNotes({ override: rootPath, visibility: "drafts" }).some((listedNote) => listedNote.key === note.key), false)
   })
 })

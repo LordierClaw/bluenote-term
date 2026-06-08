@@ -2,7 +2,7 @@
 
 BlueNote is a terminal-native notes app built for local Markdown files. It gives you a small CLI and a full-screen terminal workspace for capture, browsing, search, and editing.
 
-BlueNote keeps note bodies as plain `.md` files under `notes/`. App metadata lives separately in `.data/notes/`, so your notes remain readable in any editor and easy to back up with ordinary file tools.
+BlueNote keeps normal note bodies as plain `.md` files under `note/` and drafts under `draft/`. App metadata lives separately in `.data/notes/`, so your notes remain readable in any editor and easy to back up with ordinary file tools.
 
 ## What it does
 
@@ -46,8 +46,9 @@ Portable GitHub Release archives are available for Windows and Linux users as re
 # Initialize a BlueNote root in the current directory.
 bun run ./bin/bn.ts init
 
-# Create a note.
-bun run ./bin/bn.ts new --title "Project notes"
+# Create a draft, or pass --path note/<folder> with --title to create a normal note.
+bun run ./bin/bn.ts new --title "Project notes" "Initial content"
+bun run ./bin/bn.ts new --path note --title "Project notes" "Initial content"
 
 # List and search notes.
 bun run ./bin/bn.ts list
@@ -79,15 +80,14 @@ When installed on your `PATH`, use `bn` or `bluenote` instead of `bun run ./bin/
 | Command | Description |
 | --- | --- |
 | `init` | Initialize the managed BlueNote root. |
-| `new --title <title>` | Create a note in `notes/inbox/` and print its key and path. |
+| `new [--title <title>] [--path note/<folder>] [--clipboard] <body>` | Create a draft from positional body text or clipboard; `--path` creates a normal note under `note/`. |
 | `list` | List active notes with title, key, description, and path. |
-| `show <key|path>` | Print a note summary and body. |
+| `show [--drafts|--all] <key|path>` | Print a note summary and body. |
 | `search <query>` | Search indexed notes with contains-style matching. |
-| `edit <key|path>` | Open a matching note in `$EDITOR`. |
-| `archive <key|path>` | Move a note to `notes/archive/`. |
-| `delete <key|path> --force` | Permanently remove a note and its sidecar. |
+| `edit [--drafts|--all] <key|path>` | Open a matching note in `$EDITOR`. |
+| `archive [--drafts|--all] <key|path>` | Move a normal note to hidden `.data/archive/`. |
+| `delete [--drafts|--all] <key|path> --force` | Permanently remove a note and its sidecar. |
 | `rebuild` | Rebuild derived metadata and search indexes. |
-| `migrate` | Convert frontmatter-based notes into plain files plus sidecars. |
 | `tui` | Launch the terminal UI workspace. |
 | `ai config set --base-url <url> --api-key <key> --model <model>` | Opt in to AI by configuring an OpenAI-compatible provider. |
 | `ai config set --provider codex --model <model>` | Select the Codex provider. |
@@ -131,13 +131,10 @@ Pending AI work is durable in `.data/ai/queue.json` and is recovered on TUI star
 A BlueNote root separates user-authored notes from BlueNote-managed data:
 
 ```text
-notes/
-  inbox/
-  journal/
-  archive/
-scratches/
-templates/
+note/                 # normal user notes and custom folders
+draft/                # draft notes
 .data/
+  archive/            # archived note files
   notes/              # sidecar metadata JSON
   ai/                 # opt-in AI config, prompts, queue, and logs
     config.json       # plaintext provider settings when configured
@@ -194,7 +191,7 @@ Common controls:
 
 ### Editor
 
-The Editor supports inline body editing, Unicode-safe cursor movement, newline, backspace, delete, undo/redo, wrap mode, `Ctrl+F` find, `Ctrl+R` replace, and `Ctrl+S` save.
+The Editor supports inline body editing, Unicode-safe cursor movement, newline, backspace, delete, undo/redo, wrap mode, `Ctrl+F` find, `Ctrl+R` replace, and `Ctrl+S` save. `Ctrl+PageDown` and `Ctrl+PageUp` switch to the next or previous note in the same folder; after switching, the topbar shows a temporary blue index label such as `03/10` before the title.
 
 Autosave runs after 750 ms. Autosave and manual save use the same safe note-body write path. If a save fails, BlueNote keeps the buffer dirty and retries later.
 

@@ -15,11 +15,11 @@ BlueNote is a terminal-native note tool optimized for fast local capture, browsi
 Current public behavior includes:
 
 - managed root initialization
-- plain Markdown note files under `notes/`
+- plain Markdown normal note files under `note/` and drafts under `draft/`
 - canonical BlueNote metadata sidecars under `.data/notes/`
 - rebuildable metadata/search artifacts at `.data/metadata.sqlite` and `.data/search-index.json`
-- safe migration input handling for legacy frontmatter notes and legacy `.state/` metadata
-- CLI flows for `init`, `new`, `list`, `show`, `search`, `edit`, `archive`, `delete`, `rebuild`, `migrate`, and `tui`
+- Phase 7 fresh-root storage with no legacy `notes/` tree migration path
+- CLI flows for `init`, `new`, `list`, `show`, `search`, `edit`, `archive`, `delete`, `rebuild`, and `tui`
 - `key|path` selector UX for everyday note targeting
 - contains-style search output over keys, paths, titles, descriptions, and note bodies
 - automatic index rebuilds after CLI mutations so list/search output reflects changes immediately
@@ -55,7 +55,7 @@ The current TUI bootstrap smoke status is `tui-workspace-ready` with follow-up m
 
 ## Storage and search contract
 
-Notes remain plain Markdown under `notes/`. BlueNote metadata sidecars are stored under `.data/notes/`. Derived metadata/search artifacts are rebuildable under `.data/` as `.data/metadata.sqlite` and `.data/search-index.json`. Legacy `.state/` directories are migration input only and are not the active canonical storage layout.
+Normal notes remain plain Markdown under `note/`, drafts remain plain Markdown under `draft/`, and archived note bodies move to hidden `.data/archive/` storage. BlueNote metadata sidecars are stored under `.data/notes/`. Derived metadata/search artifacts are rebuildable under `.data/` as `.data/metadata.sqlite` and `.data/search-index.json`. Legacy `.state/` directories are migration input only and are not the active canonical storage layout.
 
 `bn search`, Manager filtering, Search Everything, and slash-command discovery use contains-style matching rather than fuzzy subsequence matching. For example, `123` matches `Receipt 123`, `meeting-123.md`, or body text containing `123`, but it does not match notes without an actual `123` substring in a searchable field or content.
 

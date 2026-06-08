@@ -4,13 +4,10 @@ Current default managed user root:
 
 ```text
 ~/.bluenote/
-├── notes/
-│   ├── inbox/
-│   ├── journal/
-│   └── archive/
-├── scratches/
-├── templates/
+├── note/                    # normal user notes and custom folders
+├── draft/                   # draft notes
 ├── .data/
+│   ├── archive/             # archived note files
 │   ├── manifest.json
 │   ├── metadata.sqlite
 │   ├── search-index.json
@@ -35,6 +32,7 @@ Current default managed user root:
 
 - note files remain canonical user data and plain Markdown
 - `.data/notes/*.json` sidecars are canonical BlueNote metadata paired with note files
+- `.data/archive/` stores archived note files outside the normal `note/` tree
 - `.data/metadata.sqlite` and `.data/search-index.json` are rebuildable derived artifacts
 - `.data/ai/` stores opt-in AI configuration, prompt templates, queued description jobs, auth state, and logs; OpenAI-compatible provider API keys in `.data/ai/config.json` are plaintext in Phase 6, while Codex provider config stores no OpenAI-compatible `baseUrl` or `apiKey`; `.data/ai/config.json` also stores non-secret preferences such as `maxAttempts` (default `3`) and `outputLanguage` (default `English`); `.data/ai/codex-auth.json` is sensitive root-local app state and must not be committed or shared
 - `.data/tmp/`, `.data/logs/`, and `.data/recovery/` are BlueNote-managed support directories

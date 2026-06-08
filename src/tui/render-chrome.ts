@@ -19,6 +19,7 @@ export const TUI_SHORTCUTS = {
   managerOpen: { key: "Enter", action: "Open" },
   managerFilter: { key: "/", action: "Filter" },
   managerNew: { key: "n", action: "New" },
+  quickNewDraft: { key: "N", action: "New Draft" },
   globalSearch: { key: "Ctrl+P", action: "Search" },
   managerBack: { key: "Esc", action: "Back" },
   managerPreview: { key: "p", action: "Preview" },
@@ -29,6 +30,7 @@ export const TUI_SHORTCUTS = {
   editorUndo: { key: "Ctrl+Z", action: "Undo" },
   editorRedo: { key: "Ctrl+Y", action: "Redo" },
   editorWrap: { key: "Alt+Z", action: "Wrap" },
+  editorSwitchNote: { key: "Ctrl+PageUp/Down", action: "Switch Note" },
   editorTerminalPaste: { key: "Ctrl+Shift+V", action: "Paste" },
 } as const
 

@@ -31,6 +31,7 @@ type NoteWithEditorMetadata = NonNullable<TuiState["editor"]>["note"] & {
 export type EditorShortcutViewModel = ShortcutHint & { order: number }
 
 export interface EditorTopbarViewModel {
+  noteSwitchIndicator: { label: string; intent: TuiColorIntent } | null
   noteName: string
   titleIntent: TuiColorIntent
   directoryPath: string
@@ -289,6 +290,7 @@ function editorShortcuts(): EditorShortcutViewModel[] {
     { ...TUI_SHORTCUTS.editorUndo, order: 6 },
     { ...TUI_SHORTCUTS.editorRedo, order: 7 },
     { ...TUI_SHORTCUTS.editorWrap, order: 8 },
+    { ...TUI_SHORTCUTS.editorSwitchNote, order: 9 },
   ]
 }
 
@@ -448,6 +450,7 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
 
   return {
     topbar: {
+      noteSwitchIndicator: editor?.noteSwitchIndicator ? { label: editor.noteSwitchIndicator.label, intent: "info" } : null,
       noteName: note?.title ?? "No note open",
       titleIntent: "textPrimary",
       directoryPath: directoryPathFor(relativePath),
@@ -576,6 +579,15 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     width: "100%",
     height: 1,
   })
+  if (vm.topbar.noteSwitchIndicator) {
+    topbar.add(new TextRenderable(options.renderer, {
+      id: "bluenote-editor-topbar-note-index",
+      content: `${vm.topbar.noteSwitchIndicator.label} `,
+      width: vm.topbar.noteSwitchIndicator.label.length + 1,
+      height: 1,
+      fg: tuiTheme[vm.topbar.noteSwitchIndicator.intent],
+    }))
+  }
   topbar.add(new TextRenderable(options.renderer, {
     id: "bluenote-editor-topbar-title",
     content: `${vm.topbar.noteName} `,
@@ -887,6 +899,10 @@ export function routeEditorKey(sequence: string, controller: WorkspaceController
   switch (sequence) {
     case "\u0013":
       void controller.saveEditor().then(() => onInvalidate?.()).catch(() => onInvalidate?.())
+      return true
+    case "\u001bs":
+    case "\u001bS":
+      controller.openSaveDraftAs()
       return true
     case "\u001a":
       if (state.mode !== "editor.body") return false

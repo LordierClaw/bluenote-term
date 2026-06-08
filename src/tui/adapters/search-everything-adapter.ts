@@ -22,6 +22,8 @@ export type SearchEverythingManagerSelection = "note" | "folder" | "none"
 export interface SearchEverythingCommandContext {
   screen: Exclude<TuiScreen, "search">
   managerSelection?: SearchEverythingManagerSelection
+  managerCanCreateFolder?: boolean
+  activeEditorIsDraft?: boolean
 }
 
 export interface SearchEverythingResultOptions {
@@ -112,8 +114,8 @@ export interface SearchEverythingPreview {
 export const TUI_COMMANDS: readonly TuiCommandDefinition[] = [
   {
     name: "/new",
-    description: "Create a new note and open it in the editor",
-    usage: "/new [title]",
+    description: "Create a new folder in the current note folder",
+    usage: "/new <folder-name>",
     shortcut: TUI_SHORTCUTS.managerNew.key,
     contexts: ["manager"],
   },
@@ -161,6 +163,13 @@ export const TUI_COMMANDS: readonly TuiCommandDefinition[] = [
     description: "Save the active editor buffer",
     usage: "/save",
     shortcut: TUI_SHORTCUTS.editorSave.key,
+    contexts: ["editor"],
+  },
+  {
+    name: "/save-draft-as",
+    description: "Save the active draft as a normal note in an existing note folder",
+    usage: "/save-draft-as",
+    shortcut: "Alt+S",
     contexts: ["editor"],
   },
   {
@@ -349,11 +358,11 @@ function withHighlightedPreviewText(
 function foldersFor(relativePath: string): string[] {
   const parts = normalizePath(relativePath).split("/").filter(Boolean)
 
-  if (parts.length <= 2 || parts[0] !== "notes") {
+  if (parts.length <= 2 || parts[0] !== "note") {
     return []
   }
 
-  return parts.slice(1, -1).map((_, index) => ["notes", ...parts.slice(1, index + 2)].join("/"))
+  return parts.slice(1, -1).map((_, index) => ["note", ...parts.slice(1, index + 2)].join("/"))
 }
 
 interface SearchEverythingFolderCandidate {
@@ -653,11 +662,17 @@ function commandAvailableForContext(command: TuiCommandDefinition, context: Sear
   if (command.contexts && !command.contexts.includes(context.screen)) {
     return false
   }
+  if (command.name === "/new") {
+    return context.screen === "manager" && context.managerCanCreateFolder === true
+  }
   if (command.name === "/delete") {
     return context.screen === "manager" && context.managerSelection === "note"
   }
   if (command.name === "/ai-describe") {
     return context.screen === "editor" || (context.screen === "manager" && context.managerSelection === "note")
+  }
+  if (command.name === "/save-draft-as") {
+    return context.screen === "editor" && context.activeEditorIsDraft === true
   }
   return true
 }

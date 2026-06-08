@@ -9,8 +9,9 @@ import { parsePlainNote } from "../storage/plain-note"
 import { createSidecarRepository } from "../storage/sidecar-repository"
 import { createNoteRepository, type StoredNoteRecord } from "../storage/note-repository"
 import type { ParsedNote } from "../storage/note-schema"
-import { ensureManagedRoot } from "../storage/root-layout"
+import { ensureManagedRoot, getArchiveNotesPath } from "../storage/root-layout"
 import { migrateLegacyAppStateToData } from "../storage/app-state-migration"
+import { assertPathInsideRoot } from "../platform/path-safety"
 
 export interface RebuildIndexesOptions extends ResolveBlueNoteRootOptions {
   testHooks?: {
@@ -91,6 +92,12 @@ function readLegacyFrontmatterNote(rawNote: string, relativePath: string) {
   } catch {
     return null
   }
+}
+
+function pathIsInsideDirectory(directoryPath: string, targetPath: string): boolean {
+  const relativePath = path.relative(path.resolve(directoryPath), path.resolve(targetPath))
+
+  return relativePath === "" || (!relativePath.startsWith("..") && !path.isAbsolute(relativePath))
 }
 
 export function rebuildIndexes(options: RebuildIndexesOptions = {}): RebuildIndexesSummary {
@@ -186,6 +193,20 @@ export function rebuildIndexes(options: RebuildIndexesOptions = {}): RebuildInde
 
       try {
         const sidecar = sidecars.read(sidecarKey)
+
+        if (path.isAbsolute(sidecar.relativePath)) {
+          throw new UsageError(
+            `Sidecar '${path.join(STATE_NOTES_DIRECTORY, `${sidecarKey}.json`)}' declares absolute relativePath '${sidecar.relativePath}'.`,
+          )
+        }
+
+        const sidecarNotePath = assertPathInsideRoot(rootPath, path.join(rootPath, sidecar.relativePath))
+        const archiveNotesPath = getArchiveNotesPath(rootPath)
+
+        if (pathIsInsideDirectory(archiveNotesPath, sidecarNotePath) && existsSync(sidecarNotePath)) {
+          continue
+        }
+
         validationErrors.push(
           `Sidecar '${path.join(STATE_NOTES_DIRECTORY, `${sidecarKey}.json`)}' points to missing note '${sidecar.relativePath}'.`,
         )

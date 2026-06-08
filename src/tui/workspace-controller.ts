@@ -2,6 +2,8 @@ import type { ClipboardModel, ClipboardOperationResult, EditorCursorDirection, E
 import { advanceEditorFindState, backspaceAtEditorCursor, deleteAtEditorCursor, findInEditorBody, insertTextAtEditorCursor, moveEditorCursor, pasteText, replaceAllMatches, replaceCurrentMatch, replaceEditorBody } from "./adapters/editor-buffer-adapter"
 import {
   buildManagerBrowserModel,
+  buildManagerFolderPreviewRows,
+  canCreateManagerFolderAt,
   focusedManagerBrowserItem,
   goToManagerParent,
   moveManagerSelection,
@@ -112,12 +114,22 @@ export interface WorkspaceControllerDependencies {
   listNoteFolders?: () => readonly string[]
   showNote: (selector: string) => TuiNote
   searchNotes: (query: string) => readonly SearchNoteMatch[]
-  createNote?: (title: string, body: string) => TuiNote | { key: string }
+  managedRootPath?: string
+  createNote?: (title: string, destinationFolder: string) => TuiNote
+  createDraft?: () => TuiNote
+  createFolder?: (folderRelativePath: string) => void
+  renameNote?: (selector: string, title: string) => TuiNote
+  renameFolder?: (folderRelativePath: string, nextName: string) => void
+  moveNote?: (selector: string, destinationFolder: string) => TuiNote
+  promoteDraft?: (selector: string, title: string, destinationFolder: string) => TuiNote
   deleteNote?: (selector: string) => void
   rebuildIndexes?: () => void
   persistEditorBody?: SaveEditorBufferDependencies["persist"]
+  initialNote?: TuiNote
+  recordLatestOpenedNote?: (note: TuiNote) => void
   autosaveScheduler?: WorkspaceDebounceScheduler
   aiIdleScheduler?: WorkspaceDebounceScheduler
+  transientIndicatorScheduler?: WorkspaceDebounceScheduler
   clipboard?: ClipboardModel
   initialAiStatus?: AiStatusState
   aiActions?: WorkspaceAiActions
@@ -133,6 +145,8 @@ export interface WorkspaceController {
   focusManagerItem: (index: number) => void
   moveManagerSelection: (direction: MoveManagerSelectionDirection, options?: { wrap?: boolean }) => void
   openFocusedManagerItem: (options?: WorkspaceActionOptions) => WorkspaceActionResult
+  openFocusedManagerFolder: () => WorkspaceActionResult
+  goToManagerParent: (options?: { preserveActionMode?: boolean }) => WorkspaceActionResult
   showManager: () => WorkspaceActionResult
   showEditor: () => WorkspaceActionResult
   updateEditorBody: (body: string) => void
@@ -153,12 +167,22 @@ export interface WorkspaceController {
   goBack: () => WorkspaceActionResult
   openManagerFilter: () => void
   openManagerCreate: () => void
+  toggleManagerCreateKind: () => void
+  quickNewDraft: () => WorkspaceActionResult
   updateManagerCreateTitle: (title: string) => void
   submitManagerCreate: () => Promise<WorkspaceActionResult>
   cancelManagerCreate: () => void
+  openManagerRename: () => void
+  openManagerMove: () => WorkspaceActionResult
+  openSaveDraftAs: () => WorkspaceActionResult
+  updateManagerActionInput: (input: string) => void
+  submitManagerAction: () => WorkspaceActionResult
+  cancelManagerAction: () => void
   openManagerDeleteConfirmation: () => void
   confirmManagerDelete: () => Promise<WorkspaceActionResult>
   cancelManagerDelete: () => void
+  renameFocusedManagerItem: (titleOrFolderName: string) => WorkspaceActionResult
+  moveFocusedManagerNote: (destinationFolder: string) => WorkspaceActionResult
   setManagerFilter: (query: string) => void
   updateManagerFilter: (query: string) => void
   clearManagerFilter: () => void
@@ -177,6 +201,7 @@ export interface WorkspaceController {
   replaceAllEditorMatches: () => void
   undoEditor: () => void
   redoEditor: () => void
+  switchEditorNote: (direction: "next" | "previous", options?: WorkspaceActionOptions) => WorkspaceActionResult
   requestQuit: (options?: WorkspaceActionOptions) => WorkspaceActionResult
   dispose: () => void
   startAiStartupScan: () => void
@@ -188,7 +213,7 @@ export interface WorkspaceController {
 const ok = (): WorkspaceActionResult => ({ blocked: false })
 const dirtyBlocked = (): WorkspaceActionResult => ({ blocked: true, reason: "dirty-editor" })
 
-const destructiveCommands = new Set(["/archive", "/delete", "/migrate", "/quit"])
+const destructiveCommands = new Set(["/archive", "/delete", "/quit"])
 const searchIndexUnavailableStatus = "Search index unavailable; showing notes, folders, and commands only"
 const dirtyEditorManagerStatus = "Save or discard current note first"
 
@@ -224,6 +249,10 @@ function cloneSearchResult(result: SearchEverythingResult): SearchEverythingResu
   return { ...result }
 }
 
+function isDraftRelativePath(relativePath: string | undefined): boolean {
+  return (relativePath ?? "").replaceAll("\\", "/").startsWith("draft/")
+}
+
 function cloneStateSnapshot(source: TuiState): TuiState {
   return {
     ...source,
@@ -231,12 +260,14 @@ function cloneStateSnapshot(source: TuiState): TuiState {
       ...source.manager,
       items: source.manager.items.map(cloneManagerItem),
       createDraft: source.manager.createDraft ? { ...source.manager.createDraft } : null,
+      actionDraft: source.manager.actionDraft ? { ...source.manager.actionDraft } : null,
       deleteDraft: source.manager.deleteDraft ? { ...source.manager.deleteDraft } : null,
     },
     editor: source.editor
       ? {
           ...source.editor,
           note: toTuiNote(source.editor.note),
+          noteSwitchIndicator: source.editor.noteSwitchIndicator ? { ...source.editor.noteSwitchIndicator } : null,
           undoStack: source.editor.undoStack?.map((snapshot) => ({ ...snapshot })) ?? [],
           redoStack: source.editor.redoStack?.map((snapshot) => ({ ...snapshot })) ?? [],
         }
@@ -263,6 +294,29 @@ function commandArgumentsFor(command: string): string {
 
 function filenameForPath(path: string): string {
   return path.replaceAll("\\", "/").split("/").filter(Boolean).at(-1) ?? path
+}
+
+function normalizeWorkspaceRelativePath(relativePath: string | null | undefined): string {
+  return (relativePath ?? "").replaceAll("\\", "/").replace(/\/+/gu, "/").replace(/^\/+|\/+$/gu, "")
+}
+
+function managerFolderForNotePath(relativePath: string | null | undefined): string | null {
+  const normalizedPath = normalizeWorkspaceRelativePath(relativePath)
+  const parts = normalizedPath.split("/").filter(Boolean)
+
+  if (parts.length < 2 || !normalizedPath.endsWith(".md")) {
+    return null
+  }
+
+  if (parts[0] !== "note" && parts[0] !== "draft") {
+    return null
+  }
+
+  return parts.slice(0, -1).join("/")
+}
+
+function folderNameSegmentFromTitle(title: string): string {
+  return title.trim().replaceAll("\\", "/").split("/").filter(Boolean).at(-1)?.trim() ?? ""
 }
 
 export function editorRequiresDestructiveConfirmation(editor: EditorBufferState | null | undefined): boolean {
@@ -328,10 +382,14 @@ function isPromiseLike<T>(value: T | Promise<T>): value is Promise<T> {
 export function createWorkspaceController(deps: WorkspaceControllerDependencies): WorkspaceController {
   let noteSummaries: readonly NoteManagerSummary[] = []
   let userFolderPaths: readonly string[] = []
-  let state = createInitialTuiState({ ai: deps.initialAiStatus })
+  let state = createInitialTuiState({
+    ai: deps.initialAiStatus,
+    manager: { managedRootPath: deps.managedRootPath ?? null },
+  })
   let searchResults: SearchEverythingResult[] = []
   let autosaveTimer: unknown = null
   let aiIdleTimer: unknown = null
+  let noteSwitchIndicatorTimer: unknown = null
   let aiIdleGeneration = 0
   let aiIdlePendingSelector: string | null = null
   let disposed = false
@@ -344,6 +402,10 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
   }
   const aiIdleScheduler: WorkspaceDebounceScheduler = deps.aiIdleScheduler ?? {
+    setTimeout: (callback, delay) => globalThis.setTimeout(callback, delay),
+    clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
+  }
+  const transientIndicatorScheduler: WorkspaceDebounceScheduler = deps.transientIndicatorScheduler ?? {
     setTimeout: (callback, delay) => globalThis.setTimeout(callback, delay),
     clearTimeout: (handle) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>),
   }
@@ -412,6 +474,40 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       autosaveScheduler.clearTimeout(autosaveTimer)
       autosaveTimer = null
     }
+  }
+
+  function clearNoteSwitchIndicatorTimer(): void {
+    if (noteSwitchIndicatorTimer !== null) {
+      transientIndicatorScheduler.clearTimeout(noteSwitchIndicatorTimer)
+      noteSwitchIndicatorTimer = null
+    }
+  }
+
+  function scheduleNoteSwitchIndicator(label: string): void {
+    clearNoteSwitchIndicatorTimer()
+    if (!state.editor) return
+    state = {
+      ...state,
+      editor: {
+        ...state.editor,
+        noteSwitchIndicator: { label },
+      },
+    }
+    notifyAutosaveStateChange()
+    noteSwitchIndicatorTimer = transientIndicatorScheduler.setTimeout(() => {
+      noteSwitchIndicatorTimer = null
+      if (disposed || state.editor?.noteSwitchIndicator?.label !== label) {
+        return
+      }
+      state = {
+        ...state,
+        editor: {
+          ...state.editor,
+          noteSwitchIndicator: null,
+        },
+      }
+      notifyAutosaveStateChange()
+    }, 2_000)
   }
 
   function clearAiIdleTimer(options: { clearPending?: boolean } = {}): void {
@@ -732,6 +828,10 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
   function clearManagerPreviewCache(): void {
     previewBodyCache.clear()
+  }
+
+  function managerRenameDisplayName(item: ManagerItem): string {
+    return item.type === "folder" ? item.filename : item.title
   }
 
   function setManagerStatus(status: string | null): void {
@@ -1070,13 +1170,44 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   }
 
   function setEditorNote(note: TuiNote): void {
+    const openedNote = toTuiNote(note)
     state = openEditorForNote({
       ...state,
       manager: {
         ...state.manager,
         status: null,
       },
-    }, toTuiNote(note))
+    }, openedNote)
+    try {
+      deps.recordLatestOpenedNote?.(openedNote)
+    } catch {
+      // Latest-opened state is a best-effort startup hint; opening the editor must remain non-blocking.
+    }
+  }
+
+  function updateOpenEditorNotePreservingScreen(note: TuiNote): void {
+    if (!state.editor) {
+      return
+    }
+
+    const openedNote = toTuiNote(note)
+    state = {
+      ...state,
+      editor: {
+        ...state.editor,
+        note: openedNote,
+        body: openedNote.body,
+        savedBody: openedNote.body,
+        dirty: false,
+        autosaveStatus: "saved",
+        statusMessage: null,
+      },
+    }
+    try {
+      deps.recordLatestOpenedNote?.(openedNote)
+    } catch {
+      // Latest-opened state is a best-effort startup hint; renames/moves must not depend on it.
+    }
   }
 
   function openNoteByKey(key: string, options: WorkspaceActionOptions = {}): WorkspaceActionResult {
@@ -1100,15 +1231,71 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     return ok()
   }
 
+  function folderPathForNoteRelativePath(relativePath: string | undefined): string {
+    const normalized = (relativePath ?? "").replaceAll("\\", "/").replace(/\/+/gu, "/").replace(/^\/+|\/+$/gu, "")
+    const parts = normalized.split("/").filter(Boolean)
+    return parts.length <= 1 ? "" : parts.slice(0, -1).join("/")
+  }
+
+  function noteSwitchLabel(index: number, total: number): string {
+    const width = Math.max(2, String(total).length)
+    return `${String(index + 1).padStart(width, "0")}/${String(total).padStart(width, "0")}`
+  }
+
+  function switchEditorNote(direction: "next" | "previous", options: WorkspaceActionOptions = {}): WorkspaceActionResult {
+    const editor = state.editor
+    if (!editor) {
+      return ok()
+    }
+
+    const folderPath = folderPathForNoteRelativePath(editor.note.relativePath)
+    const rows = buildManagerFolderPreviewRows(noteSummaries, folderPath, editor.note.key).filter((row) => row.type === "note")
+    if (rows.length === 0) {
+      return ok()
+    }
+
+    const currentIndex = rows.findIndex((row) => row.key === editor.note.key)
+    if (currentIndex === -1) {
+      return ok()
+    }
+
+    if (rows.length === 1) {
+      scheduleNoteSwitchIndicator(noteSwitchLabel(currentIndex, rows.length))
+      return ok()
+    }
+
+    const nextIndex = direction === "next"
+      ? (currentIndex + 1) % rows.length
+      : (currentIndex - 1 + rows.length) % rows.length
+    const next = rows[nextIndex]
+    if (!next) {
+      return ok()
+    }
+
+    const result = openNoteByKey(next.key, options)
+    if (!result.blocked) {
+      state = {
+        ...state,
+        manager: {
+          ...state.manager,
+          currentFolderPath: folderPath,
+        },
+      }
+      scheduleNoteSwitchIndicator(noteSwitchLabel(nextIndex, rows.length))
+    }
+    return result
+  }
+
   function searchCommandContext(): SearchEverythingCommandContext {
     const screen = state.search?.previousScreen ?? (state.screen === "search" ? "manager" : state.screen)
     if (screen === "editor") {
-      return { screen }
+      return { screen, activeEditorIsDraft: isDraftRelativePath(state.editor?.note.relativePath) }
     }
     const focused = state.manager.items[state.manager.focusedIndex]
     return {
       screen: "manager",
-      managerSelection: focused?.type === "note" || state.editor ? "note" : focused?.type ?? "none",
+      managerSelection: focused?.type ?? "none",
+      managerCanCreateFolder: state.manager.canCreateFolder === true,
     }
   }
 
@@ -1245,6 +1432,78 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     })
   }
 
+  function moveManagerNote(sourceKey: string, sourceRelativePath: string, destinationFolder: string): WorkspaceActionResult {
+    const normalizedDestination = normalizeWorkspaceRelativePath(destinationFolder)
+    if (!deps.moveNote) {
+      setManagerStatus("Move note unavailable")
+      applyManagerBrowserModel()
+      return ok()
+    }
+    try {
+      const moved = deps.moveNote(sourceKey, normalizedDestination)
+      if (state.editor?.note.key === sourceKey || state.editor?.note.relativePath === sourceRelativePath) {
+        updateOpenEditorNotePreservingScreen(moved)
+      }
+      clearManagerPreviewCache()
+      deps.rebuildIndexes?.()
+      refreshManager()
+      setManagerStatus("Moved")
+      applyManagerBrowserModel()
+      return ok()
+    } catch (error) {
+      clearManagerPreviewCache()
+      setManagerStatus(error instanceof Error ? error.message : "Move failed")
+      applyManagerBrowserModel()
+      return ok()
+    }
+  }
+
+  function promoteManagerDraft(sourceKey: string, sourceRelativePath: string, title: string, destinationFolder: string): WorkspaceActionResult {
+    const normalizedDestination = normalizeWorkspaceRelativePath(destinationFolder)
+    const trimmedTitle = title.trim()
+    if (!trimmedTitle) {
+      setManagerStatus("Title required")
+      applyManagerBrowserModel()
+      return ok()
+    }
+    if (!deps.promoteDraft) {
+      setManagerStatus("Save draft as unavailable")
+      applyManagerBrowserModel()
+      return ok()
+    }
+    try {
+      const promoted = deps.promoteDraft(sourceKey, trimmedTitle, normalizedDestination)
+      clearManagerPreviewCache()
+      deps.rebuildIndexes?.()
+      refreshManager()
+      setEditorNote(promoted)
+      state = {
+        ...state,
+        manager: {
+          ...state.manager,
+          actionDraft: null,
+          status: null,
+        },
+      }
+      setManagerStatus("Draft saved as normal note")
+      applyManagerBrowserModel()
+      return ok()
+    } catch (error) {
+      clearManagerPreviewCache()
+      const status = error instanceof Error ? error.message : "Save draft as failed"
+      setManagerStatus(status)
+      state = {
+        ...state,
+        manager: {
+          ...state.manager,
+          actionDraft: state.manager.actionDraft ? { ...state.manager.actionDraft, status } : null,
+        },
+      }
+      applyManagerBrowserModel()
+      return ok()
+    }
+  }
+
   const controller: WorkspaceController = {
     getState: () => cloneStateSnapshot(state),
 
@@ -1302,15 +1561,26 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       }
 
       if (focused.type === "folder") {
+        const previousMode = state.mode
+        const previousActionDraft = state.manager.actionDraft
         const opened = openManagerBrowserItem(state.manager, { showNote: deps.showNote })
         if (opened.type === "folder") {
-          state = clearManagerFilterState({
+          const shouldPreserveActionMode = previousActionDraft
+            && (previousMode === "manager.move" || previousMode === "manager.saveDraftAs")
+          const nextState = clearManagerFilterState({
             ...state,
             screen: "manager",
             mode: "manager.browse",
             search: null,
             manager: opened.state,
           })
+          state = shouldPreserveActionMode
+            ? {
+                ...nextState,
+                mode: previousMode,
+                manager: { ...nextState.manager, actionDraft: previousActionDraft },
+              }
+            : nextState
           applyManagerBrowserModel()
         }
         return ok()
@@ -1339,8 +1609,37 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       return ok()
     },
 
+    openFocusedManagerFolder: () => {
+      const focused = focusedManagerBrowserItem(state.manager).item
+      if (!focused || focused.type !== "folder") {
+        return ok()
+      }
+      return controller.openFocusedManagerItem()
+    },
+
+    goToManagerParent: (options = {}) => {
+      if (state.screen !== "manager") {
+        return ok()
+      }
+      const previousMode = state.mode
+      const previousActionDraft = state.manager.actionDraft
+      const nextManager = goToManagerParent(state.manager)
+      const shouldPreserveActionMode = options.preserveActionMode === true
+        && previousActionDraft
+        && (previousMode === "manager.move" || previousMode === "manager.saveDraftAs")
+      state = {
+        ...state,
+        mode: shouldPreserveActionMode ? previousMode : "manager.browse",
+        manager: shouldPreserveActionMode
+          ? { ...nextManager, actionDraft: previousActionDraft }
+          : nextManager,
+      }
+      applyManagerBrowserModel()
+      return ok()
+    },
+
     goBack: () => {
-      if (state.screen === "search" || state.mode === "editor.find" || state.mode === "editor.replace" || state.mode === "manager.filter" || state.mode === "manager.create" || state.mode === "manager.deleteConfirm") {
+      if (state.screen === "search" || state.mode === "editor.find" || state.mode === "editor.replace" || state.mode === "manager.filter" || state.mode === "manager.create" || state.mode === "manager.rename" || state.mode === "manager.move" || state.mode === "manager.saveDraftAs" || state.mode === "manager.deleteConfirm") {
         state = closeTransientMode(state)
         if (state.screen === "manager") {
           applyManagerBrowserModel()
@@ -1352,22 +1651,23 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       }
 
       if (state.screen === "manager") {
-        const nextManager = goToManagerParent(state.manager)
-        state = {
-          ...state,
-          mode: "manager.browse",
-          manager: nextManager,
-        }
-        applyManagerBrowserModel()
+        return controller.goToManagerParent()
       }
 
       if (state.screen === "editor") {
         const selectorLeavingEditor = state.editor?.note.key ?? null
+        const currentEditorFolderPath = folderPathForNoteRelativePath(state.editor?.note.relativePath)
         state = {
           ...state,
           screen: "manager",
           mode: "manager.browse",
           search: null,
+          manager: {
+            ...state.manager,
+            currentFolderPath: currentEditorFolderPath,
+            hoveredPath: null,
+            focusedIndex: 0,
+          },
         }
         applyManagerBrowserModel()
         if (selectorLeavingEditor && aiIdlePendingSelector === selectorLeavingEditor) {
@@ -1383,8 +1683,78 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     },
 
     openManagerCreate: () => {
+      const currentFolderPath = state.manager.currentFolderPath ?? ""
+      const parts = normalizeWorkspaceRelativePath(currentFolderPath).split("/").filter(Boolean)
+      if (parts[0] === "draft") {
+        setManagerStatus("New draft shortcut creates drafts; folders are unavailable in draft")
+        applyManagerBrowserModel()
+        return
+      }
+      if (!canCreateManagerFolderAt(currentFolderPath)) {
+        setManagerStatus("Note creation is unavailable here")
+        applyManagerBrowserModel()
+        return
+      }
       state = openManagerCreateState(state)
       applyManagerBrowserModel()
+    },
+
+    toggleManagerCreateKind: () => {
+      if (state.mode !== "manager.create" || !state.manager.createDraft) {
+        return
+      }
+      if (!canCreateManagerFolderAt(state.manager.currentFolderPath)) {
+        state = setManagerCreateStatus(state, "Folder creation is unavailable here")
+        applyManagerBrowserModel()
+        return
+      }
+      state = {
+        ...state,
+        manager: {
+          ...state.manager,
+          createDraft: {
+            ...state.manager.createDraft,
+            kind: state.manager.createDraft.kind === "folder" ? "note" : "folder",
+            status: null,
+          },
+        },
+      }
+      applyManagerBrowserModel()
+    },
+
+    quickNewDraft: () => {
+      if (editorRequiresDestructiveConfirmation(state.editor)) {
+        const status = "Save or discard current changes before creating a new draft"
+        if (state.editor) {
+          state = { ...state, editor: { ...state.editor, statusMessage: status } }
+          setManagerStatus(status)
+        } else {
+          setManagerStatus(status)
+          applyManagerBrowserModel()
+        }
+        return dirtyBlocked()
+      }
+      if (!deps.createDraft) {
+        setManagerStatus("Create draft unavailable")
+        applyManagerBrowserModel()
+        return ok()
+      }
+      try {
+        const created = deps.createDraft()
+        deps.rebuildIndexes?.()
+        refreshManager()
+        setEditorNote(created)
+        return ok()
+      } catch (error) {
+        const status = error instanceof Error ? error.message : "Create draft failed"
+        if (state.editor) {
+          state = { ...state, editor: { ...state.editor, statusMessage: status } }
+        } else {
+          setManagerStatus(status)
+          applyManagerBrowserModel()
+        }
+        return ok()
+      }
     },
 
     updateManagerCreateTitle: (title) => {
@@ -1394,34 +1764,76 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
     submitManagerCreate: async () => {
       const title = state.manager.createDraft?.title.trim() ?? ""
+      const createKind = state.manager.createDraft?.kind ?? "note"
       if (!title) {
-        state = setManagerCreateStatus(state, "Title required")
+        state = setManagerCreateStatus(state, createKind === "folder" ? "Folder name required" : "Title required")
         applyManagerBrowserModel()
         return ok()
       }
 
-      if (editorRequiresDestructiveConfirmation(state.editor)) {
-        state = setManagerCreateStatus(state, "Save or discard current note first")
+      const parentFolderPath = normalizeWorkspaceRelativePath(state.manager.currentFolderPath)
+      if (!canCreateManagerFolderAt(parentFolderPath)) {
+        state = setManagerCreateStatus(state, createKind === "folder" ? "Folder creation is unavailable here" : "Note creation is unavailable here")
         applyManagerBrowserModel()
-        return dirtyBlocked()
+        return ok()
       }
 
       try {
-        const created = deps.createNote?.(title, "")
-        if (!created) {
-          state = setManagerCreateStatus(state, "Create unavailable")
+        if (createKind === "note") {
+          if (editorRequiresDestructiveConfirmation(state.editor)) {
+            state = setManagerCreateStatus(state, "Save or discard current changes before creating a note")
+            applyManagerBrowserModel()
+            return dirtyBlocked()
+          }
+          if (!deps.createNote) {
+            state = setManagerCreateStatus(state, "Create note unavailable")
+            applyManagerBrowserModel()
+            return ok()
+          }
+          const created = deps.createNote(title, parentFolderPath)
+          clearManagerPreviewCache()
+          deps.rebuildIndexes?.()
+          refreshManager()
+          state = cancelManagerCreateState(state)
+          setEditorNote(created)
+          return ok()
+        }
+
+        const folderName = folderNameSegmentFromTitle(title)
+        if (!folderName) {
+          state = setManagerCreateStatus(state, "Folder name required")
           applyManagerBrowserModel()
           return ok()
         }
+        if (!deps.createFolder) {
+          state = setManagerCreateStatus(state, "Create folder unavailable")
+          applyManagerBrowserModel()
+          return ok()
+        }
+        const folderRelativePath = `${parentFolderPath}/${folderName}`
+        deps.createFolder(folderRelativePath)
 
         clearManagerPreviewCache()
         deps.rebuildIndexes?.()
         refreshManager()
-        setEditorNote(deps.showNote(created.key))
+        state = cancelManagerCreateState(state)
+        state = {
+          ...state,
+          screen: "manager",
+          mode: "manager.browse",
+          manager: {
+            ...state.manager,
+            currentFolderPath: parentFolderPath,
+            hoveredPath: null,
+            focusedIndex: 0,
+            status: null,
+          },
+        }
+        applyManagerBrowserModel()
         return ok()
       } catch {
         clearManagerPreviewCache()
-        state = setManagerCreateStatus(state, "Create failed")
+        state = setManagerCreateStatus(state, createKind === "folder" ? "Create folder failed" : "Create note failed")
         applyManagerBrowserModel()
         return ok()
       }
@@ -1429,6 +1841,189 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
     cancelManagerCreate: () => {
       state = cancelManagerCreateState(state)
+      applyManagerBrowserModel()
+    },
+
+    openManagerRename: () => {
+      const focused = focusedManagerBrowserItem(state.manager).item
+      if (!focused) {
+        setManagerStatus("Rename target required")
+        applyManagerBrowserModel()
+        return
+      }
+      state = {
+        ...state,
+        screen: "manager",
+        mode: "manager.rename",
+        manager: {
+          ...state.manager,
+          items: state.manager.items.map((item) => ({ ...item })),
+          status: null,
+          actionDraft: { kind: "rename", input: managerRenameDisplayName(focused), status: null },
+        },
+        search: null,
+      }
+      applyManagerBrowserModel()
+    },
+
+    openManagerMove: () => {
+      const focused = focusedManagerBrowserItem(state.manager).item
+      if (!focused || focused.type !== "note") {
+        setManagerStatus("Move note unavailable")
+        applyManagerBrowserModel()
+        return ok()
+      }
+      if (isDraftRelativePath(focused.relativePath)) {
+        setManagerStatus("Use Save Draft As to move drafts into note folders")
+        applyManagerBrowserModel()
+        return ok()
+      }
+      state = {
+        ...state,
+        screen: "manager",
+        mode: "manager.move",
+        manager: {
+          ...state.manager,
+          items: state.manager.items.map((item) => ({ ...item })),
+          status: null,
+          actionDraft: {
+            kind: "move",
+            input: state.manager.currentFolderPath || "note",
+            status: null,
+            sourceKey: focused.key,
+            sourceRelativePath: focused.relativePath,
+          },
+        },
+        search: null,
+      }
+      applyManagerBrowserModel()
+      return ok()
+    },
+
+    openSaveDraftAs: () => {
+      const draft = state.editor?.note
+      if (draft && isDraftRelativePath(draft.relativePath) && editorRequiresDestructiveConfirmation(state.editor)) {
+        if (state.search) {
+          state = closeSearchEverything(state)
+        }
+        state = {
+          ...state,
+          screen: "editor",
+          mode: "editor.body",
+          editor: state.editor ? { ...state.editor, statusMessage: "Save the current draft before Save As" } : state.editor,
+        }
+        return dirtyBlocked()
+      }
+      if (!draft || !isDraftRelativePath(draft.relativePath)) {
+        if (state.search) {
+          state = closeSearchEverything(state)
+        }
+        if (state.editor) {
+          state = {
+            ...state,
+            screen: "editor",
+            mode: "editor.body",
+            editor: { ...state.editor, statusMessage: "Save draft as is only available for drafts" },
+          }
+        } else {
+          setManagerStatus("Save draft as is only available for drafts")
+          applyManagerBrowserModel()
+        }
+        return ok()
+      }
+      state = {
+        ...state,
+        screen: "manager",
+        mode: "manager.saveDraftAs",
+        search: null,
+        manager: {
+          ...state.manager,
+          currentFolderPath: "note",
+          hoveredPath: null,
+          focusedIndex: 0,
+          status: null,
+          actionDraft: {
+            kind: "saveDraftAs",
+            input: draft.title,
+            status: null,
+            sourceKey: draft.key,
+            sourceRelativePath: draft.relativePath,
+          },
+        },
+      }
+      applyManagerBrowserModel()
+      return ok()
+    },
+
+    updateManagerActionInput: (input) => {
+      const draft = state.manager.actionDraft
+      if (!draft || (state.mode !== "manager.rename" && state.mode !== "manager.move" && state.mode !== "manager.saveDraftAs")) {
+        return
+      }
+      if (draft.kind === "move") {
+        return
+      }
+      state = {
+        ...state,
+        screen: "manager",
+        manager: {
+          ...state.manager,
+          items: state.manager.items.map((item) => ({ ...item })),
+          actionDraft: { ...draft, input, status: null },
+        },
+        search: null,
+      }
+      applyManagerBrowserModel()
+    },
+
+    submitManagerAction: () => {
+      const draft = state.manager.actionDraft
+      if (!draft) {
+        return ok()
+      }
+      const focusedActionItem = focusedManagerBrowserItem(state.manager).item
+      const result = draft.kind === "rename"
+        ? controller.renameFocusedManagerItem(draft.input)
+        : draft.kind === "saveDraftAs"
+          ? promoteManagerDraft(
+              draft.sourceKey ?? "",
+              draft.sourceRelativePath ?? "",
+              draft.input,
+              focusedActionItem?.type === "folder" ? focusedActionItem.relativePath : state.manager.currentFolderPath || "note",
+            )
+          : moveManagerNote(
+              draft.sourceKey ?? "",
+              draft.sourceRelativePath ?? "",
+              focusedActionItem?.type === "folder" ? focusedActionItem.relativePath : state.manager.currentFolderPath || draft.input,
+            )
+      if (draft.kind !== "saveDraftAs") {
+        state = {
+          ...state,
+          mode: "manager.browse",
+          manager: {
+            ...state.manager,
+            items: state.manager.items.map((item) => ({ ...item })),
+            actionDraft: null,
+          },
+        }
+        applyManagerBrowserModel()
+      }
+      return result
+    },
+
+    cancelManagerAction: () => {
+      state = {
+        ...state,
+        screen: "manager",
+        mode: "manager.browse",
+        manager: {
+          ...state.manager,
+          items: state.manager.items.map((item) => ({ ...item })),
+          status: null,
+          actionDraft: null,
+        },
+        search: null,
+      }
       applyManagerBrowserModel()
     },
 
@@ -1506,6 +2101,76 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     cancelManagerDelete: () => {
       state = cancelManagerDeleteConfirmState(state)
       applyManagerBrowserModel()
+    },
+
+    renameFocusedManagerItem: (titleOrFolderName) => {
+      const focused = focusedManagerBrowserItem(state.manager).item
+      const nextName = titleOrFolderName.trim()
+      if (!focused || !nextName) {
+        setManagerStatus("Rename target required")
+        applyManagerBrowserModel()
+        return ok()
+      }
+      if (nextName === managerRenameDisplayName(focused)) {
+        setManagerStatus("Rename unchanged")
+        applyManagerBrowserModel()
+        return ok()
+      }
+      if (editorRequiresDestructiveConfirmation(state.editor)) {
+        setManagerStatus(dirtyEditorManagerStatus)
+        applyManagerBrowserModel()
+        return dirtyBlocked()
+      }
+      try {
+        if (focused.type === "folder") {
+          if (!deps.renameFolder) {
+            setManagerStatus("Rename folder unavailable")
+            applyManagerBrowserModel()
+            return ok()
+          }
+          deps.renameFolder(focused.relativePath, nextName)
+          if (state.editor?.note.relativePath === focused.relativePath || state.editor?.note.relativePath.startsWith(`${focused.relativePath}/`)) {
+            updateOpenEditorNotePreservingScreen(deps.showNote(state.editor.note.key))
+          }
+        } else {
+          if (!deps.renameNote) {
+            setManagerStatus("Rename note unavailable")
+            applyManagerBrowserModel()
+            return ok()
+          }
+          const renamed = deps.renameNote(focused.key, nextName)
+          if (state.editor?.note.key === focused.key || state.editor?.note.relativePath === focused.relativePath) {
+            updateOpenEditorNotePreservingScreen(renamed)
+          }
+        }
+        clearManagerPreviewCache()
+        deps.rebuildIndexes?.()
+        refreshManager()
+        setManagerStatus("Renamed")
+        applyManagerBrowserModel()
+        return ok()
+      } catch (error) {
+        clearManagerPreviewCache()
+        setManagerStatus(error instanceof Error ? error.message : "Rename failed")
+        applyManagerBrowserModel()
+        return ok()
+      }
+    },
+
+    moveFocusedManagerNote: (destinationFolder) => {
+      const focused = focusedManagerBrowserItem(state.manager).item
+      const normalizedDestination = normalizeWorkspaceRelativePath(destinationFolder)
+      if (!focused || focused.type !== "note") {
+        setManagerStatus("Move note unavailable")
+        applyManagerBrowserModel()
+        return ok()
+      }
+      if (editorRequiresDestructiveConfirmation(state.editor)) {
+        setManagerStatus(dirtyEditorManagerStatus)
+        applyManagerBrowserModel()
+        return dirtyBlocked()
+      }
+      return moveManagerNote(focused.key, focused.relativePath, normalizedDestination)
     },
 
     setManagerFilter: (query) => {
@@ -1770,15 +2435,40 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       }, { recordHistory: false })
     },
 
+    switchEditorNote,
+
     showManager: () => {
       const selectorLeavingEditor = state.screen === "editor" ? state.editor?.note.key ?? null : null
+      const anchoredFolderPath = managerFolderForNotePath(state.editor?.note.relativePath) ?? state.manager.currentFolderPath ?? ""
       state = {
         ...state,
         screen: "manager",
         mode: "manager.browse",
         search: null,
+        manager: {
+          ...state.manager,
+          currentFolderPath: anchoredFolderPath,
+          hoveredPath: null,
+          focusedIndex: 0,
+        },
       }
       applyManagerBrowserModel()
+      if (state.editor) {
+        const activeNoteIndex = state.manager.items.findIndex((item) => item.type === "note" && item.key === state.editor?.note.key)
+        if (activeNoteIndex !== -1) {
+          const activeNoteItem = state.manager.items[activeNoteIndex]
+          state = {
+            ...state,
+            manager: {
+              ...state.manager,
+              focusedIndex: activeNoteIndex,
+              hoveredPath: activeNoteItem?.relativePath ?? null,
+              selectedNoteKey: activeNoteItem?.key ?? null,
+            },
+          }
+          applyManagerBrowserModel()
+        }
+      }
       if (selectorLeavingEditor && aiIdlePendingSelector === selectorLeavingEditor) {
         scheduleManagerAiIdleWork(selectorLeavingEditor)
       }
@@ -2052,6 +2742,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       disposed = true
       clearAutosaveTimer()
       clearAiIdleTimer()
+      clearNoteSwitchIndicatorTimer()
       autosaveStateChangeHandler = null
     },
 
@@ -2109,6 +2800,13 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         }
         void controller.saveEditor()
         return ok()
+      }
+
+      if (commandName === "/save-draft-as") {
+        if (state.search) {
+          state = closeSearchEverything(state)
+        }
+        return controller.openSaveDraftAs()
       }
 
       if (commandName === "/copy-all") {
@@ -2214,7 +2912,8 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       }
 
       if (commandName === "/delete") {
-        const commandDeleteTarget: ManagerItem | undefined = state.editor
+        const invokedFromEditor = state.search?.previousScreen === "editor" || (state.screen === "editor" && !state.search)
+        const commandDeleteTarget: ManagerItem | undefined = invokedFromEditor && state.editor
           ? {
             type: "note",
             key: state.editor.note.key,
@@ -2257,6 +2956,9 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   }
 
   refreshManager()
+  if (deps.initialNote) {
+    setEditorNote(deps.initialNote)
+  }
 
   return controller
 }

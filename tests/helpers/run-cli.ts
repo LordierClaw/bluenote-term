@@ -1,10 +1,6 @@
 #!/usr/bin/env bun
 import pkg from "../../package.json"
-import { resolveBlueNoteRoot } from "../../src/config/root"
-import { AppError } from "../../src/core/errors"
-import { systemClock } from "../../src/platform/clock"
-import { migrateLegacyStorage } from "../../src/storage/migration"
-import { formatCliError, formatMigrateCliResult, runCliAsync, type CliRuntimeOptions } from "../../src/cli/entry"
+import { runCliAsync, type CliRuntimeOptions } from "../../src/cli/entry"
 
 function readTestClock() {
   const value = process.env.BLUENOTE_TEST_NOW
@@ -64,51 +60,17 @@ function readRebuildIndexesTestHooks(): CliRuntimeOptions["rebuildIndexesOptions
   }
 }
 
-function shouldForceMigrateRebuildFailure(): boolean {
-  return process.env.BLUENOTE_TEST_MIGRATE_FAIL_REBUILD_WRITE === "1"
-}
-
-function runMigrateCliWithInjectedFailure(randomSource?: () => number, clock = systemClock) {
-  try {
-    const summary = migrateLegacyStorage({
-      rootPath: resolveBlueNoteRoot(),
-      migratedAt: clock.now().toISOString(),
-      ...(randomSource ? { randomSource } : {}),
-      testHooks: {
-        rebuildIndexes() {
-          throw new Error("simulated rebuild write failure")
-        },
-      },
-    })
-
-    return formatMigrateCliResult(summary)
-  } catch (error) {
-    if (error instanceof AppError) {
-      return formatCliError(error)
-    }
-
-    throw error
-  }
-}
-
 const clock = readTestClock()
 const randomSource = readTestRandomSource()
 const rebuildIndexesOptions = readRebuildIndexesTestHooks()
 const args = process.argv.slice(2)
-const result =
-  shouldForceMigrateRebuildFailure() && args[0] === "migrate"
-    ? runMigrateCliWithInjectedFailure(randomSource, clock ?? systemClock)
-    : await runCliAsync(args, pkg.version, {
-        createNoteOptions: {
-          ...(clock ? { clock } : {}),
-          ...(randomSource ? { randomSource } : {}),
-        },
-        migrateStorageOptions: {
-          ...(clock ? { clock } : {}),
-          ...(randomSource ? { randomSource } : {}),
-        },
-        ...(rebuildIndexesOptions ? { rebuildIndexesOptions } : {}),
-      })
+const result = await runCliAsync(args, pkg.version, {
+  createNoteOptions: {
+    ...(clock ? { clock } : {}),
+    ...(randomSource ? { randomSource } : {}),
+  },
+  ...(rebuildIndexesOptions ? { rebuildIndexesOptions } : {}),
+})
 
 if (result.stdout) {
   process.stdout.write(result.stdout)

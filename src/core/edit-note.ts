@@ -10,8 +10,9 @@ import { createNoteDescription } from "../domain/note-description"
 import { rebuildIndexes } from "./rebuild-indexes"
 import { renameNote } from "./rename-note"
 import { selectNote } from "./select-note"
+import type { NoteVisibilityOptions } from "./note-visibility"
 
-export interface EditNoteOptions extends ResolveBlueNoteRootOptions, LaunchEditorOptions {
+export interface EditNoteOptions extends ResolveBlueNoteRootOptions, LaunchEditorOptions, NoteVisibilityOptions {
   selector: string
   clock?: Clock
   randomSource?: () => number
@@ -55,7 +56,7 @@ function enqueueAiDescriptionAfterEdit(
 export function editNote(options: EditNoteOptions): EditNoteSummary {
   const rootPath = resolveBlueNoteRoot(options)
   const repository = createNoteRepository(rootPath)
-  const selected = selectNote({ repository, selector: options.selector })
+  const selected = selectNote({ repository, selector: options.selector, visibility: options.visibility })
   const notePath = path.join(rootPath, selected.sourcePath)
   const clock = options.clock ?? systemClock
 
@@ -75,6 +76,7 @@ export function editNote(options: EditNoteOptions): EditNoteSummary {
       title,
       body: edited.body,
       updatedAt,
+      visibility: options.visibility,
       randomSource: options.randomSource,
     })
 

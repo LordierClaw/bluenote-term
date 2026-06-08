@@ -17,9 +17,10 @@ Minimum sidecar shape:
 ```json
 {
   "key": "example-title-51u7i0",
+  "type": "normal",
   "title": "Example title",
   "description": "Body text stays in the Markdown file.",
-  "relativePath": "notes/inbox/example-title-51u7i0.md",
+  "relativePath": "note/example-title-51u7i0.md",
   "createdAt": "2026-05-12T10:15:00.000Z",
   "updatedAt": "2026-05-12T10:15:00.000Z",
   "archivedAt": null,
@@ -33,11 +34,11 @@ Selector and CLI expectations:
 - `show`, `edit`, `archive`, and `delete` resolve by canonical `key|path` selectors in the Phase 2 user-facing contract
 - `delete` requires `--force`
 - `bn ai describe <key|path>` uses the same selector contract and automatically updates only the sidecar description when provider output is valid
-- legacy frontmatter remains relevant for migration compatibility, not canonical storage
+- legacy frontmatter and the old `notes/` tree are not part of the Phase 7 storage contract
 
 ## Indexing design
 
-Canonical state lives in files: plain Markdown note bodies under `notes/` and BlueNote metadata sidecars under `.data/notes/`. Legacy `.state/` directories are used only as migration input.
+Canonical state lives in files: plain Markdown note bodies under `note/` and draft bodies under `draft/`, with BlueNote metadata sidecars under `.data/notes/`.
 
 Rebuildable caches:
 - `.data/metadata.sqlite` `sql.js` metadata cache

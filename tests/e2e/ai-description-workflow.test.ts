@@ -81,12 +81,12 @@ test("AI description workflow runs end to end against a mock OpenAI-compatible p
     assert.match(configResult.stdout, /AI config saved\./)
     assert.match(configResult.stdout, /API key is stored in plaintext/)
 
-    const createResult = runOk(harness, "bn new", ["new", "--title", "Project tasks"], {
+    const createResult = runOk(harness, "bn new", ["new", "Project task body."], {
       BLUENOTE_TEST_NOW: "2026-06-01T00:00:00.000Z",
       BLUENOTE_TEST_RANDOM_SEQUENCE: "0x12345678",
     })
     const key = extractCreatedKey(createResult.stdout)
-    assert.match(createResult.stdout, new RegExp(`Path: notes/inbox/${key}\\.md`))
+    assert.match(createResult.stdout, new RegExp(`Path: draft/${key}\\.md`))
 
     const queuePath = path.join(harness.rootPath, ".data", "ai", "queue.json")
     const queued = JSON.parse(await readFile(queuePath, "utf8"))
@@ -94,7 +94,7 @@ test("AI description workflow runs end to end against a mock OpenAI-compatible p
     assert.equal(queued.jobs.length, 1)
     assert.equal(queued.jobs[0].kind, "describe-note")
     assert.equal(queued.jobs[0].key, key)
-    assert.equal(queued.jobs[0].relativePath, `notes/inbox/${key}.md`)
+    assert.equal(queued.jobs[0].relativePath, `draft/${key}.md`)
     assert.equal(queued.jobs[0].status, "pending")
 
     const processResult = await harness.runAsync(["ai", "process-queue"])
@@ -109,21 +109,21 @@ test("AI description workflow runs end to end against a mock OpenAI-compatible p
     assert.equal(providerRequests.length, 1)
     assert.equal(providerRequests[0]?.authorization, "Bearer test-token")
     assert.equal((providerRequests[0]?.body as { model?: string }).model, "test-model")
-    assert.match(JSON.stringify(providerRequests[0]?.body), /Project tasks/)
+    assert.match(JSON.stringify(providerRequests[0]?.body), new RegExp(key))
 
     const sidecar = JSON.parse(await readFile(path.join(harness.rootPath, ".data", "notes", `${key}.json`), "utf8"))
     assert.equal(sidecar.description, mockDescription)
 
-    const markdown = await readFile(path.join(harness.rootPath, "notes", "inbox", `${key}.md`), "utf8")
-    assert.equal(markdown, "")
+    const markdown = await readFile(path.join(harness.rootPath, "draft", `${key}.md`), "utf8")
+    assert.equal(markdown, "Project task body.")
     assert.doesNotMatch(markdown, /^---$/m)
     assert.doesNotMatch(markdown, /description:/)
 
-    const listResult = runOk(harness, "bn list", ["list"])
-    assert.match(listResult.stdout, new RegExp(`Project tasks\\t${key}\\t${harness.escapeForRegExp(mockDescription)}\\tnotes/inbox/${key}\\.md`))
+    const listResult = runOk(harness, "bn list --drafts", ["list", "--drafts"])
+    assert.match(listResult.stdout, new RegExp(`${key}\\t${key}\\t${harness.escapeForRegExp(mockDescription)}\\tdraft/${key}\\.md`))
 
-    const searchResult = runOk(harness, "bn search", ["search", "Mock project task"])
-    assert.match(searchResult.stdout, /Project tasks/)
+    const searchResult = runOk(harness, "bn search --drafts", ["search", "--drafts", "Mock project task"])
+    assert.match(searchResult.stdout, new RegExp(key))
     assert.match(searchResult.stdout, new RegExp(`key: ${key}`))
     assert.match(searchResult.stdout, /match: description/)
 

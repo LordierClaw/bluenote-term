@@ -59,6 +59,7 @@ function createProjectNote(rootPath: string, body = "Discuss launch tasks and ow
   const created = repository.create({
     frontmatter: FIXED_FRONTMATTER,
     body,
+    destination: { type: "normal", folderRelativePath: "note" },
   })
   return { repository, created }
 }
@@ -203,7 +204,7 @@ test("AI apply preserves current sidecar path and archive metadata after an in-f
     assert.equal(currentSidecar.description, "Archived project follow-up notes.")
     assert.equal(currentSidecar.relativePath, archived.relativePath)
     assert.equal(currentSidecar.archivedAt, archived.archivedAt)
-    assert.equal(currentSidecar.updatedAt, FIXED_FRONTMATTER.updatedAt)
+    assert.equal(currentSidecar.updatedAt, "2026-06-01T10:03:00.000Z")
     assert.equal(currentSidecar.ai?.description?.lastProcessedAt, "2026-06-01T10:05:00.000Z")
   })
 })

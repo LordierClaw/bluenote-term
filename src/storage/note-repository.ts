@@ -1,5 +1,5 @@
 import path from "node:path"
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs"
 
 import { UsageError } from "../core/errors"
 import { createNoteDescription } from "../domain/note-description"
@@ -9,14 +9,19 @@ import { type PlainNote, validateNoteFrontmatter } from "./note-schema"
 import type { NoteFrontmatter, ParsedNote } from "./note-schema"
 import { parsePlainNote, serializePlainNote } from "./plain-note"
 import { createSidecarRepository } from "./sidecar-repository"
-import type { NoteSidecar } from "./sidecar-schema"
+import type { NoteSidecar, NoteType } from "./sidecar-schema"
 import { replaceNoteBodyAtomically } from "./atomic-note-writer"
-import { getArchiveNotePath, getInboxNotePath, getNotesPath } from "./root-layout"
+import { getArchiveNotePath, getArchiveNotesPath, getDraftNotesPath, getInboxNotePath, getNormalNotesPath, getStateNotesPath } from "./root-layout"
 
 export interface CreateStoredNoteInput {
   frontmatter: NoteFrontmatter
   body: string
+  destination?: CreateStoredNoteDestination
 }
+
+export type CreateStoredNoteDestination =
+  | { type: "draft" }
+  | { type: "normal"; folderRelativePath: string }
 
 export interface StoredNoteRecord {
   notePath: string
@@ -45,6 +50,8 @@ export interface NoteRepository {
   readRaw(notePath: string): string
   syncEditedNote(notePath: string, input: SyncStoredNoteInput): StoredNoteRecord
   rename(notePath: string, input: RenameStoredNoteInput): RenamedStoredNoteRecord
+  renameFolder(folderRelativePath: string, nextName: string): { previousRelativePath: string; relativePath: string }
+  moveNote(notePath: string, destinationFolderRelativePath: string, updatedAt?: string): RenamedStoredNoteRecord
   keyExists(key: string): boolean
   archive(notePath: string, archivedAt: string): StoredNoteRecord
   delete(notePath: string): StoredNoteRecord
@@ -80,11 +87,11 @@ function getCreateValidationSourcePath(frontmatter: unknown): string {
     const candidateId = (frontmatter as { id?: unknown }).id
 
     if (typeof candidateId === "string" && candidateId.length > 0) {
-      return joinPortableRelativePath("notes", "inbox", `${candidateId}.md`)
+      return joinPortableRelativePath("note", `${candidateId}.md`)
     }
   }
 
-  return joinPortableRelativePath("notes", "inbox", "<unknown>.md")
+  return joinPortableRelativePath("note", "<unknown>.md")
 }
 
 function wrapRepositoryError(action: "create" | "read" | "list" | "archive" | "delete", relativePath: string, error: unknown): never {
@@ -142,6 +149,66 @@ function notePathFromRelativePath(rootPath: string, relativePath: string): strin
   return assertPathInsideRoot(rootPath, path.join(rootPath, relativePath))
 }
 
+function normalizeInputRelativePath(relativePath: string): string {
+  return relativePath.replace(/\\/g, "/").replace(/^\.\//, "")
+}
+
+function relativePathHasHiddenSegment(relativePath: string): boolean {
+  return relativePath.split("/").some((segment) => segment.startsWith("."))
+}
+
+function destinationFolderIsUsableNormalFolder(normalNotesPath: string, candidateFolderPath: string): boolean {
+  if (!existsSync(candidateFolderPath) || !statSync(candidateFolderPath).isDirectory()) {
+    return false
+  }
+
+  try {
+    assertPathInsideRoot(realpathSync(normalNotesPath), realpathSync(candidateFolderPath))
+    return true
+  } catch {
+    return false
+  }
+}
+
+function resolveCreateNotePath(
+  rootPath: string,
+  frontmatter: NoteFrontmatter,
+  destination?: CreateStoredNoteDestination,
+): { notePath: string; relativePath: string } {
+  if (destination?.type === "draft") {
+    const draftPath = getDraftNotesPath(rootPath)
+    const notePath = assertPathInsideRoot(draftPath, path.join(draftPath, `${frontmatter.id}.md`))
+
+    return { notePath, relativePath: toRootRelativePath(rootPath, notePath) }
+  }
+
+  if (destination?.type === "normal") {
+    const normalizedFolderRelativePath = normalizeInputRelativePath(destination.folderRelativePath)
+    const candidateFolderPath = assertPathInsideRoot(rootPath, path.join(rootPath, normalizedFolderRelativePath))
+    const normalNotesPath = getNormalNotesPath(rootPath)
+    const relativePath = joinPortableRelativePath(normalizedFolderRelativePath, `${frontmatter.id}.md`)
+
+    if (
+      !normalizedFolderRelativePath.startsWith("note") ||
+      (normalizedFolderRelativePath !== "note" && !normalizedFolderRelativePath.startsWith("note/")) ||
+      relativePathHasHiddenSegment(normalizedFolderRelativePath) ||
+      !destinationFolderIsUsableNormalFolder(normalNotesPath, candidateFolderPath)
+    ) {
+      throw new UsageError(`Could not create note '${relativePath}'.`, {
+        hint: "Choose an existing folder under note/ for normal note creation.",
+      })
+    }
+
+    const notePath = assertPathInsideRoot(normalNotesPath, path.join(candidateFolderPath, `${frontmatter.id}.md`))
+
+    return { notePath, relativePath: toRootRelativePath(rootPath, notePath) }
+  }
+
+  const notePath = getInboxNotePath(rootPath, frontmatter.id)
+
+  return { notePath, relativePath: toRootRelativePath(rootPath, notePath) }
+}
+
 function createPlainNoteMarkdown(relativePath: string, body: string): string {
   return serializePlainNote({
     body,
@@ -150,14 +217,15 @@ function createPlainNoteMarkdown(relativePath: string, body: string): string {
 }
 
 function noteKeyExists(rootPath: string, key: string): boolean {
-  const notesPath = getNotesPath(rootPath)
   const notePaths: string[] = []
 
-  if (!existsSync(notesPath)) {
-    return false
-  }
+  for (const notesPath of [getNormalNotesPath(rootPath), getDraftNotesPath(rootPath)]) {
+    if (!existsSync(notesPath)) {
+      continue
+    }
 
-  collectMarkdownFiles(rootPath, notesPath, notePaths)
+    collectMarkdownFiles(rootPath, notesPath, notePaths)
+  }
 
   return notePaths.some((notePath) => keyFromNotePath(notePath) === key)
 }
@@ -172,9 +240,9 @@ function assertUniqueNoteKeys(rootPath: string, notePaths: readonly string[]): v
 
     if (firstRelativePath !== undefined) {
       throw new UsageError(
-        `Found duplicate note key '${key}' for '${firstRelativePath}' and '${relativePath}'. Note basenames must be globally unique across the notes tree.`,
+        `Found duplicate note key '${key}' for '${firstRelativePath}' and '${relativePath}'. Note basenames must be globally unique across note, draft, and archive storage.`,
         {
-          hint: "Rename or remove one of the duplicate note files so each note basename/key is unique under notes/.",
+          hint: "Rename or remove one of the duplicate note files so each note basename/key is unique under note/, draft/, and .data/archive/.",
         },
       )
     }
@@ -183,8 +251,21 @@ function assertUniqueNoteKeys(rootPath: string, notePaths: readonly string[]): v
   }
 }
 
+function inferNoteType(relativePath: string, archivedAt: string | null): NoteType {
+  if (archivedAt !== null || relativePath.startsWith(".data/archive/")) {
+    return "archived"
+  }
+
+  if (relativePath.startsWith("draft/")) {
+    return "draft"
+  }
+
+  return "normal"
+}
+
 function buildSidecar(frontmatter: NoteFrontmatter, relativePath: string, body: string, archivedAt: string | null): NoteSidecar {
   return {
+    type: inferNoteType(relativePath, archivedAt),
     key: frontmatter.id,
     title: frontmatter.title,
     description: deriveDescription(body),
@@ -217,6 +298,68 @@ function buildExistingSidecar(note: ParsedNote): NoteSidecar {
   return buildSidecar(note.frontmatter, note.sourcePath, note.body, note.frontmatter.archivedAt ?? null)
 }
 
+function normalizeFolderRelativePath(relativePath: string): string {
+  return normalizeInputRelativePath(relativePath).replace(/^\/+|\/+$/g, "")
+}
+
+function assertNormalFolderRelativePath(rootPath: string, folderRelativePath: string): { relativePath: string; folderPath: string } {
+  const normalizedFolderRelativePath = normalizeFolderRelativePath(folderRelativePath)
+  const normalNotesPath = getNormalNotesPath(rootPath)
+  const folderPath = assertPathInsideRoot(rootPath, path.join(rootPath, normalizedFolderRelativePath))
+
+  if (
+    (normalizedFolderRelativePath !== "note" && !normalizedFolderRelativePath.startsWith("note/"))
+    || normalizedFolderRelativePath.split("/").some((part) => part.startsWith("."))
+    || !destinationFolderIsUsableNormalFolder(normalNotesPath, folderPath)
+  ) {
+    throw new UsageError(`Could not move note to '${normalizedFolderRelativePath}'.`, {
+      hint: "Choose an existing folder under note/.",
+    })
+  }
+
+  return { relativePath: normalizedFolderRelativePath, folderPath }
+}
+
+function listSidecarKeys(rootPath: string): string[] {
+  const stateNotesPath = getStateNotesPath(rootPath)
+  if (!existsSync(stateNotesPath)) {
+    return []
+  }
+
+  return readdirSync(stateNotesPath)
+    .filter((entry) => entry.endsWith(".json"))
+    .map((entry) => path.basename(entry, ".json"))
+}
+
+function assertCustomNormalFolderRename(rootPath: string, folderRelativePath: string, nextName: string): { previousRelativePath: string; nextRelativePath: string; previousPath: string; nextPath: string } {
+  const previousRelativePath = normalizeFolderRelativePath(folderRelativePath)
+  const nextSegment = folderNameFromInput(nextName)
+  const parts = previousRelativePath.split("/").filter(Boolean)
+
+  if (parts.length < 2 || parts[0] !== "note" || !nextSegment || nextSegment.startsWith(".") || nextSegment.includes("/")) {
+    throw new UsageError(`Could not rename folder '${previousRelativePath}'.`, {
+      hint: "Only custom folders under note/ can be renamed.",
+    })
+  }
+
+  const parentRelativePath = parts.slice(0, -1).join("/")
+  const nextRelativePath = joinPortableRelativePath(parentRelativePath, nextSegment)
+  const previousPath = assertPathInsideRoot(rootPath, path.join(rootPath, previousRelativePath))
+  const nextPath = assertPathInsideRoot(rootPath, path.join(rootPath, nextRelativePath))
+
+  if (!destinationFolderIsUsableNormalFolder(getNormalNotesPath(rootPath), previousPath) || existsSync(nextPath)) {
+    throw new UsageError(`Could not rename folder '${previousRelativePath}'.`, {
+      hint: "Choose an existing custom note folder and a free destination name.",
+    })
+  }
+
+  return { previousRelativePath, nextRelativePath, previousPath, nextPath }
+}
+
+function folderNameFromInput(input: string): string {
+  return input.trim().replaceAll("\\", "/").split("/").filter(Boolean).at(-1)?.trim() ?? ""
+}
+
 export function createNoteRepository(rootPath: string): NoteRepository {
   const normalizedRootPath = path.resolve(rootPath)
   const sidecars = createSidecarRepository(normalizedRootPath)
@@ -226,13 +369,16 @@ export function createNoteRepository(rootPath: string): NoteRepository {
       const canonicalFrontmatter = validateNoteFrontmatter(input.frontmatter, getCreateValidationSourcePath(input.frontmatter))
       assertCreateFrontmatterIsSupported(canonicalFrontmatter)
 
-      const notePath = getInboxNotePath(normalizedRootPath, canonicalFrontmatter.id)
-      const relativePath = toRootRelativePath(normalizedRootPath, notePath)
+      const { notePath, relativePath } = resolveCreateNotePath(
+        normalizedRootPath,
+        canonicalFrontmatter,
+        input.destination,
+      )
       const sidecarPath = sidecars.getSidecarPath(canonicalFrontmatter.id)
 
       if (existsSync(notePath) || existsSync(sidecarPath) || noteKeyExists(normalizedRootPath, canonicalFrontmatter.id)) {
         throw new UsageError(`Could not create note '${relativePath}'.`, {
-          hint: "A note with the same basename/key already exists somewhere under notes/ or in sidecar metadata. Use a different id or remove/archive the existing note first.",
+          hint: "A note with the same basename/key already exists somewhere under note/, draft/, or in sidecar metadata. Use a different id or remove/archive the existing note first.",
         })
       }
 
@@ -486,6 +632,131 @@ export function createNoteRepository(rootPath: string): NoteRepository {
       }
     },
 
+    renameFolder(folderRelativePath, nextName) {
+      const renameTarget = assertCustomNormalFolderRename(normalizedRootPath, folderRelativePath, nextName)
+      const affectedSidecars: Array<{ previous: NoteSidecar; next: NoteSidecar }> = []
+      let renamedFolder = false
+      const writtenSidecars: NoteSidecar[] = []
+
+      try {
+        for (const key of listSidecarKeys(normalizedRootPath)) {
+          const sidecar = sidecars.read(key)
+          if (
+            sidecar.type === "normal" &&
+            (sidecar.relativePath === renameTarget.previousRelativePath || sidecar.relativePath.startsWith(`${renameTarget.previousRelativePath}/`))
+          ) {
+            affectedSidecars.push({
+              previous: sidecar,
+              next: {
+                ...sidecar,
+                relativePath: joinPortableRelativePath(
+                  renameTarget.nextRelativePath,
+                  sidecar.relativePath.slice(renameTarget.previousRelativePath.length).replace(/^\//, ""),
+                ),
+              },
+            })
+          }
+        }
+
+        renameSync(renameTarget.previousPath, renameTarget.nextPath)
+        renamedFolder = true
+
+        for (const { next } of affectedSidecars) {
+          sidecars.write(next)
+          writtenSidecars.push(next)
+        }
+      } catch (error) {
+        const rollbackErrors: unknown[] = []
+        for (const written of [...writtenSidecars].reverse()) {
+          const previous = affectedSidecars.find((entry) => entry.previous.key === written.key)?.previous
+          if (previous) {
+            try {
+              sidecars.write(previous)
+            } catch (rollbackError) {
+              rollbackErrors.push(rollbackError)
+            }
+          }
+        }
+        if (renamedFolder) {
+          try {
+            renameSync(renameTarget.nextPath, renameTarget.previousPath)
+          } catch (rollbackError) {
+            rollbackErrors.push(rollbackError)
+          }
+        }
+        if (error instanceof UsageError && rollbackErrors.length === 0) {
+          throw error
+        }
+        throw new UsageError(`Could not rename folder '${renameTarget.previousRelativePath}'.`, {
+          hint: "Ensure the folder and note sidecars are writable inside BLUENOTE_ROOT.",
+          cause: rollbackErrors.length > 0
+            ? new AggregateError([error, ...rollbackErrors], "Folder rename failed and rollback also failed.")
+            : error,
+        })
+      }
+
+      return {
+        previousRelativePath: renameTarget.previousRelativePath,
+        relativePath: renameTarget.nextRelativePath,
+      }
+    },
+
+    moveNote(notePath, destinationFolderRelativePath, updatedAt) {
+      const normalizedNotePath = assertPathInsideRoot(normalizedRootPath, notePath)
+      const previousRelativePath = toRootRelativePath(normalizedRootPath, normalizedNotePath)
+      const existing = this.read(normalizedNotePath)
+      const previousKey = existing.frontmatter.id
+      const previousSidecarPath = sidecars.getSidecarPath(previousKey)
+      const existingSidecar = existsSync(previousSidecarPath) ? sidecars.read(previousKey) : buildExistingSidecar(existing)
+      const destination = assertNormalFolderRelativePath(normalizedRootPath, destinationFolderRelativePath)
+
+      if (existingSidecar.type !== "normal" || existing.frontmatter.archivedAt !== undefined || !previousRelativePath.startsWith("note/")) {
+        throw new UsageError(`Could not move note '${previousRelativePath}'.`, {
+          hint: "Only normal notes under note/ can be moved.",
+        })
+      }
+
+      const nextRelativePath = joinPortableRelativePath(destination.relativePath, path.basename(previousRelativePath))
+      const nextNotePath = assertPathInsideRoot(normalizedRootPath, path.join(normalizedRootPath, nextRelativePath))
+      if (nextNotePath !== normalizedNotePath && existsSync(nextNotePath)) {
+        throw new UsageError(`Could not move note '${previousRelativePath}'.`, {
+          hint: "A note file already exists in the destination folder.",
+        })
+      }
+
+      let movedNoteFile = false
+      try {
+        if (nextNotePath !== normalizedNotePath) {
+          renameSync(normalizedNotePath, nextNotePath)
+          movedNoteFile = true
+        }
+        sidecars.write({ ...existingSidecar, relativePath: nextRelativePath, updatedAt: updatedAt ?? existingSidecar.updatedAt })
+      } catch (error) {
+        const rollbackErrors: unknown[] = []
+        if (movedNoteFile) {
+          try {
+            renameSync(nextNotePath, normalizedNotePath)
+          } catch (rollbackError) {
+            rollbackErrors.push(rollbackError)
+          }
+        }
+        throw new UsageError(`Could not move note '${previousRelativePath}'.`, {
+          hint: "Ensure the note and its sidecar are writable inside BLUENOTE_ROOT.",
+          cause: rollbackErrors.length > 0
+            ? new AggregateError([error, ...rollbackErrors], "Move failed and rollback also failed.")
+            : error,
+        })
+      }
+
+      return {
+        notePath: nextNotePath,
+        relativePath: nextRelativePath,
+        previousKey,
+        key: previousKey,
+        previousRelativePath,
+      }
+    },
+
     keyExists(key) {
       return noteKeyExists(normalizedRootPath, key) || existsSync(sidecars.getSidecarPath(key))
     },
@@ -511,7 +782,9 @@ export function createNoteRepository(rootPath: string): NoteRepository {
       })
       const archivedSidecar: NoteSidecar = {
         ...existingSidecar,
+        type: "archived",
         relativePath: archivedRelativePath,
+        updatedAt: archivedAt,
         archivedAt,
       }
       let wroteArchivedCopy = false
@@ -636,15 +909,16 @@ export function createNoteRepository(rootPath: string): NoteRepository {
     },
 
     listNotePaths() {
-      const notesPath = getNotesPath(normalizedRootPath)
       const notePaths: string[] = []
 
-      if (!existsSync(notesPath)) {
-        return []
-      }
-
       try {
-        collectMarkdownFiles(normalizedRootPath, notesPath, notePaths)
+        for (const notesPath of [getNormalNotesPath(normalizedRootPath), getDraftNotesPath(normalizedRootPath), getArchiveNotesPath(normalizedRootPath)]) {
+          if (!existsSync(notesPath)) {
+            continue
+          }
+
+          collectMarkdownFiles(normalizedRootPath, notesPath, notePaths)
+        }
       } catch (error) {
         wrapRepositoryError("list", NOTES_RELATIVE_PATH, error)
       }

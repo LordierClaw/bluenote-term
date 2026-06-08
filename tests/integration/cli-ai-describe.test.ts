@@ -54,15 +54,13 @@ test("bn ai describe auto-applies a mock provider description and updates list/s
     const harness = await createManagedRootHarness("bluenote-cli-ai-describe-")
 
     try {
-      const createResult = harness.run(["new", "--title", "Project Notes"], {
+      const createResult = harness.run(["new", "--path", "note", "--title", "Project Notes", "Project tasks and deadlines.\n"], {
         BLUENOTE_TEST_NOW: "2026-06-01T00:00:00.000Z",
         BLUENOTE_TEST_RANDOM_SEQUENCE: "0x12345678",
       })
       assert.equal(createResult.exitCode, 0)
       const key = extractKey(createResult.stdout)
 
-      await Bun.write(path.join(harness.rootPath, "notes", "inbox", `${key}.md`), "Project tasks and deadlines.\n")
-      assert.equal(harness.run(["rebuild"]).exitCode, 0)
 
       const setConfig = harness.run([
         "ai",
@@ -80,10 +78,10 @@ test("bn ai describe auto-applies a mock provider description and updates list/s
       const prompt = readDescribeNotePrompt(harness.rootPath)
       enqueueDescribeNoteJob(harness.rootPath, {
         key,
-        relativePath: `notes/inbox/${key}.md`,
+        relativePath: `note/${key}.md`,
         title: "Project Notes",
         body: "Project tasks and deadlines.\n",
-        currentDescription: "",
+        currentDescription: "Project tasks and deadlines.",
         promptHash: prompt.hash,
       })
 
@@ -111,14 +109,14 @@ test("bn ai describe auto-applies a mock provider description and updates list/s
 
       const listResult = harness.run(["list"])
       assert.equal(listResult.exitCode, 0)
-      assert.match(listResult.stdout, /Project Notes\t.+\tConcise AI project summary\.\tnotes\/inbox\//)
+      assert.match(listResult.stdout, /Project Notes\t.+\tConcise AI project summary\.\tnote\//)
 
       const searchResult = harness.run(["search", "Concise AI"])
       assert.equal(searchResult.exitCode, 0)
       assert.match(searchResult.stdout, /Project Notes/)
       assert.match(searchResult.stdout, /description/)
 
-      const markdown = await readFile(path.join(harness.rootPath, "notes", "inbox", `${key}.md`), "utf8")
+      const markdown = await readFile(path.join(harness.rootPath, "note", `${key}.md`), "utf8")
       assert.equal(markdown, "Project tasks and deadlines.\n")
     } finally {
       await harness.cleanup()
@@ -129,7 +127,7 @@ test("bn ai describe sanitizes provider errors before returning CLI output", asy
   const harness = await createManagedRootHarness("bluenote-cli-ai-describe-sanitized-error-")
 
   try {
-    const createResult = harness.run(["new", "--title", "Secret Provider Failure"], {
+    const createResult = harness.run(["new", "--path", "note", "--title", "Secret Provider Failure", "Secret provider body."], {
       BLUENOTE_TEST_NOW: "2026-06-01T00:00:00.000Z",
       BLUENOTE_TEST_RANDOM_SEQUENCE: "0x12345678",
     })
@@ -172,7 +170,7 @@ test("bn ai describe surfaces invalid description details", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-ai-describe-invalid-detail-")
 
   try {
-    const createResult = harness.run(["new", "--title", "Invalid Detail"], {
+    const createResult = harness.run(["new", "--path", "note", "--title", "Invalid Detail", "Invalid detail body."], {
       BLUENOTE_TEST_NOW: "2026-06-01T00:00:00.000Z",
       BLUENOTE_TEST_RANDOM_SEQUENCE: "0x12345678",
     })
@@ -209,7 +207,7 @@ test("bn ai describe surfaces stale result details separately from invalid outpu
   const harness = await createManagedRootHarness("bluenote-cli-ai-describe-stale-detail-")
 
   try {
-    const createResult = harness.run(["new", "--title", "Stale Detail"], {
+    const createResult = harness.run(["new", "--path", "note", "--title", "Stale Detail", "Stale detail body."], {
       BLUENOTE_TEST_NOW: "2026-06-01T00:00:00.000Z",
       BLUENOTE_TEST_RANDOM_SEQUENCE: "0x12345678",
     })
@@ -230,7 +228,7 @@ test("bn ai describe surfaces stale result details separately from invalid outpu
     assert.equal(setConfig.exitCode, 0)
 
     const result = await runInjectedAi(harness.rootPath, ["ai", "describe", key], async () => {
-      await Bun.write(path.join(harness.rootPath, "notes", "inbox", `${key}.md`), "Changed while provider was running.\n")
+      await Bun.write(path.join(harness.rootPath, "note", `${key}.md`), "Changed while provider was running.\n")
       return { text: "Fresh result ignored." }
     })
 
@@ -247,14 +245,13 @@ test("bn ai describe reports disabled AI before constructing a Codex client", as
   const harness = await createManagedRootHarness("bluenote-cli-ai-describe-disabled-codex-")
 
   try {
-    const createResult = harness.run(["new", "--title", "Disabled Codex Describe"], {
+    const createResult = harness.run(["new", "--path", "note", "--title", "Disabled Codex Describe", "Disabled Codex should not load auth.\n"], {
       BLUENOTE_TEST_NOW: "2026-06-01T00:00:00.000Z",
       BLUENOTE_TEST_RANDOM_SEQUENCE: "0x90909090",
     })
     assert.equal(createResult.exitCode, 0)
     const key = extractKey(createResult.stdout)
-    await Bun.write(path.join(harness.rootPath, "notes", "inbox", `${key}.md`), "Disabled Codex should not load auth.\n")
-    assert.equal(harness.run(["rebuild"]).exitCode, 0)
+
     createAiConfigRepository(harness.rootPath).write({
       version: 1,
       enabled: false,
@@ -282,7 +279,7 @@ test("bn ai describe creates the default Codex provider from root-local auth", a
   const harness = await createManagedRootHarness("bluenote-cli-ai-describe-codex-")
 
   try {
-    const createResult = harness.run(["new", "--title", "Codex Provider Note"], {
+    const createResult = harness.run(["new", "--path", "note", "--title", "Codex Provider Note", "Codex provider body."], {
       BLUENOTE_TEST_NOW: "2026-06-01T00:00:00.000Z",
       BLUENOTE_TEST_RANDOM_SEQUENCE: "0x12345678",
     })

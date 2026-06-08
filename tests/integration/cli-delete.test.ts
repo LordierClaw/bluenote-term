@@ -44,6 +44,7 @@ async function writePlainNoteWithSidecar(
         createdAt,
         updatedAt,
         archivedAt,
+        type: relativePath.startsWith("draft/") ? "draft" : "normal",
         namingVersion: 1,
       },
       null,
@@ -57,7 +58,7 @@ test("bn delete <key|path> --force removes the note file and sidecar and rebuild
   const harness = await createManagedRootHarness("bluenote-cli-delete-")
 
   try {
-    const relativePath = "notes/inbox/delete-target.md"
+    const relativePath = "note/delete-target.md"
     await writePlainNoteWithSidecar(harness.rootPath, {
       key: "delete-target",
       title: "Delete Target",
@@ -69,7 +70,7 @@ test("bn delete <key|path> --force removes the note file and sidecar and rebuild
       key: "still-active",
       title: "Still Active",
       description: "Still visible.",
-      relativePath: "notes/inbox/still-active.md",
+      relativePath: "note/still-active.md",
       body: "Still visible.\n",
       createdAt: "2026-05-21T10:16:00.000Z",
     })
@@ -78,7 +79,7 @@ test("bn delete <key|path> --force removes the note file and sidecar and rebuild
 
     assert.equal(result.exitCode, 0)
     assert.equal(result.stderr, "")
-    assert.match(result.stdout, /Deleted note: notes[\\/]inbox[\\/]delete-target\.md/)
+    assert.match(result.stdout, /Deleted note: note[\\/]delete-target\.md/)
 
     await assert.rejects(() => access(path.join(harness.rootPath, relativePath)))
     await assert.rejects(() => access(path.join(harness.rootPath, ".data", "notes", "delete-target.json")))
@@ -89,7 +90,7 @@ test("bn delete <key|path> --force removes the note file and sidecar and rebuild
 
     const listResult = harness.run(["list"])
     assert.equal(listResult.exitCode, 0)
-    assert.match(listResult.stdout, /Still Active\s+still-active\s+Still visible\.\s+notes[\\/]inbox[\\/]still-active\.md/)
+    assert.match(listResult.stdout, /Still Active\s+still-active\s+Still visible\.\s+note[\\/]still-active\.md/)
     assert.doesNotMatch(listResult.stdout, /delete-target/)
 
     const searchResult = harness.run(["search", "Disposable note"])
@@ -104,7 +105,7 @@ test("bn delete requires --force", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-delete-")
 
   try {
-    const relativePath = "notes/inbox/delete-target.md"
+    const relativePath = "note/delete-target.md"
     await writePlainNoteWithSidecar(harness.rootPath, {
       key: "delete-target",
       title: "Delete Target",

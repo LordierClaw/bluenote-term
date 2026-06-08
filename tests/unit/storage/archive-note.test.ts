@@ -20,16 +20,17 @@ async function writeSidecar(rootPath: string, key: string, json: string) {
   await Bun.write(sidecarPath, json)
 }
 
-test("archiveNote moves a selected note into notes/archive and stamps archivedAt", async () => {
+test("archiveNote moves a selected note into .data/archive and stamps archivedAt", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-archive-note-"))
   const archivedAt = "2026-05-21T12:30:00.000Z"
-  const originalRelativePath = "notes/inbox/archive-me.md"
+  const originalRelativePath = "note/archive-me.md"
 
   try {
-    await writeNote(
+    await writeNote(rootPath, originalRelativePath, "Ready to archive.\n")
+    await writeSidecar(
       rootPath,
-      originalRelativePath,
-      `---\nid: archive-me\nschemaVersion: 1\ntitle: Archive Me\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:15:00.000Z\nupdatedAt: 2026-05-21T10:15:00.000Z\n---\nReady to archive.\n`,
+      "archive-me",
+      sidecarJson({ key: "archive-me", title: "Archive Me", description: "Ready to archive.", relativePath: originalRelativePath }),
     )
 
     const summary = archiveNote({
@@ -44,8 +45,8 @@ test("archiveNote moves a selected note into notes/archive and stamps archivedAt
 
     assert.equal(summary.rootPath, rootPath)
     assert.equal(summary.archivedAt, archivedAt)
-    assert.equal(summary.relativePath, "notes/archive/archive-me.md")
-    assert.equal(summary.notePath, path.join(rootPath, "notes", "archive", "archive-me.md"))
+    assert.equal(summary.relativePath, ".data/archive/archive-me.md")
+    assert.equal(summary.notePath, path.join(rootPath, ".data", "archive", "archive-me.md"))
 
     await assert.rejects(() => access(path.join(rootPath, originalRelativePath)))
     await access(summary.notePath)
@@ -54,7 +55,7 @@ test("archiveNote moves a selected note into notes/archive and stamps archivedAt
     const archivedNote = repository.read(summary.notePath)
     assert.equal(archivedNote.frontmatter.archivedAt, archivedAt)
     assert.equal(archivedNote.frontmatter.id, "archive-me")
-    assert.equal(archivedNote.sourcePath, "notes/archive/archive-me.md")
+    assert.equal(archivedNote.sourcePath, ".data/archive/archive-me.md")
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }
@@ -64,12 +65,13 @@ test("archiveNote refuses to select a target when another note already has inval
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-archive-note-"))
 
   try {
-    await writeNote(
+    await writeNote(rootPath, "note/archive-me.md", "Ready to archive.\n")
+    await writeSidecar(
       rootPath,
-      "notes/inbox/archive-me.md",
-      `---\nid: archive-me\nschemaVersion: 1\ntitle: Archive Me\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:15:00.000Z\nupdatedAt: 2026-05-21T10:15:00.000Z\n---\nReady to archive.\n`,
+      "archive-me",
+      sidecarJson({ key: "archive-me", title: "Archive Me", description: "Ready to archive.", relativePath: "note/archive-me.md" }),
     )
-    await writeNote(rootPath, "notes/journal/invalid-sidecar.md", "Plain body with mismatched metadata.\n")
+    await writeNote(rootPath, "note/journal/invalid-sidecar.md", "Plain body with mismatched metadata.\n")
     await writeSidecar(
       rootPath,
       "invalid-sidecar",
@@ -77,7 +79,7 @@ test("archiveNote refuses to select a target when another note already has inval
         key: "other-key",
         title: "Invalid Sidecar",
         description: "Broken metadata",
-        relativePath: "notes/inbox/invalid-sidecar.md",
+        relativePath: "note/invalid-sidecar.md",
       }),
     )
 
@@ -87,27 +89,34 @@ test("archiveNote refuses to select a target when another note already has inval
           override: rootPath,
           selector: "archive-me",
         }),
-      /Note metadata for 'other-key' points to 'notes[\\/]inbox[\\/]invalid-sidecar\.md' instead of 'notes[\\/]journal[\\/]invalid-sidecar\.md'\./,
+      /Note metadata for 'other-key' points to 'note[\\/]invalid-sidecar\.md' instead of 'note[\\/]journal[\\/]invalid-sidecar\.md'\./,
     )
 
     const repository = createNoteRepository(rootPath)
-    const original = repository.read(path.join(rootPath, "notes", "inbox", "archive-me.md"))
+    const original = repository.read(path.join(rootPath, "note", "archive-me.md"))
     assert.equal(original.frontmatter.archivedAt, undefined)
-    assert.equal(original.sourcePath, "notes/inbox/archive-me.md")
-    await assert.rejects(() => access(path.join(rootPath, "notes", "archive", "archive-me.md")))
+    assert.equal(original.sourcePath, "note/archive-me.md")
+    await assert.rejects(() => access(path.join(rootPath, ".data", "archive", "archive-me.md")))
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }
 })
 
-test("archiveNote rejects notes that are already stored under notes/archive", async () => {
+test("archiveNote rejects notes that are already stored under .data/archive", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-archive-note-"))
 
   try {
-    await writeNote(
+    await writeNote(rootPath, ".data/archive/already-archived.md", "Already archived.\n")
+    await writeSidecar(
       rootPath,
-      "notes/archive/already-archived.md",
-      `---\nid: already-archived\nschemaVersion: 1\ntitle: Already Archived\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:15:00.000Z\nupdatedAt: 2026-05-21T10:15:00.000Z\narchivedAt: 2026-05-21T11:00:00.000Z\n---\nAlready archived.\n`,
+      "already-archived",
+      sidecarJson({
+        key: "already-archived",
+        title: "Already Archived",
+        description: "Already archived.",
+        relativePath: ".data/archive/already-archived.md",
+        archivedAt: "2026-05-21T11:00:00.000Z",
+      }),
     )
 
     assert.throws(
@@ -115,26 +124,116 @@ test("archiveNote rejects notes that are already stored under notes/archive", as
         archiveNote({
           override: rootPath,
           selector: "already-archived",
+          visibility: "all",
         }),
-      /Note 'notes[\\/]archive[\\/]already-archived\.md' is already archived\./,
+      /Note '\.data[\\/]archive[\\/]already-archived\.md' is already archived\./,
     )
 
     const repository = createNoteRepository(rootPath)
-    const archived = repository.read(path.join(rootPath, "notes", "archive", "already-archived.md"))
+    const archived = repository.read(path.join(rootPath, ".data", "archive", "already-archived.md"))
     assert.equal(archived.frontmatter.archivedAt, "2026-05-21T11:00:00.000Z")
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }
 })
 
-test("archiveNote rejects notes whose frontmatter already has archivedAt", async () => {
+test("archiveNote defaults to normal visibility and requires explicit visibility for drafts", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-archive-note-visibility-"))
+
+  try {
+    await writeNote(rootPath, "draft/draft-abc123.md", "Draft body.\n")
+    await writeSidecar(
+      rootPath,
+      "draft-abc123",
+      sidecarJson({
+        key: "draft-abc123",
+        title: "draft-abc123",
+        description: "Draft body.",
+        relativePath: "draft/draft-abc123.md",
+        type: "draft",
+      }),
+    )
+
+    assert.throws(
+      () =>
+        archiveNote({
+          override: rootPath,
+          selector: "draft-abc123",
+        }),
+      /Could not find a note matching selector 'draft-abc123'\./,
+    )
+
+    assert.throws(
+      () =>
+        archiveNote({
+          override: rootPath,
+          selector: "draft-abc123",
+          visibility: "drafts",
+        }),
+      /Cannot archive non-normal note 'draft[\\/]draft-abc123\.md'\./,
+    )
+
+    await access(path.join(rootPath, "draft", "draft-abc123.md"))
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("archiveNote requires all visibility before resolving archived exact paths", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-archive-note-visibility-"))
+
+  try {
+    await writeNote(rootPath, ".data/archive/already-archived.md", "Already archived.\n")
+    await writeSidecar(
+      rootPath,
+      "already-archived",
+      sidecarJson({
+        key: "already-archived",
+        title: "Already Archived",
+        description: "Already archived.",
+        relativePath: ".data/archive/already-archived.md",
+        archivedAt: "2026-05-21T11:00:00.000Z",
+      }),
+    )
+
+    assert.throws(
+      () =>
+        archiveNote({
+          override: rootPath,
+          selector: ".data/archive/already-archived.md",
+        }),
+      /Could not find a note matching selector '\.data[\\/]archive[\\/]already-archived\.md'\./,
+    )
+
+    assert.throws(
+      () =>
+        archiveNote({
+          override: rootPath,
+          selector: ".data/archive/already-archived.md",
+          visibility: "all",
+        }),
+      /Note '\.data[\\/]archive[\\/]already-archived\.md' is already archived\./,
+    )
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("archiveNote rejects active notes whose sidecar has archived metadata", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-archive-note-"))
 
   try {
-    await writeNote(
+    await writeNote(rootPath, "note/archived-flag.md", "Already archived in metadata.\n")
+    await writeSidecar(
       rootPath,
-      "notes/inbox/archived-flag.md",
-      `---\nid: archived-flag\nschemaVersion: 1\ntitle: Archived Flag\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:15:00.000Z\nupdatedAt: 2026-05-21T10:15:00.000Z\narchivedAt: 2026-05-21T11:00:00.000Z\n---\nAlready archived in metadata.\n`,
+      "archived-flag",
+      sidecarJson({
+        key: "archived-flag",
+        title: "Archived Flag",
+        description: "Already archived in metadata.",
+        relativePath: "note/archived-flag.md",
+        archivedAt: "2026-05-21T11:00:00.000Z",
+      }),
     )
 
     assert.throws(
@@ -143,32 +242,27 @@ test("archiveNote rejects notes whose frontmatter already has archivedAt", async
           override: rootPath,
           selector: "archived-flag",
         }),
-      /Note 'notes[\\/]inbox[\\/]archived-flag\.md' is already archived\./,
+      /Could not read note 'note[\\/]archived-flag\.md'\./,
     )
 
-    const repository = createNoteRepository(rootPath)
-    const original = repository.read(path.join(rootPath, "notes", "inbox", "archived-flag.md"))
-    assert.equal(original.frontmatter.archivedAt, "2026-05-21T11:00:00.000Z")
-    await assert.rejects(() => access(path.join(rootPath, "notes", "archive", "archived-flag.md")))
+    await access(path.join(rootPath, "note", "archived-flag.md"))
+    await assert.rejects(() => access(path.join(rootPath, ".data", "archive", "archived-flag.md")))
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }
 })
 
-test("archiveNote fails when notes/archive already contains the same basename", async () => {
+test("archiveNote fails when .data/archive already contains the same key", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-archive-note-"))
 
   try {
-    await writeNote(
+    await writeNote(rootPath, "note/duplicate-source.md", "Source note.\n")
+    await writeSidecar(
       rootPath,
-      "notes/inbox/duplicate.md",
-      `---\nid: duplicate-source\nschemaVersion: 1\ntitle: Duplicate Source\nmode: plain\ntags: []\ncreatedAt: 2026-05-21T10:15:00.000Z\nupdatedAt: 2026-05-21T10:15:00.000Z\n---\nSource note.\n`,
+      "duplicate-source",
+      sidecarJson({ key: "duplicate-source", title: "Duplicate Source", description: "Source note.", relativePath: "note/duplicate-source.md" }),
     )
-    await writeNote(
-      rootPath,
-      "notes/archive/duplicate.md",
-      `---\nid: duplicate-archived\nschemaVersion: 1\ntitle: Existing Archived Note\nmode: plain\ntags: []\ncreatedAt: 2026-05-20T10:15:00.000Z\nupdatedAt: 2026-05-20T10:15:00.000Z\narchivedAt: 2026-05-20T11:00:00.000Z\n---\nArchived first.\n`,
-    )
+    await writeNote(rootPath, ".data/archive/duplicate-source.md", "Archived first.\n")
 
     assert.throws(
       () =>
@@ -176,14 +270,13 @@ test("archiveNote fails when notes/archive already contains the same basename", 
           override: rootPath,
           selector: "duplicate-source",
         }),
-      /Found duplicate note key 'duplicate' for 'notes[\\/]archive[\\/]duplicate\.md' and 'notes[\\/]inbox[\\/]duplicate\.md'\./,
+      /Found duplicate note key 'duplicate-source' for '\.data[\\/]archive[\\/]duplicate-source\.md' and 'note[\\/]duplicate-source\.md'\./,
     )
 
-    const repository = createNoteRepository(rootPath)
-    const archivedExisting = repository.read(path.join(rootPath, "notes", "archive", "duplicate.md"))
-    assert.equal(archivedExisting.frontmatter.id, "duplicate-archived")
+    const archivedExisting = await Bun.file(path.join(rootPath, ".data", "archive", "duplicate-source.md")).text()
+    assert.equal(archivedExisting, "Archived first.\n")
 
-    const original = repository.read(path.join(rootPath, "notes", "inbox", "duplicate.md"))
+    const original = createNoteRepository(rootPath).read(path.join(rootPath, "note", "duplicate-source.md"))
     assert.equal(original.frontmatter.id, "duplicate-source")
   } finally {
     await rm(rootPath, { recursive: true, force: true })

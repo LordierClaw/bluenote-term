@@ -1,5 +1,5 @@
 import path from "node:path"
-import { existsSync, readdirSync, type Dirent } from "node:fs"
+import { existsSync, mkdirSync, readdirSync, type Dirent } from "node:fs"
 import { createCliRenderer, BoxRenderable, type CliRenderer, type PasteEvent, type Renderable } from "@opentui/core"
 
 import { resolveBlueNoteRoot } from "../config/root"
@@ -18,7 +18,10 @@ import { createNote } from "../core/create-note"
 import { deleteNote } from "../core/delete-note"
 import { IndexUnavailableError } from "../core/errors"
 import { listNotes } from "../core/list-notes"
+import { moveNote } from "../core/move-note"
+import { promoteDraft } from "../core/promote-draft"
 import { rebuildIndexes } from "../core/rebuild-indexes"
+import { renameNote } from "../core/rename-note"
 import { updateIndexedNote } from "../index/index-store"
 import { searchNotes } from "../core/search-notes"
 import { showNote } from "../core/show-note"
@@ -35,6 +38,7 @@ import { renderSearchEverythingScreen, routeSearchEverythingKey } from "./render
 import type { AiStatusState, TuiNote } from "./state"
 import { createDesktopClipboardModel } from "./adapters/desktop-clipboard-adapter"
 import { createWorkspaceController, type WorkspaceCommandHandler, type WorkspaceController, type WorkspaceControllerDependencies } from "./workspace-controller"
+import { recordLatestOpenedNote, resolveStartupNote } from "./latest-opened-note"
 
 export { createDesktopClipboardModel } from "./adapters/desktop-clipboard-adapter"
 
@@ -125,7 +129,8 @@ function persistTuiEditorBody(rootPath: string, note: TuiNote, body: string, clo
 }
 
 function showTuiNote(rootPath: string, selector: string): TuiNote {
-  const note = showNote({ override: rootPath, selector })
+  const note = showNote({ override: rootPath, selector, visibility: "drafts" })
+
   const sidecars = createSidecarRepository(rootPath)
 
   if (!existsSync(sidecars.getSidecarPath(note.key))) {
@@ -141,7 +146,6 @@ function showTuiNote(rootPath: string, selector: string): TuiNote {
 }
 
 function listTuiNoteFolders(rootPath: string): string[] {
-  const notesPath = getNotesPath(rootPath)
   const folders: string[] = []
 
   function visit(directoryPath: string, relativePath: string): void {
@@ -163,8 +167,47 @@ function listTuiNoteFolders(rootPath: string): string[] {
     }
   }
 
-  visit(notesPath, "notes")
+  visit(getNotesPath(rootPath), "note")
   return folders
+}
+
+function createTuiNoteFolder(rootPath: string, folderRelativePath: string): void {
+  const normalizedPath = folderRelativePath.replaceAll("\\", "/").replace(/^\/+|\/+$/gu, "")
+  const parts = normalizedPath.split("/").filter(Boolean)
+
+  if (parts.length < 2 || parts[0] !== "note" || parts.some((part) => part === "." || part === ".." || part.startsWith("."))) {
+    throw new Error("Folder must be under note/")
+  }
+
+  mkdirSync(path.join(getNotesPath(rootPath), ...parts.slice(1)), { recursive: true })
+}
+
+function renameTuiNote(rootPath: string, selector: string, title: string, clock: Clock): TuiNote {
+  const currentNote = showTuiNote(rootPath, selector)
+  const renamed = renameNote({
+    override: rootPath,
+    selector,
+    title,
+    body: currentNote.body,
+    updatedAt: clock.now().toISOString(),
+    visibility: currentNote.relativePath.startsWith("draft/") ? "drafts" : "normal",
+  })
+
+  return showTuiNote(rootPath, renamed.key)
+}
+
+function renameTuiNoteFolder(rootPath: string, folderRelativePath: string, nextName: string): void {
+  createNoteRepository(rootPath).renameFolder(folderRelativePath, nextName)
+}
+
+function moveTuiNote(rootPath: string, selector: string, destinationFolder: string): TuiNote {
+  const moved = moveNote({ override: rootPath, selector, destinationFolder })
+  return showTuiNote(rootPath, moved.key)
+}
+
+function promoteTuiDraft(rootPath: string, selector: string, title: string, destinationFolder: string, clock: Clock): TuiNote {
+  const promoted = promoteDraft({ override: rootPath, selector, title, destinationFolder, updatedAt: clock.now().toISOString() })
+  return showTuiNote(rootPath, promoted.key)
 }
 
 function ensureTuiIndexes(rootPath: string): void {
@@ -408,16 +451,41 @@ export function createDefaultWorkspaceController(options: DefaultWorkspaceContro
     return aiClient
   }
 
+  const initialNote = resolveStartupNote({
+    rootPath,
+    clock,
+    showNote: (selector) => showTuiNote(rootPath, selector),
+    createDraft: () => createNote({ override: rootPath, type: "draft", body: "", clock, enqueueAi: false }),
+  })
+
   const controller = createWorkspaceController({
-    listNotes: () => listNotes({ override: rootPath }),
+    listNotes: () => listNotes({ override: rootPath, visibility: "drafts" }),
     listNoteFolders: () => listTuiNoteFolders(rootPath),
     showNote: (selector) => showTuiNote(rootPath, selector),
-    searchNotes: (query) => searchNotes(query, { override: rootPath }),
-    createNote: (title, body) => createNote({ override: rootPath, title, body, clock }),
+    searchNotes: (query) => searchNotes(query, { override: rootPath, visibility: "drafts" }),
+    createFolder: (folderRelativePath) => createTuiNoteFolder(rootPath, folderRelativePath),
+    createNote: (title, destinationFolder) => {
+      const created = createNote({ override: rootPath, type: "normal", title, destinationFolder, body: "", clock, enqueueAi: false })
+      return showTuiNote(rootPath, created.key)
+    },
+    createDraft: () => {
+      const created = createNote({ override: rootPath, type: "draft", body: "", clock, enqueueAi: false })
+      return showTuiNote(rootPath, created.key)
+    },
+    managedRootPath: rootPath,
+    renameNote: (selector, title) => renameTuiNote(rootPath, selector, title, clock),
+    renameFolder: (folderRelativePath, nextName) => renameTuiNoteFolder(rootPath, folderRelativePath, nextName),
+    moveNote: (selector, destinationFolder) => moveTuiNote(rootPath, selector, destinationFolder),
+    promoteDraft: (selector, title, destinationFolder) => promoteTuiDraft(rootPath, selector, title, destinationFolder, clock),
+    rebuildIndexes: () => {
+      rebuildIndexes({ override: rootPath })
+    },
     deleteNote: (selector) => {
-      deleteNote({ override: rootPath, selector, force: true })
+      deleteNote({ override: rootPath, selector, force: true, visibility: "drafts" })
     },
     persistEditorBody: (note, body, warn) => persistTuiEditorBody(rootPath, note, body, clock, warn),
+    initialNote,
+    recordLatestOpenedNote: (note) => recordLatestOpenedNote(rootPath, note, clock),
     autosaveScheduler: options.autosaveScheduler,
     aiIdleScheduler: options.aiIdleScheduler,
     clipboard: options.clipboard ?? options.createClipboard?.() ?? createDesktopClipboardModel(),
@@ -519,6 +587,14 @@ export function routeWorkspaceKey(
   if (state.screen === "editor") {
     const handled = routeEditorKey(sequence, controller, onExit, onInvalidate)
     if (handled) return { handled: true }
+    if (sequence === "\u001b[6;5~") {
+      controller.switchEditorNote("next")
+      return { handled: true }
+    }
+    if (sequence === "\u001b[5;5~") {
+      controller.switchEditorNote("previous")
+      return { handled: true }
+    }
     if (sequence === "\u0003") {
       const quit = controller.requestQuit()
       if (!quit.blocked) {
@@ -537,7 +613,15 @@ export function routeWorkspaceKey(
     return { handled: true, exit: !quit.blocked || undefined }
   }
 
-  if (sequence === "q" && state.mode !== "manager.filter" && state.mode !== "manager.create" && state.mode !== "manager.deleteConfirm") {
+  if (
+    sequence === "q" &&
+    state.mode !== "manager.filter" &&
+    state.mode !== "manager.create" &&
+    state.mode !== "manager.rename" &&
+    state.mode !== "manager.move" &&
+    state.mode !== "manager.saveDraftAs" &&
+    state.mode !== "manager.deleteConfirm"
+  ) {
     const quit = controller.requestQuit()
     if (!quit.blocked) {
       onExit()

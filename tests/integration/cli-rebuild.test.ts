@@ -8,6 +8,7 @@ import { createManagedRootHarness } from "../helpers/cli"
 import { noteMarkdown } from "../helpers/note-fixtures"
 
 function sidecarJson(input: {
+  type?: "normal" | "draft" | "archived"
   key: string
   title: string
   description: string
@@ -19,6 +20,7 @@ function sidecarJson(input: {
 }): string {
   return `${JSON.stringify(
     {
+      type: input.type ?? (input.archivedAt == null ? "normal" : "archived"),
       key: input.key,
       title: input.title,
       description: input.description,
@@ -37,7 +39,7 @@ test("bn rebuild reads plain note bodies plus sidecars and writes derived artifa
   const harness = await createManagedRootHarness("bluenote-cli-rebuild-")
 
   try {
-    const relativePath = "notes/inbox/alpha-note.md"
+    const relativePath = "note/alpha-note.md"
     await harness.writeNote(relativePath, "Alpha plain body mentions comet trails.\n")
     await harness.writeNote(
       path.join(".data", "notes", "alpha-note.json"),
@@ -72,7 +74,7 @@ test("bn rebuild migrates .state sidecars before rebuilding .data indexes", asyn
   const harness = await createManagedRootHarness("bluenote-cli-rebuild-state-migration-")
 
   try {
-    const relativePath = "notes/inbox/legacy-state-note.md"
+    const relativePath = "note/legacy-state-note.md"
     await harness.writeNote(relativePath, "Legacy state sidecar body mentions asteroid dust.\n")
     await harness.writeNote(
       path.join(".state", "notes", "legacy-state-note.json"),
@@ -103,7 +105,7 @@ test("bn rebuild exits 2 and reports a missing sidecar for a plain note", async 
   const harness = await createManagedRootHarness("bluenote-cli-rebuild-missing-sidecar-")
 
   try {
-    await harness.writeNote("notes/inbox/missing-sidecar.md", "Body without sidecar.\n")
+    await harness.writeNote("note/missing-sidecar.md", "Body without sidecar.\n")
 
     const result = harness.run(["rebuild"])
 
@@ -121,7 +123,7 @@ test("bn rebuild falls back to legacy frontmatter notes without sidecars", async
 
   try {
     await harness.writeNote(
-      "notes/inbox/legacy-note.md",
+      "note/legacy-note.md",
       noteMarkdown({
         id: "legacy-note",
         title: "Legacy Note",
@@ -142,7 +144,7 @@ test("bn rebuild falls back to legacy frontmatter notes without sidecars", async
         id: "legacy-note",
         title: "Legacy Note",
         description: "Legacy frontmatter body mentions meteor trails.",
-        relativePath: "notes/inbox/legacy-note.md",
+        relativePath: "note/legacy-note.md",
         createdAt: "2026-05-21T10:15:00.000Z",
         updatedAt: "2026-05-21T10:15:00.000Z",
         archivedAt: null,
@@ -158,7 +160,7 @@ test("bn rebuild fails for legacy frontmatter notes when an invalid sidecar alre
   const harness = await createManagedRootHarness("bluenote-cli-rebuild-legacy-invalid-sidecar-")
 
   try {
-    const relativePath = "notes/inbox/legacy-invalid-sidecar.md"
+    const relativePath = "note/legacy-invalid-sidecar.md"
     await harness.writeNote(
       relativePath,
       noteMarkdown({
@@ -185,7 +187,7 @@ test("bn rebuild preserves archived sidecar notes in derived artifacts without s
 
   try {
     const archivedAt = "2026-05-22T09:30:00.000Z"
-    const relativePath = "notes/archive/archived-note.md"
+    const relativePath = path.join(".data", "archive", "archived-note.md")
 
     await harness.writeNote(relativePath, "Archived body keeps lunar breadcrumb text.\n")
     await harness.writeNote(
@@ -223,7 +225,7 @@ test("bn rebuild exits 2 and reports a sidecar whose note file is missing", asyn
         key: "orphaned-note",
         title: "Orphaned Note",
         description: "No body file",
-        relativePath: "notes/inbox/orphaned-note.md",
+        relativePath: "note/orphaned-note.md",
       }),
     )
 
@@ -232,7 +234,59 @@ test("bn rebuild exits 2 and reports a sidecar whose note file is missing", asyn
     assert.equal(result.exitCode, 2)
     assert.equal(result.stdout, "")
     assert.match(result.stderr, /Validation failed while rebuilding indexes\./)
-    assert.match(result.stderr, /Sidecar '\.data[\\/]notes[\\/]orphaned-note\.json' points to missing note 'notes[\\/]inbox[\\/]orphaned-note\.md'\./)
+    assert.match(result.stderr, /Sidecar '\.data[\\/]notes[\\/]orphaned-note\.json' points to missing note 'note[\\/]orphaned-note\.md'\./)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test("bn rebuild rejects orphaned sidecars whose relative path escapes the managed root", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-rebuild-outside-sidecar-")
+
+  try {
+    await harness.writeNote(
+      path.join(".data", "notes", "outside-note.json"),
+      sidecarJson({
+        key: "outside-note",
+        title: "Outside Note",
+        description: "Should not be resolved outside root",
+        relativePath: path.join("..", "outside-note.md"),
+      }),
+    )
+
+    const result = harness.run(["rebuild"])
+
+    assert.equal(result.exitCode, 2)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Validation failed while rebuilding indexes\./)
+    assert.match(result.stderr, /type 'normal' must use a relativePath under 'note\/'\./)
+    assert.doesNotMatch(result.stderr, /points to missing note/)
+  } finally {
+    await harness.cleanup()
+  }
+})
+
+test("bn rebuild rejects orphaned sidecars whose relative path is absolute", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-rebuild-absolute-sidecar-")
+
+  try {
+    await harness.writeNote(
+      path.join(".data", "notes", "absolute-note.json"),
+      sidecarJson({
+        key: "absolute-note",
+        title: "Absolute Note",
+        description: "Absolute paths are not portable metadata",
+        relativePath: "/tmp/outside-note.md",
+      }),
+    )
+
+    const result = harness.run(["rebuild"])
+
+    assert.equal(result.exitCode, 2)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /Validation failed while rebuilding indexes\./)
+    assert.match(result.stderr, /type 'normal' must use a relativePath under 'note\/'\./)
+    assert.doesNotMatch(result.stderr, /points to missing note 'tmp[\\/]outside-note\.md'/)
   } finally {
     await harness.cleanup()
   }
@@ -242,7 +296,7 @@ test("bn rebuild exits 2 and reports sidecar key and path mismatches", async () 
   const harness = await createManagedRootHarness("bluenote-cli-rebuild-mismatch-")
 
   try {
-    const relativePath = "notes/inbox/alpha-note.md"
+    const relativePath = "note/alpha-note.md"
     await harness.writeNote(relativePath, "Mismatch body.\n")
     await harness.writeNote(
       path.join(".data", "notes", "alpha-note.json"),
@@ -250,7 +304,7 @@ test("bn rebuild exits 2 and reports sidecar key and path mismatches", async () 
         key: "other-key",
         title: "Alpha Note",
         description: "Mismatch metadata",
-        relativePath: "notes/journal/alpha-note.md",
+        relativePath: "note/renamed-alpha-note.md",
       }),
     )
 
@@ -260,7 +314,7 @@ test("bn rebuild exits 2 and reports sidecar key and path mismatches", async () 
     assert.equal(result.stdout, "")
     assert.match(result.stderr, /Validation failed while rebuilding indexes\./)
     assert.match(result.stderr, /Sidecar '\.data[\\/]notes[\\/]alpha-note\.json' declares key 'other-key' but is stored for note key 'alpha-note'\./)
-    assert.match(result.stderr, /Note metadata for 'other-key' points to 'notes[\\/]journal[\\/]alpha-note\.md' instead of 'notes[\\/]inbox[\\/]alpha-note\.md'\./)
+    assert.match(result.stderr, /Note metadata for 'other-key' points to 'note[\\/]renamed-alpha-note\.md' instead of 'note[\\/]alpha-note\.md'\./)
   } finally {
     await harness.cleanup()
   }
@@ -270,13 +324,14 @@ test("bn rebuild exits 2 and surfaces invalid sidecar validation errors", async 
   const harness = await createManagedRootHarness("bluenote-cli-rebuild-invalid-sidecar-")
 
   try {
-    const relativePath = "notes/inbox/broken-sidecar.md"
+    const relativePath = "note/broken-sidecar.md"
     await harness.writeNote(relativePath, "Broken metadata body.\n")
     await mkdir(path.join(harness.rootPath, ".data", "notes"), { recursive: true })
     await Bun.write(
       path.join(harness.rootPath, ".data", "notes", "broken-sidecar.json"),
       JSON.stringify(
         {
+          type: "normal",
           key: "broken-sidecar",
           title: "Broken Sidecar",
           relativePath,
@@ -305,7 +360,7 @@ test("bn rebuild exits 2 with a controlled error when .data/notes cannot be scan
   const harness = await createManagedRootHarness("bluenote-cli-rebuild-sidecar-scan-")
 
   try {
-    const relativePath = "notes/inbox/alpha-note.md"
+    const relativePath = "note/alpha-note.md"
     await harness.writeNote(relativePath, "Alpha body.\n")
     await harness.writeNote(
       path.join(".data", "notes", "alpha-note.json"),

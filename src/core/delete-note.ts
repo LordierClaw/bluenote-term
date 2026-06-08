@@ -6,8 +6,9 @@ import { createNoteRepository } from "../storage/note-repository"
 import { ensureManagedRoot } from "../storage/root-layout"
 import { rebuildIndexes } from "./rebuild-indexes"
 import { selectNote } from "./select-note"
+import type { NoteVisibilityOptions } from "./note-visibility"
 
-export interface DeleteNoteOptions extends ResolveBlueNoteRootOptions {
+export interface DeleteNoteOptions extends ResolveBlueNoteRootOptions, NoteVisibilityOptions {
   selector: string
   force?: boolean
 }
@@ -27,7 +28,7 @@ export function deleteNote(options: DeleteNoteOptions): DeleteNoteSummary {
 
   const rootPath = ensureManagedRoot(resolveBlueNoteRoot(options))
   const repository = createNoteRepository(rootPath)
-  const selected = selectNote({ repository, selector: options.selector })
+  const selected = selectNote({ repository, selector: options.selector, visibility: options.visibility })
   const deleted = repository.delete(path.join(rootPath, selected.sourcePath))
   const rebuildSummary = rebuildIndexes({ override: rootPath })
 

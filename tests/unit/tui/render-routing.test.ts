@@ -80,6 +80,14 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
       calls.push("openFocusedManagerItem")
       return { blocked: false }
     },
+    openFocusedManagerFolder: () => {
+      calls.push("openFocusedManagerFolder")
+      return { blocked: false }
+    },
+    goToManagerParent: () => {
+      calls.push("goToManagerParent")
+      return { blocked: false }
+    },
     showManager: () => {
       calls.push("showManager")
       state.screen = "manager"
@@ -123,18 +131,46 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
     },
     openManagerFilter: () => calls.push("openManagerFilter"),
     openManagerCreate: () => calls.push("openManagerCreate"),
+    toggleManagerCreateKind: () => calls.push("toggleManagerCreateKind"),
+    quickNewDraft: () => {
+      calls.push("quickNewDraft")
+      return { blocked: false }
+    },
     updateManagerCreateTitle: (title) => calls.push(`updateManagerCreateTitle:${title}`),
     submitManagerCreate: async () => {
       calls.push("submitManagerCreate")
       return { blocked: false }
     },
     cancelManagerCreate: () => calls.push("cancelManagerCreate"),
+    openManagerRename: () => calls.push("openManagerRename"),
+    openManagerMove: () => {
+      calls.push("openManagerMove")
+      return { blocked: false }
+    },
+    openSaveDraftAs: () => {
+      calls.push("openSaveDraftAs")
+      return { blocked: false }
+    },
+    updateManagerActionInput: (input) => calls.push(`updateManagerActionInput:${input}`),
+    submitManagerAction: () => {
+      calls.push("submitManagerAction")
+      return { blocked: false }
+    },
+    cancelManagerAction: () => calls.push("cancelManagerAction"),
     openManagerDeleteConfirmation: () => calls.push("openManagerDeleteConfirmation"),
     confirmManagerDelete: async () => {
       calls.push("confirmManagerDelete")
       return { blocked: false }
     },
     cancelManagerDelete: () => calls.push("cancelManagerDelete"),
+    renameFocusedManagerItem: (titleOrFolderName) => {
+      calls.push(`renameFocusedManagerItem:${titleOrFolderName}`)
+      return { blocked: false }
+    },
+    moveFocusedManagerNote: (destinationFolder) => {
+      calls.push(`moveFocusedManagerNote:${destinationFolder}`)
+      return { blocked: false }
+    },
     setManagerFilter: (query) => calls.push(`setManagerFilter:${query}`),
     updateManagerFilter: (query) => calls.push(`updateManagerFilter:${query}`),
     clearManagerFilter: () => calls.push("clearManagerFilter"),
@@ -153,6 +189,10 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
     replaceAllEditorMatches: () => calls.push("replaceAllEditorMatches"),
     undoEditor: () => calls.push("undoEditor"),
     redoEditor: () => calls.push("redoEditor"),
+    switchEditorNote: (direction) => {
+      calls.push(`switchEditorNote:${direction}`)
+      return { blocked: false }
+    },
     requestQuit: () => {
       calls.push("requestQuit")
       return { blocked: false }
@@ -225,6 +265,14 @@ describe("TUI render keyboard routing", () => {
     assert.deepEqual(calls, ["saveEditor"])
   })
 
+  test("editor Alt+S opens save draft as", () => {
+    const { controller, calls } = createController("editor")
+
+    assert.equal(routeEditorKey("\u001bs", controller), true)
+    assert.equal(routeEditorKey("\u001bS", controller), true)
+    assert.deepEqual(calls, ["openSaveDraftAs", "openSaveDraftAs"])
+  })
+
   test("editor Ctrl+F enters editor find mode from the body", () => {
     const { controller, calls } = createController("editor")
 
@@ -245,7 +293,7 @@ describe("TUI render keyboard routing", () => {
     const { controller, calls } = createController("editor")
     controller.getState().mode = "editor.find"
     controller.getState().editor = {
-      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "alpha beta alpha" },
+      note: { key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "alpha beta alpha" },
       body: "alpha beta alpha",
       savedBody: "alpha beta alpha",
       dirty: false,
@@ -263,7 +311,7 @@ describe("TUI render keyboard routing", () => {
     const { controller, calls } = createController("editor")
     controller.getState().mode = "editor.body"
     controller.getState().editor = {
-      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "alpha beta alpha" },
+      note: { key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "alpha beta alpha" },
       body: "alpha beta alpha",
       savedBody: "alpha beta alpha",
       dirty: false,
@@ -279,7 +327,7 @@ describe("TUI render keyboard routing", () => {
     const { controller, calls } = createController("editor")
     controller.getState().mode = "editor.body"
     controller.getState().editor = {
-      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "Alpha" },
+      note: { key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "Alpha" },
       body: "Alpha",
       savedBody: "Alpha",
       dirty: false,
@@ -318,7 +366,7 @@ describe("TUI render keyboard routing", () => {
     const { controller, calls } = createController("editor")
     controller.getState().mode = "editor.body"
     controller.getState().editor = {
-      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "Alpha Beta Gamma" },
+      note: { key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "Alpha Beta Gamma" },
       body: "Alpha Beta Gamma",
       savedBody: "Alpha Beta Gamma",
       dirty: false,
@@ -337,7 +385,7 @@ describe("TUI render keyboard routing", () => {
     const { controller, calls } = createController("editor")
     controller.getState().mode = "editor.body"
     controller.getState().editor = {
-      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "Alpha Beta Gamma" },
+      note: { key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "Alpha Beta Gamma" },
       body: "Alpha Beta Gamma",
       savedBody: "Alpha Beta Gamma",
       dirty: false,
@@ -359,7 +407,7 @@ describe("TUI render keyboard routing", () => {
     const { controller } = createController("editor")
     controller.getState().mode = "editor.body"
     controller.getState().editor = {
-      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" },
+      note: { key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "body" },
       body: "body",
       savedBody: "body",
       dirty: false,
@@ -387,7 +435,7 @@ describe("TUI render keyboard routing", () => {
     const { controller, calls } = createController("editor")
     controller.getState().mode = "editor.body"
     controller.getState().editor = {
-      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" },
+      note: { key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "" },
       body: "",
       savedBody: "",
       dirty: false,
@@ -406,7 +454,7 @@ describe("TUI render keyboard routing", () => {
             key: "daily",
             title: "Daily",
             description: "",
-            relativePath: "notes/daily.md",
+            relativePath: "note/daily.md",
             body: "alpha beta alpha",
           },
         ],
@@ -414,7 +462,7 @@ describe("TUI render keyboard routing", () => {
           key: "daily",
           title: "Daily",
           description: "",
-          relativePath: "notes/daily.md",
+          relativePath: "note/daily.md",
           body: "alpha beta alpha",
         }),
         searchNotes: () => [],
@@ -452,7 +500,7 @@ describe("TUI render keyboard routing", () => {
     const { controller, calls } = createController("editor")
     controller.getState().mode = "editor.find"
     controller.getState().editor = {
-      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" },
+      note: { key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "body" },
       body: "body",
       savedBody: "body",
       dirty: false,
@@ -473,7 +521,7 @@ describe("TUI render keyboard routing", () => {
     const { controller, calls } = createController("editor")
     controller.getState().mode = "editor.replace"
     controller.getState().editor = {
-      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "needle body" },
+      note: { key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "needle body" },
       body: "needle body",
       savedBody: "needle body",
       dirty: false,
@@ -513,7 +561,7 @@ describe("TUI render keyboard routing", () => {
           key: "daily",
           title: "Daily",
           description: "",
-          relativePath: "notes/daily.md",
+          relativePath: "note/daily.md",
           body: "alpha beta alpha",
         },
       ],
@@ -521,7 +569,7 @@ describe("TUI render keyboard routing", () => {
         key: "daily",
         title: "Daily",
         description: "",
-        relativePath: "notes/daily.md",
+        relativePath: "note/daily.md",
         body: "alpha beta alpha",
       }),
       searchNotes: () => [],
@@ -561,7 +609,7 @@ describe("TUI render keyboard routing", () => {
     const { controller, calls } = createController("editor")
     controller.getState().mode = "editor.body"
     controller.getState().editor = {
-      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" },
+      note: { key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "body" },
       body: "body",
       savedBody: "body",
       dirty: false,
@@ -577,7 +625,7 @@ describe("TUI render keyboard routing", () => {
     const { controller, calls } = createController("editor")
     controller.getState().mode = "editor.body"
     controller.getState().editor = {
-      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" },
+      note: { key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "" },
       body: "",
       savedBody: "",
       dirty: false,
@@ -591,7 +639,7 @@ describe("TUI render keyboard routing", () => {
     const { controller, calls } = createController("editor")
     controller.getState().mode = "editor.body"
     controller.getState().editor = {
-      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" },
+      note: { key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "" },
       body: "",
       savedBody: "",
       dirty: false,
@@ -605,7 +653,7 @@ describe("TUI render keyboard routing", () => {
     const { controller, calls } = createController("editor")
     controller.getState().mode = "editor.body"
     controller.getState().editor = {
-      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" },
+      note: { key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "" },
       body: "",
       savedBody: "",
       dirty: false,
@@ -619,7 +667,7 @@ describe("TUI render keyboard routing", () => {
     const { controller, calls } = createController("editor")
     controller.getState().mode = "editor.body"
     controller.getState().editor = {
-      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" },
+      note: { key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "" },
       body: "",
       savedBody: "",
       dirty: false,
@@ -633,7 +681,7 @@ describe("TUI render keyboard routing", () => {
     const { controller, calls } = createController("editor")
     controller.getState().mode = "editor.body"
     controller.getState().editor = {
-      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" },
+      note: { key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "" },
       body: "",
       savedBody: "",
       dirty: false,
@@ -647,7 +695,7 @@ describe("TUI render keyboard routing", () => {
     const { controller, calls } = createController("editor")
     controller.getState().mode = "editor.body"
     controller.getState().editor = {
-      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" },
+      note: { key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "" },
       body: "",
       savedBody: "",
       dirty: false,
@@ -661,7 +709,7 @@ describe("TUI render keyboard routing", () => {
     const { controller, calls } = createController("editor")
     controller.getState().mode = "editor.body"
     controller.getState().editor = {
-      note: { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" },
+      note: { key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "" },
       body: "",
       savedBody: "",
       dirty: false,
@@ -675,8 +723,8 @@ describe("TUI render keyboard routing", () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }],
-        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }),
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "body" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "body" }),
         searchNotes: () => [],
       })
       assert.equal(controller.openFocusedManagerItem().blocked, false)
@@ -715,8 +763,8 @@ describe("TUI render keyboard routing", () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }],
-        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }),
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "body" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "body" }),
         searchNotes: () => [],
       })
       assert.equal(controller.openFocusedManagerItem().blocked, false)
@@ -764,8 +812,8 @@ describe("TUI render keyboard routing", () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "alpha beta alpha" }],
-        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "alpha beta alpha" }),
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "alpha beta alpha" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "alpha beta alpha" }),
         searchNotes: () => [],
       })
       assert.equal(controller.openFocusedManagerItem().blocked, false)
@@ -785,8 +833,8 @@ describe("TUI render keyboard routing", () => {
       ;(renderer as typeof renderer & { width?: number; height?: number }).width = 100
       ;(renderer as typeof renderer & { width?: number; height?: number }).height = 30
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "alpha beta alpha" }],
-        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "alpha beta alpha" }),
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "alpha beta alpha" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "alpha beta alpha" }),
         searchNotes: () => [],
       })
       assert.equal(controller.openFocusedManagerItem().blocked, false)
@@ -830,8 +878,8 @@ describe("TUI render keyboard routing", () => {
       ;(renderer as typeof renderer & { height?: number; width?: number }).width = 80
       const body = Array.from({ length: 21 }, (_, index) => `line ${index + 1}`).join("\n")
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body }],
-        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body }),
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body }),
         searchNotes: () => [],
       })
       assert.equal(controller.openFocusedManagerItem().blocked, false)
@@ -849,8 +897,8 @@ describe("TUI render keyboard routing", () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }],
-        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }),
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "body" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "body" }),
         searchNotes: () => [],
       })
       assert.equal(controller.openFocusedManagerItem().blocked, false)
@@ -872,7 +920,7 @@ describe("TUI render keyboard routing", () => {
       const { controller } = createController("editor")
       controller.getState().mode = "editor.body"
       controller.getState().editor = {
-        note: { key: "daily", title: "Daily", description: "", relativePath: "notes/inbox/daily.md", body: "body", updatedAt: "2026-05-28T10:30:00.000Z" } as any,
+        note: { key: "daily", title: "Daily", description: "", relativePath: "note/inbox/daily.md", body: "body", updatedAt: "2026-05-28T10:30:00.000Z" } as any,
         body: "body",
         savedBody: "body",
         dirty: false,
@@ -905,7 +953,7 @@ describe("TUI render keyboard routing", () => {
       assert.equal(title?.content?.chunks?.[0]?.text ?? title?.content, "Daily ")
       assert.equal(title?.width, "Daily ".length)
       assert.doesNotMatch(String(title?.content?.chunks?.[0]?.text ?? title?.content), /^\s/u)
-      assert.equal(path?.content?.chunks?.[0]?.text ?? path?.content, "notes/inbox/daily.md")
+      assert.equal(path?.content?.chunks?.[0]?.text ?? path?.content, "note/inbox/daily.md")
       assert.deepEqual((path as any)?.fg?.toInts?.(), [148, 163, 184, 255])
       assert.equal(topbarSpacer?.yogaNode?.getFlexGrow?.(), 1)
       const expectedUpdated = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date("2026-05-28T10:30:00.000Z")).replace(",", "")
@@ -920,7 +968,7 @@ describe("TUI render keyboard routing", () => {
       assert.equal(findById(screen, "bluenote-editor-bottombar-save-status"), undefined)
       const shortcutChunks = shortcutRow?.content?.chunks ?? []
       const shortcutText = shortcutChunks.map((chunk: { text?: string }) => chunk.text ?? "").join("") || shortcutRow?.content
-      assert.equal(shortcutText, "[Ctrl+S] Save  [Ctrl+F] Find  [Ctrl+R] Replace  [Ctrl+P] Search  [Esc] Manager  [Ctrl+Z] Undo  [Ctrl+Y] Redo  +1")
+      assert.equal(shortcutText, "[Ctrl+S] Save  [Ctrl+F] Find  [Ctrl+R] Replace  [Ctrl+P] Search  [Esc] Manager  [Ctrl+Z] Undo  [Ctrl+Y] Redo  +2")
       assert.deepEqual(shortcutChunks.filter((chunk: { text?: string }) => /^\[[^\]]+\]$/u.test(chunk.text ?? "")).at(0)?.fg?.toInts?.(), [56, 189, 248, 255])
     } finally {
       renderer.destroy()
@@ -931,8 +979,8 @@ describe("TUI render keyboard routing", () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }],
-        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }),
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "body" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "body" }),
         searchNotes: () => [],
       })
       assert.equal(controller.openFocusedManagerItem().blocked, false)
@@ -958,8 +1006,8 @@ describe("TUI render keyboard routing", () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "abc\ndef" }],
-        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "abc\ndef" }),
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "abc\ndef" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "abc\ndef" }),
         searchNotes: () => [],
       })
       assert.equal(controller.openFocusedManagerItem().blocked, false)
@@ -988,8 +1036,8 @@ describe("TUI render keyboard routing", () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" }],
-        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" }),
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "" }),
         searchNotes: () => [],
       })
       assert.equal(controller.openFocusedManagerItem().blocked, false)
@@ -1012,8 +1060,8 @@ describe("TUI render keyboard routing", () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" }],
-        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" }),
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "" }),
         searchNotes: () => [],
       })
       assert.equal(controller.openFocusedManagerItem().blocked, false)
@@ -1043,8 +1091,8 @@ describe("TUI render keyboard routing", () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" }],
-        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "" }),
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "" }),
         searchNotes: () => [],
       })
       assert.equal(controller.openFocusedManagerItem().blocked, false)
@@ -1094,8 +1142,8 @@ describe("TUI render keyboard routing", () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }],
-        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }),
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "body" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "body" }),
         searchNotes: () => [],
       })
       assert.equal(controller.openFocusedManagerItem().blocked, false)
@@ -1155,8 +1203,8 @@ describe("TUI render keyboard routing", () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily Plan", description: "Today priorities.", relativePath: "notes/inbox/daily-plan.md", body: "Today priorities." }],
-        showNote: () => ({ key: "daily", title: "Daily Plan", description: "Today priorities.", relativePath: "notes/inbox/daily-plan.md", body: "Today priorities." }),
+        listNotes: () => [{ key: "daily", title: "Daily Plan", description: "Today priorities.", relativePath: "note/inbox/daily-plan.md", body: "Today priorities." }],
+        showNote: () => ({ key: "daily", title: "Daily Plan", description: "Today priorities.", relativePath: "note/inbox/daily-plan.md", body: "Today priorities." }),
         searchNotes: () => [],
       })
       controller.openSearch("daily")
@@ -1168,7 +1216,7 @@ describe("TUI render keyboard routing", () => {
       const previewText = previewLines.join("\n")
 
       assert.equal(previewRegion?.title, "")
-      assert.deepEqual(previewLines.slice(0, 2), ["notes/inbox/daily-plan.md", "Today priorities."])
+      assert.deepEqual(previewLines.slice(0, 2), ["note/inbox/daily-plan.md", "Today priorities."])
       assert.doesNotMatch(previewText, /Preview ·|Summary|Excerpt|Items|Availability|Usage:|Shortcut:|Risk:/u)
     } finally {
       renderer.destroy()
@@ -1179,8 +1227,8 @@ describe("TUI render keyboard routing", () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "daily body" }],
-        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "daily body" }),
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "daily body" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "daily body" }),
         searchNotes: () => [],
       })
       controller.openSearch("daily")
@@ -1244,12 +1292,35 @@ describe("TUI render keyboard routing", () => {
     assert.deepEqual(calls, ["updateManagerCreateTitle:Quiq"])
   })
 
+  test("workspace route leaves q inside manager rename, move, and save-draft-as prompts", () => {
+    const rename = createController("manager")
+    rename.controller.getState().mode = "manager.rename"
+    rename.controller.getState().manager.actionDraft = { kind: "rename", input: "Qu", status: null }
+
+    assert.deepEqual(routeWorkspaceKey("q", rename.controller, () => {}), { handled: true })
+    assert.deepEqual(rename.calls, ["updateManagerActionInput:Quq"])
+
+    const move = createController("manager")
+    move.controller.getState().mode = "manager.move"
+    move.controller.getState().manager.actionDraft = { kind: "move", input: "note", status: null, sourceKey: "daily-plan", sourceRelativePath: "note/daily-plan.md" }
+
+    assert.deepEqual(routeWorkspaceKey("q", move.controller, () => {}), { handled: true })
+    assert.deepEqual(move.calls, [])
+
+    const saveDraftAs = createController("manager")
+    saveDraftAs.controller.getState().mode = "manager.saveDraftAs"
+    saveDraftAs.controller.getState().manager.actionDraft = { kind: "saveDraftAs", input: "Qu", status: null, sourceKey: "draft-abc123", sourceRelativePath: "draft/draft-abc123.md" }
+
+    assert.deepEqual(routeWorkspaceKey("q", saveDraftAs.controller, () => {}), { handled: true })
+    assert.deepEqual(saveDraftAs.calls, ["updateManagerActionInput:Quq"])
+  })
+
   test("workspace route still handles manager Esc, q, and Ctrl+C when an edited note is dirty", () => {
     const controller = createWorkspaceController({
       listNotes: () => [
-        { key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" },
+        { key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "body" },
       ],
-      showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: "body" }),
+      showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "body" }),
       searchNotes: () => [],
     })
     assert.equal(controller.openFocusedManagerItem().blocked, false)
@@ -1275,6 +1346,7 @@ describe("TUI render keyboard routing", () => {
       ["\u001b", "goBack"],
       ["\u001b[", "goBack"],
       ["n", "openManagerCreate"],
+      ["N", "quickNewDraft"],
       ["d", "openManagerDeleteConfirmation"],
       ["/", "openManagerFilter"],
       ["\u0006", "openManagerFilter"],
@@ -1310,6 +1382,30 @@ describe("TUI render keyboard routing", () => {
     ])
   })
 
+  test("manager save-draft-as route edits title, selects folders, submits, and cancels", () => {
+    const { controller, calls } = createController("manager")
+    controller.getState().mode = "manager.saveDraftAs"
+    controller.getState().manager.actionDraft = { kind: "saveDraftAs", input: "Draft", status: null, sourceKey: "draft-abc123", sourceRelativePath: "draft/draft-abc123.md" }
+
+    assert.equal(routeManagerKey("!", controller), true)
+    assert.equal(routeManagerKey("\u001b[A", controller), true)
+    assert.equal(routeManagerKey("\u001b[B", controller), true)
+    assert.equal(routeManagerKey("\u001b[C", controller), true)
+    assert.equal(routeManagerKey("\u001b[D", controller), true)
+    assert.equal(routeManagerKey("\r", controller), true)
+    assert.equal(routeManagerKey("\u001b", controller), true)
+
+    assert.deepEqual(calls, [
+      "updateManagerActionInput:Draft!",
+      "moveManagerSelection:up",
+      "moveManagerSelection:down",
+      "openFocusedManagerFolder",
+      "goToManagerParent",
+      "submitManagerAction",
+      "cancelManagerAction",
+    ])
+  })
+
   test("manager route maps p to preview toggle while s and Ctrl+P still open Search Everything", () => {
     const { controller, calls } = createController("manager")
 
@@ -1323,7 +1419,7 @@ describe("TUI render keyboard routing", () => {
   test("manager view model uses note title and description columns with filename fallback", () => {
     const state: TuiState = {
       screen: "manager",
-      manager: { items: [], focusedIndex: 0, selectedNoteKey: null, currentFolderPath: "notes/inbox" },
+      manager: { items: [], focusedIndex: 0, selectedNoteKey: null, currentFolderPath: "note/inbox" },
       editor: null,
       search: null,
     }
@@ -1333,7 +1429,7 @@ describe("TUI render keyboard routing", () => {
       filename: "daily-plan.md",
       title: "Daily Plan",
       description: "Today priorities.",
-      relativePath: "notes/inbox/daily-plan.md",
+      relativePath: "note/inbox/daily-plan.md",
       index: 0,
       focused: true,
       selected: false,
@@ -1346,7 +1442,7 @@ describe("TUI render keyboard routing", () => {
       filename: "untitled.md",
       title: "   ",
       description: "Needs a title.",
-      relativePath: "notes/inbox/untitled.md",
+      relativePath: "note/inbox/untitled.md",
       index: 1,
       focused: false,
       selected: false,
@@ -1355,11 +1451,11 @@ describe("TUI render keyboard routing", () => {
     }
     const folder = {
       type: "folder" as const,
-      key: "notes/inbox/projects",
+      key: "note/inbox/projects",
       filename: "projects",
       title: "Projects",
       description: "2 notes",
-      relativePath: "notes/inbox/projects",
+      relativePath: "note/inbox/projects",
       index: 2,
       focused: false,
       selected: false,
@@ -1368,8 +1464,8 @@ describe("TUI render keyboard routing", () => {
     }
     const vm = buildManagerViewModel(state, {
       layout1Rows: [titledNote, untitledNote, folder],
-      preview: { type: "folder", path: "notes/inbox/projects", rows: [titledNote, untitledNote] },
-      currentFolderPath: "notes/inbox",
+      preview: { type: "folder", path: "note/inbox/projects", rows: [titledNote, untitledNote] },
+      currentFolderPath: "note/inbox",
       hoveredPath: titledNote.relativePath,
       focusedIndex: 0,
       empty: false,
@@ -1390,22 +1486,51 @@ describe("TUI render keyboard routing", () => {
     }
   })
 
+  test("manager renderer shows Tab toggle hint in the create box", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const { controller } = createController("manager")
+      const state = controller.getState()
+      state.mode = "manager.create"
+      state.manager.currentFolderPath = "note/work"
+      state.manager.canCreateFolder = true
+      state.manager.createDraft = { title: "Client", status: null, kind: "note" }
+
+      const screen = renderManagerScreen({ renderer, controller, width: 80 })
+      renderer.root.add(screen)
+      const createHints = findById(screen, "bluenote-manager-create-hints") as { content?: any } | undefined
+      const hintText = createHints?.content?.chunks?.map((chunk: { text?: string }) => chunk.text ?? "").join("") || createHints?.content || ""
+
+      assert.equal(hintText, "[Enter] Create  [Tab] Folder  [Esc] Cancel")
+
+      state.manager.createDraft = { title: "Client", status: null, kind: "folder" }
+      const folderScreen = renderManagerScreen({ renderer, controller, width: 80 })
+      renderer.root.add(folderScreen)
+      const folderCreateHints = findById(folderScreen, "bluenote-manager-create-hints") as { content?: any } | undefined
+      const folderHintText = folderCreateHints?.content?.chunks?.map((chunk: { text?: string }) => chunk.text ?? "").join("") || folderCreateHints?.content || ""
+
+      assert.equal(folderHintText, "[Enter] Create  [Tab] Note  [Esc] Cancel")
+    } finally {
+      renderer.destroy()
+    }
+  })
+
   test("manager renderer prints simplified topbar and currently-open footer label", async () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const { controller } = createController("manager")
       const state = controller.getState()
       state.manager = {
-        items: [{ type: "note", key: "daily-plan", filename: "daily-plan.md", title: "Daily Plan", description: "Today", relativePath: "notes/inbox/daily-plan.md" }],
+        items: [{ type: "note", key: "daily-plan", filename: "daily-plan.md", title: "Daily Plan", description: "Today", relativePath: "note/inbox/daily-plan.md" }],
         focusedIndex: 0,
         selectedNoteKey: "daily-plan",
-        currentFolderPath: "notes/inbox",
-        hoveredPath: "notes/inbox/daily-plan.md",
+        currentFolderPath: "note/inbox",
+        hoveredPath: "note/inbox/daily-plan.md",
         filterQuery: "daily",
         status: "Indexing...",
       }
       state.editor = {
-        note: { key: "daily-plan", title: "Daily Plan", description: "Today", relativePath: "notes/inbox/daily-plan.md", body: "Body" },
+        note: { key: "daily-plan", title: "Daily Plan", description: "Today", relativePath: "note/inbox/daily-plan.md", body: "Body" },
         body: "Body",
         savedBody: "Body",
         dirty: false,
@@ -1416,7 +1541,7 @@ describe("TUI render keyboard routing", () => {
       const textLines = descendants(screen).map((node) => node.content?.chunks?.map((chunk: { text?: string }) => chunk.text ?? "").join("") ?? node.content ?? "")
       const renderedText = textLines.join("\n")
 
-      assert.ok(textLines.includes("BlueNote  Workspace · notes/inbox  1 items (filtered) · Indexing..."))
+      assert.ok(textLines.includes("BlueNote  Workspace · note/inbox  1 items (filtered) · Indexing..."))
       assert.match(renderedText, /Currently open: Daily Plan/u)
       assert.match(renderedText, /AI: not configured/u)
       assert.match(renderedText, /\[\/\] Filter/u)
@@ -1430,7 +1555,7 @@ describe("TUI render keyboard routing", () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const { controller } = createController("manager")
-      controller.getState().manager.items = [{ type: "note", key: "daily", filename: "daily.md", title: "Daily", description: "Today", relativePath: "notes/daily.md" }]
+      controller.getState().manager.items = [{ type: "note", key: "daily", filename: "daily.md", title: "Daily", description: "Today", relativePath: "note/daily.md" }]
       const screen = renderManagerScreen({ renderer, controller, width: 100 })
       renderer.root.add(screen)
 
@@ -1445,8 +1570,10 @@ describe("TUI render keyboard routing", () => {
       assert.notEqual(topbar?.border, true)
       assert.deepEqual(topbar?.fg?.toInts?.(), [248, 250, 252, 255])
       assert.notEqual(footer?.border, true)
-      assert.equal(footerText, "[Enter] Open  [/] Filter  [n] New  [Ctrl+P] Search  [Esc] Back  [p] Preview")
+      assert.equal(footerText, "[Enter] Open  [/] Filter  [N] New Draft  [Ctrl+P] Search  [Esc] Back  [p] Preview  [r] Rename  [m] Move")
       assert.deepEqual(footerChunks.filter((chunk: { text?: string }) => /^\[[^\]]+\]$/u.test(chunk.text ?? "")).map((chunk: any) => chunk.fg?.toInts?.()), [
+        [56, 189, 248, 255],
+        [56, 189, 248, 255],
         [56, 189, 248, 255],
         [56, 189, 248, 255],
         [56, 189, 248, 255],
@@ -1472,7 +1599,7 @@ describe("TUI render keyboard routing", () => {
           filename: `${"folder-".repeat(12)}/`,
           title: "folder-".repeat(12),
           description: "folder description ".repeat(8),
-          relativePath: `notes/${"folder-".repeat(12)}`,
+          relativePath: `note/${"folder-".repeat(12)}`,
           index: 0,
           focused: true,
           selected: false,
@@ -1485,7 +1612,7 @@ describe("TUI render keyboard routing", () => {
           filename: "long-note.md",
           title: `Launch notes ${"日本語".repeat(8)} ${"alpha ".repeat(10)}`,
           description: "description ".repeat(20),
-          relativePath: "notes/long-note.md",
+          relativePath: "note/long-note.md",
           index: 1,
           focused: false,
           selected: false,
@@ -1532,8 +1659,8 @@ describe("TUI render keyboard routing", () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md" }],
-        showNote: () => ({ key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md", body: "# Daily\n\nNote body first line" }),
+        listNotes: () => [{ key: "daily", title: "Daily", description: "Today", relativePath: "note/daily.md" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "Today", relativePath: "note/daily.md", body: "# Daily\n\nNote body first line" }),
         searchNotes: () => [],
       })
       controller.refreshManager()
@@ -1559,10 +1686,10 @@ describe("TUI render keyboard routing", () => {
     try {
       let showCalls = 0
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md" }],
+        listNotes: () => [{ key: "daily", title: "Daily", description: "Today", relativePath: "note/daily.md" }],
         showNote: () => {
           showCalls += 1
-          return { key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md", body: "# Daily\n\nPreview body" }
+          return { key: "daily", title: "Daily", description: "Today", relativePath: "note/daily.md", body: "# Daily\n\nPreview body" }
         },
         searchNotes: () => [],
       })
@@ -1604,10 +1731,10 @@ describe("TUI render keyboard routing", () => {
       ;(renderer as typeof renderer & { width?: number }).width = 60
       let showCalls = 0
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md" }],
+        listNotes: () => [{ key: "daily", title: "Daily", description: "Today", relativePath: "note/daily.md" }],
         showNote: () => {
           showCalls += 1
-          return { key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md", body: "Preview body" }
+          return { key: "daily", title: "Daily", description: "Today", relativePath: "note/daily.md", body: "Preview body" }
         },
         searchNotes: () => [],
       })
@@ -1636,10 +1763,10 @@ describe("TUI render keyboard routing", () => {
     try {
       let showCalls = 0
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md" }],
+        listNotes: () => [{ key: "daily", title: "Daily", description: "Today", relativePath: "note/daily.md" }],
         showNote: () => {
           showCalls += 1
-          return { key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md", body: "Preview body" }
+          return { key: "daily", title: "Daily", description: "Today", relativePath: "note/daily.md", body: "Preview body" }
         },
         searchNotes: () => [],
       })
@@ -1678,7 +1805,7 @@ describe("TUI render keyboard routing", () => {
         const { controller } = createController("manager")
         const state = controller.getState()
         state.mode = mode
-        state.manager.items = [{ type: "note", key: "daily", filename: "daily.md", title: "Daily", description: "Today", relativePath: "notes/daily.md" }]
+        state.manager.items = [{ type: "note", key: "daily", filename: "daily.md", title: "Daily", description: "Today", relativePath: "note/daily.md" }]
         if (mode === "manager.filter") {
           state.manager.filterQuery = "da"
         }
@@ -1686,7 +1813,7 @@ describe("TUI render keyboard routing", () => {
           state.manager.createDraft = { title: "New", status: null }
         }
         if (mode === "manager.deleteConfirm") {
-          state.manager.deleteDraft = { key: "daily", title: "Daily", relativePath: "notes/daily.md", status: null }
+          state.manager.deleteDraft = { key: "daily", title: "Daily", relativePath: "note/daily.md", status: null }
         }
         const screen = renderManagerScreen({ renderer, controller, width: 100 })
         renderer.root.add(screen)
@@ -1705,12 +1832,14 @@ describe("TUI render keyboard routing", () => {
     controller.getState().manager.createDraft = { title: "Ne", status: null }
 
     assert.equal(routeManagerKey("w", controller), true)
+    assert.equal(routeManagerKey("\t", controller), true)
     assert.equal(routeManagerKey("\u007f", controller), true)
     assert.equal(routeManagerKey("\r", controller), true)
     assert.equal(routeManagerKey("\u001b", controller), true)
     assert.equal(routeManagerKey("\u001b[", controller), true)
     assert.deepEqual(calls, [
       "updateManagerCreateTitle:New",
+      "toggleManagerCreateKind",
       "updateManagerCreateTitle:N",
       "submitManagerCreate",
       "cancelManagerCreate",
@@ -1767,8 +1896,8 @@ describe("TUI render keyboard routing", () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md" }],
-        showNote: () => ({ key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md", body: "Preview body" }),
+        listNotes: () => [{ key: "daily", title: "Daily", description: "Today", relativePath: "note/daily.md" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "Today", relativePath: "note/daily.md", body: "Preview body" }),
         searchNotes: () => [],
       })
       controller.openSearch("daily")
@@ -1797,8 +1926,8 @@ describe("TUI render keyboard routing", () => {
     try {
       ;(renderer as typeof renderer & { height?: number }).height = 12
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md", body: "Preview body" }],
-        showNote: () => ({ key: "daily", title: "Daily", description: "Today", relativePath: "notes/daily.md", body: "Preview body" }),
+        listNotes: () => [{ key: "daily", title: "Daily", description: "Today", relativePath: "note/daily.md", body: "Preview body" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "Today", relativePath: "note/daily.md", body: "Preview body" }),
         searchNotes: () => [],
       })
       controller.openSearch("daily")

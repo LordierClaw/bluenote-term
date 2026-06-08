@@ -3,6 +3,9 @@ export type TuiMode =
   | "manager.browse"
   | "manager.filter"
   | "manager.create"
+  | "manager.rename"
+  | "manager.move"
+  | "manager.saveDraftAs"
   | "manager.deleteConfirm"
   | "editor.body"
   | "editor.find"
@@ -37,6 +40,7 @@ export interface ManagerItem {
   title: string
   description: string
   relativePath: string
+  createdAt?: string
 }
 
 export interface TuiNote {
@@ -60,12 +64,24 @@ export interface ManagerState {
   filterQuery?: string
   status?: string | null
   createDraft?: ManagerCreateDraft | null
+  actionDraft?: ManagerActionDraft | null
   deleteDraft?: ManagerDeleteDraft | null
+  canCreateFolder?: boolean
+  managedRootPath?: string | null
 }
 
 export interface ManagerCreateDraft {
+  kind?: "note" | "folder"
   title: string
   status: string | null
+}
+
+export interface ManagerActionDraft {
+  kind: "rename" | "move" | "saveDraftAs"
+  input: string
+  status: string | null
+  sourceKey?: string
+  sourceRelativePath?: string
 }
 
 export interface ManagerDeleteDraft {
@@ -92,8 +108,13 @@ export interface EditorBufferState {
   activeFindIndex?: number | null
   autosaveStatus?: AutosaveStatus
   statusMessage?: string | null
+  noteSwitchIndicator?: EditorNoteSwitchIndicatorState | null
   undoStack?: EditorHistorySnapshot[]
   redoStack?: EditorHistorySnapshot[]
+}
+
+export interface EditorNoteSwitchIndicatorState {
+  label: string
 }
 
 export interface EditorHistorySnapshot {
@@ -195,7 +216,10 @@ function cloneManagerState(manager: ManagerState): ManagerState {
     filterQuery: manager.filterQuery ?? "",
     status: manager.status ?? null,
     createDraft: manager.createDraft ? { ...manager.createDraft } : null,
+    actionDraft: manager.actionDraft ? { ...manager.actionDraft } : null,
     deleteDraft: manager.deleteDraft ? { ...manager.deleteDraft } : null,
+    canCreateFolder: manager.canCreateFolder ?? false,
+    managedRootPath: manager.managedRootPath ?? null,
   }
 }
 
@@ -221,12 +245,15 @@ const defaultManagerState = (): ManagerState => ({
   focusedIndex: 0,
   selectedNoteKey: null,
   previewVisible: true,
-  currentFolderPath: "",
+  currentFolderPath: "note",
   hoveredPath: null,
   filterQuery: "",
   status: null,
   createDraft: null,
+  actionDraft: null,
   deleteDraft: null,
+  canCreateFolder: false,
+  managedRootPath: null,
 })
 
 export function createInitialTuiState(options: CreateInitialTuiStateOptions = {}): TuiState {
@@ -312,6 +339,7 @@ export function openEditorForNote(state: TuiState, note: TuiNote): TuiState {
       activeFindIndex: null,
       autosaveStatus: "idle",
       statusMessage: null,
+      noteSwitchIndicator: null,
       undoStack: [],
       redoStack: [],
     },
@@ -395,7 +423,7 @@ export function openManagerCreate(state: TuiState): TuiState {
       ...state.manager,
       items: cloneManagerItems(state.manager.items),
       status: null,
-      createDraft: { title: "", status: null },
+      createDraft: { kind: "note", title: "", status: null },
     },
     search: null,
   }
@@ -414,7 +442,7 @@ export function setManagerCreateTitle(state: TuiState, title: string): TuiState 
       ...state.manager,
       items: cloneManagerItems(state.manager.items),
       status: null,
-      createDraft: { title, status: null },
+      createDraft: { kind: state.manager.createDraft?.kind ?? "note", title, status: null },
     },
     search: null,
   }
@@ -433,6 +461,7 @@ export function setManagerCreateStatus(state: TuiState, status: string | null): 
       ...state.manager,
       items: cloneManagerItems(state.manager.items),
       createDraft: {
+        kind: state.manager.createDraft?.kind ?? "note",
         title: state.manager.createDraft?.title ?? "",
         status,
       },
@@ -548,6 +577,21 @@ export function closeTransientMode(state: TuiState): TuiState {
       return clearManagerFilter(state)
     case "manager.create":
       return cancelManagerCreate(state)
+    case "manager.rename":
+    case "manager.move":
+    case "manager.saveDraftAs":
+      return {
+        ...state,
+        screen: "manager",
+        mode: "manager.browse",
+        manager: {
+          ...state.manager,
+          items: cloneManagerItems(state.manager.items),
+          status: null,
+          actionDraft: null,
+        },
+        search: null,
+      }
     case "manager.deleteConfirm":
       return cancelManagerDeleteConfirm(state)
     default:

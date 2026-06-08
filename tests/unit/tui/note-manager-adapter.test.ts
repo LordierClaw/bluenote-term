@@ -20,19 +20,19 @@ const summaries: NoteManagerSummary[] = [
     key: "daily-plan",
     title: "Daily Plan",
     description: "Today priorities.",
-    relativePath: "notes/inbox/daily-plan.md",
+    relativePath: "note/inbox/daily-plan.md",
   },
   {
     key: "archive-review",
     title: "Archive Review",
     description: "Old ideas to revisit.",
-    relativePath: "notes/archive/archive-review.md",
+    relativePath: "note/archive/archive-review.md",
   },
   {
     key: "root-note",
     title: "Root Note",
     description: "A top-level note.",
-    relativePath: "notes/root-note.md",
+    relativePath: "note/root-note.md",
   },
 ]
 
@@ -41,75 +41,75 @@ const browserSummaries: NoteManagerSummary[] = [
     key: "root-note",
     title: "Root Note",
     description: "A top-level note.",
-    relativePath: "notes/root-note.md",
+    relativePath: "note/root-note.md",
     body: "# Root Note\n\nThis is the real note body.\n- Preview this content.\n",
   },
   {
     key: "daily-plan",
     title: "Daily Plan",
     description: "Today priorities.",
-    relativePath: "notes/inbox/daily-plan.md",
+    relativePath: "note/inbox/daily-plan.md",
   },
   {
     key: "api-roadmap",
     title: "API Roadmap",
     description: "Ship API work.",
-    relativePath: "notes/projects/api-roadmap.md",
+    relativePath: "note/projects/api-roadmap.md",
   },
   {
     key: "client-brief",
     title: "Client Brief",
     description: "Client notes.",
-    relativePath: "notes/projects/client/client-brief.md",
+    relativePath: "note/projects/client/client-brief.md",
   },
   {
     key: "scratch-text",
     title: "Scratch Text",
     description: "Not a note file.",
-    relativePath: "notes/scratch.txt",
+    relativePath: "note/scratch.txt",
   },
   {
     key: "case-123-key",
     title: "Key Only Match",
     description: "Visible summary without the digits.",
-    relativePath: "notes/case-key-only.md",
+    relativePath: "note/case-key-only.md",
   },
   {
     key: "title-match",
     title: "Receipt 123",
     description: "Visible title contains the digits.",
-    relativePath: "notes/receipt-title.md",
+    relativePath: "note/receipt-title.md",
   },
   {
     key: "description-match",
     title: "Description Match",
     description: "Invoice number 123 is visible.",
-    relativePath: "notes/description-match.md",
+    relativePath: "note/description-match.md",
   },
   {
     key: "filename-match",
     title: "Filename Match",
     description: "Visible summary without the digits.",
-    relativePath: "notes/meeting-123.md",
+    relativePath: "note/meeting-123.md",
   },
   {
     key: "folder-path-match",
     title: "Folder Path Match",
     description: "Visible summary without the digits.",
-    relativePath: "notes/client-123/project.md",
+    relativePath: "note/client-123/project.md",
   },
   {
     key: "a-big-cat",
     title: "A Big Cat",
     description: "Body summary is not a manager filter field.",
-    relativePath: "notes/a-big-cat.md",
+    relativePath: "note/a-big-cat.md",
     body: "a-big-cat has letters that form a non-contiguous subsequence for abc.",
   },
   {
     key: "abc-visible",
     title: "ABC Visible",
     description: "Visible abc appears contiguously.",
-    relativePath: "notes/abc-visible.md",
+    relativePath: "note/abc-visible.md",
     body: "This body is not needed for filtering.",
   },
   {
@@ -122,11 +122,35 @@ const browserSummaries: NoteManagerSummary[] = [
     key: "hidden-note",
     title: "Hidden Note",
     description: "Hidden app data.",
-    relativePath: "notes/.data/hidden-note.md",
+    relativePath: "note/.data/hidden-note.md",
   },
 ]
 
 describe("TUI note manager adapter", () => {
+  test("ignores legacy notes-area summaries and folders in Phase 7 manager rows", () => {
+    const items = buildManagerBrowserItems([
+      {
+        key: "legacy-note",
+        title: "Legacy Note",
+        description: "Old imported note.",
+        relativePath: "notes/inbox/legacy-note.md",
+      },
+      {
+        key: "normal-note",
+        title: "Normal Note",
+        description: "Current note.",
+        relativePath: "note/normal-note.md",
+      },
+    ], ["notes/inbox", "note/projects"])
+
+    assert.deepEqual(items.map((item) => `${item.type}:${item.relativePath}`), [
+      "folder:draft",
+      "folder:note",
+      "folder:note/projects",
+      "note:note/normal-note.md",
+    ])
+  })
+
   test("converts note summaries into note rows with filename/key, title, description, and path", () => {
     const items = buildManagerItems(summaries)
 
@@ -139,7 +163,7 @@ describe("TUI note manager adapter", () => {
           filename: "archive-review.md",
           title: "Archive Review",
           description: "Old ideas to revisit.",
-          relativePath: "notes/archive/archive-review.md",
+          relativePath: "note/archive/archive-review.md",
         },
         {
           type: "note",
@@ -147,7 +171,7 @@ describe("TUI note manager adapter", () => {
           filename: "daily-plan.md",
           title: "Daily Plan",
           description: "Today priorities.",
-          relativePath: "notes/inbox/daily-plan.md",
+          relativePath: "note/inbox/daily-plan.md",
         },
         {
           type: "note",
@@ -155,7 +179,7 @@ describe("TUI note manager adapter", () => {
           filename: "root-note.md",
           title: "Root Note",
           description: "A top-level note.",
-          relativePath: "notes/root-note.md",
+          relativePath: "note/root-note.md",
         },
       ],
     )
@@ -169,19 +193,19 @@ describe("TUI note manager adapter", () => {
       [
         {
           type: "folder",
-          key: "notes/archive",
+          key: "note/archive",
           filename: "archive",
           title: "Archive",
           description: "1 note",
-          relativePath: "notes/archive",
+          relativePath: "note/archive",
         },
         {
           type: "folder",
-          key: "notes/inbox",
+          key: "note/inbox",
           filename: "inbox",
           title: "Inbox",
           description: "1 note",
-          relativePath: "notes/inbox",
+          relativePath: "note/inbox",
         },
       ],
     )
@@ -193,26 +217,26 @@ describe("TUI note manager adapter", () => {
         key: "win-note",
         title: "Windows Note",
         description: "Backslash path.",
-        relativePath: "notes\\projects\\client\\win-note.md",
+        relativePath: "note\\projects\\client\\win-note.md",
       },
     ])
 
     assert.deepEqual(items, [
       {
         type: "folder",
-        key: "notes/projects",
+        key: "note/projects",
         filename: "projects",
         title: "Projects",
         description: "1 note",
-        relativePath: "notes/projects",
+        relativePath: "note/projects",
       },
       {
         type: "folder",
-        key: "notes/projects/client",
+        key: "note/projects/client",
         filename: "client",
         title: "Client",
         description: "1 note",
-        relativePath: "notes/projects/client",
+        relativePath: "note/projects/client",
       },
       {
         type: "note",
@@ -220,17 +244,17 @@ describe("TUI note manager adapter", () => {
         filename: "win-note.md",
         title: "Windows Note",
         description: "Backslash path.",
-        relativePath: "notes/projects/client/win-note.md",
+        relativePath: "note/projects/client/win-note.md",
       },
     ])
   })
 
   test("includes empty user folders supplied by the note-directory discovery boundary", () => {
-    const items = buildManagerBrowserItems([], ["notes/projects/empty-client"])
+    const items = buildManagerBrowserItems([], ["note/projects/empty-client"])
 
     assert.deepEqual(
       items.map((item) => `${item.type}:${item.relativePath}`),
-      ["folder:notes/projects", "folder:notes/projects/empty-client"],
+      ["folder:draft", "folder:note", "folder:note/projects", "folder:note/projects/empty-client"],
     )
   })
 
@@ -241,23 +265,23 @@ describe("TUI note manager adapter", () => {
         items: [],
         focusedIndex: 0,
         selectedNoteKey: null,
-        currentFolderPath: "notes/projects",
+        currentFolderPath: "note/projects",
       },
-      { userFolderPaths: ["notes/projects/empty-client"] },
+      { userFolderPaths: ["note/projects/empty-client"] },
     )
 
-    assert.deepEqual(model.layout1Rows.map((row) => `${row.type}:${row.relativePath}`), ["folder:notes/projects/empty-client"])
+    assert.deepEqual(model.layout1Rows.map((row) => `${row.type}:${row.relativePath}`), ["folder:note/projects/empty-client"])
   })
 
   test("filters BlueNote internal and hidden folder paths from user folder discovery", () => {
     const items = buildManagerBrowserItems([], [
-      "notes/projects/visible-client",
-      "notes/.data",
-      "notes/.state",
-      "notes/.bluenote",
-      "notes/.cache/scratch",
-      "notes/.tmp/scratch",
-      "notes/projects/.hidden-child",
+      "note/projects/visible-client",
+      "note/.data",
+      "note/.state",
+      "note/.bluenote",
+      "note/.cache/scratch",
+      "note/.tmp/scratch",
+      "note/projects/.hidden-child",
       ".data/notes/shadow",
       ".state/notes/shadow",
       ".bluenote/notes/shadow",
@@ -265,7 +289,7 @@ describe("TUI note manager adapter", () => {
 
     assert.deepEqual(
       items.map((item) => `${item.type}:${item.relativePath}`),
-      ["folder:notes/projects", "folder:notes/projects/visible-client"],
+      ["folder:draft", "folder:note", "folder:note/projects", "folder:note/projects/visible-client"],
     )
   })
 
@@ -274,13 +298,13 @@ describe("TUI note manager adapter", () => {
       items: [],
       focusedIndex: 2,
       selectedNoteKey: null,
-      currentFolderPath: "notes/projects",
-    }, { userFolderPaths: ["notes/projects/empty-client"] })
+      currentFolderPath: "note/projects",
+    }, { userFolderPaths: ["note/projects/empty-client"] })
 
     assert.deepEqual(model.layout1Rows.map((row) => `${row.type}:${row.relativePath}`), [
-      "folder:notes/projects/client",
-      "folder:notes/projects/empty-client",
-      "note:notes/projects/api-roadmap.md",
+      "folder:note/projects/client",
+      "folder:note/projects/empty-client",
+      "note:note/projects/api-roadmap.md",
     ])
 
     const opened = openManagerBrowserItem(model.state, {
@@ -288,7 +312,7 @@ describe("TUI note manager adapter", () => {
         key: selector,
         title: "API Roadmap",
         description: "Ship API work.",
-        relativePath: "notes/projects/api-roadmap.md",
+        relativePath: "note/projects/api-roadmap.md",
         body: "API body",
       }),
     })
@@ -303,11 +327,11 @@ describe("TUI note manager adapter", () => {
     assert.deepEqual(
       items.map((item) => `${item.type}:${item.relativePath}`),
       [
-        "folder:notes/archive",
-        "note:notes/archive/archive-review.md",
-        "folder:notes/inbox",
-        "note:notes/inbox/daily-plan.md",
-        "note:notes/root-note.md",
+        "folder:note/archive",
+        "note:note/archive/archive-review.md",
+        "folder:note/inbox",
+        "note:note/inbox/daily-plan.md",
+        "note:note/root-note.md",
       ],
     )
   })
@@ -378,7 +402,7 @@ describe("TUI note manager adapter", () => {
           key: "daily-plan",
           title: "Daily Plan",
           description: "Today priorities.",
-          relativePath: "notes/inbox/daily-plan.md",
+          relativePath: "note/inbox/daily-plan.md",
           body: "- Write tests\n- Ship adapter\n",
           updatedAt: "2026-05-28T10:30:00.000Z",
         }
@@ -390,7 +414,7 @@ describe("TUI note manager adapter", () => {
       key: "daily-plan",
       title: "Daily Plan",
       description: "Today priorities.",
-      relativePath: "notes/inbox/daily-plan.md",
+      relativePath: "note/inbox/daily-plan.md",
       body: "- Write tests\n- Ship adapter\n",
       updatedAt: "2026-05-28T10:30:00.000Z",
     })
@@ -425,19 +449,19 @@ describe("TUI note manager adapter", () => {
       items: [],
       focusedIndex: 0,
       selectedNoteKey: null,
-      currentFolderPath: "",
+      currentFolderPath: "note",
       hoveredPath: null,
       filterQuery: "",
     })
 
     assert.deepEqual(
       model.layout1Rows.map((row) => `${row.type}:${row.relativePath}`),
-      ["folder:notes/inbox", "folder:notes/projects", "note:notes/root-note.md"],
+      ["folder:note/inbox", "folder:note/projects", "note:note/root-note.md"],
     )
     assert.deepEqual(model.layout1Rows[0], {
       type: "folder",
-      key: "notes/inbox",
-      relativePath: "notes/inbox",
+      key: "note/inbox",
+      relativePath: "note/inbox",
       filename: "inbox",
       title: "",
       description: "",
@@ -450,10 +474,11 @@ describe("TUI note manager adapter", () => {
     assert.deepEqual(model.layout1Rows[2], {
       type: "note",
       key: "root-note",
-      relativePath: "notes/root-note.md",
+      relativePath: "note/root-note.md",
       filename: "root-note.md",
       title: "Root Note",
       description: "A top-level note.",
+      createdAt: undefined,
       columns: { filename: "root-note.md", title: "Root Note", description: "A top-level note." },
       rowStyleIntent: "note",
       focused: false,
@@ -467,13 +492,13 @@ describe("TUI note manager adapter", () => {
       items: [],
       focusedIndex: 0,
       selectedNoteKey: null,
-      currentFolderPath: "",
-      hoveredPath: "notes/projects",
+      currentFolderPath: "note",
+      hoveredPath: "note/projects",
       filterQuery: "",
     }).preview
 
     assert.equal(folderPreview.type, "folder")
-    assert.equal(folderPreview.path, "notes/projects")
+    assert.equal(folderPreview.path, "note/projects")
     assert.deepEqual(
       folderPreview.rows?.map((row) => ({
         type: row.type,
@@ -484,7 +509,7 @@ describe("TUI note manager adapter", () => {
         rowStyleIntent: row.rowStyleIntent,
       })),
       [
-        { type: "folder", key: "notes/projects/client", filename: "client", title: "", description: "", rowStyleIntent: "folder" },
+        { type: "folder", key: "note/projects/client", filename: "client", title: "", description: "", rowStyleIntent: "folder" },
         { type: "note", key: "api-roadmap", filename: "api-roadmap.md", title: "API Roadmap", description: "Ship API work.", rowStyleIntent: "note" },
       ],
     )
@@ -493,29 +518,29 @@ describe("TUI note manager adapter", () => {
       items: [],
       focusedIndex: 2,
       selectedNoteKey: null,
-      currentFolderPath: "",
-      hoveredPath: "notes/root-note.md",
+      currentFolderPath: "note",
+      hoveredPath: "note/root-note.md",
       filterQuery: "",
     }).preview
 
     assert.deepEqual(notePreview, {
       type: "note-content",
-      path: "notes/root-note.md",
+      path: "note/root-note.md",
       noteKey: "root-note",
       title: "Root Note",
       contentLines: ["# Root Note", "", "This is the real note body.", "- Preview this content."],
     })
     assert.equal("description" in notePreview, false)
-    assert.equal(notePreview.type === "note-content" && notePreview.contentLines.includes("notes/root-note.md"), false)
+    assert.equal(notePreview.type === "note-content" && notePreview.contentLines.includes("note/root-note.md"), false)
     assert.equal(notePreview.type === "note-content" && notePreview.contentLines.includes("A top-level note."), false)
   })
 
   test("builds folder preview lines from precomputed browser items", () => {
     const items = buildManagerBrowserItems(browserSummaries)
 
-    assert.equal(items.some((item) => item.relativePath === "notes/.data"), false)
-    assert.deepEqual(buildManagerFolderPreviewLinesFromItems(items, "notes/projects"), ["client", "api-roadmap.md"])
-    assert.deepEqual(buildManagerFolderPreviewLinesFromItems(items, "notes/.data"), [])
+    assert.equal(items.some((item) => item.relativePath === "note/.data"), false)
+    assert.deepEqual(buildManagerFolderPreviewLinesFromItems(items, "note/projects"), ["client", "api-roadmap.md"])
+    assert.deepEqual(buildManagerFolderPreviewLinesFromItems(items, "note/.data"), [])
   })
 
   test("returns an explicit hidden preview without resolving note content when preview is hidden", () => {
@@ -526,8 +551,8 @@ describe("TUI note manager adapter", () => {
         items: [],
         focusedIndex: 2,
         selectedNoteKey: null,
-        currentFolderPath: "",
-        hoveredPath: "notes/root-note.md",
+        currentFolderPath: "note",
+        hoveredPath: "note/root-note.md",
         filterQuery: "",
       },
       {
@@ -541,8 +566,8 @@ describe("TUI note manager adapter", () => {
     )
 
     assert.equal(bodyLookups, 0)
-    assert.deepEqual(model.preview, { type: "hidden", path: "notes/root-note.md", reason: "manual" })
-    assert.equal(model.layout1Rows.some((row) => row.relativePath === "notes/root-note.md"), true)
+    assert.deepEqual(model.preview, { type: "hidden", path: "note/root-note.md", reason: "manual" })
+    assert.equal(model.layout1Rows.some((row) => row.relativePath === "note/root-note.md"), true)
   })
 
   test("does not resolve preview note content for folder previews", () => {
@@ -554,7 +579,7 @@ describe("TUI note manager adapter", () => {
         focusedIndex: 0,
         selectedNoteKey: null,
         currentFolderPath: "",
-        hoveredPath: "notes/projects",
+        hoveredPath: "note/projects",
         filterQuery: "",
       },
       {
@@ -574,8 +599,8 @@ describe("TUI note manager adapter", () => {
       items: [],
       focusedIndex: 0,
       selectedNoteKey: null,
-      currentFolderPath: "",
-      hoveredPath: "notes/projects",
+      currentFolderPath: "note",
+      hoveredPath: "note/projects",
       filterQuery: "",
     })
     const openedFolder = openManagerBrowserItem(rootModel.state, {
@@ -585,14 +610,14 @@ describe("TUI note manager adapter", () => {
     })
 
     assert.equal(openedFolder.type, "folder")
-    assert.equal(openedFolder.state.currentFolderPath, "notes/projects")
+    assert.equal(openedFolder.state.currentFolderPath, "note/projects")
     assert.equal(openedFolder.state.hoveredPath, null)
     assert.equal(openedFolder.state.focusedIndex, 0)
     assert.equal(openedFolder.state.filterQuery, "")
 
     const projectModel = buildManagerBrowserModel(browserSummaries, {
       ...openedFolder.state,
-      hoveredPath: "notes/projects/api-roadmap.md",
+      hoveredPath: "note/projects/api-roadmap.md",
     })
     const openedNote = openManagerBrowserItem(projectModel.state, {
       showNote: (selector) => {
@@ -601,7 +626,7 @@ describe("TUI note manager adapter", () => {
           key: "api-roadmap",
           title: "API Roadmap",
           description: "Ship API work.",
-          relativePath: "notes/projects/api-roadmap.md",
+          relativePath: "note/projects/api-roadmap.md",
           body: "# API Roadmap\n\nShip it.\n",
           updatedAt: "2026-05-28T10:30:00.000Z",
         }
@@ -614,7 +639,7 @@ describe("TUI note manager adapter", () => {
         key: "api-roadmap",
         title: "API Roadmap",
         description: "Ship API work.",
-        relativePath: "notes/projects/api-roadmap.md",
+        relativePath: "note/projects/api-roadmap.md",
         body: "# API Roadmap\n\nShip it.\n",
         updatedAt: "2026-05-28T10:30:00.000Z",
       },
@@ -626,9 +651,9 @@ describe("TUI note manager adapter", () => {
       items: [],
       focusedIndex: 0,
       selectedNoteKey: null,
-      currentFolderPath: "",
+      currentFolderPath: "note",
       hoveredPath: null,
-      filterQuery: "",
+      filterQuery: "root",
     }).state
     const filteredState: ManagerState = {
       ...unfilteredState,
@@ -637,10 +662,10 @@ describe("TUI note manager adapter", () => {
       filterQuery: "root",
     }
 
-    assert.notEqual(filteredState.items[0]?.relativePath, "notes/root-note.md")
+    assert.notEqual(filteredState.items[0]?.relativePath, "note/root-note.md")
     assert.deepEqual(
       buildManagerBrowserModel(browserSummaries, filteredState).layout1Rows.map((row) => row.relativePath),
-      ["notes/root-note.md"],
+      ["note/root-note.md"],
     )
 
     const opened = openManagerBrowserItem(filteredState, {
@@ -650,7 +675,7 @@ describe("TUI note manager adapter", () => {
           key: "root-note",
           title: "Root Note",
           description: "A top-level note.",
-          relativePath: "notes/root-note.md",
+          relativePath: "note/root-note.md",
           body: "# Root Note\n\nThis is the real note body.\n",
         }
       },
@@ -665,8 +690,8 @@ describe("TUI note manager adapter", () => {
       items: [],
       focusedIndex: 3,
       selectedNoteKey: null,
-      currentFolderPath: "notes/projects/client",
-      hoveredPath: "notes/projects/client/client-brief.md",
+      currentFolderPath: "note/projects/client",
+      hoveredPath: "note/projects/client/client-brief.md",
       filterQuery: "client",
     }
 
@@ -674,12 +699,12 @@ describe("TUI note manager adapter", () => {
       items: [],
       focusedIndex: 0,
       selectedNoteKey: null,
-      currentFolderPath: "notes/projects",
+      currentFolderPath: "note/projects",
       hoveredPath: null,
       filterQuery: "client",
     })
 
-    const root: ManagerState = { ...nested, currentFolderPath: "", focusedIndex: 1, hoveredPath: "notes/projects" }
+    const root: ManagerState = { ...nested, currentFolderPath: "", focusedIndex: 1, hoveredPath: "note/projects" }
     assert.equal(goToManagerParent(root), root)
   })
 
@@ -688,15 +713,15 @@ describe("TUI note manager adapter", () => {
       items: [],
       focusedIndex: 0,
       selectedNoteKey: null,
-      currentFolderPath: "",
-      hoveredPath: "notes/root-note.md",
+      currentFolderPath: "note",
+      hoveredPath: "note/root-note.md",
       filterQuery: "project",
     })
 
-    assert.deepEqual(model.layout1Rows.map((row) => row.relativePath), ["notes/projects"])
-    assert.equal(model.hoveredPath, "notes/projects")
+    assert.deepEqual(model.layout1Rows.map((row) => row.relativePath), ["note/projects"])
+    assert.equal(model.hoveredPath, "note/projects")
     assert.equal(model.preview.type, "folder")
-    assert.deepEqual(model.preview.rows?.map((row) => row.relativePath), ["notes/projects/client", "notes/projects/api-roadmap.md"])
+    assert.deepEqual(model.preview.rows?.map((row) => row.relativePath), ["note/projects/client", "note/projects/api-roadmap.md"])
   })
 
   test("filters with contains semantics only against visible item filenames", () => {
@@ -704,14 +729,14 @@ describe("TUI note manager adapter", () => {
       items: [],
       focusedIndex: 0,
       selectedNoteKey: null,
-      currentFolderPath: "",
+      currentFolderPath: "note",
       hoveredPath: null,
       filterQuery: "123",
     })
 
     assert.deepEqual(model.layout1Rows.map((row) => row.relativePath), [
-      "notes/client-123",
-      "notes/meeting-123.md",
+      "note/client-123",
+      "note/meeting-123.md",
     ])
   })
 
@@ -720,7 +745,7 @@ describe("TUI note manager adapter", () => {
       items: [],
       focusedIndex: 0,
       selectedNoteKey: null,
-      currentFolderPath: "notes/projects",
+      currentFolderPath: "note/projects",
       hoveredPath: null,
       filterQuery: "projects",
     })
@@ -730,13 +755,13 @@ describe("TUI note manager adapter", () => {
       items: [],
       focusedIndex: 0,
       selectedNoteKey: null,
-      currentFolderPath: "",
+      currentFolderPath: "note",
       hoveredPath: null,
       filterQuery: "123",
     })
-    assert.equal(titleDescriptionKeyModel.layout1Rows.some((row) => row.relativePath === "notes/case-key-only.md"), false)
-    assert.equal(titleDescriptionKeyModel.layout1Rows.some((row) => row.relativePath === "notes/description-match.md"), false)
-    assert.equal(titleDescriptionKeyModel.layout1Rows.some((row) => row.relativePath === "notes/receipt-title.md"), false)
+    assert.equal(titleDescriptionKeyModel.layout1Rows.some((row) => row.relativePath === "note/case-key-only.md"), false)
+    assert.equal(titleDescriptionKeyModel.layout1Rows.some((row) => row.relativePath === "note/description-match.md"), false)
+    assert.equal(titleDescriptionKeyModel.layout1Rows.some((row) => row.relativePath === "note/receipt-title.md"), false)
   })
 
   test("manager filter does not include nested descendants outside the current folder", () => {
@@ -757,13 +782,13 @@ describe("TUI note manager adapter", () => {
       items: [],
       focusedIndex: 0,
       selectedNoteKey: null,
-      currentFolderPath: "",
+      currentFolderPath: "note",
       hoveredPath: null,
       filterQuery: "abc",
     })
 
-    assert.deepEqual(model.layout1Rows.map((row) => row.relativePath), ["notes/abc-visible.md"])
-    assert.equal(model.layout1Rows.some((row) => row.relativePath === "notes/a-big-cat.md"), false)
+    assert.deepEqual(model.layout1Rows.map((row) => row.relativePath), ["note/abc-visible.md"])
+    assert.equal(model.layout1Rows.some((row) => row.relativePath === "note/a-big-cat.md"), false)
   })
 
   test("filters hidden BlueNote app data paths out of manager browser rows", () => {
