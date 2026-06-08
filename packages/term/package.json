@@ -2,5 +2,18 @@
   "name": "bluenote-term",
   "version": "0.3.0",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "bin": {
+    "bn": "./bin/bn.ts",
+    "bluenote": "./bin/bn.ts"
+  },
+  "engines": {
+    "bun": ">=1.3.0",
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@bluenote/core": "workspace:*",
+    "@opentui/core": "0.2.14",
+    "clipboardy": "5.3.1"
+  }
 }

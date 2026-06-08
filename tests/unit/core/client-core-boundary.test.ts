@@ -6,15 +6,15 @@ import path from "node:path"
 const repoRoot = path.resolve(import.meta.dir, "../../..")
 
 const clientFiles = [
-  "src/cli/entry.ts",
-  "src/cli/ai.ts",
-  "src/core/edit-note.ts",
-  "src/tui/app.ts",
-  "src/tui/latest-opened-note.ts",
-  "src/tui/workspace-controller.ts",
-  "src/tui/adapters/note-manager-adapter.ts",
-  "src/tui/adapters/search-everything-adapter.ts",
-  "src/platform/editor.ts",
+  "packages/term/src/cli/entry.ts",
+  "packages/term/src/cli/ai.ts",
+  "packages/term/src/core/edit-note.ts",
+  "packages/term/src/tui/app.ts",
+  "packages/term/src/tui/latest-opened-note.ts",
+  "packages/term/src/tui/workspace-controller.ts",
+  "packages/term/src/tui/adapters/note-manager-adapter.ts",
+  "packages/term/src/tui/adapters/search-everything-adapter.ts",
+  "packages/term/src/platform/editor.ts",
 ]
 
 const movedBusinessImportPattern = /from\s+["'](?:\.\.\/)+(?:core|storage|config|domain|search|index|ai|platform\/path-safety)(?:\/[^"']*)?["']/g

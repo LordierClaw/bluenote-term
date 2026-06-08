@@ -29,6 +29,15 @@
     "packages/term": {
       "name": "bluenote-term",
       "version": "0.3.0",
+      "bin": {
+        "bn": "./bin/bn.ts",
+        "bluenote": "./bin/bn.ts",
+      },
+      "dependencies": {
+        "@bluenote/core": "workspace:*",
+        "@opentui/core": "0.2.14",
+        "clipboardy": "5.3.1",
+      },
     },
   },
   "packages": {

@@ -27,7 +27,7 @@
   },
   "scripts": {
     "cli": "bun run ./bin/bn.ts",
-    "dev:tui": "bun run ./src/tui/app.ts",
+    "dev:tui": "bun run ./packages/term/src/tui/app.ts",
     "check:env": "bun run ./scripts/check-env.ts",
     "smoke:opentui": "bun run ./scripts/smoke-opentui.ts",
     "smoke:cli": "bun run ./scripts/smoke-cli.ts",

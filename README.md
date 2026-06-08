@@ -212,6 +212,13 @@ Editor commands include `/find`, `/replace`, `/save`, `/save-draft-as`, `/copy-a
 
 ## Development
 
+This repository is currently a temporary Bun workspace split into:
+
+- `packages/core` (`@bluenote/core`): headless business logic, storage, search, indexing, domain helpers, and reusable AI services. It must not import OpenTUI or terminal-client code.
+- `packages/term` (`bluenote-term`): the Bun-first CLI/TUI client, including `bn`/`bluenote` entrypoints, OpenTUI screens, terminal editor launch, clipboard helpers, and client orchestration. It consumes business logic through `@bluenote/core` public exports.
+
+The root `bin/bn.ts` and moved root `src/cli`, `src/tui`, `src/platform`, and editor-flow paths are compatibility shims so existing source imports, tests, and `bun run ./bin/bn.ts ...` usage keep working during the migration.
+
 Run the full local verification suite:
 
 ```bash

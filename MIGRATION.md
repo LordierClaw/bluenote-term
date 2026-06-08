@@ -22,14 +22,14 @@ This phase is an internal module split only. It must not create or depend on a s
 - [x] Loop 6: Move search/rebuild/index logic into `@bluenote/core`.
 - [x] Loop 7: Move reusable AI config/queue/provider business logic into `@bluenote/core`.
 - [x] Loop 8: Update CLI/TUI to consume `@bluenote/core` public APIs.
-- [ ] Loop 9: Enforce package boundaries and update current-facing docs.
+- [x] Loop 9: Enforce package boundaries and update current-facing docs.
 
 ## Remaining Steps
 
-1. Move code in small verified loops, starting with pure domain/types/constants and only then storage, search, AI, and term consumption.
+1. No Phase 1 implementation loops remain after Loop 9 verification and review.
 2. Keep `packages/term` as the client package that owns CLI wiring, TUI rendering, keyboard/input handling, terminal APIs, clipboard, and OpenTUI usage.
 3. Keep `packages/core` headless: no OpenTUI imports, no imports from `packages/term`, no terminal rendering, no keyboard handling, no TUI state.
-4. Verify after every loop with the narrowest relevant checks, then run the full practical suite before finishing.
+4. Preserve root compatibility shims until downstream tests, scripts, release packaging, and docs no longer depend on historical paths.
 
 ## Invariants That Must Not Change
 
@@ -133,6 +133,14 @@ This phase is an internal module split only. It must not create or depend on a s
 | Loop 8 | `bun run smoke:opentui` | PASS | OpenTUI smoke check passed for BlueNote (`tui-workspace-ready`; follow-up `hardening-follow-up`). |
 | Loop 8 | `bun run smoke:cli` | PASS | CLI smoke check passed. |
 | Loop 8 | Boundary search in `packages/core` for `@opentui\|packages/term\|src/tui\|../../term` | PASS | No forbidden terminal/TUI boundary imports found. |
+| Loop 9 RED | `bun test tests/unit/core/package-boundaries.test.ts` | FAIL (expected) | New package boundary test failed before term-owned CLI/TUI/platform files existed under `packages/term`. |
+| Loop 9 | `bun install --lockfile-only` | PASS | Updated lockfile after adding `bluenote-term` package dependencies on `@bluenote/core`, OpenTUI, and clipboardy. |
+| Loop 9 | `bun test tests/unit/core/package-boundaries.test.ts` | PASS | Enforced core headlessness, term file ownership, term business imports through `@bluenote/core`, and root compatibility shims. |
+| Loop 9 | `bun test tests/unit/core/client-core-boundary.test.ts tests/unit/core/package-boundaries.test.ts` | PASS | Updated client boundary coverage to package-term paths; 5 focused boundary tests passed. |
+| Loop 9 | `bun run check` | PASS | Full root suite passed: lint, typecheck, 880 tests, OpenTUI smoke, CLI smoke. |
+| Loop 9 | `bun run ./bin/bn.ts --version && bun run ./packages/term/bin/bn.ts --version` | PASS | Both root compatibility entrypoint and term package entrypoint printed `0.3.0`. |
+| Loop 9 | Boundary search in `packages/core/src` for `@opentui/core\|packages/term\|src/tui\|bluenote-term` | PASS | No forbidden terminal/TUI/client imports found in core package. |
+| Loop 9 | Boundary search in `packages/term` for root moved business shim imports | PASS | No package-term imports from root `src/core`, `src/storage`, `src/config`, `src/ai`, `src/search`, `src/index`, or `src/domain` shims found. |
 
 ## Known Risks
 
@@ -140,8 +148,7 @@ This phase is an internal module split only. It must not create or depend on a s
 - `src/core/edit-note.ts` currently mixes business note update behavior with external editor launching; Loop 5 intentionally left it as a root/term-facing module to keep CLI edit compatible, so a careful later split is still required.
 - `packages/core/src/index/index-store.ts` uses `sql.js` and resolves `sql-wasm.wasm` relative to both executable and project paths; package relocation can break release and smoke behavior.
 - Loop 7 moved reusable AI config/provider/auth/queue/description/prompt/log modules into `@bluenote/core`; these modules are sensitive, so future changes must continue preserving queue files, setup blockers, redaction, prompt hashes, Codex auth, and non-blocking TUI orchestration.
-- Loop 8 intentionally left `src/core/edit-note.ts` as a term-facing mixed editor flow while switching its callers' moved business imports to `@bluenote/core`; a later split should separate external editor launch from reusable note update logic.
-- TUI manager/search adapters mix view-model logic with core note/search imports; move only the business boundary, not UI state or behavior.
-- Tests and helper paths currently assume a single root package; migration must keep root verification commands working while package-specific tests are introduced gradually.
-- Release packaging may assume root `package.json`, root `bin/bn.ts`, and root `node_modules`; update only after behavior-preserving workspace scaffolding is verified.
+- `packages/term/src/core/edit-note.ts` remains a term-owned mixed editor flow because it launches the external editor while coordinating core note updates; keep root `src/core/edit-note.ts` as a compatibility shim until callers move to the package path.
+- Root `src/cli`, `src/tui`, `src/platform`, and `src/core/edit-note.ts` are compatibility shims to `packages/term`; future cleanup should retire them only after tests, scripts, release packaging, and imports are updated deliberately.
+- Release packaging may assume root `package.json`, root `bin/bn.ts`, and root `node_modules`; the root bin is preserved as a package-term shim, but release packaging still needs review before publishing.
 - Loop 3 moved all of `src/core/types.ts` into `@bluenote/core`; this temporarily exposes CLI result/exit-code types from the core package until later loops split terminal-only API surface more precisely.
