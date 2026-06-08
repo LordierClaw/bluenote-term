@@ -20,6 +20,9 @@
     "packages/core": {
       "name": "@bluenote/core",
       "version": "0.0.0",
+      "dependencies": {
+        "js-yaml": "4.1.1",
+      },
     },
     "packages/term": {
       "name": "bluenote-term",

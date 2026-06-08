@@ -17,7 +17,7 @@ This phase is an internal module split only. It must not create or depend on a s
 - [x] Loop 1: Create workspace structure with `packages/core` and `packages/term`, keeping behavior unchanged.
 - [x] Loop 2: Create a minimal `@bluenote/core` public API/façade without broad behavior changes.
 - [x] Loop 3: Move pure types/constants/domain helpers into `@bluenote/core`.
-- [ ] Loop 4: Move workspace/storage/note metadata logic into `@bluenote/core`.
+- [x] Loop 4: Move workspace/storage/note metadata logic into `@bluenote/core`.
 - [ ] Loop 5: Move note business logic into `@bluenote/core`.
 - [ ] Loop 6: Move search/rebuild/index logic into `@bluenote/core`.
 - [ ] Loop 7: Move reusable AI config/queue/provider business logic into `@bluenote/core`.
@@ -98,6 +98,13 @@ This phase is an internal module split only. It must not create or depend on a s
 | Loop 3 | `bun run typecheck` | PASS | Root TypeScript check passed after moving pure helpers and adding compatibility shims. |
 | Loop 3 | `bun run smoke:cli` | PASS | Root CLI smoke script passed after moved-helper shims. |
 | Loop 3 | Boundary search in `packages/core` for `@opentui\|packages/term\|src/tui\|../../term` | PASS | No forbidden terminal/TUI boundary imports found. |
+| Loop 4 RED | `bun test tests/unit/core/package-storage-exports.test.ts` | FAIL (expected) | New package-storage export test failed because managed-root/storage helpers were not exported from `@bluenote/core` yet. |
+| Loop 4 | `bun test tests/unit/core/package-storage-exports.test.ts` | PASS | `@bluenote/core` exports managed-root/storage helpers; root storage shims preserve function identity. |
+| Loop 4 | `bun test tests/unit/storage tests/integration/note-repository.test.ts tests/unit/core/package-storage-exports.test.ts tests/unit/core/public-api.test.ts` | PASS | Focused moved storage/repository/public API slice passed: 110 tests. |
+| Loop 4 | `bun run typecheck` | PASS | Root TypeScript check passed after moving workspace/storage/init-root modules and adding compatibility shims. |
+| Loop 4 | `bun run smoke:cli` | PASS | Root CLI smoke script passed after moved storage shims. |
+| Loop 4 | Boundary search in `packages/core` for `@opentui\|packages/term\|src/tui\|../../term` | PASS | No forbidden terminal/TUI boundary imports found. |
+| Loop 4 follow-up | `bun install --lockfile-only && bun run typecheck && bun run smoke:cli` | PASS | Added `js-yaml` as a direct `@bluenote/core` dependency for moved `frontmatter.ts`; lockfile, typecheck, and CLI smoke passed. |
 
 ## Known Risks
 
