@@ -2,35 +2,43 @@ import path from "node:path"
 import { existsSync, mkdirSync, readdirSync, type Dirent } from "node:fs"
 import { createCliRenderer, BoxRenderable, type CliRenderer, type PasteEvent, type Renderable } from "@opentui/core"
 
-import { resolveBlueNoteRoot } from "../config/root"
-import { createAiConfigRepository } from "../ai/config"
-import { createCodexAuthClient } from "../ai/codex-auth-client"
-import { createCodexAuthRepository } from "../ai/codex-auth-repository"
-import { generateNoteDescription } from "../ai/description-service"
-import { sanitizeAiErrorMessage } from "../ai/error-redaction"
-import { enqueueDescribeNoteIfAiEnabled } from "../ai/enqueue-describe-note"
-import { scanAndEnqueueStaleDescriptions } from "../ai/stale-description-scan"
-import { CodexProviderSetupRequiredError, createAiTextGenerationClient, type AiTextGenerationClient } from "../ai/provider"
-import { CodexTextGenerationClientError } from "../ai/codex-client"
-import { createAiQueueRepository } from "../ai/queue-repository"
-import { dropDescribeNoteJobIfNoteMissing, listPendingAiJobs, listRetryableAiJobs, markDescribeNoteJobFailedIfContentHashMatches } from "../ai/queue-service"
-import { createNote } from "../core/create-note"
-import { deleteNote } from "../core/delete-note"
-import { IndexUnavailableError } from "../core/errors"
-import { listNotes } from "../core/list-notes"
-import { moveNote } from "../core/move-note"
-import { promoteDraft } from "../core/promote-draft"
-import { rebuildIndexes } from "../core/rebuild-indexes"
-import { renameNote } from "../core/rename-note"
-import { updateIndexedNote } from "../index/index-store"
-import { searchNotes } from "../core/search-notes"
-import { showNote } from "../core/show-note"
-import type { CliResult } from "../core/types"
-import { systemClock, type Clock } from "../platform/clock"
-import { createNoteRepository } from "../storage/note-repository"
-import { createSidecarRepository } from "../storage/sidecar-repository"
-import { getNotesPath } from "../storage/root-layout"
-import { cleanupStaleAtomicNoteWriterTemps } from "../storage/atomic-note-writer"
+import {
+  cleanupStaleAtomicNoteWriterTemps,
+  CodexProviderSetupRequiredError,
+  CodexTextGenerationClientError,
+  createAiConfigRepository,
+  createAiQueueRepository,
+  createAiTextGenerationClient,
+  createCodexAuthClient,
+  createCodexAuthRepository,
+  createNote,
+  createNoteRepository,
+  createSidecarRepository,
+  deleteNote,
+  dropDescribeNoteJobIfNoteMissing,
+  enqueueDescribeNoteIfAiEnabled,
+  generateNoteDescription,
+  getNotesPath,
+  IndexUnavailableError,
+  listNotes,
+  listPendingAiJobs,
+  listRetryableAiJobs,
+  markDescribeNoteJobFailedIfContentHashMatches,
+  moveNote,
+  promoteDraft,
+  rebuildIndexes,
+  renameNote,
+  resolveBlueNoteRoot,
+  sanitizeAiErrorMessage,
+  scanAndEnqueueStaleDescriptions,
+  searchNotes,
+  showNote,
+  systemClock,
+  updateIndexedNote,
+  type AiTextGenerationClient,
+  type CliResult,
+  type Clock,
+} from "@bluenote/core"
 import { renderEditorScreen, routeEditorKey } from "./render-editor"
 import { sanitizePastedEditorText } from "./paste"
 import { renderManagerScreen, routeManagerKey } from "./render-manager"

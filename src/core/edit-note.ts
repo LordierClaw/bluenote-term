@@ -1,16 +1,20 @@
 import path from "node:path"
 
-import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions } from "../config/root"
-import { enqueueDescribeNoteIfAiEnabled } from "../ai/enqueue-describe-note"
-import { createNoteRepository } from "../storage/note-repository"
-import { parsePlainNote } from "../storage/plain-note"
+import {
+  createNoteDescription,
+  createNoteRepository,
+  enqueueDescribeNoteIfAiEnabled,
+  parsePlainNote,
+  rebuildIndexes,
+  renameNote,
+  resolveBlueNoteRoot,
+  selectNote,
+  systemClock,
+  type Clock,
+  type NoteVisibilityOptions,
+  type ResolveBlueNoteRootOptions,
+} from "@bluenote/core"
 import { launchEditor, type LaunchEditorOptions } from "../platform/editor"
-import { systemClock, type Clock } from "../platform/clock"
-import { createNoteDescription } from "../domain/note-description"
-import { rebuildIndexes } from "./rebuild-indexes"
-import { renameNote } from "./rename-note"
-import { selectNote } from "./select-note"
-import type { NoteVisibilityOptions } from "./note-visibility"
 
 export interface EditNoteOptions extends ResolveBlueNoteRootOptions, LaunchEditorOptions, NoteVisibilityOptions {
   selector: string

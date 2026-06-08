@@ -1,13 +1,15 @@
 import path from "node:path"
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 
-import { UsageError } from "../core/errors"
-import type { Clock } from "../platform/clock"
-import { assertPathInsideRoot } from "../platform/path-safety"
-import { replaceFileAtomically } from "../storage/atomic-replace"
-import { createAppConfigRepository } from "../storage/app-config-repository"
-import { createSidecarRepository } from "../storage/sidecar-repository"
-import { getStatePath } from "../storage/root-layout"
+import {
+  assertPathInsideRoot,
+  createAppConfigRepository,
+  createSidecarRepository,
+  getStatePath,
+  replaceFileAtomically,
+  UsageError,
+  type Clock,
+} from "@bluenote/core"
 import type { TuiNote } from "./state"
 
 export interface LatestOpenedNoteState {

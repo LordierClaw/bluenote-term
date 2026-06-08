@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process"
 
-import { EditorLaunchError } from "../core/errors"
+import { EditorLaunchError } from "@bluenote/core"
 
 export interface EditorLaunchResult {
   exitCode: number

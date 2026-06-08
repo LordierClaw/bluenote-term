@@ -1,20 +1,22 @@
 import {
   AppError,
+  archiveNote,
+  createNote,
+  deleteNote,
+  initRoot,
   isValidationOrDataError,
+  listNotes,
+  rebuildIndexes,
+  searchNotes,
+  showNote,
   UsageError,
-} from "../core/errors"
-import type { CliResult } from "../core/types"
-import { archiveNote } from "../core/archive-note"
-import { createNote } from "../core/create-note"
-import { deleteNote } from "../core/delete-note"
+  type CliResult,
+  type NoteVisibility,
+  type RebuildIndexesOptions,
+  type SearchNoteMatch,
+} from "@bluenote/core"
 import { editNote } from "../core/edit-note"
-import { initRoot } from "../core/init-root"
-import { listNotes } from "../core/list-notes"
-import { rebuildIndexes, type RebuildIndexesOptions } from "../core/rebuild-indexes"
-import { searchNotes, type SearchNoteMatch } from "../core/search-notes"
-import { showNote } from "../core/show-note"
 import { desktopClipboard, type ClipboardRuntime } from "../platform/clipboard"
-import type { NoteVisibility } from "../core/note-visibility"
 import { runTuiCli } from "../tui/app"
 import { runAiCli, type AiCliRuntimeOptions } from "./ai"
 

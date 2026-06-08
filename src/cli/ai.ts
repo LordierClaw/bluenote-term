@@ -1,17 +1,31 @@
-import { resolveBlueNoteRoot } from "../config/root"
-import { UsageError } from "../core/errors"
-import type { CliResult } from "../core/types"
-import { ensureManagedRoot } from "../storage/root-layout"
-import { createAiConfigRepository, maskApiKey, type AiConfig } from "../ai/config"
-import { generateNoteDescription, type GenerateNoteDescriptionResult } from "../ai/description-service"
-import { sanitizeAiErrorMessage, sanitizeCodexAuthErrorMessage } from "../ai/error-redaction"
-import { CodexProviderSetupRequiredError, createAiTextGenerationClient, type AiTextGenerationClient } from "../ai/provider"
-import type { OpenAiCompatibleFetch } from "../ai/openai-compatible-client"
-import type { AiQueueJob } from "../ai/queue-repository"
-import { dropDescribeNoteJobIfNoteMissing, listPendingAiJobs, listRetryableAiJobs, markDescribeNoteJobFailedIfContentHashMatches } from "../ai/queue-service"
-import { CodexAuthClientError, createCodexAuthClient, type CodexAuthClientOptions } from "../ai/codex-auth-client"
-import { CodexTextGenerationClientError } from "../ai/codex-client"
-import { createCodexAuthRepository, formatCodexAuthStatus } from "../ai/codex-auth-repository"
+import {
+  CodexAuthClientError,
+  CodexProviderSetupRequiredError,
+  CodexTextGenerationClientError,
+  createAiConfigRepository,
+  createAiTextGenerationClient,
+  createCodexAuthClient,
+  createCodexAuthRepository,
+  dropDescribeNoteJobIfNoteMissing,
+  ensureManagedRoot,
+  formatCodexAuthStatus,
+  generateNoteDescription,
+  listPendingAiJobs,
+  listRetryableAiJobs,
+  markDescribeNoteJobFailedIfContentHashMatches,
+  maskApiKey,
+  resolveBlueNoteRoot,
+  sanitizeAiErrorMessage,
+  sanitizeCodexAuthErrorMessage,
+  UsageError,
+  type AiConfig,
+  type AiQueueJob,
+  type AiTextGenerationClient,
+  type CliResult,
+  type CodexAuthClientOptions,
+  type GenerateNoteDescriptionResult,
+  type OpenAiCompatibleFetch,
+} from "@bluenote/core"
 
 export interface AiCliRuntimeOptions {
   aiClient?: AiTextGenerationClient

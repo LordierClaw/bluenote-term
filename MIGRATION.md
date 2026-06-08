@@ -21,7 +21,7 @@ This phase is an internal module split only. It must not create or depend on a s
 - [x] Loop 5: Move note business logic into `@bluenote/core`.
 - [x] Loop 6: Move search/rebuild/index logic into `@bluenote/core`.
 - [x] Loop 7: Move reusable AI config/queue/provider business logic into `@bluenote/core`.
-- [ ] Loop 8: Update CLI/TUI to consume `@bluenote/core` public APIs.
+- [x] Loop 8: Update CLI/TUI to consume `@bluenote/core` public APIs.
 - [ ] Loop 9: Enforce package boundaries and update current-facing docs.
 
 ## Remaining Steps
@@ -126,6 +126,13 @@ This phase is an internal module split only. It must not create or depend on a s
 | Loop 7 | `bun run smoke:cli` | PASS | Root CLI smoke script passed after AI module move. |
 | Loop 7 | Boundary search in `packages/core` for `@opentui\|packages/term\|src/tui\|../../term` | PASS | No forbidden terminal/TUI boundary imports found. |
 | Loop 7 | Search `packages/core/src` for `../../../src/ai` or `../../../../src/ai` imports | PASS | No package-core imports from root AI shims remain. |
+| Loop 8 RED | `bun test tests/unit/core/client-core-boundary.test.ts` | FAIL (expected) | New client boundary test failed because representative CLI/TUI/platform files still imported moved business modules through root `src/core`, `src/storage`, `src/config`, `src/search`, `src/index`, `src/ai`, and `src/platform/path-safety` shims. |
+| Loop 8 | `bun test tests/unit/core/client-core-boundary.test.ts` | PASS | Representative CLI/TUI/platform files now consume moved business APIs from `@bluenote/core`; the test explicitly allows the still term-owned `src/core/edit-note.ts` editor flow. |
+| Loop 8 | `bun test tests/unit/cli-entry.test.ts tests/unit/cli/entry-errors.test.ts tests/unit/tui tests/integration/tui-workflow.test.ts tests/integration/cli-help.test.ts tests/integration/cli-ai-config.test.ts tests/integration/cli-ai-describe.test.ts tests/integration/cli-ai-queue.test.ts tests/integration/cli-ai-queue-mutations.test.ts` | PASS | Required CLI/TUI/AI regression slice passed: 539 tests. |
+| Loop 8 | `bun run typecheck` | PASS | Root TypeScript check passed after switching client imports and exposing `initRoot` from the `@bluenote/core` public barrel. |
+| Loop 8 | `bun run smoke:opentui` | PASS | OpenTUI smoke check passed for BlueNote (`tui-workspace-ready`; follow-up `hardening-follow-up`). |
+| Loop 8 | `bun run smoke:cli` | PASS | CLI smoke check passed. |
+| Loop 8 | Boundary search in `packages/core` for `@opentui\|packages/term\|src/tui\|../../term` | PASS | No forbidden terminal/TUI boundary imports found. |
 
 ## Known Risks
 
@@ -133,6 +140,7 @@ This phase is an internal module split only. It must not create or depend on a s
 - `src/core/edit-note.ts` currently mixes business note update behavior with external editor launching; Loop 5 intentionally left it as a root/term-facing module to keep CLI edit compatible, so a careful later split is still required.
 - `packages/core/src/index/index-store.ts` uses `sql.js` and resolves `sql-wasm.wasm` relative to both executable and project paths; package relocation can break release and smoke behavior.
 - Loop 7 moved reusable AI config/provider/auth/queue/description/prompt/log modules into `@bluenote/core`; these modules are sensitive, so future changes must continue preserving queue files, setup blockers, redaction, prompt hashes, Codex auth, and non-blocking TUI orchestration.
+- Loop 8 intentionally left `src/core/edit-note.ts` as a term-facing mixed editor flow while switching its callers' moved business imports to `@bluenote/core`; a later split should separate external editor launch from reusable note update logic.
 - TUI manager/search adapters mix view-model logic with core note/search imports; move only the business boundary, not UI state or behavior.
 - Tests and helper paths currently assume a single root package; migration must keep root verification commands working while package-specific tests are introduced gradually.
 - Release packaging may assume root `package.json`, root `bin/bn.ts`, and root `node_modules`; update only after behavior-preserving workspace scaffolding is verified.
