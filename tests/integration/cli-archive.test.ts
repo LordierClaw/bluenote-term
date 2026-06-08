@@ -84,7 +84,7 @@ test("bn archive <selector> moves the plain note to .data/archive, preserves the
 
     await assert.rejects(() => access(path.join(harness.rootPath, "note", "archive-target.md")))
 
-    const archivedRelativePath = path.join(".data", "archive", "archive-target.md")
+    const archivedRelativePath = ".data/archive/archive-target.md"
     const archivedMarkdown = await readFile(path.join(harness.rootPath, archivedRelativePath), "utf8")
     assert.equal(archivedMarkdown, "Searchable before archive.\n")
 

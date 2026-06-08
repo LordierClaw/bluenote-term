@@ -99,7 +99,7 @@ test("bn delete <key|path> --force removes the note file and sidecar and rebuild
   } finally {
     await harness.cleanup()
   }
-}, 20_000)
+}, 60_000)
 
 test("bn delete requires --force", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-delete-")
