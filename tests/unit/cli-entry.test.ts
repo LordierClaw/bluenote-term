@@ -2,7 +2,7 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 import os from "node:os"
 import path from "node:path"
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 
 import { formatHelp, formatSearchMatches, runCli } from "../../src/cli/entry"
 
@@ -294,10 +294,9 @@ test("runCli selector commands default to normal notes and accept draft/all visi
 
   try {
     runCli(["init"], "0.1.0")
-    const editorScriptPath = path.join(rootPath, "noop-editor.sh")
-    await writeFile(editorScriptPath, "#!/usr/bin/env bash\nexit 0\n", "utf8")
-    await chmod(editorScriptPath, 0o755)
-    process.env.EDITOR = editorScriptPath
+    const editorScriptPath = path.join(rootPath, "noop-editor.ts")
+    await writeFile(editorScriptPath, "process.exit(0)\n", "utf8")
+    process.env.EDITOR = `bun ${JSON.stringify(editorScriptPath)}`
 
     const draft = runCli(["new", "Draft body"], "0.1.0", {
       createNoteOptions: { randomSource: () => 0x12345678 },

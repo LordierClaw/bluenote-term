@@ -84,14 +84,17 @@ test("retry attempts and output language are validated", () => {
   assert.throws(() => validateAiConfig({ ...validConfig(), outputLanguage: "" }, ".data/ai/config.json"), /outputLanguage/i)
 })
 
-test("AI config writes restrict plaintext API key file permissions to owner only", async () => {
+test("AI config writes restrict plaintext API key file permissions to owner only on POSIX", async () => {
   await withRoot("bluenote-ai-config-permissions-", async (rootPath) => {
     const repository = createAiConfigRepository(rootPath)
 
     repository.write(validConfig())
-
     const configStats = await stat(getAiConfigPath(rootPath))
-    assert.equal(configStats.mode & 0o077, 0)
+    if (process.platform === "win32") {
+      assert.equal(configStats.isFile(), true)
+    } else {
+      assert.equal(configStats.mode & 0o077, 0)
+    }
   })
 })
 

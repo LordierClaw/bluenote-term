@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } 
 import { UsageError } from "../core/errors"
 import { replaceFileAtomically } from "../storage/atomic-replace"
 import { getAiQueuePath } from "../storage/root-layout"
+import { toPortableRelativePath } from "../platform/path-safety"
 
 export type AiQueueJobStatus = "pending" | "running" | "failed"
 
@@ -148,7 +149,7 @@ function acquireQueueLock(lockPath: string, relativePath: string): () => void {
 }
 
 function relativeQueuePath(rootPath: string, queuePath: string): string {
-  return path.relative(rootPath, queuePath) || queuePath
+  return toPortableRelativePath(path.relative(rootPath, queuePath) || queuePath)
 }
 
 function assertPlainObject(input: unknown, sourcePath: string): asserts input is Record<string, unknown> {

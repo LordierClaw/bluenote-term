@@ -4,6 +4,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync }
 import { UsageError } from "../core/errors"
 import { replaceFileAtomically } from "../storage/atomic-replace"
 import { getAiConfigPath } from "../storage/root-layout"
+import { toPortableRelativePath } from "../platform/path-safety"
 import type { AiConfig } from "./config-schema"
 import { validateAiConfig } from "./config-schema"
 
@@ -26,7 +27,7 @@ function removeTemporaryConfig(configPath: string): void {
 }
 
 function relativeConfigPath(rootPath: string, configPath: string): string {
-  return path.relative(rootPath, configPath) || configPath
+  return toPortableRelativePath(path.relative(rootPath, configPath) || configPath)
 }
 
 export function createAiConfigRepository(rootPath: string): AiConfigRepository {

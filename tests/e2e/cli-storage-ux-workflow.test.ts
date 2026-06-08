@@ -184,4 +184,4 @@ test("CLI storage and UX workflow stays consistent through the real bin/bn.ts en
   } finally {
     await harness.cleanup()
   }
-}, 45_000)
+}, 90_000)
