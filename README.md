@@ -8,7 +8,7 @@ BlueNote keeps normal note bodies as plain `.md` files under `note/` and drafts 
 
 - Stores notes as plain Markdown files, without required frontmatter.
 - Keeps titles, descriptions, timestamps, and paths in sidecar JSON files.
-- Provides CLI commands for creating, listing, showing, searching, editing, archiving, deleting, rebuilding, migrating, and opt-in AI description generation.
+- Provides CLI commands for creating, listing, showing, searching, editing, archiving, deleting, rebuilding, and opt-in AI description generation.
 - Includes a terminal UI with a Manager, Editor, and Search Everything palette.
 - Uses contains-style search, so queries match real substrings in titles, paths, descriptions, and note bodies.
 - Runs locally. BlueNote does not require accounts, sync services, hosted backends, or cloud storage for core note workflows. Optional AI commands require a configured provider and network access; OpenAI-compatible API-key providers remain supported, and the Codex provider now has root-local CLI auth commands.
@@ -46,9 +46,11 @@ Portable GitHub Release archives are available for Windows and Linux users as re
 # Initialize a BlueNote root in the current directory.
 bun run ./bin/bn.ts init
 
-# Create a draft, or pass --path note/<folder> with --title to create a normal note.
+# Create a draft, or pass --path note/<folder> with --title to create a normal note
+# in an existing folder under note/.
 bun run ./bin/bn.ts new --title "Project notes" "Initial content"
-bun run ./bin/bn.ts new --path note --title "Project notes" "Initial content"
+mkdir -p note/work
+bun run ./bin/bn.ts new --path note/work --title "Project notes" "Initial content"
 
 # List and search notes.
 bun run ./bin/bn.ts list
@@ -81,9 +83,9 @@ When installed on your `PATH`, use `bn` or `bluenote` instead of `bun run ./bin/
 | --- | --- |
 | `init` | Initialize the managed BlueNote root. |
 | `new [--title <title>] [--path note/<folder>] [--clipboard] <body>` | Create a draft from positional body text or clipboard; `--path` creates a normal note under `note/`. |
-| `list` | List active notes with title, key, description, and path. |
+| `list [--drafts|--all]` | List notes with title, key, description, and path; default output shows normal notes, `--drafts` also includes drafts, and `--all` also includes archived notes. |
 | `show [--drafts|--all] <key|path>` | Print a note summary and body. |
-| `search <query>` | Search indexed notes with contains-style matching. |
+| `search [--drafts|--all] <query>` | Search indexed notes with contains-style matching; default output searches normal notes, `--drafts` also includes drafts, and `--all` also includes archived notes. |
 | `edit [--drafts|--all] <key|path>` | Open a matching note in `$EDITOR`. |
 | `archive [--drafts|--all] <key|path>` | Move a normal note to hidden `.data/archive/`. |
 | `delete [--drafts|--all] <key|path> --force` | Permanently remove a note and its sidecar. |
@@ -171,7 +173,7 @@ Launch the workspace with:
 bun run ./bin/bn.ts tui
 ```
 
-The TUI reads and writes the same Markdown files and sidecars as the CLI.
+The TUI reads and writes the same Markdown files and sidecars as the CLI. On startup, it reopens the latest recently opened note when that path is still valid, or creates and opens a fresh draft when there is no recent valid note.
 
 ### Manager
 
@@ -184,14 +186,19 @@ Common controls:
 | `Right` / `Enter` | Open a folder or note. |
 | `Left`, `Esc`, `Ctrl+[` | Go back toward the root manager. |
 | `/` | Filter visible notes and folders. |
-| `n` | Create a note. |
+| `n` | Create a note or folder in the current `note/` folder. |
+| `N` | Create and open a quick draft. |
+| `r` | Rename the focused note or folder. |
+| `m` | Move the focused normal note to an existing `note/` folder. |
 | `d` | Delete the focused note after confirmation. |
+| `p` | Toggle the preview pane. |
+| `e` | Return to the editor. |
 | `Ctrl+P` | Open Search Everything. |
 | `q` / `Ctrl+C` | Quit. |
 
 ### Editor
 
-The Editor supports inline body editing, Unicode-safe cursor movement, newline, backspace, delete, undo/redo, wrap mode, `Ctrl+F` find, `Ctrl+R` replace, and `Ctrl+S` save. `Ctrl+PageDown` and `Ctrl+PageUp` switch to the next or previous note in the same folder; after switching, the topbar shows a temporary blue index label such as `03/10` before the title.
+The Editor supports inline body editing, Unicode-safe cursor movement, newline, backspace, delete, undo/redo, wrap mode, `Ctrl+F` find, `Ctrl+R` replace, and `Ctrl+S` save. `Alt+S` saves an open draft as a normal note by choosing an existing `note/` folder and destination title. `Ctrl+PageDown` and `Ctrl+PageUp` switch to the next or previous note in the same folder; after switching, the topbar shows a temporary blue index label such as `03/10` before the title.
 
 Autosave runs after 750 ms. Autosave and manual save use the same safe note-body write path. If a save fails, BlueNote keeps the buffer dirty and retries later.
 
@@ -201,7 +208,7 @@ BlueNote leaves normal visible-text selection to the terminal. Use your terminal
 
 `Ctrl+P` opens Search Everything from the Manager or Editor. Results include notes, body matches, folders, paths, and commands that work in the current context.
 
-Editor commands include `/find`, `/replace`, `/save`, `/copy-all`, `/replace-all`, and `/paste`. Manager commands include `/new` and, when a note action is available, `/delete`.
+Editor commands include `/find`, `/replace`, `/save`, `/save-draft-as`, `/copy-all`, `/replace-all`, and `/paste`. Manager commands include `/new` and, when a note action is available, `/delete`.
 
 ## Development
 
