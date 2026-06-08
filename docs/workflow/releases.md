@@ -7,8 +7,9 @@ BlueNote publishes portable archives from GitHub Releases. These archives are bu
 The release workflow publishes:
 
 - `bn.exe` — Windows x64 standalone executable.
-- `bluenote-windows-x64.zip` — Windows x64 portable ZIP containing `bn.exe`.
-- `bluenote-linux-x64.tar.gz` — Linux x64 portable tarball containing `bn`.
+- `sql-wasm.wasm` — SQL.js runtime companion file required next to a directly downloaded `bn.exe`.
+- `bluenote-windows-x64.zip` — Windows x64 portable ZIP containing `bn.exe`, `sql-wasm.wasm`, and usage notes.
+- `bluenote-linux-x64.tar.gz` — Linux x64 portable tarball containing `bn`, `sql-wasm.wasm`, and usage notes.
 
 SHA-256 checksums are printed directly in the GitHub Release notes.
 
@@ -27,7 +28,7 @@ macOS, Linux arm64, installers, package-manager recipes, and code signing are fu
 .\bn.exe tui
 ```
 
-The Windows release also publishes `bn.exe` directly for environments where downloading executables is acceptable. The ZIP assets are provided for environments that prefer or require executables to arrive inside an archive.
+The Windows release also publishes `bn.exe` directly for environments where downloading executables is acceptable. If you use the direct executable, download `sql-wasm.wasm` from the same release and keep it in the same folder as `bn.exe`. The ZIP asset is the safer default because it already keeps the companion file next to the executable.
 
 ## Linux usage
 
@@ -56,6 +57,7 @@ On Windows PowerShell, compare the printed hash with the matching checksum in th
 ```powershell
 Get-FileHash .\bluenote-windows-x64.zip -Algorithm SHA256
 Get-FileHash .\bn.exe -Algorithm SHA256
+Get-FileHash .\sql-wasm.wasm -Algorithm SHA256
 ```
 
 ## Maintainer release flow

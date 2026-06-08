@@ -1,5 +1,5 @@
 import path from "node:path"
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 
 import MiniSearch from "minisearch"
 // @ts-expect-error sql.js does not ship TypeScript declarations in this project.
@@ -12,7 +12,27 @@ import { collectContainsFieldMatches, type ContainsFieldMatch } from "../search/
 import type { ParsedNote } from "../storage/note-schema"
 import { createSearchDocuments, type IndexedSearchNote } from "./search-documents"
 
-const SQL = await initSqlJs()
+const SQL_WASM_FILENAME = "sql-wasm.wasm"
+const executableAdjacentSqlWasmPath = path.join(path.dirname(process.execPath), SQL_WASM_FILENAME)
+const projectSqlWasmPath = path.resolve("node_modules", "sql.js", "dist", SQL_WASM_FILENAME)
+
+function locateSqlWasm(fileName: string): string {
+  if (fileName !== SQL_WASM_FILENAME) {
+    return fileName
+  }
+
+  if (existsSync(executableAdjacentSqlWasmPath)) {
+    return executableAdjacentSqlWasmPath
+  }
+
+  if (existsSync(projectSqlWasmPath)) {
+    return projectSqlWasmPath
+  }
+
+  return fileName
+}
+
+const SQL = await initSqlJs({ locateFile: locateSqlWasm })
 
 const DERIVED_DIRECTORY = STATE_DIRECTORY
 const METADATA_FILENAME = "metadata.sqlite"

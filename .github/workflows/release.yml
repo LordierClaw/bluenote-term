@@ -37,6 +37,7 @@ jobs:
           name: bluenote-windows-x64
           path: |
             dist/release/bn.exe
+            dist/release/sql-wasm.wasm
             dist/release/bluenote-windows-x64.zip
           if-no-files-found: error
 
@@ -88,6 +89,7 @@ jobs:
           cd dist/release-assets
           sha256sum \
             bluenote-windows-x64/bn.exe \
+            bluenote-windows-x64/sql-wasm.wasm \
             bluenote-windows-x64/bluenote-windows-x64.zip \
             bluenote-linux-x64/bluenote-linux-x64.tar.gz \
             | sed 's#bluenote-windows-x64/##; s#bluenote-linux-x64/##' \
@@ -108,5 +110,6 @@ jobs:
           body_path: dist/release-assets/RELEASE_NOTES.md
           files: |
             dist/release-assets/bluenote-windows-x64/bn.exe
+            dist/release-assets/bluenote-windows-x64/sql-wasm.wasm
             dist/release-assets/bluenote-windows-x64/bluenote-windows-x64.zip
             dist/release-assets/bluenote-linux-x64/bluenote-linux-x64.tar.gz

@@ -195,6 +195,20 @@ test("current docs document the Phase 6 opt-in AI description workflow", async (
   assert.match(phaseDoc, /TUI startup recovery scans sidecar `updatedAt` against `ai\.description\.lastProcessedAt`/)
 })
 
+test("release workflow publishes the SQL.js WASM companion everywhere it is needed", async () => {
+  const [releaseWorkflow, releaseDocs] = await Promise.all([
+    readWorkspaceFile(".github/workflows/release.yml"),
+    readWorkspaceFile("docs/workflow/releases.md"),
+  ])
+
+  assert.match(releaseWorkflow, /dist\/release\/sql-wasm\.wasm/)
+  assert.match(releaseWorkflow, /bluenote-windows-x64\/sql-wasm\.wasm/)
+  assert.match(releaseWorkflow, /dist\/release-assets\/bluenote-windows-x64\/sql-wasm\.wasm/)
+  assert.match(releaseDocs, /`sql-wasm\.wasm` — SQL\.js runtime companion file required next to a directly downloaded `bn\.exe`/)
+  assert.match(releaseDocs, /The ZIP asset is the safer default because it already keeps the companion file next to the executable/)
+  assert.match(releaseDocs, /Get-FileHash \.\\sql-wasm\.wasm -Algorithm SHA256/)
+})
+
 test("project verification commands cover CLI plus import-only OpenTUI checks", async () => {
   const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as {
     scripts?: Record<string, string>

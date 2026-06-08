@@ -6,6 +6,8 @@ const releaseRoot = path.resolve("dist", "release")
 const workRoot = path.join(releaseRoot, "work")
 const verifyRoot = path.join(releaseRoot, "verify")
 const packageRoot = path.join(workRoot, "bluenote")
+const sqlWasmFilename = "sql-wasm.wasm"
+const sqlWasmSourcePath = path.resolve("node_modules", "sql.js", "dist", sqlWasmFilename)
 
 interface PlatformRelease {
   platformId: "windows-x64" | "linux-x64"
@@ -71,7 +73,8 @@ Linux:
   ./bn init
   ./bn tui
 
-Notes are local files. No network install is required after extraction.
+Keep ${sqlWasmFilename} next to the executable. Notes are local files.
+No network install is required after extraction.
 `,
     "utf8",
   )
@@ -106,6 +109,7 @@ function publishStandaloneExecutable(release: PlatformRelease, executablePath: s
   }
 
   copyFileSync(executablePath, path.join(releaseRoot, release.executableName))
+  copyFileSync(path.join(packageRoot, sqlWasmFilename), path.join(releaseRoot, sqlWasmFilename))
 }
 
 function validateArchive(release: PlatformRelease, archiveName: string): void {
@@ -114,6 +118,7 @@ function validateArchive(release: PlatformRelease, archiveName: string): void {
   const extractedPackageRoot = path.join(extractedRoot, "bluenote")
   const extractedExecutable = path.join(extractedPackageRoot, release.executableName)
   const extractedReadme = path.join(extractedPackageRoot, "README.txt")
+  const extractedSqlWasm = path.join(extractedPackageRoot, sqlWasmFilename)
 
   rmSync(extractedRoot, { recursive: true, force: true })
   mkdirSync(extractedRoot, { recursive: true })
@@ -138,6 +143,10 @@ function validateArchive(release: PlatformRelease, archiveName: string): void {
     throw new Error(`Release archive validation failed: missing README ${extractedReadme}`)
   }
 
+  if (!existsSync(extractedSqlWasm)) {
+    throw new Error(`Release archive validation failed: missing SQL.js WASM file ${extractedSqlWasm}`)
+  }
+
   const helpOutput = run(extractedExecutable, ["--help"], { capture: true, cwd: extractedRoot })
   if (!helpOutput.includes("BlueNote v")) {
     throw new Error("Release archive validation failed: extracted executable --help output did not contain 'BlueNote v'.")
@@ -155,6 +164,7 @@ function main(): void {
   mkdirSync(packageRoot, { recursive: true })
 
   run("bun", ["build", "./bin/bn.ts", "--compile", "--outfile", executablePath])
+  copyFileSync(sqlWasmSourcePath, path.join(packageRoot, sqlWasmFilename))
 
   if (process.platform !== "win32") {
     chmodSync(executablePath, 0o755)
