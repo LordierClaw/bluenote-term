@@ -47,7 +47,7 @@ import {
   type TuiNote,
   type TuiState,
 } from "./state"
-import { sanitizeAiErrorMessage, type SearchNoteMatch } from "@bluenote/core"
+import { sanitizeAiErrorMessage, type SearchNoteMatch } from "@lordierclaw/bluenote-core"
 
 export type WorkspaceActionBlockedReason = "dirty-editor"
 

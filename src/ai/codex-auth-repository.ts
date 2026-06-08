@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/ai/codex-auth-repository"
+export * from "@lordierclaw/bluenote-core"

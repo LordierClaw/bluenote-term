@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/platform/ids"
+export * from "@lordierclaw/bluenote-core"

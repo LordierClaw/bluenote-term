@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/storage/sidecar-schema"
+export * from "@lordierclaw/bluenote-core"

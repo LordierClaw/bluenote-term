@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/storage/state-manifest"
+export * from "@lordierclaw/bluenote-core"

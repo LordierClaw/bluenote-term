@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/core/promote-draft"
+export * from "@lordierclaw/bluenote-core"

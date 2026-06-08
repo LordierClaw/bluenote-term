@@ -11,13 +11,13 @@ import {
   slugifyNoteTitle,
   systemClock,
   uuidGenerator,
-} from "@bluenote/core"
+} from "@lordierclaw/bluenote-core"
 import { UsageError as ShimUsageError } from "../../../src/core/errors"
 import { createNoteKey as shimCreateNoteKey } from "../../../src/domain/note-key"
 import { assertPathInsideRoot as shimAssertPathInsideRoot } from "../../../src/platform/path-safety"
 
 
-test("@bluenote/core exports moved pure domain and platform helpers", () => {
+test("@lordierclaw/bluenote-core exports moved pure domain and platform helpers", () => {
   assert.equal(slugifyNoteTitle("Hello, BlueNote!"), "hello-bluenote")
   assert.equal(
     createNoteKey("Package API", { suffixLength: 4, randomSource: () => 0x12345678 }),

@@ -4,10 +4,10 @@ Phase 8 refactors the single-package BlueNote repository into a temporary Bun wo
 
 ## Packages
 
-- `packages/core` (`@bluenote/core`): headless BlueNote engine for domain types, workspace/root resolution, storage layout, note business logic, sidecar metadata, rebuildable search/index state, literal contains-style search, and reusable AI config/queue/provider services.
+- `../bluenote-core` (`@lordierclaw/bluenote-core`): sibling headless BlueNote engine for domain types, workspace/root resolution, storage layout, note business logic, sidecar metadata, rebuildable search/index state, literal contains-style search, and reusable AI config/queue/provider services.
 - `packages/term` (`bluenote-term`): Bun-first terminal client for `bn`/`bluenote` entrypoints, CLI command presentation, OpenTUI rendering, keyboard/input handling, terminal editor launch, clipboard helpers, TUI state, and client orchestration.
 
-This is an internal module split only. Phase 8 does not create or depend on a separate `bluenote-core` repository.
+Phase 8.2 consumes the separated sibling `bluenote-core` repository by local file dependency.
 
 ## Compatibility
 
@@ -29,13 +29,13 @@ Existing behavior and storage contracts must remain unchanged:
 
 ## Boundaries
 
-`packages/core` must stay headless:
+The sibling `@lordierclaw/bluenote-core` package must stay headless:
 
 - No OpenTUI imports.
 - No imports from `packages/term`.
 - No terminal rendering, keyboard handling, screen layout, OpenTUI components, or TUI state.
 
-`packages/term` owns client concerns and may use Bun, OpenTUI, clipboard, terminal APIs, CLI parsing, and TUI rendering/state. It consumes business logic through `@bluenote/core` public exports.
+`packages/term` owns client concerns and may use Bun, OpenTUI, clipboard, terminal APIs, CLI parsing, and TUI rendering/state. It consumes business logic through `@lordierclaw/bluenote-core` public exports.
 
 ## Verification
 
@@ -55,7 +55,7 @@ bun run ./packages/term/bin/bn.ts --version
 
 ## Known follow-up risks
 
-- `@bluenote/core` is private and source-based for now; it is not an npm-publishable package contract yet.
-- The `@bluenote/core` public barrel is intentionally broad during the temporary split and should be narrowed or documented before external consumption.
+- `@lordierclaw/bluenote-core` is private and source-based for now; it is not an npm-publishable package contract yet.
+- The `@lordierclaw/bluenote-core` public barrel is intentionally broad during the temporary split and should be narrowed or documented before external consumption.
 - Release packaging should be explicitly revalidated before publishing artifacts because the root bin delegates into `packages/term`, and `sql.js` WASM lookup remains packaging-sensitive.
 - Root compatibility shims should remain until downstream scripts, tests, release packaging, and imports are deliberately migrated.

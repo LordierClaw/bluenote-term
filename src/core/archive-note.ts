@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/core/archive-note"
+export * from "@lordierclaw/bluenote-core"

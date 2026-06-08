@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/core/rebuild-indexes"
+export * from "@lordierclaw/bluenote-core"

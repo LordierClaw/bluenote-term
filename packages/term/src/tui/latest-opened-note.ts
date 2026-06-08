@@ -9,7 +9,7 @@ import {
   replaceFileAtomically,
   UsageError,
   type Clock,
-} from "@bluenote/core"
+} from "@lordierclaw/bluenote-core"
 import type { TuiNote } from "./state"
 
 export interface LatestOpenedNoteState {

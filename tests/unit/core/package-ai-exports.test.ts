@@ -10,12 +10,12 @@ import {
   maskApiKey,
   sanitizeAiErrorMessage,
   validateAiConfig,
-} from "@bluenote/core"
+} from "@lordierclaw/bluenote-core"
 import { validateAiConfig as rootValidateAiConfig, maskApiKey as rootMaskApiKey } from "../../../src/ai/config"
 import { createAiQueueRepository as rootCreateAiQueueRepository } from "../../../src/ai/queue-repository"
 import { sanitizeAiErrorMessage as rootSanitizeAiErrorMessage } from "../../../src/ai/error-redaction"
 
-describe("@bluenote/core AI exports", () => {
+describe("@lordierclaw/bluenote-core AI exports", () => {
   test("exports reusable AI APIs with root shim identity and repository behavior", async () => {
     assert.equal(validateAiConfig, rootValidateAiConfig)
     assert.equal(maskApiKey, rootMaskApiKey)

@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/ai/queue-repository"
+export * from "@lordierclaw/bluenote-core"

@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/storage/root-layout"
+export * from "@lordierclaw/bluenote-core"

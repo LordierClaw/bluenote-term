@@ -13,7 +13,7 @@ import {
   type Clock,
   type NoteVisibilityOptions,
   type ResolveBlueNoteRootOptions,
-} from "@bluenote/core"
+} from "@lordierclaw/bluenote-core"
 import { launchEditor, type LaunchEditorOptions } from "../platform/editor"
 
 export interface EditNoteOptions extends ResolveBlueNoteRootOptions, LaunchEditorOptions, NoteVisibilityOptions {

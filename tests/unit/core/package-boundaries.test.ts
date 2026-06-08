@@ -1,6 +1,6 @@
 import { describe, test } from "bun:test"
 import assert from "node:assert/strict"
-import { readdir, readFile } from "node:fs/promises"
+import { readdir, readFile, stat } from "node:fs/promises"
 import path from "node:path"
 
 const repoRoot = path.resolve(import.meta.dir, "../../..")
@@ -12,6 +12,7 @@ async function collectTsFiles(relativeDir: string): Promise<string[]> {
   return entries
     .filter((entry) => entry.isFile() && entry.name.endsWith(".ts"))
     .map((entry) => path.relative(repoRoot, path.join(entry.parentPath, entry.name)))
+    .filter((relativePath) => !relativePath.split(path.sep).includes("node_modules"))
     .sort()
 }
 
@@ -95,27 +96,16 @@ const termBusinessIntegrationFiles = [
 ]
 
 describe("package boundary enforcement", () => {
-  test("packages/core remains headless and does not import the terminal client", async () => {
-    const files = await collectTsFiles("packages/core/src")
-    const violations: string[] = []
-
-    for (const file of files) {
-      const source = await read(file)
-      const specifiers = importSpecifiers(source)
-      const forbidden = specifiers.filter((specifier) =>
-        specifier === "@opentui/core" ||
-        specifier.includes("packages/term") ||
-        specifier.includes("src/tui") ||
-        specifier.includes("/term/") ||
-        specifier.startsWith("bluenote-term"),
-      )
-
-      if (forbidden.length > 0) {
-        violations.push(`${file}: ${forbidden.join(", ")}`)
-      }
+  test("local packages/core implementation has been removed", async () => {
+    let exists = false
+    try {
+      await stat(path.join(repoRoot, "packages/core"))
+      exists = true
+    } catch {
+      exists = false
     }
 
-    assert.deepEqual(violations, [])
+    assert.equal(exists, false)
   })
 
   test("term-owned executable, CLI, TUI, platform, and editor files live in packages/term", async () => {
@@ -132,7 +122,7 @@ describe("package boundary enforcement", () => {
     assert.deepEqual(missing, [])
   })
 
-  test("packages/term imports business logic through @bluenote/core instead of root shims", async () => {
+  test("packages/term imports business logic through @lordierclaw/bluenote-core instead of root shims", async () => {
     const files = await collectTsFiles("packages/term")
     const violations: string[] = []
     const forbiddenRootBusinessPattern = /(?:^|\/)src\/(?:core|storage|config|ai|search|index|domain)(?:\/|$)/
@@ -156,8 +146,8 @@ describe("package boundary enforcement", () => {
 
     for (const file of termBusinessIntegrationFiles) {
       const source = await read(file)
-      if (!source.includes('from "@bluenote/core"') && !source.includes("from '@bluenote/core'")) {
-        violations.push(`${file}: missing @bluenote/core import`)
+      if (!source.includes('from "@lordierclaw/bluenote-core"') && !source.includes("from '@lordierclaw/bluenote-core'")) {
+        violations.push(`${file}: missing @lordierclaw/bluenote-core import`)
       }
     }
 
@@ -171,6 +161,36 @@ describe("package boundary enforcement", () => {
       const source = await read(file)
       if (!source.includes("packages/term")) {
         violations.push(`${file}: does not shim to packages/term`)
+      }
+    }
+
+    assert.deepEqual(violations, [])
+  })
+
+  test("term repository does not import old or private core package paths", async () => {
+    const files = [
+      ...(await collectTsFiles("bin")),
+      ...(await collectTsFiles("scripts")),
+      ...(await collectTsFiles("src")),
+      ...(await collectTsFiles("packages/term")),
+      ...(await collectTsFiles("tests")),
+    ]
+    const violations: string[] = []
+
+    for (const file of files) {
+      const source = await read(file)
+      const specifiers = importSpecifiers(source)
+      const forbidden = specifiers.filter((specifier) => {
+        if (specifier === "@bluenote/core") return true
+        if (specifier.startsWith("@lordierclaw/bluenote-core/src")) return true
+        if (specifier.includes("../bluenote-core/src") || specifier.includes("..\\bluenote-core\\src")) return true
+
+        const resolved = specifier.startsWith(".") ? path.normalize(path.join(path.dirname(file), specifier)) : specifier
+        return resolved.includes("bluenote-core/src")
+      })
+
+      if (forbidden.length > 0) {
+        violations.push(`${file}: ${forbidden.join(", ")}`)
       }
     }
 

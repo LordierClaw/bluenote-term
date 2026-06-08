@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/platform/clock"
+export * from "@lordierclaw/bluenote-core"

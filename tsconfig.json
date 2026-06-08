@@ -11,9 +11,6 @@
     "allowSyntheticDefaultImports": true,
     "types": ["bun", "node"],
     "baseUrl": ".",
-    "paths": {
-      "@bluenote/core": ["packages/core/src/index.ts"]
-    },
     "forceConsistentCasingInFileNames": true
   },
   "include": [

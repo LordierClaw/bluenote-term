@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/storage/atomic-replace"
+export * from "@lordierclaw/bluenote-core"

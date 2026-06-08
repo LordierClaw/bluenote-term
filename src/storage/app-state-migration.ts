@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/storage/app-state-migration"
+export * from "@lordierclaw/bluenote-core"

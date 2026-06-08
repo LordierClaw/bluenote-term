@@ -14,7 +14,7 @@ import {
   type NoteVisibility,
   type RebuildIndexesOptions,
   type SearchNoteMatch,
-} from "@bluenote/core"
+} from "@lordierclaw/bluenote-core"
 import { editNote } from "../core/edit-note"
 import { desktopClipboard, type ClipboardRuntime } from "../platform/clipboard"
 import { runTuiCli } from "../tui/app"

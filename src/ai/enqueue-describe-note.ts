@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/ai/enqueue-describe-note"
+export * from "@lordierclaw/bluenote-core"

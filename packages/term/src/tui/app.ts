@@ -38,7 +38,7 @@ import {
   type AiTextGenerationClient,
   type CliResult,
   type Clock,
-} from "@bluenote/core"
+} from "@lordierclaw/bluenote-core"
 import { renderEditorScreen, routeEditorKey } from "./render-editor"
 import { sanitizePastedEditorText } from "./paste"
 import { renderManagerScreen, routeManagerKey } from "./render-manager"

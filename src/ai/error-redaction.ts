@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/ai/error-redaction"
+export * from "@lordierclaw/bluenote-core"

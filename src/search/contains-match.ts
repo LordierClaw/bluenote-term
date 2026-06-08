@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/search/contains-match"
+export * from "@lordierclaw/bluenote-core"

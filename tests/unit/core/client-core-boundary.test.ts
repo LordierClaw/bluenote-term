@@ -20,8 +20,8 @@ const clientFiles = [
 const movedBusinessImportPattern = /from\s+["'](?:\.\.\/)+(?:core|storage|config|domain|search|index|ai|platform\/path-safety)(?:\/[^"']*)?["']/g
 const termOwnedCoreImports = new Set(['from "../core/edit-note"'])
 
-describe("CLI/TUI @bluenote/core boundary", () => {
-  test("client files consume moved business modules through @bluenote/core", async () => {
+describe("CLI/TUI @lordierclaw/bluenote-core boundary", () => {
+  test("client files consume moved business modules through @lordierclaw/bluenote-core", async () => {
     const violations: string[] = []
 
     for (const relativePath of clientFiles) {
@@ -32,8 +32,8 @@ describe("CLI/TUI @bluenote/core boundary", () => {
         violations.push(`${relativePath}: ${matches.join(", ")}`)
       }
 
-      if (!source.includes('from "@bluenote/core"')) {
-        violations.push(`${relativePath}: missing @bluenote/core import`)
+      if (!source.includes('from "@lordierclaw/bluenote-core"')) {
+        violations.push(`${relativePath}: missing @lordierclaw/bluenote-core import`)
       }
     }
 

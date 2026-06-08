@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/ai/provider"
+export * from "@lordierclaw/bluenote-core"

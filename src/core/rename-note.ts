@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/core/rename-note"
+export * from "@lordierclaw/bluenote-core"

@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/index/index-store"
+export * from "@lordierclaw/bluenote-core"

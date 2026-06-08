@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/ai/openai-compatible-client"
+export * from "@lordierclaw/bluenote-core"

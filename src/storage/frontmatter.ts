@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/storage/frontmatter"
+export * from "@lordierclaw/bluenote-core"

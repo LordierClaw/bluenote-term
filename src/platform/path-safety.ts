@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/platform/path-safety"
+export * from "@lordierclaw/bluenote-core"

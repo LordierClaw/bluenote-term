@@ -12,7 +12,7 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "@bluenote/core": "workspace:*",
+    "@lordierclaw/bluenote-core": "file:../../../bluenote-core",
     "@opentui/core": "0.2.14",
     "clipboardy": "5.3.1"
   }

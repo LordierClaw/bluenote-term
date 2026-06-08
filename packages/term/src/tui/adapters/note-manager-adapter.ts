@@ -1,4 +1,4 @@
-import { containsSearchQuery, type NoteSummary, type ShowNoteSummary } from "@bluenote/core"
+import { containsSearchQuery, type NoteSummary, type ShowNoteSummary } from "@lordierclaw/bluenote-core"
 import type { ManagerItem, ManagerState, TuiNote } from "../state"
 
 export interface NoteManagerSummary extends NoteSummary {

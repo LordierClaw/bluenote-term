@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/ai/prompt-repository"
+export * from "@lordierclaw/bluenote-core"

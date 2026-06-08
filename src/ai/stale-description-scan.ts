@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/ai/stale-description-scan"
+export * from "@lordierclaw/bluenote-core"

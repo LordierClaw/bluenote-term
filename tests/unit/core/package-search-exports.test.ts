@@ -13,7 +13,7 @@ import {
   rebuildIndexStore,
   searchNotes,
   updateIndexedNote,
-} from "@bluenote/core"
+} from "@lordierclaw/bluenote-core"
 import { containsSearchQuery as rootContainsSearchQuery } from "../../../src/search/contains-match"
 import { rebuildIndexes as rootRebuildIndexes } from "../../../src/core/rebuild-indexes"
 import { searchNotes as rootSearchNotes } from "../../../src/core/search-notes"
@@ -24,7 +24,7 @@ import {
 } from "../../../src/index/index-store"
 import { createSearchDocuments as rootCreateSearchDocuments } from "../../../src/index/search-documents"
 
-describe("@bluenote/core search/rebuild/index exports", () => {
+describe("@lordierclaw/bluenote-core search/rebuild/index exports", () => {
   test("exports package-local search APIs with root shim identity and literal contains search", async () => {
     assert.equal(containsSearchQuery, rootContainsSearchQuery)
     assert.equal(rebuildIndexes, rootRebuildIndexes)

@@ -25,7 +25,7 @@ import {
   type CodexAuthClientOptions,
   type GenerateNoteDescriptionResult,
   type OpenAiCompatibleFetch,
-} from "@bluenote/core"
+} from "@lordierclaw/bluenote-core"
 
 export interface AiCliRuntimeOptions {
   aiClient?: AiTextGenerationClient

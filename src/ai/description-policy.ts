@@ -1,1 +1,1 @@
-export * from "../../packages/core/src/ai/description-policy"
+export * from "@lordierclaw/bluenote-core"

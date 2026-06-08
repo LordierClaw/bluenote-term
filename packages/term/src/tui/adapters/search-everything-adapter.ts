@@ -1,4 +1,4 @@
-import { collectContainsFieldMatches, scoreContainsMatch, type SearchNoteMatch } from "@bluenote/core"
+import { collectContainsFieldMatches, scoreContainsMatch, type SearchNoteMatch } from "@lordierclaw/bluenote-core"
 import { buildManagerBrowserItems, buildManagerFolderPreviewLinesFromItems, type NoteManagerSummary } from "./note-manager-adapter"
 import { TUI_SHORTCUTS } from "../render-chrome"
 import type { ManagerItem } from "../state"

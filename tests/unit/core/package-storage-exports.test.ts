@@ -15,11 +15,11 @@ import {
   getNotesPath,
   getStateNotesPath,
   getStatePath,
-} from "@bluenote/core"
+} from "@lordierclaw/bluenote-core"
 import { ensureManagedRoot as shimEnsureManagedRoot } from "../../../src/storage/root-layout"
 import { createNoteRepository as shimCreateNoteRepository } from "../../../src/storage/note-repository"
 
-describe("@bluenote/core storage exports", () => {
+describe("@lordierclaw/bluenote-core storage exports", () => {
   test("exports managed-root storage helpers and preserves root shim identity", async () => {
     const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-core-storage-exports-"))
 
