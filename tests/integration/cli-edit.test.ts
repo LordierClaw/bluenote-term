@@ -171,6 +171,43 @@ test("bn edit renames the note key, file, and sidecar when the markdown heading 
   }
 }, 15_000)
 
+test("bn edit --drafts preserves draft visibility when a heading edit renames the draft", async () => {
+  const harness = await createManagedRootHarness("bluenote-cli-edit-draft-rename-")
+  const relativePath = "draft/original-draft.md"
+  const updatedBody = "# Renamed Draft\n\nDraft body after rename.\n"
+
+  try {
+    await writePlainNoteWithSidecar(harness.rootPath, {
+      key: "original-draft",
+      title: "Original Draft",
+      description: "Original draft body.",
+      relativePath,
+      body: "# Original Draft\n\nDraft body before rename.\n",
+    })
+    const editorScriptPath = await harness.writeFakeEditorScript(updatedBody)
+
+    const rebuildResult = harness.run(["rebuild"])
+    assert.equal(rebuildResult.exitCode, 0)
+    assert.equal(rebuildResult.stderr, "")
+
+    const editResult = harness.run(["edit", "--drafts", "original-draft"], { EDITOR: editorScriptPath })
+
+    assert.equal(editResult.exitCode, 0)
+    assert.equal(editResult.stderr, "")
+    assert.match(editResult.stdout, /Edited note: draft[\\/]renamed-draft-[a-z0-9]{6}\.md/)
+    const renamedKey = editResult.stdout.match(/Renamed key: original-draft -> (renamed-draft-[a-z0-9]{6})/)?.[1]
+    assert.ok(renamedKey)
+
+    await assert.rejects(() => access(path.join(harness.rootPath, relativePath)))
+    const showResult = harness.run(["show", "--drafts", renamedKey])
+    assert.equal(showResult.exitCode, 0)
+    assert.match(showResult.stdout, new RegExp(`Path: draft/${harness.escapeForRegExp(renamedKey)}\\.md`))
+    assert.match(showResult.stdout, /# Renamed Draft\n\nDraft body after rename\./)
+  } finally {
+    await harness.cleanup()
+  }
+}, 15_000)
+
 test("bn edit fails when $EDITOR is unset even if the parent environment defines it", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-edit-missing-editor-")
   const originalEditor = process.env.EDITOR

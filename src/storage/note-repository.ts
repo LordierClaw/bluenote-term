@@ -153,6 +153,10 @@ function normalizeInputRelativePath(relativePath: string): string {
   return relativePath.replace(/\\/g, "/").replace(/^\.\//, "")
 }
 
+function relativePathHasHiddenSegment(relativePath: string): boolean {
+  return relativePath.split("/").some((segment) => segment.startsWith("."))
+}
+
 function destinationFolderIsUsableNormalFolder(normalNotesPath: string, candidateFolderPath: string): boolean {
   if (!existsSync(candidateFolderPath) || !statSync(candidateFolderPath).isDirectory()) {
     return false
@@ -187,6 +191,7 @@ function resolveCreateNotePath(
     if (
       !normalizedFolderRelativePath.startsWith("note") ||
       (normalizedFolderRelativePath !== "note" && !normalizedFolderRelativePath.startsWith("note/")) ||
+      relativePathHasHiddenSegment(normalizedFolderRelativePath) ||
       !destinationFolderIsUsableNormalFolder(normalNotesPath, candidateFolderPath)
     ) {
       throw new UsageError(`Could not create note '${relativePath}'.`, {

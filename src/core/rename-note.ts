@@ -7,12 +7,13 @@ import { createNoteRepository } from "../storage/note-repository"
 import { selectNote } from "./select-note"
 import { joinPortableRelativePath } from "../platform/path-safety"
 import { UsageError } from "./errors"
+import type { NoteVisibilityOptions } from "./note-visibility"
 
 export interface RenameNoteHooks {
   onRecoveryArtifactStaged?: (artifactPath: string) => void
 }
 
-export interface RenameNoteOptions extends ResolveBlueNoteRootOptions {
+export interface RenameNoteOptions extends ResolveBlueNoteRootOptions, NoteVisibilityOptions {
   selector: string
   title: string
   body: string
@@ -50,7 +51,7 @@ function updateLatestOpenedPathIfMatched(rootPath: string, previousRelativePath:
 export function renameNote(options: RenameNoteOptions): RenameNoteSummary {
   const rootPath = resolveBlueNoteRoot(options)
   const repository = createNoteRepository(rootPath)
-  const selected = selectNote({ repository, selector: options.selector })
+  const selected = selectNote({ repository, selector: options.selector, visibility: options.visibility })
   const currentKey = selected.frontmatter.id
 
   let nextKey: string

@@ -7,6 +7,7 @@ import path from "node:path"
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 
 import { createNoteRepository } from "../../src/storage/note-repository"
+import { UsageError } from "../../src/core/errors"
 import { sidecarJson } from "../helpers/note-fixtures"
 import {
   ensureManagedRoot,
@@ -77,6 +78,34 @@ test("creating a note succeeds from a fresh root without pre-created notes direc
 
     const sidecarPath = path.join(getStateNotesPath(rootPath), "note-123.json")
     assert.equal(JSON.parse(await readFile(sidecarPath, "utf8")).relativePath, "note/note-123.md")
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("creating a normal note rejects hidden note-folder destinations", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-hidden-destination-"))
+
+  try {
+    ensureManagedRoot(rootPath)
+    await mkdir(path.join(rootPath, "note", ".hidden"), { recursive: true })
+    const repository = createNoteRepository(rootPath)
+
+    assert.throws(
+      () =>
+        repository.create({
+          frontmatter: FIXED_FRONTMATTER,
+          body: "Hidden body.\n",
+          destination: { type: "normal", folderRelativePath: "note/.hidden" },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof UsageError)
+        assert.match(error.message, /Could not create note 'note\/\.hidden\/note-123\.md'/)
+        return true
+      },
+    )
+
+    await assert.rejects(() => access(path.join(rootPath, "note", ".hidden", "note-123.md")))
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }

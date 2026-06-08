@@ -46,7 +46,28 @@ const OPTIONAL_SIDECAR_FIELDS = ["ai"] as const
 const AI_FIELDS = ["description"] as const
 const AI_DESCRIPTION_FIELDS = ["lastProcessedAt"] as const
 
-function assertNoteTypeField(record: Record<string, unknown>, sourcePath: string): NoteType {
+function inferNoteType(relativePath: string, archivedAt: string | null): NoteType {
+  if (archivedAt !== null || relativePath.startsWith(".data/archive/")) {
+    return "archived"
+  }
+
+  if (relativePath.startsWith("draft/")) {
+    return "draft"
+  }
+
+  return "normal"
+}
+
+function assertNoteTypeField(
+  record: Record<string, unknown>,
+  sourcePath: string,
+  relativePath: string,
+  archivedAt: string | null,
+): NoteType {
+  if (record.type === undefined) {
+    return inferNoteType(relativePath, archivedAt)
+  }
+
   const value = assertStringField(record, "type", sourcePath, "sidecar metadata")
 
   if (value !== "normal" && value !== "draft" && value !== "archived") {
@@ -200,11 +221,11 @@ export function validateNoteSidecar(sidecar: unknown, sourcePath: string): NoteS
   }
 
   assertKnownFields(sidecar, [...REQUIRED_SIDECAR_FIELDS, ...OPTIONAL_SIDECAR_FIELDS], sourcePath, validationKind)
-  assertRequiredFields(sidecar, REQUIRED_SIDECAR_FIELDS, sourcePath, validationKind)
+  assertRequiredFields(sidecar, REQUIRED_SIDECAR_FIELDS.filter((field) => field !== "type"), sourcePath, validationKind)
   const ai = validateAiMetadata(sidecar.ai, sourcePath, validationKind)
-  const noteType = assertNoteTypeField(sidecar, sourcePath)
   const relativePath = toPortableRelativePath(assertStringField(sidecar, "relativePath", sourcePath, validationKind))
   const archivedAt = assertArchivedAtField(sidecar, sourcePath)
+  const noteType = assertNoteTypeField(sidecar, sourcePath, relativePath, archivedAt)
 
   assertSidecarInvariants(noteType, relativePath, archivedAt, sourcePath)
 

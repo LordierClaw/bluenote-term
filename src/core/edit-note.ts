@@ -76,6 +76,7 @@ export function editNote(options: EditNoteOptions): EditNoteSummary {
       title,
       body: edited.body,
       updatedAt,
+      visibility: options.visibility,
       randomSource: options.randomSource,
     })
 

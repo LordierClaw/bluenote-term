@@ -196,17 +196,25 @@ test("validateNoteSidecar rejects missing required fields", () => {
   )
 })
 
-test("validateNoteSidecar rejects missing type", () => {
-  const { type: _type, ...sidecarWithoutType } = canonicalSidecar()
+test("validateNoteSidecar infers legacy missing type from path and archived state", () => {
+  const { type: _type, ...normalWithoutType } = canonicalSidecar()
+  const { type: _draftType, ...draftWithoutType } = {
+    ...canonicalSidecar(),
+    type: "draft",
+    key: "draft-a8k2p9",
+    relativePath: "draft/draft-a8k2p9.md",
+  }
+  const { type: _archivedType, ...archivedWithoutType } = {
+    ...canonicalSidecar(),
+    type: "archived",
+    key: "archived-note",
+    relativePath: ".data/archive/archived-note.md",
+    archivedAt: "2026-05-25T12:00:00.000Z",
+  }
 
-  assert.throws(
-    () => validateNoteSidecar(sidecarWithoutType, ".data/notes/note-work-24-abc123.json"),
-    (error: unknown) => {
-      assert.ok(error instanceof InvalidFrontmatterError)
-      assert.match(error.message, /type/i)
-      return true
-    },
-  )
+  assert.equal(validateNoteSidecar(normalWithoutType, ".data/notes/note-work-24-abc123.json").type, "normal")
+  assert.equal(validateNoteSidecar(draftWithoutType, ".data/notes/draft-a8k2p9.json").type, "draft")
+  assert.equal(validateNoteSidecar(archivedWithoutType, ".data/notes/archived-note.json").type, "archived")
 })
 
 test("validateNoteSidecar rejects invalid note type/path/archive invariants", () => {
