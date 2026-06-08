@@ -2,6 +2,8 @@
 
 ## Runtime rules
 
+Phase 8 introduces the temporary monorepo/package split documented in `docs/phases/phase-8-temporary-monorepo.md`.
+
 - Use Bun `1.3+` as the preferred runtime for CLI/TUI work, local scripts, smoke checks, and the current repository entrypoint.
 - Preserve Node.js `20+` compatibility for shared core modules where feasible; current `bin/` commands and scripts are intentionally Bun-first.
 - Avoid native SQLite dependencies; use `sql.js` for rebuildable cache metadata.

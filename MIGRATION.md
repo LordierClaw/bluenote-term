@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 1: Internal module split from the current single-package Bun repo into a temporary monorepo:
+Phase 8: Internal module split from the current single-package Bun repo into a temporary monorepo:
 
 - `packages/core`: `@bluenote/core`, a headless BlueNote engine.
 - `packages/term`: `bluenote-term`, the existing CLI/TUI client.
@@ -26,7 +26,7 @@ This phase is an internal module split only. It must not create or depend on a s
 
 ## Remaining Steps
 
-1. No Phase 1 implementation loops remain after Loop 9 verification and review.
+1. No Phase 8 implementation loops remain after Loop 9 verification and review.
 2. Keep `packages/term` as the client package that owns CLI wiring, TUI rendering, keyboard/input handling, terminal APIs, clipboard, and OpenTUI usage.
 3. Keep `packages/core` headless: no OpenTUI imports, no imports from `packages/term`, no terminal rendering, no keyboard handling, no TUI state.
 4. Preserve root compatibility shims until downstream tests, scripts, release packaging, and docs no longer depend on historical paths.
@@ -81,7 +81,7 @@ This phase is an internal module split only. It must not create or depend on a s
 | Step | Command | Result | Notes |
 |---|---|---|---|
 | Step 0 | `git status --short --branch` | PASS | Started from `main...origin/main`, clean working tree before branch checkout. |
-| Step 0 | `git checkout -b phase-1-temporary-monorepo-plan` | PASS | Created planning/migration branch. |
+| Step 0 | `git checkout -b phase-1-temporary-monorepo-plan` | PASS | Created planning/migration branch; later renamed to `phase-8-temporary-monorepo` after phase correction. |
 | Step 0 | Read/package/source inspection via Hermes tools and import scan | PASS | No file edits during inspection. |
 | Loop 1 baseline | `bun run typecheck` | PASS | Established root typecheck behavior before workspace edits. |
 | Loop 1 | `bun install --lockfile-only` | PASS | Updated `bun.lock` to recognize `packages/core` and `packages/term` workspaces. |

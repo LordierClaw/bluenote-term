@@ -212,7 +212,7 @@ Editor commands include `/find`, `/replace`, `/save`, `/save-draft-as`, `/copy-a
 
 ## Development
 
-This repository is currently a temporary Bun workspace split into:
+This repository is currently in the Phase 8 temporary Bun workspace split (see `docs/phases/phase-8-temporary-monorepo.md`) with:
 
 - `packages/core` (`@bluenote/core`): headless business logic, storage, search, indexing, domain helpers, and reusable AI services. It must not import OpenTUI or terminal-client code.
 - `packages/term` (`bluenote-term`): the Bun-first CLI/TUI client, including `bn`/`bluenote` entrypoints, OpenTUI screens, terminal editor launch, clipboard helpers, and client orchestration. It consumes business logic through `@bluenote/core` public exports.
