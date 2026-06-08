@@ -1,4 +1,4 @@
-import type { IndexedNoteSummary, SearchIndexMatch } from "../../../../src/index/index-store"
+import type { IndexedNoteSummary, SearchIndexMatch } from "../index/index-store"
 import type { ParsedNote } from "../storage/note-schema"
 
 export type NoteVisibility = "normal" | "drafts" | "all"

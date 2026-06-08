@@ -4,7 +4,7 @@ import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions } from "../config/
 import { IndexValidationFailedError, UsageError } from "./errors"
 import { createNoteRepository } from "../storage/note-repository"
 import { ensureManagedRoot } from "../storage/root-layout"
-import { rebuildIndexes } from "../../../../src/core/rebuild-indexes"
+import { rebuildIndexes } from "./rebuild-indexes"
 import { selectNote } from "./select-note"
 import type { NoteVisibilityOptions } from "./note-visibility"
 

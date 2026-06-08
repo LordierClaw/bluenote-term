@@ -5,7 +5,7 @@ import { systemClock, type Clock } from "../platform/clock"
 import { createNoteRepository } from "../storage/note-repository"
 import type { ParsedNote } from "../storage/note-schema"
 import { ensureManagedRoot } from "../storage/root-layout"
-import { rebuildIndexes } from "../../../../src/core/rebuild-indexes"
+import { rebuildIndexes } from "./rebuild-indexes"
 import { selectNote } from "./select-note"
 import type { NoteVisibilityOptions } from "./note-visibility"
 

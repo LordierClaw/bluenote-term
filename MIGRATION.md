@@ -19,7 +19,7 @@ This phase is an internal module split only. It must not create or depend on a s
 - [x] Loop 3: Move pure types/constants/domain helpers into `@bluenote/core`.
 - [x] Loop 4: Move workspace/storage/note metadata logic into `@bluenote/core`.
 - [x] Loop 5: Move note business logic into `@bluenote/core`.
-- [ ] Loop 6: Move search/rebuild/index logic into `@bluenote/core`.
+- [x] Loop 6: Move search/rebuild/index logic into `@bluenote/core`.
 - [ ] Loop 7: Move reusable AI config/queue/provider business logic into `@bluenote/core`.
 - [ ] Loop 8: Update CLI/TUI to consume `@bluenote/core` public APIs.
 - [ ] Loop 9: Enforce package boundaries and update current-facing docs.
@@ -111,13 +111,21 @@ This phase is an internal module split only. It must not create or depend on a s
 | Loop 5 | `bun run typecheck` | PASS | Root TypeScript check passed after moving note business modules and adding compatibility shims. |
 | Loop 5 | `bun run smoke:cli` | PASS | Root CLI smoke script passed after note-business move. |
 | Loop 5 | Boundary search in `packages/core` for `@opentui\|packages/term\|src/tui\|../../term` | PASS | No forbidden terminal/TUI boundary imports found. |
+| Loop 6 RED | `bun test tests/unit/core/package-search-exports.test.ts` | FAIL (expected) | New package search/rebuild/index export test failed because `containsSearchQuery` was not exported from `@bluenote/core` yet. |
+| Loop 6 | `bun install --lockfile-only` | PASS | Added direct `@bluenote/core` runtime dependencies for moved search/index modules: `minisearch` and `sql.js`. |
+| Loop 6 | `bun test tests/unit/core/package-search-exports.test.ts` | PASS | `@bluenote/core` exports search/rebuild/index APIs; representative root shims preserve identity and literal substring search passed. |
+| Loop 6 | `bun test tests/unit/search tests/unit/index tests/unit/core/search-notes.test.ts tests/unit/core/package-search-exports.test.ts tests/integration/cli-search.test.ts tests/integration/cli-rebuild.test.ts tests/unit/core/public-api.test.ts` | PASS | Required focused search/index/rebuild/CLI/public API slice passed: 41 tests. |
+| Loop 6 | `bun run typecheck` | PASS | Root TypeScript check passed after moving search/rebuild/index modules and adding compatibility shims. |
+| Loop 6 | `bun run smoke:cli` | PASS | Root CLI smoke script passed after search/rebuild/index move. |
+| Loop 6 | Boundary search in `packages/core` for `@opentui\|packages/term\|src/tui\|../../term` | PASS | No forbidden terminal/TUI boundary imports found. Remaining root imports from `packages/core` are AI enqueue imports intentionally left for Loop 7. |
+| Loop 6 follow-up | `bun test tests/unit/core/package-search-exports.test.ts && bun run typecheck && bun run smoke:cli` | PASS | Strengthened package search test to import index APIs from `@bluenote/core` and verify root shim identity for `loadIndexStore`, `rebuildIndexStore`, `updateIndexedNote`, and `createSearchDocuments`. |
 
 ## Known Risks
 
 - `src/tui/app.ts` is large and mixed: OpenTUI runtime, TUI persistence, folder operations, startup note handling, AI status/queue orchestration, and direct storage/core calls are intertwined.
 - `src/core/edit-note.ts` currently mixes business note update behavior with external editor launching; Loop 5 intentionally left it as a root/term-facing module to keep CLI edit compatible, so a careful later split is still required.
-- `src/index/index-store.ts` uses `sql.js` and resolves `sql-wasm.wasm` relative to both executable and project paths; package relocation can break release and smoke behavior.
-- Loop 5 note business modules in `@bluenote/core` still temporarily import root search/index/rebuild and AI enqueue helpers until Loops 6 and 7 move those implementations.
+- `packages/core/src/index/index-store.ts` uses `sql.js` and resolves `sql-wasm.wasm` relative to both executable and project paths; package relocation can break release and smoke behavior.
+- Loop 6 moved search/index/rebuild into `@bluenote/core`; note creation in `@bluenote/core` still temporarily imports the root AI enqueue helper until Loop 7 moves AI business modules.
 - AI queue/provider/config/auth modules are business-reusable but sensitive: queue preservation, setup blockers, redaction, prompt hashes, Codex auth, and non-blocking TUI orchestration must remain compatible.
 - TUI manager/search adapters mix view-model logic with core note/search imports; move only the business boundary, not UI state or behavior.
 - Tests and helper paths currently assume a single root package; migration must keep root verification commands working while package-specific tests are introduced gradually.

@@ -6,7 +6,7 @@ import { enqueueDescribeNoteIfAiEnabled } from "../../../../src/ai/enqueue-descr
 import { IndexValidationFailedError, UsageError } from "./errors"
 import { createNoteDescription } from "../domain/note-description"
 import { createDraftNoteKey, createNoteKey } from "../domain/note-key"
-import { rebuildIndexes } from "../../../../src/core/rebuild-indexes"
+import { rebuildIndexes } from "./rebuild-indexes"
 import { systemClock, type Clock } from "../platform/clock"
 import { createNoteRepository } from "../storage/note-repository"
 import { ensureManagedRoot, getStateNotesPath } from "../storage/root-layout"

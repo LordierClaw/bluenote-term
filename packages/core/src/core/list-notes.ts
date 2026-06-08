@@ -1,5 +1,5 @@
 import { resolveBlueNoteRoot, type ResolveBlueNoteRootOptions } from "../config/root"
-import { loadIndexStore } from "../../../../src/index/index-store"
+import { loadIndexStore } from "../index/index-store"
 import { noteIsVisible, type NoteVisibilityOptions } from "./note-visibility"
 
 export interface NoteSummary {
