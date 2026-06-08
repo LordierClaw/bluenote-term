@@ -18,7 +18,7 @@ This phase is an internal module split only. It must not create or depend on a s
 - [x] Loop 2: Create a minimal `@bluenote/core` public API/façade without broad behavior changes.
 - [x] Loop 3: Move pure types/constants/domain helpers into `@bluenote/core`.
 - [x] Loop 4: Move workspace/storage/note metadata logic into `@bluenote/core`.
-- [ ] Loop 5: Move note business logic into `@bluenote/core`.
+- [x] Loop 5: Move note business logic into `@bluenote/core`.
 - [ ] Loop 6: Move search/rebuild/index logic into `@bluenote/core`.
 - [ ] Loop 7: Move reusable AI config/queue/provider business logic into `@bluenote/core`.
 - [ ] Loop 8: Update CLI/TUI to consume `@bluenote/core` public APIs.
@@ -105,12 +105,19 @@ This phase is an internal module split only. It must not create or depend on a s
 | Loop 4 | `bun run smoke:cli` | PASS | Root CLI smoke script passed after moved storage shims. |
 | Loop 4 | Boundary search in `packages/core` for `@opentui\|packages/term\|src/tui\|../../term` | PASS | No forbidden terminal/TUI boundary imports found. |
 | Loop 4 follow-up | `bun install --lockfile-only && bun run typecheck && bun run smoke:cli` | PASS | Added `js-yaml` as a direct `@bluenote/core` dependency for moved `frontmatter.ts`; lockfile, typecheck, and CLI smoke passed. |
+| Loop 5 RED | `bun test tests/unit/core/package-note-business-exports.test.ts` | FAIL (expected) | New package note-business export test failed because `listNotes` and the moved note APIs were not exported from `@bluenote/core` yet. |
+| Loop 5 | `bun test tests/unit/core/package-note-business-exports.test.ts` | PASS | `@bluenote/core` exports note business APIs; root compatibility shims preserve representative function identity and a create/show/list workflow passed. |
+| Loop 5 | `bun test tests/unit/core tests/unit/storage tests/integration/cli-new.test.ts tests/integration/cli-list-show.test.ts tests/integration/cli-edit.test.ts tests/integration/cli-delete.test.ts tests/integration/cli-archive.test.ts` | PASS | Focused note-business/storage/CLI regression slice passed: 166 tests. |
+| Loop 5 | `bun run typecheck` | PASS | Root TypeScript check passed after moving note business modules and adding compatibility shims. |
+| Loop 5 | `bun run smoke:cli` | PASS | Root CLI smoke script passed after note-business move. |
+| Loop 5 | Boundary search in `packages/core` for `@opentui\|packages/term\|src/tui\|../../term` | PASS | No forbidden terminal/TUI boundary imports found. |
 
 ## Known Risks
 
 - `src/tui/app.ts` is large and mixed: OpenTUI runtime, TUI persistence, folder operations, startup note handling, AI status/queue orchestration, and direct storage/core calls are intertwined.
-- `src/core/edit-note.ts` currently mixes business note update behavior with external editor launching; this needs a careful split to keep CLI edit compatible.
+- `src/core/edit-note.ts` currently mixes business note update behavior with external editor launching; Loop 5 intentionally left it as a root/term-facing module to keep CLI edit compatible, so a careful later split is still required.
 - `src/index/index-store.ts` uses `sql.js` and resolves `sql-wasm.wasm` relative to both executable and project paths; package relocation can break release and smoke behavior.
+- Loop 5 note business modules in `@bluenote/core` still temporarily import root search/index/rebuild and AI enqueue helpers until Loops 6 and 7 move those implementations.
 - AI queue/provider/config/auth modules are business-reusable but sensitive: queue preservation, setup blockers, redaction, prompt hashes, Codex auth, and non-blocking TUI orchestration must remain compatible.
 - TUI manager/search adapters mix view-model logic with core note/search imports; move only the business boundary, not UI state or behavior.
 - Tests and helper paths currently assume a single root package; migration must keep root verification commands working while package-specific tests are introduced gradually.
