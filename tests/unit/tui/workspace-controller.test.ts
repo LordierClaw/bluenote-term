@@ -2970,6 +2970,32 @@ describe("TUI workspace controller", () => {
     assert.equal(latestOpened.at(-1), "note/work/renamed-alpha.md")
   })
 
+  test("manager same-title note rename is a no-op that preserves the existing key", () => {
+    const { deps, calls } = createDeps({
+      listNotes: () => phaseSevenSummaries,
+      listNoteFolders: () => ["note/work"],
+      showNote: (selector) => phaseSevenNotesByKey[selector],
+      renameNote: (selector, title) => {
+        calls.push(`rename-note:${selector}:${title}`)
+        return { ...phaseSevenNotesByKey[selector], title }
+      },
+      rebuildIndexes: () => calls.push("rebuild"),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openManagerFolderPath(controller, "note/work")
+    const alphaIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === "alpha-note")
+    assert.notEqual(alphaIndex, -1)
+    controller.focusManagerItem(alphaIndex)
+
+    const result = controller.renameFocusedManagerItem(" Alpha Note ")
+
+    assert.equal(result.blocked, false)
+    assert.equal(controller.getState().manager.status, "Rename unchanged")
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "note" && item.key === "alpha-note"), true)
+    assert.deepEqual(calls.filter((call) => call.startsWith("rename-note:") || call === "rebuild"), [])
+  })
+
   test("manager rename folder refreshes affected note rows without allowing protected folders", () => {
     let folders = ["note/work", "note/work/projects"]
     let summaries = [...phaseSevenSummaries]

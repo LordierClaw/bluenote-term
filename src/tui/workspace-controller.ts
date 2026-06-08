@@ -2107,6 +2107,11 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         applyManagerBrowserModel()
         return ok()
       }
+      if (nextName === focused.title) {
+        setManagerStatus("Rename unchanged")
+        applyManagerBrowserModel()
+        return ok()
+      }
       if (editorRequiresDestructiveConfirmation(state.editor)) {
         setManagerStatus(dirtyEditorManagerStatus)
         applyManagerBrowserModel()
