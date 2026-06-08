@@ -97,8 +97,33 @@ test("createNote creates a normal note in an existing note destination folder", 
   }
 })
 
-test("createNote rejects normal notes without a destination folder", async () => {
-  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-create-note-normal-no-destination-"))
+test("createNote defaults titled notes to drafts unless normal creation is explicit", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-create-note-titled-default-draft-"))
+
+  try {
+    const created = createNote({
+      override: rootPath,
+      title: "Default destination",
+      body: "Default note body.",
+      randomSource: () => 46655,
+      clock: fixedClock("2026-06-06T12:00:00.000Z"),
+    })
+
+    assert.equal(created.key, "default-destination-000zzz")
+    assert.equal(created.title, "Default destination")
+    assert.equal(created.relativePath, "draft/default-destination-000zzz.md")
+    assert.equal(await readFile(created.notePath, "utf8"), "Default note body.")
+
+    const sidecar = JSON.parse(await readFile(path.join(getStateNotesPath(rootPath), "default-destination-000zzz.json"), "utf8"))
+    assert.equal(sidecar.type, "draft")
+    assert.equal(sidecar.relativePath, "draft/default-destination-000zzz.md")
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("createNote rejects explicit normal creation without a destination folder", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-create-note-normal-missing-destination-"))
 
   try {
     assert.throws(
@@ -107,13 +132,13 @@ test("createNote rejects normal notes without a destination folder", async () =>
           override: rootPath,
           type: "normal",
           title: "Missing destination",
-          body: "",
+          body: "Normal note body.",
           randomSource: () => 46655,
           clock: fixedClock("2026-06-06T12:00:00.000Z"),
         }),
       (error) => {
         assert.ok(error instanceof UsageError)
-        assert.match(error.message, /Normal note creation requires a destination folder under note\//i)
+        assert.match(error.message, /Normal note creation requires an explicit destination folder\./)
         return true
       },
     )

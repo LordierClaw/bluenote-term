@@ -117,7 +117,7 @@ Example delete sheet:
 ```text
 Delete note?
 Visual polish notes
-notes/inbox/visual-polish.md
+note/inbox/visual-polish.md
 
 Deletes the Markdown file and BlueNote sidecar metadata.
 This cannot be undone.

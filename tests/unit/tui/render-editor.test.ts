@@ -65,6 +65,12 @@ describe("editor rendering", () => {
     assert.equal(vm.topbar.noteName, "Alpha")
   })
 
+  test("editor shortcut hints advertise same-folder quick switching", () => {
+    const vm = buildEditorViewModel(editorState(), { width: 0 })
+
+    assert.ok(vm.bottombar.row2.visibleShortcuts.includes("[Ctrl+PageUp/Down] Switch Note"))
+  })
+
   test("rendered topbar shows active same-folder switch indicator in blue left of title", async () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {

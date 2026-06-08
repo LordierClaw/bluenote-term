@@ -213,7 +213,7 @@ export interface WorkspaceController {
 const ok = (): WorkspaceActionResult => ({ blocked: false })
 const dirtyBlocked = (): WorkspaceActionResult => ({ blocked: true, reason: "dirty-editor" })
 
-const destructiveCommands = new Set(["/archive", "/delete", "/migrate", "/quit"])
+const destructiveCommands = new Set(["/archive", "/delete", "/quit"])
 const searchIndexUnavailableStatus = "Search index unavailable; showing notes, folders, and commands only"
 const dirtyEditorManagerStatus = "Save or discard current note first"
 
@@ -1652,11 +1652,18 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
       if (state.screen === "editor") {
         const selectorLeavingEditor = state.editor?.note.key ?? null
+        const currentEditorFolderPath = folderPathForNoteRelativePath(state.editor?.note.relativePath)
         state = {
           ...state,
           screen: "manager",
           mode: "manager.browse",
           search: null,
+          manager: {
+            ...state.manager,
+            currentFolderPath: currentEditorFolderPath,
+            hoveredPath: null,
+            focusedIndex: 0,
+          },
         }
         applyManagerBrowserModel()
         if (selectorLeavingEditor && aiIdlePendingSelector === selectorLeavingEditor) {

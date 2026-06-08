@@ -102,14 +102,14 @@ const noteSummaries: NoteManagerSummary[] = [
     key: "daily-plan",
     title: "Daily Plan",
     description: "Today priorities.",
-    relativePath: "notes/inbox/daily-plan.md",
+    relativePath: "note/inbox/daily-plan.md",
     body: "Original daily body",
   },
   {
     key: "archive-review",
     title: "Archive Review",
     description: "Old ideas.",
-    relativePath: "notes/archive/archive-review.md",
+    relativePath: "note/archive/archive-review.md",
     body: "Archive body",
   },
 ]
@@ -119,14 +119,14 @@ const notesByKey: Record<string, TuiNote> = {
     key: "daily-plan",
     title: "Daily Plan",
     description: "Today priorities.",
-    relativePath: "notes/inbox/daily-plan.md",
+    relativePath: "note/inbox/daily-plan.md",
     body: "Original daily body",
   },
   "archive-review": {
     key: "archive-review",
     title: "Archive Review",
     description: "Old ideas.",
-    relativePath: "notes/archive/archive-review.md",
+    relativePath: "note/archive/archive-review.md",
     body: "Archive body",
   },
 }
@@ -258,7 +258,7 @@ function openManagerFolderPath(controller: ReturnType<typeof createWorkspaceCont
 }
 
 function openInboxDaily(controller: ReturnType<typeof createWorkspaceController>): void {
-  openManagerFolderPath(controller, "notes/inbox")
+  openManagerFolderPath(controller, "note/inbox")
   const noteIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === "daily-plan")
   assert.notEqual(noteIndex, -1, "missing daily-plan manager row")
   controller.focusManagerItem(noteIndex)
@@ -448,16 +448,6 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().mode, "manager.browse")
     assert.match(controller.getState().manager.status ?? "", /draft/i)
 
-    const legacySummaries = [...phaseSevenSummaries, { key: "legacy-daily", title: "Legacy Daily", description: "Legacy", relativePath: "notes/inbox/daily.md" }]
-    const legacyController = createWorkspaceController(createDeps({
-      listNotes: () => legacySummaries,
-      listNoteFolders: () => ["notes/inbox"],
-      showNote: (selector) => phaseSevenNotesByKey[selector],
-    }).deps)
-    openManagerFolderPath(legacyController, "notes/inbox")
-    legacyController.openManagerCreate()
-    assert.equal(legacyController.getState().mode, "manager.browse")
-    assert.match(legacyController.getState().manager.status ?? "", /unavailable/)
   })
 
   test("manager n under note creates a normal note by default, records latest opened, and opens it", async () => {
@@ -674,12 +664,12 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().screen, "manager")
     assert.deepEqual(
       controller.getState().manager.items.map((item) => `${item.type}:${item.key}`),
-      ["folder:notes/archive", "folder:notes/inbox"],
+      ["folder:note/archive", "folder:note/inbox"],
     )
     assert.deepEqual(calls, ["list"])
   })
 
-  test("keeps legacy notes folders reachable when draft notes exist", () => {
+  test("ignores legacy notes folders when draft notes exist", () => {
     const mixedSummaries: NoteManagerSummary[] = [
       ...noteSummaries,
       {
@@ -706,14 +696,20 @@ describe("TUI workspace controller", () => {
 
     assert.deepEqual(
       controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`),
-      ["folder:draft", "folder:note", "folder:notes"],
+      ["folder:note/archive", "folder:note/inbox"],
     )
 
-    openManagerFolderPath(controller, "notes/inbox")
+    controller.goBack()
+    assert.deepEqual(
+      controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`),
+      ["folder:draft", "folder:note"],
+    )
+
+    openManagerFolderPath(controller, "note/inbox")
 
     assert.deepEqual(
       controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`),
-      ["note:notes/inbox/daily-plan.md"],
+      ["note:note/inbox/daily-plan.md"],
     )
   })
 
@@ -736,7 +732,7 @@ describe("TUI workspace controller", () => {
     openInboxDaily(controller)
 
     assert.equal(controller.getState().screen, "editor")
-    assert.deepEqual(openedRelativePaths, ["notes/inbox/daily-plan.md"])
+    assert.deepEqual(openedRelativePaths, ["note/inbox/daily-plan.md"])
   })
 
   test("opens editor even when latest-opened recording fails", () => {
@@ -749,7 +745,7 @@ describe("TUI workspace controller", () => {
 
     assert.doesNotThrow(() => openInboxDaily(controller))
     assert.equal(controller.getState().screen, "editor")
-    assert.equal(controller.getState().editor?.note.relativePath, "notes/inbox/daily-plan.md")
+    assert.equal(controller.getState().editor?.note.relativePath, "note/inbox/daily-plan.md")
   })
 
   test("default TUI controller reads configured AI model at startup without running jobs", async () => {
@@ -841,7 +837,7 @@ describe("TUI workspace controller", () => {
       })
       enqueueDescribeNoteJob(rootPath, {
         key: "daily-plan",
-        relativePath: "notes/inbox/daily-plan.md",
+        relativePath: "note/inbox/daily-plan.md",
         title: "Daily Plan",
         body: "Original daily body\n",
         currentDescription: "",
@@ -1492,10 +1488,10 @@ describe("TUI workspace controller", () => {
       listNoteFolders: () => {
         calls.push("folders")
         return [
-          "notes/projects/empty-client",
-          "notes/.data",
-          "notes/.cache/scratch",
-          "notes/projects/.hidden-child",
+          "note/projects/empty-client",
+          "note/.data",
+          "note/.cache/scratch",
+          "note/projects/.hidden-child",
         ]
       },
     })
@@ -1504,9 +1500,9 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(
       controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`),
       [
-        "folder:notes/archive",
-        "folder:notes/inbox",
-        "folder:notes/projects",
+        "folder:note/archive",
+        "folder:note/inbox",
+        "folder:note/projects",
       ],
     )
     assert.deepEqual(calls, ["list", "folders"])
@@ -1514,7 +1510,7 @@ describe("TUI workspace controller", () => {
     controller.focusManagerItem(2)
     assert.equal(controller.openFocusedManagerItem().blocked, false)
     assert.deepEqual(controller.getState().manager.items.map((item) => `${item.type}:${item.relativePath}`), [
-      "folder:notes/projects/empty-client",
+      "folder:note/projects/empty-client",
     ])
   })
 
@@ -1525,14 +1521,14 @@ describe("TUI workspace controller", () => {
           key: "daily-plan",
           title: "Daily Plan",
           description: "Today priorities.",
-          relativePath: "notes/inbox/daily-plan.md",
+          relativePath: "note/inbox/daily-plan.md",
         },
       ],
       showNote: () => ({
         key: "daily-plan",
         title: "Daily Plan",
         description: "Today priorities.",
-        relativePath: "notes/inbox/daily-plan.md",
+        relativePath: "note/inbox/daily-plan.md",
         body: "# Daily Plan",
         updatedAt: "2026-05-28T10:30:00.000Z",
       }),
@@ -1692,7 +1688,7 @@ describe("TUI workspace controller", () => {
       key: `daily-${index.toString().padStart(2, "0")}`,
       title: `Daily ${index.toString().padStart(2, "0")}`,
       description: `Daily match ${index}`,
-      relativePath: `notes/daily-${index.toString().padStart(2, "0")}.md`,
+      relativePath: `note/daily-${index.toString().padStart(2, "0")}.md`,
       body: `Daily match ${index}`,
     }))
     const controller = createWorkspaceController({
@@ -1757,7 +1753,7 @@ describe("TUI workspace controller", () => {
     const model = controller.getManagerBrowserModel()
 
     assert.deepEqual(calls, ["list"])
-    assert.deepEqual(model.preview, { type: "hidden", path: "notes/inbox/daily-plan.md", reason: "manual" })
+    assert.deepEqual(model.preview, { type: "hidden", path: "note/inbox/daily-plan.md", reason: "manual" })
   })
 
   test("manager preview hydrates a focused note at most once per note during a session", () => {
@@ -1895,13 +1891,13 @@ describe("TUI workspace controller", () => {
     let shouldFail = true
     const controller = createWorkspaceController({
       listNotes: () => [
-        { key: "beta", title: "Beta", description: "Beta", relativePath: "notes/inbox/beta.md" },
+        { key: "beta", title: "Beta", description: "Beta", relativePath: "note/inbox/beta.md" },
       ],
       showNote: () => ({
         key: "beta",
         title: "Beta",
         description: "Beta",
-        relativePath: "notes/inbox/beta.md",
+        relativePath: "note/inbox/beta.md",
         body: "Beta body",
       }),
       searchNotes: () => [],
@@ -2062,7 +2058,7 @@ describe("TUI workspace controller", () => {
           key: "alpha-summary",
           title: "Alpha Summary",
           description: "Summary",
-          relativePath: "notes/similar/alpha-summary.md",
+          relativePath: "note/similar/alpha-summary.md",
           body: "summary",
         },
       ],
@@ -2072,7 +2068,7 @@ describe("TUI workspace controller", () => {
           key: "alpha-source",
           title: "Alpha Source",
           description: "Source",
-          relativePath: "notes/similar/alpha-source.md",
+          relativePath: "note/similar/alpha-source.md",
           body: "source",
         },
       ],
@@ -2082,7 +2078,7 @@ describe("TUI workspace controller", () => {
           key: "beta",
           title: "Beta",
           description: "Beta",
-          relativePath: "notes/inbox/beta.md",
+          relativePath: "note/inbox/beta.md",
           body: "beta",
         },
       ],
@@ -2114,7 +2110,7 @@ describe("TUI workspace controller", () => {
       assert.equal(controller.openFocusedManagerItem().blocked, false)
     }
 
-    openFolder("notes/similar")
+    openFolder("note/similar")
     controller.openManagerFilter()
     controller.updateManagerFilter("alpha-summary")
     assert.equal(controller.openFocusedManagerItem().blocked, false)
@@ -2130,7 +2126,7 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.showManager().blocked, false)
     controller.clearManagerFilter()
     assert.equal(controller.goBack().blocked, false)
-    openFolder("notes/inbox")
+    openFolder("note/inbox")
     controller.openManagerFilter()
     controller.updateManagerFilter("beta")
     assert.equal(controller.openFocusedManagerItem().blocked, false)
@@ -2189,7 +2185,7 @@ describe("TUI workspace controller", () => {
     controller.focusManagerItem(1)
     controller.openFocusedManagerItem()
     assert.equal(controller.getState().screen, "manager")
-    assert.equal(controller.getState().manager.currentFolderPath, "notes/inbox")
+    assert.equal(controller.getState().manager.currentFolderPath, "note/inbox")
     controller.focusManagerItem(0)
     const result = controller.openFocusedManagerItem()
 
@@ -2425,9 +2421,9 @@ describe("TUI workspace controller", () => {
       filename: "archive-review.md",
       title: "Archive Review",
       description: "Old ideas.",
-      relativePath: "notes/archive/archive-review.md",
+      relativePath: "note/archive/archive-review.md",
       label: "Archive Review",
-      detail: "archive-review.md — notes/archive/archive-review.md",
+      detail: "archive-review.md — note/archive/archive-review.md",
       score: 100,
       matchedFields: ["title"],
     })
@@ -2437,16 +2433,16 @@ describe("TUI workspace controller", () => {
     controller.openSearch("inbox")
     controller.selectSearchResult({
       kind: "folder",
-      id: "folder:notes/inbox",
-      path: "notes/inbox",
+      id: "folder:note/inbox",
+      path: "note/inbox",
       name: "inbox",
       label: "inbox/",
-      detail: "1 note in notes/inbox",
+      detail: "1 note in note/inbox",
       score: 90,
       noteCount: 1,
     })
     assert.equal(controller.getState().screen, "manager")
-    assert.equal(controller.getState().manager.currentFolderPath, "notes/inbox")
+    assert.equal(controller.getState().manager.currentFolderPath, "note/inbox")
 
     controller.openSearch("/new")
     controller.selectSearchResult(commandResult("/new"))
@@ -2551,7 +2547,7 @@ describe("TUI workspace controller", () => {
     const controller = createWorkspaceController(deps)
 
     controller.openSearch("/")
-    assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/ai-process-queue", "/ai-status"])
+    assert.deepEqual(controller.getSearchResults().filter((result) => result.kind === "command").map((result) => result.name), ["/new", "/ai-process-queue", "/ai-status"])
     assert.equal(controller.getSearchResults().some((result) => result.kind === "command" && ["/archive", "/rebuild", "/migrate"].includes(result.name)), false)
 
     openInboxDaily(controller)
@@ -2608,7 +2604,7 @@ describe("TUI workspace controller", () => {
   test("Search Everything stays usable with partial summary, folder, and command results when the search index is unavailable", () => {
     const { deps, calls } = createDeps({
       listNotes: () => [...noteSummaries, ...phaseSevenSummaries],
-      listNoteFolders: () => ["notes/inbox", "notes/archive", "note"],
+      listNoteFolders: () => ["note/inbox", "note/archive", "note"],
       searchNotes: (query) => {
         calls.push(`search:${query}`)
         throw new Error("simulated corrupt search index")
@@ -2628,11 +2624,11 @@ describe("TUI workspace controller", () => {
     assert.doesNotThrow(() => controller.updateSearchQuery("inbox"))
     assert.equal(controller.getState().search?.query, "inbox")
     assert.equal(controller.getState().search?.status, "Search index unavailable; showing notes, folders, and commands only")
-    assert.equal(controller.getSearchResults().some((result) => result.kind === "folder" && result.path === "notes/inbox"), true)
+    assert.equal(controller.getSearchResults().some((result) => result.kind === "folder" && result.path === "note/inbox"), true)
 
     assert.doesNotThrow(() => controller.updateSearchQuery("/new"))
     assert.equal(controller.getState().search?.query, "/new")
-    assert.equal(controller.getSearchResults().some((result) => result.kind === "command" && result.name === "/new"), false)
+    assert.equal(controller.getSearchResults().some((result) => result.kind === "command" && result.name === "/new"), true)
 
     controller.goBack()
     openManagerFolderPath(controller, "note")
@@ -2735,11 +2731,11 @@ describe("TUI workspace controller", () => {
     controller.openSearch("missing")
     controller.selectSearchResult({
       kind: "folder",
-      id: "folder:notes/missing",
-      path: "notes/missing",
+      id: "folder:note/missing",
+      path: "note/missing",
       name: "missing",
       label: "missing/",
-      detail: "0 notes in notes/missing",
+      detail: "0 notes in note/missing",
       score: 90,
       noteCount: 0,
     })
@@ -2755,13 +2751,13 @@ describe("TUI workspace controller", () => {
     const { deps, calls } = createDeps()
     const controller = createWorkspaceController(deps)
 
-    assert.equal(controller.getState().manager.currentFolderPath, "")
+    assert.equal(controller.getState().manager.currentFolderPath, "note")
     controller.focusManagerItem(1)
     const folderResult = controller.openFocusedManagerItem()
 
     assert.equal(folderResult.blocked, false)
     assert.equal(controller.getState().screen, "manager")
-    assert.equal(controller.getState().manager.currentFolderPath, "notes/inbox")
+    assert.equal(controller.getState().manager.currentFolderPath, "note/inbox")
     assert.deepEqual(controller.getState().manager.items.map((item) => item.key), ["daily-plan"])
 
     const noteResult = controller.openFocusedManagerItem()
@@ -2834,7 +2830,9 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().mode, "manager.browse")
     assert.equal(controller.getState().manager.filterQuery, "")
 
-    assert.equal(controller.getState().manager.currentFolderPath, "notes/inbox")
+    assert.equal(controller.getState().manager.currentFolderPath, "note/inbox")
+    controller.goBack()
+    assert.equal(controller.getState().manager.currentFolderPath, "note")
     controller.goBack()
     assert.equal(controller.getState().manager.currentFolderPath, "")
   })
@@ -3230,13 +3228,18 @@ describe("TUI workspace controller", () => {
     }
     const calls: string[] = []
     const latestOpened: string[] = []
+    let summaries = phaseSevenSummaries
     const controller = createWorkspaceController(createDeps({
-      listNotes: () => phaseSevenSummaries,
+      listNotes: () => summaries,
       listNoteFolders: () => ["note/work", "note/work/projects"],
       showNote: (selector) => selector === promoted.key ? promoted : phaseSevenNotesByKey[selector],
       initialNote: phaseSevenNotesByKey["newer-draft"],
       promoteDraft: (selector, title, destinationFolder) => {
         calls.push(`promote:${selector}:${title}:${destinationFolder}`)
+        summaries = [
+          ...phaseSevenSummaries.filter((summary) => summary.key !== "newer-draft"),
+          promoted,
+        ]
         return promoted
       },
       rebuildIndexes: () => calls.push("rebuild"),
@@ -3254,6 +3257,11 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().editor?.note.relativePath, "note/work/project-draft-000000.md")
     assert.equal(controller.getState().manager.actionDraft, null)
     assert.deepEqual(latestOpened.at(-1), "note/work/project-draft-000000.md")
+
+    controller.goBack()
+    assert.equal(controller.getState().screen, "manager")
+    assert.equal(controller.getState().manager.currentFolderPath, "note/work")
+    assert.equal(controller.getState().manager.items.some((item) => item.relativePath === "note/work/project-draft-000000.md"), true)
   })
 
   test("save draft as refuses dirty draft buffers instead of promoting stale disk content", () => {
@@ -3498,7 +3506,7 @@ describe("TUI workspace controller", () => {
       key: "daily-plan",
       title: "Daily Plan",
       description: "Today priorities.",
-      relativePath: "notes/inbox/daily-plan.md",
+      relativePath: "note/inbox/daily-plan.md",
     }]
     controller.refreshManager()
     assert.deepEqual(controller.getManagerBrowserModel().preview.contentLines, ["Recreated daily body must not use deleted-note preview cache"])
@@ -3636,21 +3644,21 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().screen, "manager")
     assert.equal(controller.getState().mode, "manager.filter")
     assert.equal(controller.getState().manager.filterQuery, "inbox")
-    assert.deepEqual(controller.getState().manager.items.map((item) => item.key), ["notes/inbox"])
-    assert.equal(controller.getState().manager.hoveredPath, "notes/inbox")
+    assert.deepEqual(controller.getState().manager.items.map((item) => item.key), ["note/inbox"])
+    assert.equal(controller.getState().manager.hoveredPath, "note/inbox")
 
     controller.clearManagerFilter()
 
     assert.equal(controller.getState().mode, "manager.browse")
     assert.equal(controller.getState().manager.filterQuery, "")
-    assert.deepEqual(controller.getState().manager.items.map((item) => item.key), ["notes/archive", "notes/inbox"])
+    assert.deepEqual(controller.getState().manager.items.map((item) => item.key), ["note/archive", "note/inbox"])
 
     controller.openManagerFilter()
     controller.updateManagerFilter("inbox")
     assert.equal(routeManagerKey("\r", controller), true)
     assert.equal(controller.getState().screen, "manager")
     assert.equal(controller.getState().mode, "manager.browse")
-    assert.equal(controller.getState().manager.currentFolderPath, "notes/inbox")
+    assert.equal(controller.getState().manager.currentFolderPath, "note/inbox")
     assert.equal(controller.getState().manager.filterQuery, "")
   })
 
@@ -3661,14 +3669,14 @@ describe("TUI workspace controller", () => {
           key: "daily-plan",
           title: "Daily Plan",
           description: "Today priorities.",
-          relativePath: "notes/inbox/daily-plan.md",
+          relativePath: "note/inbox/daily-plan.md",
           body: "Original daily body",
         },
         {
           key: "daily-retro",
           title: "Daily Retro",
           description: "Today retrospective.",
-          relativePath: "notes/inbox/daily-retro.md",
+          relativePath: "note/inbox/daily-retro.md",
           body: "Retro body",
         },
       ],
@@ -3676,7 +3684,7 @@ describe("TUI workspace controller", () => {
         key: selector,
         title: selector,
         description: "",
-        relativePath: `notes/inbox/${selector}.md`,
+        relativePath: `note/inbox/${selector}.md`,
         body: `${selector} body`,
       }),
     })
@@ -3713,14 +3721,14 @@ describe("TUI workspace controller", () => {
         key: "project-plan",
         title: "Project Plan",
         description: "Nested note that creates a root folder row.",
-        relativePath: "notes/projects/project-plan.md",
+        relativePath: "note/projects/project-plan.md",
         body: "Project body",
       },
       {
         key: "target-note",
         title: "Target Note",
         description: "Top-level note visible after filtering.",
-        relativePath: "notes/target-note.md",
+        relativePath: "note/target-note.md",
         body: "Target body",
       },
     ]
@@ -3733,10 +3741,10 @@ describe("TUI workspace controller", () => {
       const controller = createWorkspaceController(deps)
 
       assert.equal(controller.getState().manager.items[0]?.type, "folder")
-      assert.equal(controller.getState().manager.items[0]?.relativePath, "notes/projects")
+      assert.equal(controller.getState().manager.items[0]?.relativePath, "note/projects")
       controller.openManagerFilter()
       controller.updateManagerFilter("target")
-      assert.deepEqual(controller.getManagerBrowserModel().layout1Rows.map((row) => row.relativePath), ["notes/target-note.md"])
+      assert.deepEqual(controller.getManagerBrowserModel().layout1Rows.map((row) => row.relativePath), ["note/target-note.md"])
 
       assert.equal(routeManagerKey(sequence, controller), true)
       assert.equal(controller.getState().screen, "editor")
@@ -3782,9 +3790,9 @@ describe("TUI workspace controller", () => {
       filename: "daily-plan.md",
       title: "Daily Plan",
       description: "Today priorities.",
-      relativePath: "notes/inbox/daily-plan.md",
+      relativePath: "note/inbox/daily-plan.md",
       label: "Daily Plan",
-      detail: "daily-plan.md — notes/inbox/daily-plan.md",
+      detail: "daily-plan.md — note/inbox/daily-plan.md",
       score: 100,
       matchedFields: ["title"],
     })
@@ -3893,12 +3901,12 @@ describe("TUI workspace controller", () => {
     assert.deepEqual(persistedSnapshots, [
       {
         key: "daily-plan",
-        relativePath: "notes/inbox/daily-plan.md",
+        relativePath: "note/inbox/daily-plan.md",
         body: "Original daily body typed autosave token",
       },
     ])
     assert.equal(controller.getState().editor?.note.key, "daily-plan")
-    assert.equal(controller.getState().editor?.note.relativePath, "notes/inbox/daily-plan.md")
+    assert.equal(controller.getState().editor?.note.relativePath, "note/inbox/daily-plan.md")
     assert.equal(controller.getState().editor?.body, "Original daily body typed autosave token")
     assert.equal(controller.getState().editor?.savedBody, "Original daily body typed autosave token")
     assert.equal(controller.getState().editor?.dirty, false)
@@ -3924,7 +3932,7 @@ describe("TUI workspace controller", () => {
     await Promise.resolve()
 
     assert.deepEqual(persistenceErrors, [
-      "Error: atomic writer temp write failed for daily-plan notes/inbox/daily-plan.md Original daily body typed failing autosave token",
+      "Error: atomic writer temp write failed for daily-plan note/inbox/daily-plan.md Original daily body typed failing autosave token",
     ])
     assert.equal(controller.getState().screen, "editor")
     assert.equal(controller.getState().mode, "editor.body")
@@ -4333,9 +4341,9 @@ describe("TUI workspace controller", () => {
       filename: "archive-review.md",
       title: "Archive Review",
       description: "Old ideas.",
-      relativePath: "notes/archive/archive-review.md",
+      relativePath: "note/archive/archive-review.md",
       label: "Archive Review",
-      detail: "archive-review.md — notes/archive/archive-review.md",
+      detail: "archive-review.md — note/archive/archive-review.md",
       score: 100,
       matchedFields: ["title"],
     })

@@ -358,11 +358,11 @@ function withHighlightedPreviewText(
 function foldersFor(relativePath: string): string[] {
   const parts = normalizePath(relativePath).split("/").filter(Boolean)
 
-  if (parts.length <= 2 || parts[0] !== "notes") {
+  if (parts.length <= 2 || parts[0] !== "note") {
     return []
   }
 
-  return parts.slice(1, -1).map((_, index) => ["notes", ...parts.slice(1, index + 2)].join("/"))
+  return parts.slice(1, -1).map((_, index) => ["note", ...parts.slice(1, index + 2)].join("/"))
 }
 
 interface SearchEverythingFolderCandidate {

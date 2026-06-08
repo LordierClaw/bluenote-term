@@ -4,7 +4,7 @@ import os from "node:os"
 import path from "node:path"
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 
-import { UsageError } from "../../../src/core/errors"
+import { SelectorNotFoundError, UsageError } from "../../../src/core/errors"
 import { moveNote } from "../../../src/core/move-note"
 
 async function writeSidecarNote(rootPath: string, input: { key: string; title: string; relativePath: string; type?: "normal" | "draft" | "archived" }) {
@@ -81,7 +81,7 @@ test("moveNote rejects drafts and hidden/archive destinations", async () => {
     await mkdir(path.join(rootPath, "note", "target"), { recursive: true })
     await mkdir(path.join(rootPath, ".data", "archive"), { recursive: true })
 
-    assert.throws(() => moveNote({ override: rootPath, selector: "draft-one", destinationFolder: "note/target" }), UsageError)
+    assert.throws(() => moveNote({ override: rootPath, selector: "draft-one", destinationFolder: "note/target" }), SelectorNotFoundError)
     assert.throws(() => moveNote({ override: rootPath, selector: "normal-one", destinationFolder: ".data/archive" }), UsageError)
     assert.throws(() => moveNote({ override: rootPath, selector: "normal-one", destinationFolder: "draft" }), UsageError)
   } finally {

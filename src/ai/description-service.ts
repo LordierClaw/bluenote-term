@@ -114,7 +114,7 @@ function isCapturedInputFresh(input: {
   key: string
   contentHash: string
 }): boolean {
-  const currentSelected = selectNote({ repository: input.repository, selector: input.key })
+  const currentSelected = selectNote({ repository: input.repository, selector: input.key, visibility: "all" })
   const currentSidecar = input.sidecars.read(input.key)
   const currentContentHash = hashDescribeNoteContent({
     title: currentSidecar.title,
@@ -145,7 +145,7 @@ export async function generateNoteDescription(options: GenerateNoteDescriptionOp
   const prompt = readDescribeNotePrompt(rootPath)
   const repository = createNoteRepository(rootPath)
   const sidecars = createSidecarRepository(rootPath)
-  const selected = selectNote({ repository, selector: options.selector })
+  const selected = selectNote({ repository, selector: options.selector, visibility: "all" })
   const key = selected.frontmatter.id
   const sidecar = sidecars.read(key)
   const contentHash = hashDescribeNoteContent({

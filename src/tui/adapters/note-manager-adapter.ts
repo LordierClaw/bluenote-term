@@ -126,8 +126,8 @@ export function canCreateManagerFolderAt(path: string | null | undefined): boole
   return parts.length >= 1 && parts[0] === "note" && parts.every((part) => !part.startsWith("."))
 }
 
-function isManagedNoteArea(area: string | undefined): area is "note" | "draft" | "notes" {
-  return area === "note" || area === "draft" || area === "notes"
+function isManagedNoteArea(area: string | undefined): area is "note" | "draft" {
+  return area === "note" || area === "draft"
 }
 
 function filenameFor(relativePath: string): string {
@@ -186,10 +186,6 @@ function folderAncestorsFor(folderPath: string): string[] {
   }
 
   const parts = normalizedPath.split("/").filter(Boolean)
-  if (parts[0] === "notes") {
-    return parts.slice(1).map((_, index) => ["notes", ...parts.slice(1, index + 2)].join("/"))
-  }
-
   return parts.map((_, index) => parts.slice(0, index + 1).join("/"))
 }
 
@@ -533,7 +529,7 @@ export function goToManagerParent(state: ManagerState): ManagerState {
   }
 
   const rawParentPath = currentFolderPath.includes("/") ? currentFolderPath.split("/").slice(0, -1).join("/") : ""
-  const parentPath = rawParentPath === "notes" ? "" : rawParentPath
+  const parentPath = rawParentPath
 
   return {
     ...state,

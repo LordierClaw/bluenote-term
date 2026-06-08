@@ -73,7 +73,7 @@ function assertSingleMatch(selector: string, matches: ParsedNote[]): ParsedNote 
 }
 
 export function selectNote(options: SelectNoteOptions): ParsedNote {
-  const visibility = options.visibility ?? "all"
+  const visibility = options.visibility ?? "normal"
   const notes = options.repository.list().filter((note) => noteIsVisible(note, visibility))
   const trimmedSelector = options.selector.trim()
 

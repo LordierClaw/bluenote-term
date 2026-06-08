@@ -22,11 +22,11 @@ const baseState: TuiState = {
     items: [
       {
         type: "folder",
-        key: "notes/inbox",
+        key: "note/inbox",
         filename: "inbox/",
         title: "inbox",
         description: "2 notes",
-        relativePath: "notes/inbox",
+        relativePath: "note/inbox",
       },
       {
         type: "note",
@@ -34,7 +34,7 @@ const baseState: TuiState = {
         filename: "daily-plan.md",
         title: "Daily Plan",
         description: "Today priorities.",
-        relativePath: "notes/inbox/daily-plan.md",
+        relativePath: "note/inbox/daily-plan.md",
       },
     ],
   },
@@ -43,7 +43,7 @@ const baseState: TuiState = {
       key: "daily-plan",
       title: "Daily Plan",
       description: "Today priorities.",
-      relativePath: "notes/inbox/daily-plan.md",
+      relativePath: "note/inbox/daily-plan.md",
       body: "# Daily Plan\n\nShip renderer screens.",
     },
     body: "# Daily Plan\n\nShip renderer screens.",
@@ -181,7 +181,7 @@ describe("TUI render view models", () => {
         deleteDraft: {
           key: "daily-plan",
           title: "Daily Plan",
-          relativePath: "notes/inbox/daily-plan.md",
+          relativePath: "note/inbox/daily-plan.md",
           status: null,
         },
       },
@@ -191,7 +191,7 @@ describe("TUI render view models", () => {
       key: "daily-plan",
       sheetTitle: "Delete note?",
       title: "Daily Plan",
-      relativePath: "notes/inbox/daily-plan.md",
+      relativePath: "note/inbox/daily-plan.md",
       consequenceLines: [
         "Deletes the Markdown file and BlueNote sidecar metadata.",
         "This cannot be undone.",
@@ -208,7 +208,7 @@ describe("TUI render view models", () => {
     assert.deepEqual(
       vm.rows.map((row) => ({ marker: row.focusMarker, openMarker: row.openMarker, key: row.key, filename: row.filename, title: row.title, description: row.description, focused: row.focused })),
       [
-        { marker: "", openMarker: "", key: "notes/inbox", filename: "inbox/", title: "inbox", description: "2 notes", focused: false },
+        { marker: "", openMarker: "", key: "note/inbox", filename: "inbox/", title: "inbox", description: "2 notes", focused: false },
         { marker: "", openMarker: "", key: "daily-plan", filename: "daily-plan.md", title: "Daily Plan", description: "Today priorities.", focused: true },
       ],
     )
@@ -222,7 +222,7 @@ describe("TUI render view models", () => {
     assert.deepEqual(
       vm.rows.map((row) => ({ key: row.key, type: row.type, icon: row.icon, styleIntent: row.styleIntent, itemStyleIntent: row.itemStyleIntent, openStyleIntent: row.openStyleIntent, metadataStyleIntent: row.metadataStyleIntent })),
       [
-        { key: "notes/inbox", type: "folder", icon: "📁", styleIntent: "panel", itemStyleIntent: "textPrimary", openStyleIntent: null, metadataStyleIntent: "mutedText" },
+        { key: "note/inbox", type: "folder", icon: "📁", styleIntent: "panel", itemStyleIntent: "textPrimary", openStyleIntent: null, metadataStyleIntent: "mutedText" },
         { key: "daily-plan", type: "note", icon: "📄", styleIntent: "focusedRow", itemStyleIntent: "textPrimary", openStyleIntent: null, metadataStyleIntent: "mutedText" },
       ],
     )
@@ -302,8 +302,8 @@ describe("TUI render view models", () => {
         items: [baseState.manager.items[1]!],
         filterQuery: "daily",
         status: "Indexing...",
-        currentFolderPath: "notes/inbox",
-        hoveredPath: "notes/inbox/daily-plan.md",
+        currentFolderPath: "note/inbox",
+        hoveredPath: "note/inbox/daily-plan.md",
         selectedNoteKey: "daily-plan",
       },
     })
@@ -319,7 +319,7 @@ describe("TUI render view models", () => {
       ...baseState,
       editor: {
         ...baseState.editor!,
-        note: { ...baseState.editor!.note, title: "", relativePath: "notes/inbox/untitled-note.md" },
+        note: { ...baseState.editor!.note, title: "", relativePath: "note/inbox/untitled-note.md" },
       },
     })
     assert.equal(filenameFallbackVm.topbar.bottomPath, "Currently open: untitled-note.md")
@@ -347,7 +347,7 @@ describe("TUI render view models", () => {
             filename: "note-a.md",
             title: "Note A",
             description: "Focused note.",
-            relativePath: "notes/note-a.md",
+            relativePath: "note/note-a.md",
           },
           {
             type: "note",
@@ -355,7 +355,7 @@ describe("TUI render view models", () => {
             filename: "note-b.md",
             title: "Note B",
             description: "Open note.",
-            relativePath: "notes/note-b.md",
+            relativePath: "note/note-b.md",
           },
         ],
       },
@@ -366,7 +366,7 @@ describe("TUI render view models", () => {
           key: "note-b",
           title: "Note B",
           description: "Open note.",
-          relativePath: "notes/note-b.md",
+          relativePath: "note/note-b.md",
         },
       },
     })
@@ -394,7 +394,7 @@ describe("TUI render view models", () => {
     assert.deepEqual(
       vm.rows.map((row) => ({ key: row.key, focused: row.focused, styleIntent: row.styleIntent, openStyleIntent: row.openStyleIntent })),
       [
-        { key: "notes/inbox", focused: false, styleIntent: "panel", openStyleIntent: null },
+        { key: "note/inbox", focused: false, styleIntent: "panel", openStyleIntent: null },
         { key: "daily-plan", focused: true, styleIntent: "focusedRow", openStyleIntent: null },
       ],
     )
@@ -402,16 +402,16 @@ describe("TUI render view models", () => {
 
   test("manager browser view model exposes two-column rows and folder preview without decorative type coloring", () => {
     const summaries: NoteManagerSummary[] = [
-      { key: "root-note", title: "Root Note", description: "A top-level note.", relativePath: "notes/root-note.md", body: "# Root Note" },
-      { key: "api-roadmap", title: "API Roadmap", description: "Ship API work.", relativePath: "notes/projects/api-roadmap.md" },
-      { key: "client-brief", title: "Client Brief", description: "Client notes.", relativePath: "notes/projects/client/client-brief.md" },
+      { key: "root-note", title: "Root Note", description: "A top-level note.", relativePath: "note/root-note.md", body: "# Root Note" },
+      { key: "api-roadmap", title: "API Roadmap", description: "Ship API work.", relativePath: "note/projects/api-roadmap.md" },
+      { key: "client-brief", title: "Client Brief", description: "Client notes.", relativePath: "note/projects/client/client-brief.md" },
     ]
     const browser = buildManagerBrowserModel(summaries, {
       items: [],
       focusedIndex: 0,
       selectedNoteKey: "api-roadmap",
-      currentFolderPath: "",
-      hoveredPath: "notes/projects",
+      currentFolderPath: "note",
+      hoveredPath: "note/projects",
       filterQuery: "",
     })
     const vm = buildManagerViewModel({
@@ -431,7 +431,7 @@ describe("TUI render view models", () => {
       styleIntent: "textPrimary",
     })
     assert.deepEqual(vm.panels, {
-      layout1: { title: "note/", styleIntent: "borderFocus" },
+      layout1: { title: "note", styleIntent: "borderFocus" },
       layout2: { title: "projects", styleIntent: "borderSubtle" },
     })
     assert.match(vm.shortcuts.join(" "), /\[Ctrl\+P\] Search/u)
@@ -471,11 +471,11 @@ describe("TUI render view models", () => {
         items: [
           {
             type: "folder",
-            key: "notes/long-folder",
+            key: "note/long-folder",
             filename: `${longFolderName}/`,
             title: longFolderName,
             description: "42 notes in this very long folder description",
-            relativePath: `notes/${longFolderName}`,
+            relativePath: `note/${longFolderName}`,
           },
           {
             type: "note",
@@ -483,7 +483,7 @@ describe("TUI render view models", () => {
             filename: longNoteFilename,
             title: longNoteTitle,
             description: longDescription,
-            relativePath: "notes/long-note.md",
+            relativePath: "note/long-note.md",
           },
         ],
         focusedIndex: 0,
@@ -498,7 +498,7 @@ describe("TUI render view models", () => {
       assert.ok(displayCellWidth(row.displaySegments.secondary) <= 12, row.displaySegments.secondary)
     }
     assert.match(vm.layout1.rows[0]!.displaySegments.primary, /^folder-/u)
-    assert.match(vm.layout1.rows[1]!.displaySegments.primary, /^Launch notes/u)
+    assert.match(vm.layout1.rows[1]!.displaySegments.primary, /^Launch note/u)
     assert.doesNotMatch(vm.layout1.rows[1]!.displaySegments.primary, /^filename-/u)
     assert.doesNotMatch(vm.layout1.rows[1]!.displaySegments.primary, /�/u)
     assert.ok(vm.layout1.rows[1]!.displaySegments.secondary.endsWith("…"), vm.layout1.rows[1]!.displaySegments.secondary)
@@ -510,15 +510,15 @@ describe("TUI render view models", () => {
         key: "root-note",
         title: "Root Note",
         description: "A top-level note.",
-        relativePath: "notes/root-note.md",
+        relativePath: "note/root-note.md",
         body: "# Root Note\n\nPreview body.",
       },
     ], {
       items: [],
       focusedIndex: 0,
       selectedNoteKey: "root-note",
-      currentFolderPath: "",
-      hoveredPath: "notes/root-note.md",
+      currentFolderPath: "note",
+      hoveredPath: "note/root-note.md",
       filterQuery: "",
     })
 
@@ -530,14 +530,14 @@ describe("TUI render view models", () => {
       },
       editor: {
         ...baseState.editor!,
-        note: { ...baseState.editor!.note, key: "root-note", relativePath: "notes/root-note.md", title: "Root Note" },
+        note: { ...baseState.editor!.note, key: "root-note", relativePath: "note/root-note.md", title: "Root Note" },
       },
     } as TuiState, browser)
 
     assert.deepEqual(vm.layout2.preview, {
       type: "note-content",
       title: "Root Note",
-      path: "notes/root-note.md",
+      path: "note/root-note.md",
       noteKey: "root-note",
       contentLines: ["# Root Note", "", "Preview body."],
       sections: [
@@ -562,15 +562,15 @@ describe("TUI render view models", () => {
         key: "root-note",
         title: "Root Note",
         description: "A top-level note.",
-        relativePath: "notes/root-note.md",
+        relativePath: "note/root-note.md",
         body: "# Root Note\n\nPreview body.",
       },
     ], {
       items: [],
       focusedIndex: 0,
       selectedNoteKey: "root-note",
-      currentFolderPath: "",
-      hoveredPath: "notes/root-note.md",
+      currentFolderPath: "note",
+      hoveredPath: "note/root-note.md",
       filterQuery: "",
       previewVisible: true,
     })
@@ -603,13 +603,13 @@ describe("TUI render view models", () => {
 
   test("manager chrome titles current folder and hidden preview states without artificial layout labels", () => {
     const browser = buildManagerBrowserModel([
-      { key: "api-roadmap", title: "API Roadmap", description: "Ship API work.", relativePath: "notes/projects/api-roadmap.md" },
+      { key: "api-roadmap", title: "API Roadmap", description: "Ship API work.", relativePath: "note/projects/api-roadmap.md" },
     ], {
       items: [],
       focusedIndex: 0,
       selectedNoteKey: "api-roadmap",
-      currentFolderPath: "notes/projects",
-      hoveredPath: "notes/projects/api-roadmap.md",
+      currentFolderPath: "note/projects",
+      hoveredPath: "note/projects/api-roadmap.md",
       filterQuery: "",
       previewVisible: false,
     }, { previewVisible: false })
@@ -624,7 +624,7 @@ describe("TUI render view models", () => {
     } as TuiState, browser)
 
     assert.equal(vm.title, "")
-    assert.equal(vm.panels.layout1.title, "notes/projects")
+    assert.equal(vm.panels.layout1.title, "note/projects")
     assert.equal(vm.panels.layout2.title, "Preview hidden")
     assert.equal(vm.layout2.preview.type, "hidden")
     assert.match(vm.shortcuts.join(" "), /\[Ctrl\+P\] Search/u)
@@ -641,8 +641,8 @@ describe("TUI render view models", () => {
 
   test("runtime manager controller exposes the browser preview model used by renderer", () => {
     const summaries: NoteManagerSummary[] = [
-      { key: "root-note", title: "Root Note", description: "A top-level note.", relativePath: "notes/root-note.md" },
-      { key: "api-roadmap", title: "API Roadmap", description: "Ship API work.", relativePath: "notes/projects/api-roadmap.md" },
+      { key: "root-note", title: "Root Note", description: "A top-level note.", relativePath: "note/root-note.md" },
+      { key: "api-roadmap", title: "API Roadmap", description: "Ship API work.", relativePath: "note/projects/api-roadmap.md" },
     ]
     const controller = createWorkspaceController({
       listNotes: () => summaries,
@@ -659,7 +659,7 @@ describe("TUI render view models", () => {
     const vm = buildManagerViewModel(controller.getState(), controller.getManagerBrowserModel())
 
     assert.equal(vm.layout2.preview.type, "note-content")
-    assert.equal(vm.layout2.preview.path, "notes/root-note.md")
+    assert.equal(vm.layout2.preview.path, "note/root-note.md")
     assert.deepEqual(vm.layout2.preview.contentLines, ["# Root Note", "", "Hydrated preview body."])
   })
 
@@ -674,13 +674,13 @@ describe("TUI render view models", () => {
     })
     assert.deepEqual(vm.topbar, {
       noteName: "Daily Plan",
-      directoryPath: "notes/inbox",
+      directoryPath: "note/inbox",
       filename: "daily-plan.md",
-      fullPath: "notes/inbox/daily-plan.md",
+      fullPath: "note/inbox/daily-plan.md",
       pathSeparator: "|",
       updatedSeparator: "|",
       fullPathIntent: "mutedText",
-      relativePath: "notes/inbox/daily-plan.md",
+      relativePath: "note/inbox/daily-plan.md",
       key: "daily-plan",
       dirty: false,
       saveStatusLabel: "Saved",
@@ -720,6 +720,7 @@ describe("TUI render view models", () => {
         "[Ctrl+Z] Undo",
         "[Ctrl+Y] Redo",
         "[Alt+Z] Wrap",
+        "[Ctrl+PageUp/Down] Switch Note",
       ],
       visibleShortcuts: [
         "[Ctrl+S] Save",
@@ -730,6 +731,7 @@ describe("TUI render view models", () => {
         "[Ctrl+Z] Undo",
         "[Ctrl+Y] Redo",
         "[Alt+Z] Wrap",
+        "[Ctrl+PageUp/Down] Switch Note",
       ],
       visibleShortcutHints: [
         { key: "Ctrl+S", action: "Save" },
@@ -740,6 +742,7 @@ describe("TUI render view models", () => {
         { key: "Ctrl+Z", action: "Undo" },
         { key: "Ctrl+Y", action: "Redo" },
         { key: "Alt+Z", action: "Wrap" },
+        { key: "Ctrl+PageUp/Down", action: "Switch Note" },
       ],
       hiddenShortcutCount: 0,
     })
@@ -816,11 +819,11 @@ describe("TUI render view models", () => {
     assert.equal(vm.topbar.statusLabel, "Saved")
     assert.equal(vm.topbar.wrapLabel, "Wrap on")
     assert.deepEqual(vm.bottombar.row2.visibleShortcuts, ["[Ctrl+S] Save", "[Ctrl+F] Find"])
-    assert.equal(vm.bottombar.row2.hiddenShortcutCount, 6)
+    assert.equal(vm.bottombar.row2.hiddenShortcutCount, 7)
 
     const eightyColumnVm = buildEditorViewModel({ ...baseState, screen: "editor", mode: "editor.body" }, { width: 76 })
     assert.deepEqual(eightyColumnVm.bottombar.row2.visibleShortcuts, ["[Ctrl+S] Save", "[Ctrl+F] Find", "[Ctrl+R] Replace", "[Ctrl+P] Search"])
-    assert.equal(eightyColumnVm.bottombar.row2.visibleShortcuts.join("  ").length + "  +4".length <= 76, true)
+    assert.equal(eightyColumnVm.bottombar.row2.visibleShortcuts.join("  ").length + "  +5".length <= 76, true)
   })
 
   test("editor find prompt is a quiet task sheet with query, match count, and find-specific actions", () => {
@@ -866,6 +869,7 @@ describe("TUI render view models", () => {
       "[Ctrl+Z] Undo",
       "[Ctrl+Y] Redo",
       "[Alt+Z] Wrap",
+      "[Ctrl+PageUp/Down] Switch Note",
     ])
     assert.deepEqual(vm.bottombar.row2.visibleShortcutHints, [
       { key: "Ctrl+S", action: "Save" },
@@ -876,6 +880,7 @@ describe("TUI render view models", () => {
       { key: "Ctrl+Z", action: "Undo" },
       { key: "Ctrl+Y", action: "Redo" },
       { key: "Alt+Z", action: "Wrap" },
+      { key: "Ctrl+PageUp/Down", action: "Switch Note" },
     ])
     assert.equal(vm.bottombar.row2.hiddenShortcutCount, 0)
   })
@@ -978,7 +983,7 @@ describe("TUI render view models", () => {
       { key: "Ctrl+S", action: "Save" },
       { key: "Ctrl+F", action: "Find" },
     ])
-    assert.equal(narrowVm.bottombar.row2.hiddenShortcutCount, 6)
+    assert.equal(narrowVm.bottombar.row2.hiddenShortcutCount, 7)
     assert.doesNotMatch(narrowVm.bottombar.row2.shortcuts.join(" "), /\[\?\] More/u)
     assert.deepEqual(narrowVm.body.overflow, { above: false, below: true, indicator: "↓" })
 
@@ -1110,8 +1115,8 @@ describe("TUI render view models", () => {
       ;(renderer as typeof renderer & { width?: number; height?: number }).height = 8
       const longLine = "abcdefghijklmnopqrstuvwxyz"
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: longLine }],
-        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "notes/daily.md", body: longLine }),
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: longLine }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: longLine }),
         searchNotes: () => [],
       })
       assert.equal(controller.openFocusedManagerItem().blocked, false)
@@ -1142,14 +1147,14 @@ describe("TUI render view models", () => {
         ...baseState.editor!,
         note: {
           ...baseState.editor!.note,
-          relativePath: "notes/projects/client/client-brief.md",
+          relativePath: "note/projects/client/client-brief.md",
           updatedAt: "2026-05-28T10:30:00.000Z",
           modifiedAt: "2026-05-28T11:45:00.000Z",
         },
       } as TuiState["editor"],
     })
 
-    assert.equal(vm.topbar.directoryPath, "notes/projects/client")
+    assert.equal(vm.topbar.directoryPath, "note/projects/client")
     assert.equal(vm.topbar.filename, "client-brief.md")
     const expectedModified = new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date("2026-05-28T11:45:00.000Z")).replace(",", "")
     assert.equal(vm.topbar.updatedLabel, `Modified ${expectedModified}`)
@@ -1250,12 +1255,12 @@ describe("TUI render view models", () => {
         id: "content:daily-plan:body",
         key: "daily-plan",
         title: "Daily Plan",
-        relativePath: "notes/inbox/daily-plan.md",
+        relativePath: "note/inbox/daily-plan.md",
         matchIndex: 0,
         matchLabel: "body",
         excerpt: "Ship renderer screens with OpenTUI.",
         label: "Daily Plan",
-        detail: "body — notes/inbox/daily-plan.md",
+        detail: "body — note/inbox/daily-plan.md",
         score: 100,
       },
       {
@@ -1312,7 +1317,7 @@ describe("TUI render view models", () => {
         selectedMarker: row.selectedMarker,
       })),
       [
-        { marker: " ", typeLabel: "content", tagLabel: "note", riskLabel: null, availabilityLabel: null, typeIcon: "content", primaryLabel: "Daily Plan", detail: "body — notes/inbox/daily-plan.md", selected: false, selectedMarker: " " },
+        { marker: " ", typeLabel: "content", tagLabel: "note", riskLabel: null, availabilityLabel: null, typeIcon: "content", primaryLabel: "Daily Plan", detail: "body — note/inbox/daily-plan.md", selected: false, selectedMarker: " " },
         { marker: "›", typeLabel: "command", tagLabel: "cmd", riskLabel: null, availabilityLabel: null, typeIcon: "command", primaryLabel: "/replace", detail: "Find and replace text in the active editor buffer", selected: true, selectedMarker: "›" },
       ],
     )
@@ -1344,7 +1349,7 @@ describe("TUI render view models", () => {
     assert.equal(contentPreview?.visible, true)
     if (contentPreview?.visible) {
       assert.deepEqual(contentPreview.lines, ["Ship renderer screens with OpenTUI."])
-      assert.equal(contentPreview.title, "notes/inbox/daily-plan.md")
+      assert.equal(contentPreview.title, "note/inbox/daily-plan.md")
       assert.deepEqual(contentPreview.sections, [])
       assert.deepEqual(contentPreview.linesText, [{ text: "Ship renderer screens with OpenTUI.", highlights: [{ start: 0, end: 4 }] }])
     }
@@ -1359,12 +1364,12 @@ describe("TUI render view models", () => {
         id: "content:daily-plan:deep",
         key: "daily-plan",
         title: "Daily Plan",
-        relativePath: "notes/inbox/daily-plan.md",
+        relativePath: "note/inbox/daily-plan.md",
         matchIndex: 0,
         matchLabel: "body line 30",
         excerpt: "...release checklist identifies launch blockers before handoff...",
         label: "Daily Plan",
-        detail: "body line 30 — notes/inbox/daily-plan.md",
+        detail: "body line 30 — note/inbox/daily-plan.md",
         score: 100,
       },
     ]
@@ -1407,7 +1412,7 @@ describe("TUI render view models", () => {
     }
     assert.deepEqual(emptyVm.emptyState, {
       title: "Search your local workspace",
-      examples: ["daily plan", "notes/inbox", "/save"],
+      examples: ["daily plan", "note/projects", "/save"],
       recentActions: ["Open recent notes", "Jump to folders", "Run available commands"],
       commandSuggestions: ["/new", "/find", "/replace", "/save", "/delete"],
       styleIntent: "mutedText",
@@ -1423,12 +1428,12 @@ describe("TUI render view models", () => {
       id: `note:daily-${index}`,
       key: `daily-${index}`,
       title: `Daily ${index}`,
-      relativePath: `notes/daily-${index}.md`,
+      relativePath: `note/daily-${index}.md`,
       filename: `daily-${index}.md`,
       description: `Daily ${index} body`,
       matchedFields: ["title"],
       label: `Daily ${index}`,
-      detail: `notes/daily-${index}.md`,
+      detail: `note/daily-${index}.md`,
       score: 100 - index,
     }))
     const build = (selectedIndex: number) => buildSearchEverythingViewModel(
@@ -1460,13 +1465,13 @@ describe("TUI render view models", () => {
         kind: "folder",
         typeLabel: "folder",
         typeIcon: "folder",
-        id: "folder:notes/projects/client",
-        path: "notes/projects/client",
+        id: "folder:note/projects/client",
+        path: "note/projects/client",
         name: "client",
         noteCount: 3,
         previewLines: ["research", "brief.md", "todo.md"],
         label: "client/",
-        detail: "3 notes in notes/projects/client",
+        detail: "3 notes in note/projects/client",
         score: 100,
       },
     ]
@@ -1481,10 +1486,10 @@ describe("TUI render view models", () => {
 
     assert.equal(vm.preview?.visible, true)
     if (vm.preview?.visible) {
-      assert.equal(vm.preview.title, "notes/projects/client")
+      assert.equal(vm.preview.title, "note/projects/client")
       assert.deepEqual(vm.preview.titleText, {
-        text: "notes/projects/client",
-        highlights: [{ start: 15, end: 21 }],
+        text: "note/projects/client",
+        highlights: [{ start: 14, end: 20 }],
       })
       assert.equal(vm.preview.subtitle, "")
       assert.deepEqual(vm.preview.lines, ["research", "brief.md", "todo.md"])
@@ -1576,13 +1581,13 @@ describe("TUI render view models", () => {
         id: "note:daily-plan",
         key: "daily-plan",
         title: "Daily Plan",
-        relativePath: "notes/inbox/daily-plan.md",
+        relativePath: "note/inbox/daily-plan.md",
         filename: "daily-plan.md",
         description: "Today priorities.",
         body: "Today priorities.",
         matchedFields: ["title"],
         label: "Daily Plan",
-        detail: "notes/inbox/daily-plan.md",
+        detail: "note/inbox/daily-plan.md",
         score: 10,
       },
     ]
@@ -1638,12 +1643,12 @@ describe("TUI render view models", () => {
           id: "note:daily-plan",
           key: "daily-plan",
           title: "Daily Plan",
-          relativePath: "notes/inbox/daily-plan.md",
+          relativePath: "note/inbox/daily-plan.md",
           filename: "daily-plan.md",
           description: "Today priorities.",
           matchedFields: ["title"],
           label: "Daily Plan",
-          detail: "notes/inbox/daily-plan.md",
+          detail: "note/inbox/daily-plan.md",
           score: 10,
         },
       ],
@@ -1693,8 +1698,8 @@ describe("TUI render view models", () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
       const controller = createWorkspaceController({
-        listNotes: () => [{ key: "root-note", title: "Root Note", description: "A top-level note.", relativePath: "notes/root-note.md", body: "# Root Note\n\nPreview body." }],
-        showNote: () => ({ key: "root-note", title: "Root Note", description: "A top-level note.", relativePath: "notes/root-note.md", body: "# Root Note\n\nPreview body." }),
+        listNotes: () => [{ key: "root-note", title: "Root Note", description: "A top-level note.", relativePath: "note/root-note.md", body: "# Root Note\n\nPreview body." }],
+        showNote: () => ({ key: "root-note", title: "Root Note", description: "A top-level note.", relativePath: "note/root-note.md", body: "# Root Note\n\nPreview body." }),
         searchNotes: () => [],
       })
       controller.refreshManager()
@@ -1765,7 +1770,7 @@ describe("TUI render view models", () => {
             key: "daily-plan",
             title: "Daily Plan",
             description: "Today priorities.",
-            relativePath: "notes/inbox/daily-plan.md",
+            relativePath: "note/inbox/daily-plan.md",
             body: "Ship renderer screens.",
           },
         ],
@@ -1803,7 +1808,7 @@ describe("TUI render view models", () => {
             key: "daily-plan",
             title: "Daily Plan",
             description: "Today priorities.",
-            relativePath: "notes/inbox/daily-plan.md",
+            relativePath: "note/inbox/daily-plan.md",
             body: "Ship renderer screens.",
           },
         ],
@@ -1930,7 +1935,7 @@ describe("TUI render view models", () => {
         key: `daily-${index}`,
         title: `Daily ${index}`,
         description: `Daily ${index} body`,
-        relativePath: `notes/daily-${index}.md`,
+        relativePath: `note/daily-${index}.md`,
         body: `Daily ${index} body`,
       }))
       const controller = createWorkspaceController({
@@ -1985,7 +1990,7 @@ describe("TUI render view models", () => {
             key: "daily-plan",
             title: "Daily Plan",
             description: "Stale preview should not show.",
-            relativePath: "notes/inbox/daily-plan.md",
+            relativePath: "note/inbox/daily-plan.md",
             body: "Hidden preview body.",
           },
         ],

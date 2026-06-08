@@ -1,5 +1,5 @@
 import path from "node:path"
-import { existsSync, mkdirSync, readFileSync, readdirSync, type Dirent } from "node:fs"
+import { existsSync, mkdirSync, readdirSync, type Dirent } from "node:fs"
 import { createCliRenderer, BoxRenderable, type CliRenderer, type PasteEvent, type Renderable } from "@opentui/core"
 
 import { resolveBlueNoteRoot } from "../config/root"
@@ -39,7 +39,6 @@ import type { AiStatusState, TuiNote } from "./state"
 import { createDesktopClipboardModel } from "./adapters/desktop-clipboard-adapter"
 import { createWorkspaceController, type WorkspaceCommandHandler, type WorkspaceController, type WorkspaceControllerDependencies } from "./workspace-controller"
 import { recordLatestOpenedNote, resolveStartupNote } from "./latest-opened-note"
-import type { NoteManagerSummary } from "./adapters/note-manager-adapter"
 
 export { createDesktopClipboardModel } from "./adapters/desktop-clipboard-adapter"
 
@@ -130,23 +129,7 @@ function persistTuiEditorBody(rootPath: string, note: TuiNote, body: string, clo
 }
 
 function showTuiNote(rootPath: string, selector: string): TuiNote {
-  let note: TuiNote
-  try {
-    note = showNote({ override: rootPath, selector })
-  } catch (error) {
-    const legacySummary = listLegacyTuiNoteSummaries(rootPath).find((summary) => summary.key === selector || summary.relativePath === selector || summary.title === selector)
-    if (!legacySummary) {
-      throw error
-    }
-    return {
-      key: legacySummary.key,
-      title: legacySummary.title,
-      description: legacySummary.description,
-      body: legacySummary.body ?? "",
-      relativePath: legacySummary.relativePath,
-      createdAt: legacySummary.createdAt,
-    }
-  }
+  const note = showNote({ override: rootPath, selector, visibility: "drafts" })
 
   const sidecars = createSidecarRepository(rootPath)
 
@@ -160,10 +143,6 @@ function showTuiNote(rootPath: string, selector: string): TuiNote {
     createdAt: sidecar.createdAt,
     updatedAt: sidecar.updatedAt,
   }
-}
-
-function legacyNotesPath(rootPath: string): string {
-  return path.join(rootPath, "notes")
 }
 
 function listTuiNoteFolders(rootPath: string): string[] {
@@ -189,65 +168,7 @@ function listTuiNoteFolders(rootPath: string): string[] {
   }
 
   visit(getNotesPath(rootPath), "note")
-  visit(legacyNotesPath(rootPath), "notes")
   return folders
-}
-
-function titleFromLegacyMarkdown(body: string, fallback: string): string {
-  const frontmatterTitle = body.match(/^---\n(?<frontmatter>[\s\S]*?)\n---/u)?.groups?.frontmatter.match(/^title:\s*['"]?(?<title>[^'"\n]+)['"]?\s*$/mu)?.groups?.title?.trim()
-  if (frontmatterTitle) {
-    return frontmatterTitle
-  }
-
-  const headingTitle = body.match(/^#\s+(?<title>.+)$/mu)?.groups?.title?.trim()
-  return headingTitle || fallback
-}
-
-function listLegacyTuiNoteSummaries(rootPath: string): NoteManagerSummary[] {
-  const summaries: NoteManagerSummary[] = []
-
-  function visit(directoryPath: string, relativePath: string): void {
-    let entries: Dirent[]
-    try {
-      entries = readdirSync(directoryPath, { withFileTypes: true })
-    } catch {
-      return
-    }
-
-    for (const entry of entries) {
-      if (entry.name.startsWith(".")) {
-        continue
-      }
-      const childRelativePath = `${relativePath}/${entry.name}`
-      const childPath = path.join(directoryPath, entry.name)
-      if (entry.isDirectory()) {
-        visit(childPath, childRelativePath)
-        continue
-      }
-      if (!entry.isFile() || !entry.name.endsWith(".md")) {
-        continue
-      }
-
-      let body = ""
-      try {
-        body = readFileSync(childPath, "utf8")
-      } catch {
-        continue
-      }
-
-      const key = path.basename(entry.name, ".md")
-      summaries.push({
-        key,
-        title: titleFromLegacyMarkdown(body, key),
-        description: "",
-        body,
-        relativePath: childRelativePath,
-      })
-    }
-  }
-
-  visit(legacyNotesPath(rootPath), "notes")
-  return summaries
 }
 
 function createTuiNoteFolder(rootPath: string, folderRelativePath: string): void {
@@ -537,7 +458,7 @@ export function createDefaultWorkspaceController(options: DefaultWorkspaceContro
   })
 
   const controller = createWorkspaceController({
-    listNotes: () => [...listNotes({ override: rootPath, visibility: "drafts" }), ...listLegacyTuiNoteSummaries(rootPath)],
+    listNotes: () => listNotes({ override: rootPath, visibility: "drafts" }),
     listNoteFolders: () => listTuiNoteFolders(rootPath),
     showNote: (selector) => showTuiNote(rootPath, selector),
     searchNotes: (query) => searchNotes(query, { override: rootPath, visibility: "drafts" }),
@@ -559,7 +480,7 @@ export function createDefaultWorkspaceController(options: DefaultWorkspaceContro
       rebuildIndexes({ override: rootPath })
     },
     deleteNote: (selector) => {
-      deleteNote({ override: rootPath, selector, force: true })
+      deleteNote({ override: rootPath, selector, force: true, visibility: "drafts" })
     },
     persistEditorBody: (note, body, warn) => persistTuiEditorBody(rootPath, note, body, clock, warn),
     initialNote,

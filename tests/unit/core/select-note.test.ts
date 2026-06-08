@@ -245,7 +245,7 @@ test("selectNote resolves an exact key match even when a legacy frontmatter id c
   )
 })
 
-test("selectNote resolves exact selectors for normal, draft, and archived notes by default", async () => {
+test("selectNote defaults to normal notes and requires explicit visibility for drafts or archived notes", async () => {
   await withRepository(
     async (rootPath) => {
       await writePlainNoteWithSidecar(rootPath, {
@@ -269,11 +269,14 @@ test("selectNote resolves exact selectors for normal, draft, and archived notes 
     },
     (repository) => {
       assert.equal(selectNote({ repository, selector: "normal-note" }).sourcePath, "note/normal-note.md")
-      assert.equal(selectNote({ repository, selector: "draft-note" }).sourcePath, "draft/draft-note.md")
-      assert.equal(selectNote({ repository, selector: "archived-note" }).sourcePath, ".data/archive/archived-note.md")
-      assert.equal(selectNote({ repository, selector: ".data/archive/archived-note.md" }).sourcePath, ".data/archive/archived-note.md")
+      assert.throws(() => selectNote({ repository, selector: "draft-note" }), SelectorNotFoundError)
+      assert.throws(() => selectNote({ repository, selector: "archived-note" }), SelectorNotFoundError)
+      assert.throws(() => selectNote({ repository, selector: ".data/archive/archived-note.md" }), SelectorNotFoundError)
+
+      assert.equal(selectNote({ repository, selector: "draft-note", visibility: "drafts" }).sourcePath, "draft/draft-note.md")
       assert.throws(() => selectNote({ repository, selector: "archived-note", visibility: "drafts" }), SelectorNotFoundError)
       assert.equal(selectNote({ repository, selector: "archived-note", visibility: "all" }).sourcePath, ".data/archive/archived-note.md")
+      assert.equal(selectNote({ repository, selector: ".data/archive/archived-note.md", visibility: "all" }).sourcePath, ".data/archive/archived-note.md")
     },
   )
 })

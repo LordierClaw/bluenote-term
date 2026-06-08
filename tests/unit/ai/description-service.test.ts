@@ -59,6 +59,7 @@ function createProjectNote(rootPath: string, body = "Discuss launch tasks and ow
   const created = repository.create({
     frontmatter: FIXED_FRONTMATTER,
     body,
+    destination: { type: "normal", folderRelativePath: "note" },
   })
   return { repository, created }
 }

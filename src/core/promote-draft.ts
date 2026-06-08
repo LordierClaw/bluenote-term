@@ -81,7 +81,7 @@ export function promoteDraft(options: PromoteDraftOptions): PromoteDraftSummary 
   const rootPath = resolveBlueNoteRoot(options)
   const repository = createNoteRepository(rootPath)
   const sidecars = createSidecarRepository(rootPath)
-  const selected = selectNote({ repository, selector: options.selector })
+  const selected = selectNote({ repository, selector: options.selector, visibility: "drafts" })
   const previousKey = selected.frontmatter.id
   const previousRelativePath = selected.sourcePath
   const previousNotePath = assertPathInsideRoot(rootPath, path.join(rootPath, previousRelativePath))

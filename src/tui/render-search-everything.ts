@@ -249,7 +249,7 @@ function buildSearchEverythingEmptyState(query: string, resultCount: number): Se
   }
   return {
     title: query.trim().length === 0 ? "Search your local workspace" : "No matches yet",
-    examples: ["daily plan", "notes/inbox", "/save"],
+    examples: ["daily plan", "note/projects", "/save"],
     recentActions: ["Open recent notes", "Jump to folders", "Run available commands"],
     commandSuggestions: ["/new", "/find", "/replace", "/save", "/delete"],
     styleIntent: "mutedText",

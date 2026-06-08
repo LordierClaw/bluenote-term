@@ -290,6 +290,7 @@ function editorShortcuts(): EditorShortcutViewModel[] {
     { ...TUI_SHORTCUTS.editorUndo, order: 6 },
     { ...TUI_SHORTCUTS.editorRedo, order: 7 },
     { ...TUI_SHORTCUTS.editorWrap, order: 8 },
+    { ...TUI_SHORTCUTS.editorSwitchNote, order: 9 },
   ]
 }
 

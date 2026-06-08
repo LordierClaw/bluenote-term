@@ -81,7 +81,7 @@ test("AI description workflow runs end to end against a mock OpenAI-compatible p
     assert.match(configResult.stdout, /AI config saved\./)
     assert.match(configResult.stdout, /API key is stored in plaintext/)
 
-    const createResult = runOk(harness, "bn new", ["new", "--title", "Project tasks", "Project task body."], {
+    const createResult = runOk(harness, "bn new", ["new", "Project task body."], {
       BLUENOTE_TEST_NOW: "2026-06-01T00:00:00.000Z",
       BLUENOTE_TEST_RANDOM_SEQUENCE: "0x12345678",
     })
@@ -109,7 +109,7 @@ test("AI description workflow runs end to end against a mock OpenAI-compatible p
     assert.equal(providerRequests.length, 1)
     assert.equal(providerRequests[0]?.authorization, "Bearer test-token")
     assert.equal((providerRequests[0]?.body as { model?: string }).model, "test-model")
-    assert.match(JSON.stringify(providerRequests[0]?.body), /Project tasks/)
+    assert.match(JSON.stringify(providerRequests[0]?.body), new RegExp(key))
 
     const sidecar = JSON.parse(await readFile(path.join(harness.rootPath, ".data", "notes", `${key}.json`), "utf8"))
     assert.equal(sidecar.description, mockDescription)
@@ -120,10 +120,10 @@ test("AI description workflow runs end to end against a mock OpenAI-compatible p
     assert.doesNotMatch(markdown, /description:/)
 
     const listResult = runOk(harness, "bn list --drafts", ["list", "--drafts"])
-    assert.match(listResult.stdout, new RegExp(`Project tasks\\t${key}\\t${harness.escapeForRegExp(mockDescription)}\\tdraft/${key}\\.md`))
+    assert.match(listResult.stdout, new RegExp(`${key}\\t${key}\\t${harness.escapeForRegExp(mockDescription)}\\tdraft/${key}\\.md`))
 
     const searchResult = runOk(harness, "bn search --drafts", ["search", "--drafts", "Mock project task"])
-    assert.match(searchResult.stdout, /Project tasks/)
+    assert.match(searchResult.stdout, new RegExp(key))
     assert.match(searchResult.stdout, new RegExp(`key: ${key}`))
     assert.match(searchResult.stdout, /match: description/)
 

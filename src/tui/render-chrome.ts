@@ -30,6 +30,7 @@ export const TUI_SHORTCUTS = {
   editorUndo: { key: "Ctrl+Z", action: "Undo" },
   editorRedo: { key: "Ctrl+Y", action: "Redo" },
   editorWrap: { key: "Alt+Z", action: "Wrap" },
+  editorSwitchNote: { key: "Ctrl+PageUp/Down", action: "Switch Note" },
   editorTerminalPaste: { key: "Ctrl+Shift+V", action: "Paste" },
 } as const
 

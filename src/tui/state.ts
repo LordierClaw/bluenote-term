@@ -245,7 +245,7 @@ const defaultManagerState = (): ManagerState => ({
   focusedIndex: 0,
   selectedNoteKey: null,
   previewVisible: true,
-  currentFolderPath: "",
+  currentFolderPath: "note",
   hoveredPath: null,
   filterQuery: "",
   status: null,
@@ -561,8 +561,7 @@ export function setManagerFolderPath(state: TuiState, path: string): TuiState {
 
 export function goToManagerParent(state: TuiState): TuiState {
   const currentFolderPath = normalizeManagerPath(state.manager.currentFolderPath)
-  const rawParentPath = currentFolderPath.includes("/") ? currentFolderPath.split("/").slice(0, -1).join("/") : ""
-  const parentPath = rawParentPath === "notes" ? "" : rawParentPath
+  const parentPath = currentFolderPath.includes("/") ? currentFolderPath.split("/").slice(0, -1).join("/") : ""
 
   return setManagerFolderPath(state, parentPath)
 }

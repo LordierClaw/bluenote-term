@@ -46,7 +46,6 @@ test("real bin CLI covers draft, named draft, normal note, search visibility, an
       BLUENOTE_TEST_NOW: undefined,
       BLUENOTE_TEST_RANDOM_SEQUENCE: undefined,
       BLUENOTE_TEST_REBUILD_FAIL_SIDECAR_SCAN: undefined,
-      BLUENOTE_TEST_MIGRATE_FAIL_REBUILD_WRITE: undefined,
     })
     assert.match(initResult.stdout, new RegExp(`Initialized BlueNote root: ${harness.escapeForRegExp(harness.rootPath)}`))
 

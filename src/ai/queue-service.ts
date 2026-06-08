@@ -161,7 +161,7 @@ export function dropDescribeNoteJobIfNoteMissing(rootPath: string, job: AiQueueJ
 
   let key = job.key
   try {
-    const selected = selectNote({ repository: createNoteRepository(rootPath), selector: job.key })
+    const selected = selectNote({ repository: createNoteRepository(rootPath), selector: job.key, visibility: "all" })
     key = selected.frontmatter.id
   } catch (error) {
     if (error instanceof SelectorNotFoundError) {

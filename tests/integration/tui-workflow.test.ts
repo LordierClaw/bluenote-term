@@ -197,6 +197,11 @@ async function markDescriptionProcessedAt(rootPath: string, key: string, lastPro
 }
 
 function openManagerFolderPath(controller: DefaultWorkspaceController, folderPath: string): void {
+  const normalizedFolderPath = folderPath.replace(/\\/gu, "/").replace(/^\/+|\/+$/gu, "")
+  if (controller.getState().manager.currentFolderPath === normalizedFolderPath) {
+    return
+  }
+
   const directFolderIndex = controller.getState().manager.items.findIndex((item) => item.type === "folder" && item.relativePath === folderPath)
   if (directFolderIndex !== -1) {
     controller.focusManagerItem(directFolderIndex)
@@ -204,7 +209,7 @@ function openManagerFolderPath(controller: DefaultWorkspaceController, folderPat
     return
   }
 
-  const parts = folderPath.split("/").filter(Boolean)
+  const parts = normalizedFolderPath.split("/").filter(Boolean)
   let prefix = ""
 
   for (const part of parts) {
@@ -231,6 +236,8 @@ describe("TUI workspace workflows", () => {
   test("startup opens recorded note if path exists and openedAt is within TTL", () => {
     const restoredNote = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Restore Me",
       body: "restored body",
       clock: fixedClock("2026-06-05T12:00:00.000Z"),
@@ -254,9 +261,31 @@ describe("TUI workspace workflows", () => {
     })
   })
 
+  test("default TUI ignores stale legacy notes tree in Phase 7 manager and startup restore", async () => {
+    await mkdir(path.join(rootPath, "notes", "inbox"), { recursive: true })
+    await writeFile(path.join(rootPath, "notes", "inbox", "legacy-note.md"), "# Legacy Note\n\nOld body", "utf8")
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: "notes/inbox/legacy-note.md",
+      openedAt: "2026-06-06T11:00:00.000Z",
+    })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clock: fixedClock("2026-06-06T12:00:00.000Z"),
+      cleanupStaleAtomicTemps: () => {},
+    })
+
+    assert.equal(controller.getState().editor?.note.relativePath.startsWith("draft/"), true)
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    assert.equal(controller.getState().manager.items.some((item) => item.relativePath.startsWith("notes")), false)
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "note" && item.key === "legacy-note"), false)
+  })
+
   test("startup creates and opens draft when latest-opened is stale", () => {
     const staleNote = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Stale Restore",
       body: "stale body",
       clock: fixedClock("2026-05-01T12:00:00.000Z"),
@@ -301,6 +330,8 @@ describe("TUI workspace workflows", () => {
   test("OpenTUI lifecycle starts on the latest-opened editor and quits cleanly from editor input", async () => {
     const restoredNote = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Lifecycle Restore",
       body: "restored lifecycle body",
       clock: fixedClock("2026-06-05T12:00:00.000Z"),
@@ -367,6 +398,37 @@ describe("TUI workspace workflows", () => {
       newer.relativePath,
       older.relativePath,
     ])
+  })
+
+  test("default manager delete removes visible draft notes", async () => {
+    const draft = createNote({
+      override: rootPath,
+      type: "draft",
+      body: "delete this draft",
+      randomSource: () => 333333,
+      clock: fixedClock("2026-06-03T00:00:00.000Z"),
+    })
+    createLatestOpenedNoteRepository(rootPath).write({
+      relativePath: draft.relativePath,
+      openedAt: "2026-06-03T12:00:00.000Z",
+    })
+
+    const controller = createDefaultWorkspaceController({
+      rootPath,
+      clock: fixedClock("2026-06-04T00:00:00.000Z"),
+      cleanupStaleAtomicTemps: () => {},
+    })
+
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    assert.equal(controller.getState().manager.currentFolderPath, "draft")
+    controller.focusManagerItem(0)
+    controller.openManagerDeleteConfirmation()
+
+    await controller.confirmManagerDelete()
+
+    assert.equal(controller.getState().mode, "manager.browse")
+    assert.equal(existsSync(path.join(rootPath, draft.relativePath)), false)
+    assert.equal(controller.getState().manager.items.some((item) => item.key === draft.key), false)
   })
 
   test("runtime Ctrl+PageDown and Ctrl+PageUp switch editor notes in the same folder", async () => {
@@ -512,11 +574,13 @@ describe("TUI workspace workflows", () => {
     }
   })
 
-  test("default manager keeps real legacy notes reachable when Phase 7 areas exist", async () => {
+  test("default manager keeps real legacy notes hidden when Phase 7 areas exist", async () => {
     await mkdir(path.join(rootPath, "notes", "inbox"), { recursive: true })
     await writeFile(path.join(rootPath, "notes", "inbox", "daily.md"), "---\nid: daily\nschemaVersion: 1\ntitle: Legacy Daily\nmode: note\ntags: []\ncreatedAt: '2026-05-20T10:00:00.000Z'\nupdatedAt: '2026-05-20T10:00:00.000Z'\n---\n\nLegacy body", "utf8")
     createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Phase 7 Draft",
       body: "draft body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -527,14 +591,7 @@ describe("TUI workspace workflows", () => {
     const controller = createDefaultWorkspaceController({ rootPath })
     assert.deepEqual(controller.showManager(), { blocked: false })
     if (controller.getState().manager.currentFolderPath !== "") controller.goBack()
-    assert.equal(controller.getState().manager.items.some((item) => item.type === "folder" && item.relativePath === "notes"), true)
-
-    openManagerFolderPath(controller, "notes/inbox")
-    const legacyIndex = controller.getState().manager.items.findIndex((item) => item.type === "note" && item.relativePath === "notes/inbox/daily.md")
-    assert.notEqual(legacyIndex, -1)
-    controller.focusManagerItem(legacyIndex)
-    assert.equal(controller.openFocusedManagerItem().blocked, false)
-    assert.equal(controller.getState().editor?.note.relativePath, "notes/inbox/daily.md")
+    assert.equal(controller.getState().manager.items.some((item) => item.type === "folder" && item.relativePath === "notes"), false)
   })
 
   test("manager shows filesystem-seeded empty user folders while hiding internal note folders", async () => {
@@ -616,6 +673,8 @@ describe("TUI workspace workflows", () => {
     const unrelatedTemp = path.join(tempPath, "editor-swap.tmp")
     const normalNote = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Normal Note",
       body: "normal note body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -649,12 +708,16 @@ describe("TUI workspace workflows", () => {
   test("loads manager rows, opens a note, edits body, saves, and persists the plain note file", async () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Daily Ideas",
       body: "Initial body with café",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
     createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Second Note",
       body: "Another note",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
@@ -681,6 +744,8 @@ describe("TUI workspace workflows", () => {
     const aiIdleScheduler = createFakeScheduler()
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "TUI Queued Save",
       body: "Initial TUI body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -726,6 +791,8 @@ describe("TUI workspace workflows", () => {
     const aiIdleScheduler = createFakeScheduler()
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "TUI Queued Autosave",
       body: "Initial autosave body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -765,6 +832,8 @@ describe("TUI workspace workflows", () => {
   test("TUI save does not enqueue when body is unchanged", async () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "TUI Unchanged Save",
       body: "Stable TUI body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -783,6 +852,8 @@ describe("TUI workspace workflows", () => {
   test("no AI config leaves TUI save and autosave workflows without queue.json", async () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "TUI No AI Save",
       body: "Initial no AI body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -804,6 +875,8 @@ describe("TUI workspace workflows", () => {
     const aiIdleScheduler = createFakeScheduler()
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "TUI Queue Failure Save",
       body: "Initial failure body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -829,6 +902,8 @@ describe("TUI workspace workflows", () => {
     const aiIdleScheduler = createFakeScheduler()
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "TUI Queue Failure Autosave",
       body: "Initial autosave failure body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -853,12 +928,16 @@ describe("TUI workspace workflows", () => {
   test("AI startup scan starts default controller without blocking and enqueues only stale notes", async () => {
     const stale = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Startup Stale Description",
       body: "Stale startup body should be queued.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
     const fresh = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Startup Fresh Description",
       body: "Fresh startup body should not be queued.",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
@@ -898,6 +977,8 @@ describe("TUI workspace workflows", () => {
   test("AI startup scan preserves existing failed queue counts when no stale work is enqueued", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Startup Failed Queue Count",
       body: "Already processed startup body.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -940,6 +1021,8 @@ describe("TUI workspace workflows", () => {
   test("AI startup scan processes already pending queue work when no stale work is enqueued", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Startup Pending Queue",
       body: "Already queued startup body.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -977,6 +1060,8 @@ describe("TUI workspace workflows", () => {
   test("AI startup scan timer is cleared when the default controller is disposed before idle", async () => {
     const stale = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Disposed Startup Scan",
       body: "Disposed startup scan should not leave a pending timer.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -996,6 +1081,8 @@ describe("TUI workspace workflows", () => {
   test("AI startup queued stale notes can still be processed explicitly", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Startup Explicit Process Queue",
       body: "Startup queued body should be processed on command.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1026,6 +1113,8 @@ describe("TUI workspace workflows", () => {
   test("AI startup scan attempts Codex refreshable expired auth instead of preflight blocking", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Expired Codex Refreshable Startup",
       body: "Expired access token should still allow refresh-backed startup work.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1059,6 +1148,8 @@ describe("TUI workspace workflows", () => {
   test("AI process queue leaves refreshed newer jobs pending when an older provider call fails", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "TUI Stale Failure Queue",
       body: "Original queued body.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1106,12 +1197,16 @@ describe("TUI workspace workflows", () => {
   test("AI process queue cleans up deleted-note work without blocking TUI interaction", async () => {
     const deletedNote = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Deleted TUI Queue",
       body: "Deleted stale queue body.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
     const existingNote = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Existing TUI Queue",
       body: "Existing queue body.",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
@@ -1167,6 +1262,8 @@ describe("TUI workspace workflows", () => {
   test("AI process queue cleans up deleted-note work before Codex auth setup and does not block TUI interaction", async () => {
     const deletedNote = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Deleted Codex Auth Queue",
       body: "Deleted codex auth queue body.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1204,6 +1301,8 @@ describe("TUI workspace workflows", () => {
   test("TUI startup forgets deleted exhausted failed queue jobs before showing AI status", async () => {
     const deletedNote = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Deleted Exhausted Queue",
       body: "Deleted exhausted queue body.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1244,6 +1343,8 @@ describe("TUI workspace workflows", () => {
   test("AI process queue preserves queued jobs without attempts when AI is disabled", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Disabled TUI Queue",
       body: "Disabled AI should not consume queued attempts.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1284,6 +1385,8 @@ describe("TUI workspace workflows", () => {
   test("AI process queue preserves Codex jobs when auth refresh fails without blocking TUI interaction", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "TUI Codex Refresh Failure Queue",
       body: "Codex refresh failure should keep this job pending.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1330,6 +1433,8 @@ describe("TUI workspace workflows", () => {
     const longBody = Array.from({ length: 220 }, (_, index) => `Section ${index}: detailed non-sensitive project notes for retry coverage.`).join("\n")
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Long Retry Nonblocking",
       body: longBody,
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1393,12 +1498,16 @@ describe("TUI workspace workflows", () => {
   test("AI process queue retries existing failed jobs before max attempts", async () => {
     const failedNote = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Existing Failed Queue Count",
       body: "Failed queue body.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
     const pendingNote = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Pending With Failed Queue Count",
       body: "Pending queue body.",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
@@ -1447,6 +1556,8 @@ describe("TUI workspace workflows", () => {
     const longLine = "0123456789abcdefghijklmnopqrstuvwxyz日本語"
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Long Line",
       body: longLine,
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1478,18 +1589,24 @@ describe("TUI workspace workflows", () => {
   test("edit-save-switch-quit workflow persists both edited files", async () => {
     const alphaSummary = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Alpha Summary",
       body: "summary",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
     const alphaSource = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Alpha Source",
       body: "source",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
     })
     const beta = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Beta",
       body: "beta",
       clock: fixedClock("2026-05-26T10:02:00.000Z"),
@@ -1533,6 +1650,8 @@ describe("TUI workspace workflows", () => {
   test("editor Mode A clipboard uses terminal paste plus /copy-all and /replace-all", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Clipboard Flow",
       body: "Alpha Beta Gamma",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1640,6 +1759,8 @@ describe("TUI workspace workflows", () => {
   test("default TUI controller wires a desktop-capable clipboard adapter", () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Default Desktop Clipboard",
       body: "Alpha Beta Gamma",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1665,6 +1786,8 @@ describe("TUI workspace workflows", () => {
   test("editor undo redo shortcuts restore body and shortcut labels are honest", () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Undo Shortcut Flow",
       body: "start",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1696,6 +1819,8 @@ describe("TUI workspace workflows", () => {
   test("editor replace shortcut highlights the active match and replacement flow autosaves to disk", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Replace Flow",
       body: "alpha beta alpha",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1738,6 +1863,8 @@ describe("TUI workspace workflows", () => {
   test("editor replace shortcut starts on find field, accepts needle Tab thread Enter, and autosaves to disk", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Replace Focus Flow",
       body: "alpha needle alpha",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1794,12 +1921,16 @@ describe("TUI workspace workflows", () => {
   test("autosave after editor input persists and manager can switch notes without blocking", async () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Autosave Source",
       body: "Source body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
     const second = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Autosave Switch Target",
       body: "Target body",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
@@ -1859,6 +1990,8 @@ describe("TUI workspace workflows", () => {
   test("autosave keeps saved state when derived-index rebuild fails after note persistence", async () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Post Write Rebuild Failure",
       body: "Original body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1885,6 +2018,8 @@ describe("TUI workspace workflows", () => {
   test("dirty editor state still routes Esc, q, and Ctrl+C from manager", () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Dirty Routing Source",
       body: "Source body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1911,12 +2046,16 @@ describe("TUI workspace workflows", () => {
   test("dirty manager note switch is blocked with a visible status instead of reopening only the same note", () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Dirty Switch Source",
       body: "Source body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
     const second = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Dirty Switch Target",
       body: "Target body",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
@@ -1952,6 +2091,8 @@ describe("TUI workspace workflows", () => {
   test("manual save after cursor-aware editor input persists through core services", async () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Cursor Save",
       body: "Alpha omega",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -1982,6 +2123,8 @@ describe("TUI workspace workflows", () => {
   test("manual save refreshes search indexes for the saved note without requiring a full rebuild", async () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Incremental Save Source",
       body: "Original searchable body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -2017,6 +2160,8 @@ describe("TUI workspace workflows", () => {
   test("manual save atomic pre-write failure keeps TUI editor dirty and leaves note file unchanged", async () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Atomic Failure Save",
       body: "Original body before writer failure",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -2098,6 +2243,8 @@ describe("TUI workspace workflows", () => {
   test("manager delete confirmation removes a real note file and sidecar through core services", async () => {
     const created = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "TUI Delete Target",
       body: "Delete me",
       clock: fixedClock("2026-05-26T10:03:00.000Z"),
@@ -2128,12 +2275,16 @@ describe("TUI workspace workflows", () => {
   test("opens Search Everything from editor, selects a content match, and returns to editor", () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Daily Ideas",
       body: "Needle phrase lives here",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
     const second = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Research Log",
       body: "Alpha beta gamma delta epsilon quokka zeta eta theta iota",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
@@ -2163,12 +2314,16 @@ describe("TUI workspace workflows", () => {
   test("Search Everything exposes and selects every content occurrence for the same note", () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Current Note",
       body: "current body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
     })
     const repeated = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Repeated Occurrences",
       body: "needle on line one\nneedle on line two",
       clock: fixedClock("2026-05-26T10:01:00.000Z"),
@@ -2222,6 +2377,8 @@ describe("TUI workspace workflows", () => {
   test("Search Everything navigates deeply through many matches and Enter opens the selected visible result", () => {
     const created = Array.from({ length: 16 }, (_, index) => createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: `Many Match ${index.toString().padStart(2, "0")}`,
       body: `sharedtoken body ${index}`,
       clock: fixedClock(`2026-05-26T10:${index.toString().padStart(2, "0")}:00.000Z`),
@@ -2247,6 +2404,8 @@ describe("TUI workspace workflows", () => {
   test("Search Everything can select summary results and cancel when content search index is unavailable", () => {
     const first = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Fallback Daily",
       body: "Body text that should not be needed for summary fallback",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -2291,6 +2450,8 @@ describe("TUI workspace workflows", () => {
   test("default Search Everything hides unusable commands and runs shown editor commands", () => {
     createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Default Command Note",
       body: "Command body",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),
@@ -2320,6 +2481,8 @@ describe("TUI workspace workflows", () => {
   test("default TUI controller wires /ai-describe to the description service asynchronously", async () => {
     const note = createNote({
       override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
       title: "Default AI Describe",
       body: "Body that the mock provider summarizes.",
       clock: fixedClock("2026-05-26T10:00:00.000Z"),

@@ -80,12 +80,13 @@ export function createNote(options: CreateNoteOptions): CreateNoteSummary {
       })
     }
 
-    const destinationFolder = options.destinationFolder
-    if (destinationFolder === undefined || destinationFolder.trim().length === 0) {
-      throw new UsageError("Normal note creation requires a destination folder under note/.", {
-        hint: "Pass an existing note/... folder as the normal note destination.",
+    if (options.destinationFolder === undefined || options.destinationFolder.trim().length === 0) {
+      throw new UsageError("Normal note creation requires an explicit destination folder.", {
+        hint: "Pass --path note/<folder> or destinationFolder when creating a normal note.",
       })
     }
+
+    const destinationFolder = options.destinationFolder
 
     title = options.title
     key = createNoteKey(title, {

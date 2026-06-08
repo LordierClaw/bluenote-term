@@ -127,6 +127,58 @@ test("syncEditedNote updates the plain markdown body and aligned sidecar metadat
   }
 })
 
+test("rename refreshes derived description while preserving AI freshness metadata", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-rename-metadata-"))
+
+  try {
+    ensureManagedRoot(rootPath)
+    const repository = createNoteRepository(rootPath)
+    const created = repository.create({
+      frontmatter: FIXED_FRONTMATTER,
+      body: "Original body.\n",
+    })
+    const sidecarPath = path.join(getStateNotesPath(rootPath), "note-123.json")
+    const existingSidecar = JSON.parse(await readFile(sidecarPath, "utf8"))
+    await writeFile(
+      sidecarPath,
+      JSON.stringify({
+        ...existingSidecar,
+        description: "Custom AI summary.",
+        ai: {
+          description: {
+            lastProcessedAt: "2026-05-21T11:00:00.000Z",
+          },
+        },
+      }, null, 2) + "\n",
+      "utf8",
+    )
+
+    const renamed = repository.rename(created.notePath, {
+      nextKey: "renamed-note",
+      title: "Renamed Note",
+      body: "Renamed body should replace stale summary.\n",
+      updatedAt: "2026-05-21T12:30:00.000Z",
+    })
+
+    assert.equal(renamed.relativePath, "note/renamed-note.md")
+    await assert.rejects(() => access(sidecarPath), { code: "ENOENT" })
+
+    const renamedSidecar = JSON.parse(await readFile(path.join(getStateNotesPath(rootPath), "renamed-note.json"), "utf8"))
+    assert.equal(renamedSidecar.title, "Renamed Note")
+    assert.equal(renamedSidecar.description, "Renamed body should replace stale summary.")
+    assert.deepEqual(renamedSidecar.ai, {
+      description: {
+        lastProcessedAt: "2026-05-21T11:00:00.000Z",
+      },
+    })
+    assert.equal(renamedSidecar.relativePath, "note/renamed-note.md")
+    assert.equal(renamedSidecar.createdAt, "2026-05-21T10:15:00.000Z")
+    assert.equal(renamedSidecar.updatedAt, "2026-05-21T12:30:00.000Z")
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
 test("reading and listing notes joins plain file bodies with sidecar metadata", async () => {
   const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-note-repository-integration-"))
 

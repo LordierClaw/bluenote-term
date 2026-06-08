@@ -10,7 +10,6 @@ import { deleteNote } from "../core/delete-note"
 import { editNote } from "../core/edit-note"
 import { initRoot } from "../core/init-root"
 import { listNotes } from "../core/list-notes"
-import { migrateStorage, type MigrateStorageOptions } from "../core/migrate-storage"
 import { rebuildIndexes, type RebuildIndexesOptions } from "../core/rebuild-indexes"
 import { searchNotes, type SearchNoteMatch } from "../core/search-notes"
 import { showNote } from "../core/show-note"
@@ -21,7 +20,6 @@ import { runAiCli, type AiCliRuntimeOptions } from "./ai"
 
 export interface CliRuntimeOptions {
   createNoteOptions?: Pick<Parameters<typeof createNote>[0], "clock" | "randomSource">
-  migrateStorageOptions?: Pick<MigrateStorageOptions, "clock" | "randomSource">
   rebuildIndexesOptions?: Pick<RebuildIndexesOptions, "testHooks">
   tuiRunner?: () => CliResult
   ai?: AiCliRuntimeOptions
@@ -95,15 +93,30 @@ function parseVisibilityArgs(args: string[]): { args: string[]; visibility: Note
   return { args: args.slice(index), visibility }
 }
 
-function parseSelectorArgs(command: string, args: string[], options: { requireForce?: boolean } = {}): { selector: string; force: boolean } {
+function parseSelectorArgs(command: string, args: string[], options: { requireForce?: boolean } = {}): { selector: string; force: boolean; visibility: NoteVisibility } {
   const selectors: string[] = []
   let force = false
+  let visibility: NoteVisibility = "normal"
 
   for (const arg of args) {
-    if (arg === "--drafts" || arg === "--all") {
-      throw new UsageError(`${command} does not accept ${arg}.`, {
-        hint: `Run bn ${command} <key|path>${options.requireForce ? " --force" : ""}.`,
-      })
+    if (arg === "--drafts") {
+      if (visibility === "all") {
+        throw new UsageError("Choose either --drafts or --all, not both.", {
+          hint: "Use --drafts for normal + draft notes, or --all to include archived notes.",
+        })
+      }
+      visibility = "drafts"
+      continue
+    }
+
+    if (arg === "--all") {
+      if (visibility === "drafts") {
+        throw new UsageError("Choose either --drafts or --all, not both.", {
+          hint: "Use --drafts for normal + draft notes, or --all to include archived notes.",
+        })
+      }
+      visibility = "all"
+      continue
     }
 
     if (arg === "--force") {
@@ -138,7 +151,7 @@ function parseSelectorArgs(command: string, args: string[], options: { requireFo
     })
   }
 
-  return { selector: selectors[0], force }
+  return { selector: selectors[0], force, visibility }
 }
 
 interface ParsedNewArgs {
@@ -276,15 +289,30 @@ export function formatHelp(version: string): string {
     "  new          [--title <title>] [--path note/<folder>] [--clipboard] <body>",
     "               Create a draft from body text or clipboard; --path creates a normal note",
     "  list         [--drafts|--all]  List notes as title, key, description, and path",
-    "  show         <key|path>  Print a matching note summary and body",
+    "  show         [--drafts|--all] <key|path>  Print a matching note summary and body",
     "  search       [--drafts|--all] <query>  Search indexed notes",
-    "  edit         <key|path>  Open a matching note in $EDITOR",
-    "  archive      <key|path>  Archive a matching note",
-    "  delete       <key|path> --force  Permanently remove a matching note and sidecar",
+    "  edit         [--drafts|--all] <key|path>  Open a matching note in $EDITOR",
+    "  archive      [--drafts|--all] <key|path>  Archive a matching normal note",
+    "  delete       [--drafts|--all] <key|path> --force  Permanently remove a matching note and sidecar",
     "  rebuild      Rebuild derived metadata and search indexes",
-    "  migrate      Convert frontmatter notes into plain files + sidecars",
     "  tui          Launch the terminal UI workspace",
     "  ai           Configure and run opt-in AI description generation",
+  ].join("\n") + "\n"
+}
+
+export function formatNewHelp(): string {
+  return [
+    "Usage:",
+    "  bn new [--title <title>] [--path note/<folder>] [--clipboard] <body>",
+    "",
+    "Creates a new note from quoted body text or clipboard text.",
+    "Without --path, creates a draft under draft/.",
+    "With --path note/<folder> and --title, creates a normal note under an existing note folder.",
+    "",
+    "Options:",
+    "  --title, -t <title>  Set the note title",
+    "  --path <folder>     Existing note/<folder> destination for a normal note",
+    "  --clipboard         Read note body from the clipboard",
   ].join("\n") + "\n"
 }
 
@@ -326,29 +354,6 @@ export function formatSearchMatches(query: string, matches: SearchNoteMatch[]): 
   }).join("\n\n") + "\n"
 }
 
-export function formatMigrateCliResult(summary: ReturnType<typeof migrateStorage>): CliResult {
-  if (summary.status === "noop") {
-    return {
-      exitCode: 0,
-      stdout:
-        summary.reason === "new-format"
-          ? "BlueNote storage is already migrated; nothing to do.\n"
-          : "BlueNote root is empty; nothing to migrate.\n",
-      stderr: "",
-    }
-  }
-
-  const keyMapLines = Object.entries(summary.keyMap)
-    .sort(([left], [right]) => left.localeCompare(right))
-    .map(([previousId, nextKey]) => `Key map: ${previousId} -> ${nextKey}`)
-  const stdoutLines = [`Migrated ${summary.migratedNoteCount} legacy note(s) to plain-note + sidecar storage.`, ...keyMapLines]
-
-  return {
-    exitCode: 0,
-    stdout: `${stdoutLines.join("\n")}\n`,
-    stderr: "",
-  }
-}
 
 export function runCli(args: string[], version: string, runtime: CliRuntimeOptions = {}): CliResult {
   try {
@@ -377,6 +382,10 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
     }
 
     if (command === "new") {
+      if (commandArgs.length === 1 && commandArgs[0] === "--help") {
+        return { exitCode: 0, stdout: formatNewHelp(), stderr: "" }
+      }
+
       const parsed = parseNewArgs(commandArgs)
       const body = readNewNoteBody(parsed, runtime)
 
@@ -398,9 +407,9 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
     }
 
     if (command === "edit") {
-      const { selector } = parseSelectorArgs("edit", commandArgs)
+      const { selector, visibility } = parseSelectorArgs("edit", commandArgs)
 
-      const summary = editNote({ selector })
+      const summary = editNote({ selector, visibility })
       const renameLine =
         summary.previousKey !== undefined && summary.key !== undefined && summary.previousKey !== summary.key
           ? `Renamed key: ${summary.previousKey} -> ${summary.key}\n`
@@ -414,9 +423,9 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
     }
 
     if (command === "archive") {
-      const { selector } = parseSelectorArgs("archive", commandArgs)
+      const { selector, visibility } = parseSelectorArgs("archive", commandArgs)
 
-      const summary = archiveNote({ selector })
+      const summary = archiveNote({ selector, visibility })
 
       return {
         exitCode: 0,
@@ -426,11 +435,12 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
     }
 
     if (command === "delete") {
-      const { selector, force } = parseSelectorArgs("delete", commandArgs, { requireForce: true })
+      const { selector, force, visibility } = parseSelectorArgs("delete", commandArgs, { requireForce: true })
 
       const summary = deleteNote({
         selector,
         force,
+        visibility,
       })
 
       return {
@@ -480,9 +490,9 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
     }
 
     if (command === "show") {
-      const { selector } = parseSelectorArgs("show", commandArgs)
+      const { selector, visibility } = parseSelectorArgs("show", commandArgs)
 
-      const shown = showNote({ selector })
+      const shown = showNote({ selector, visibility })
 
       return {
         exitCode: 0,
@@ -509,9 +519,6 @@ export function runCli(args: string[], version: string, runtime: CliRuntimeOptio
       }
     }
 
-    if (command === "migrate") {
-      return formatMigrateCliResult(migrateStorage(runtime.migrateStorageOptions))
-    }
 
     return formatCliError(
       new UsageError(`Unknown command: ${command}`, {

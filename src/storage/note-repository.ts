@@ -87,11 +87,11 @@ function getCreateValidationSourcePath(frontmatter: unknown): string {
     const candidateId = (frontmatter as { id?: unknown }).id
 
     if (typeof candidateId === "string" && candidateId.length > 0) {
-      return joinPortableRelativePath("notes", "inbox", `${candidateId}.md`)
+      return joinPortableRelativePath("note", `${candidateId}.md`)
     }
   }
 
-  return joinPortableRelativePath("notes", "inbox", "<unknown>.md")
+  return joinPortableRelativePath("note", "<unknown>.md")
 }
 
 function wrapRepositoryError(action: "create" | "read" | "list" | "archive" | "delete", relativePath: string, error: unknown): never {
@@ -235,9 +235,9 @@ function assertUniqueNoteKeys(rootPath: string, notePaths: readonly string[]): v
 
     if (firstRelativePath !== undefined) {
       throw new UsageError(
-        `Found duplicate note key '${key}' for '${firstRelativePath}' and '${relativePath}'. Note basenames must be globally unique across the notes tree.`,
+        `Found duplicate note key '${key}' for '${firstRelativePath}' and '${relativePath}'. Note basenames must be globally unique across note, draft, and archive storage.`,
         {
-          hint: "Rename or remove one of the duplicate note files so each note basename/key is unique under notes/.",
+          hint: "Rename or remove one of the duplicate note files so each note basename/key is unique under note/, draft/, and .data/archive/.",
         },
       )
     }

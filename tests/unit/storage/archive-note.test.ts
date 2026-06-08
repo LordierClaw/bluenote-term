@@ -124,6 +124,7 @@ test("archiveNote rejects notes that are already stored under .data/archive", as
         archiveNote({
           override: rootPath,
           selector: "already-archived",
+          visibility: "all",
         }),
       /Note '\.data[\\/]archive[\\/]already-archived\.md' is already archived\./,
     )
@@ -131,6 +132,88 @@ test("archiveNote rejects notes that are already stored under .data/archive", as
     const repository = createNoteRepository(rootPath)
     const archived = repository.read(path.join(rootPath, ".data", "archive", "already-archived.md"))
     assert.equal(archived.frontmatter.archivedAt, "2026-05-21T11:00:00.000Z")
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("archiveNote defaults to normal visibility and requires explicit visibility for drafts", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-archive-note-visibility-"))
+
+  try {
+    await writeNote(rootPath, "draft/draft-abc123.md", "Draft body.\n")
+    await writeSidecar(
+      rootPath,
+      "draft-abc123",
+      sidecarJson({
+        key: "draft-abc123",
+        title: "draft-abc123",
+        description: "Draft body.",
+        relativePath: "draft/draft-abc123.md",
+        type: "draft",
+      }),
+    )
+
+    assert.throws(
+      () =>
+        archiveNote({
+          override: rootPath,
+          selector: "draft-abc123",
+        }),
+      /Could not find a note matching selector 'draft-abc123'\./,
+    )
+
+    assert.throws(
+      () =>
+        archiveNote({
+          override: rootPath,
+          selector: "draft-abc123",
+          visibility: "drafts",
+        }),
+      /Cannot archive non-normal note 'draft[\\/]draft-abc123\.md'\./,
+    )
+
+    await access(path.join(rootPath, "draft", "draft-abc123.md"))
+  } finally {
+    await rm(rootPath, { recursive: true, force: true })
+  }
+})
+
+test("archiveNote requires all visibility before resolving archived exact paths", async () => {
+  const rootPath = await mkdtemp(path.join(os.tmpdir(), "bluenote-archive-note-visibility-"))
+
+  try {
+    await writeNote(rootPath, ".data/archive/already-archived.md", "Already archived.\n")
+    await writeSidecar(
+      rootPath,
+      "already-archived",
+      sidecarJson({
+        key: "already-archived",
+        title: "Already Archived",
+        description: "Already archived.",
+        relativePath: ".data/archive/already-archived.md",
+        archivedAt: "2026-05-21T11:00:00.000Z",
+      }),
+    )
+
+    assert.throws(
+      () =>
+        archiveNote({
+          override: rootPath,
+          selector: ".data/archive/already-archived.md",
+        }),
+      /Could not find a note matching selector '\.data[\\/]archive[\\/]already-archived\.md'\./,
+    )
+
+    assert.throws(
+      () =>
+        archiveNote({
+          override: rootPath,
+          selector: ".data/archive/already-archived.md",
+          visibility: "all",
+        }),
+      /Note '\.data[\\/]archive[\\/]already-archived\.md' is already archived\./,
+    )
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }

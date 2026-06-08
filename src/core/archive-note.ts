@@ -7,8 +7,9 @@ import type { ParsedNote } from "../storage/note-schema"
 import { ensureManagedRoot } from "../storage/root-layout"
 import { rebuildIndexes } from "./rebuild-indexes"
 import { selectNote } from "./select-note"
+import type { NoteVisibilityOptions } from "./note-visibility"
 
-export interface ArchiveNoteOptions extends ResolveBlueNoteRootOptions {
+export interface ArchiveNoteOptions extends ResolveBlueNoteRootOptions, NoteVisibilityOptions {
   selector: string
   clock?: Clock
 }
@@ -36,7 +37,7 @@ function throwArchiveValidationError(stage: "before" | "after", sourcePath: stri
 export function archiveNote(options: ArchiveNoteOptions): ArchiveNoteSummary {
   const rootPath = ensureManagedRoot(resolveBlueNoteRoot(options))
   const repository = createNoteRepository(rootPath)
-  const selected = selectNote({ repository, selector: options.selector })
+  const selected = selectNote({ repository, selector: options.selector, visibility: options.visibility ?? "normal" })
 
   if (isArchivedNote(selected)) {
     throw new UsageError(`Note '${selected.sourcePath}' is already archived.`, {

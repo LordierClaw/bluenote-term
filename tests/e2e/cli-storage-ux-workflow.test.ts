@@ -69,7 +69,12 @@ test("CLI storage and UX workflow stays consistent through the real bin/bn.ts en
     const archiveDraftResult = harness.runBin(["archive", draftKey])
     assert.equal(archiveDraftResult.exitCode, 1)
     assert.equal(archiveDraftResult.stdout, "")
-    assert.match(archiveDraftResult.stderr, /Cannot archive non-normal note/)
+    assert.match(archiveDraftResult.stderr, /Could not find a note matching selector/)
+
+    const archiveVisibleDraftResult = harness.runBin(["archive", "--drafts", draftKey])
+    assert.equal(archiveVisibleDraftResult.exitCode, 1)
+    assert.equal(archiveVisibleDraftResult.stdout, "")
+    assert.match(archiveVisibleDraftResult.stderr, /Cannot archive non-normal note/)
 
     const noBodyResult = harness.runBin(["new"])
     assert.equal(noBodyResult.exitCode, 1)
@@ -92,11 +97,11 @@ test("CLI storage and UX workflow stays consistent through the real bin/bn.ts en
     assert.match(listDraftsResult.stdout, /draft-[a-z0-9]{6}\tdraft-[a-z0-9]{6}\tQuick draft body\tdraft\/draft-[a-z0-9]{6}\.md/)
 
     const draftEditorScriptPath = await harness.writeFakeEditorScript("Edited draft body mentions comet flags.\n")
-    const draftEditResult = runOk("bn edit draft", ["edit", draftKey], { EDITOR: draftEditorScriptPath })
+    const draftEditResult = runOk("bn edit draft", ["edit", "--drafts", draftKey], { EDITOR: draftEditorScriptPath })
     assert.equal(draftEditResult.stdout, `Edited note: draft/${draftKey}.md\n`)
     assert.equal(await readFile(path.join(harness.rootPath, draftRelativePath), "utf8"), "Edited draft body mentions comet flags.\n")
 
-    const showDraftResult = runOk("bn show draft", ["show", draftKey])
+    const showDraftResult = runOk("bn show draft", ["show", "--drafts", draftKey])
     assert.match(showDraftResult.stdout, /Edited draft body mentions comet flags\./)
 
     const searchResult = runOk("bn search workflow beta", ["search", "workflow beta"])
@@ -137,8 +142,12 @@ test("CLI storage and UX workflow stays consistent through the real bin/bn.ts en
     const archiveResult = runOk("bn archive renamed", ["archive", renamedKey])
     assert.match(archiveResult.stdout, new RegExp(`Archived note: \.data/archive/${harness.escapeForRegExp(renamedKey)}\\.md`))
 
-    const archiveShowResult = runOk("bn show archived exact path", ["show", `.data/archive/${renamedKey}.md`])
+    const archiveShowResult = runOk("bn show archived exact path", ["show", "--all", `.data/archive/${renamedKey}.md`])
     assert.match(archiveShowResult.stdout, new RegExp(`^Path: \.data/archive/${harness.escapeForRegExp(renamedKey)}\\.md$`, "m"))
+    const archiveArchivedResult = harness.runBin(["archive", `.data/archive/${renamedKey}.md`])
+    assert.equal(archiveArchivedResult.exitCode, 1)
+    assert.equal(archiveArchivedResult.stdout, "")
+    assert.match(archiveArchivedResult.stderr, /Could not find a note matching selector/)
     const archivedSidecar = await readSidecar(renamedKey)
     assert.equal(archivedSidecar.type, "archived")
     assert.equal(archivedSidecar.relativePath, `.data/archive/${renamedKey}.md`)

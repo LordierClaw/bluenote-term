@@ -16,9 +16,10 @@ test("bn --help prints the visible command surface without removed command or re
   assert.equal(result.stderr.toString(), "")
 
   const output = result.stdout.toString()
-  for (const command of ["init", "new", "list", "show", "search", "edit", "archive", "delete", "rebuild", "migrate", "tui", "ai"]) {
+  for (const command of ["init", "new", "list", "show", "search", "edit", "archive", "delete", "rebuild", "tui", "ai"]) {
     assert.match(output, new RegExp(`(^|\\n)  ${command}(\\s|$)`, "m"))
   }
+  assert.doesNotMatch(output, /(^|\n)  migrate(\s|$)/m)
 
   assert.match(output, /tui\s+Launch the terminal UI workspace/)
   assert.match(output, /ai\s+Configure and run opt-in AI description generation/)
@@ -59,12 +60,13 @@ test("bn ai help and config commands describe opt-in provider behavior without n
 }, 15_000)
 
 test("current docs document the Phase 6 opt-in AI description workflow", async () => {
-  const [readme, overview, rootLayout, noteFormat, runtime, phaseDoc, consolidatedPlan] = await Promise.all([
+  const [readme, overview, rootLayout, noteFormat, runtime, designLanguage, phaseDoc, consolidatedPlan] = await Promise.all([
     readWorkspaceFile("README.md"),
     readWorkspaceFile("docs/product/overview.md"),
     readWorkspaceFile("docs/architecture/managed-root-layout.md"),
     readWorkspaceFile("docs/architecture/note-format-and-indexing.md"),
     readWorkspaceFile("docs/architecture/runtime-and-dependencies.md"),
+    readWorkspaceFile("docs/product/design-language.md"),
     readWorkspaceFile("docs/phases/phase-6-ai-suggestion.md"),
     readWorkspaceFile("docs/plans/2026-06-05-phase-6-ai-suggestion-consolidated-plan.md"),
   ])
@@ -94,7 +96,21 @@ test("current docs document the Phase 6 opt-in AI description workflow", async (
   assert.match(readme, /Generated descriptions must be one short sentence under 10 words/)
   assert.match(readme, /10-second editor idle timer/)
   assert.match(readme, /5-second manager idle timer/)
+  assert.match(readme, /Create a draft, or pass --path note\/<folder> with --title to create a normal note/)
+  assert.match(readme, /bun run \.\/bin\/bn\.ts new --path note --title "Project notes" "Initial content"/)
+  assert.match(readme, /`new \[--title <title>\] \[--path note\/<folder>\] \[--clipboard\] <body>`/)
+  assert.doesNotMatch(readme, /--content <text>/)
+  assert.match(readme, /`show \[--drafts\|--all\] <key\|path>`/)
+  assert.match(readme, /`edit \[--drafts\|--all\] <key\|path>`/)
+  assert.match(readme, /`archive \[--drafts\|--all\] <key\|path>`/)
+  assert.match(readme, /`delete \[--drafts\|--all\] <key\|path> --force`/)
+  assert.match(readme, /`Ctrl\+PageDown` and `Ctrl\+PageUp` switch to the next or previous note in the same folder/)
+  assert.match(readme, /shows a temporary blue index label such as `03\/10` before the title/)
 
+  assert.match(rootLayout, /note\/\s+# normal user notes/)
+  assert.match(rootLayout, /draft\/\s+# draft notes/)
+  assert.match(rootLayout, /`\.data\/archive\/` stores archived note files/)
+  assert.doesNotMatch(rootLayout, /^├── notes\/|^├── scratches\/|^├── templates\/|^│   ├── inbox\/|^│   ├── journal\//m)
   assert.match(rootLayout, /\.data\/ai\//)
   assert.match(rootLayout, /config\.json/)
   assert.match(rootLayout, /prompts\//)
@@ -107,6 +123,11 @@ test("current docs document the Phase 6 opt-in AI description workflow", async (
   assert.match(rootLayout, /pending AI work is durable and recovered on TUI startup/)
   assert.match(rootLayout, /ai\.description\.lastProcessedAt/)
   assert.match(noteFormat, /AI-generated descriptions are automatically written to `\.data\/notes\/<key>\.json`/)
+  assert.match(noteFormat, /"type": "normal"/)
+  assert.match(noteFormat, /"relativePath": "note\/example-title-51u7i0\.md"/)
+  assert.match(noteFormat, /legacy frontmatter and the old `notes\/` tree are not part of the Phase 7 storage contract/)
+  assert.doesNotMatch(noteFormat, /notes\/inbox/)
+  assert.doesNotMatch(await readWorkspaceFile("src/tui/render-search-everything.ts"), /notes\/inbox/)
   assert.match(noteFormat, /OpenAI-compatible provider keys in `\.data\/ai\/config\.json` are plaintext/)
   assert.match(noteFormat, /Codex provider auth state lives at `\.data\/ai\/codex-auth\.json` and is sensitive root-local app state/)
   assert.match(noteFormat, /TUI also schedules idle\/background processing/)
@@ -116,6 +137,7 @@ test("current docs document the Phase 6 opt-in AI description workflow", async (
   assert.match(noteFormat, /one short sentence under 10 words/)
   assert.doesNotMatch(noteFormat, /Users manually run `bn ai describe <key\|path>` for one note or `bn ai process-queue \[--limit <n>\]` for pending jobs/)
   assert.doesNotMatch(noteFormat, /experimental Codex provider config|real auth setup is performed separately/)
+  assert.doesNotMatch(noteFormat, /migration compatibility, not canonical storage|Legacy `\.state\/` directories are used only as migration input/)
 
   assert.doesNotMatch(overview, /AI processing or model calls\n/)
   assert.doesNotMatch(overview, /automatic AI daemon\/autostart processing/)
@@ -131,6 +153,13 @@ test("current docs document the Phase 6 opt-in AI description workflow", async (
   assert.match(overview, /On TUI startup, BlueNote scans sidecar `updatedAt` against `ai\.description\.lastProcessedAt`/)
   assert.match(overview, /timestamp-only sidecar freshness metadata/)
   assert.match(overview, /Generated descriptions are one short sentence under 10 words/)
+  assert.match(overview, /plain Markdown normal note files under `note\/` and drafts under `draft\/`/)
+  assert.match(overview, /Phase 7 fresh-root storage with no legacy `notes\/` tree migration path/)
+  assert.match(overview, /CLI flows for `init`, `new`, `list`, `show`, `search`, `edit`, `archive`, `delete`, `rebuild`, and `tui`/)
+  assert.match(overview, /Normal notes remain plain Markdown under `note\/`, drafts remain plain Markdown under `draft\/`, and archived note bodies move to hidden `\.data\/archive\/` storage/)
+  assert.doesNotMatch(overview, /plain Markdown note files under `notes\/`|Notes remain plain Markdown under `notes\/`|CLI flows for .*`migrate`/)
+  assert.match(designLanguage, /note\/inbox\/visual-polish\.md/)
+  assert.doesNotMatch(designLanguage, /notes\/inbox\/visual-polish\.md/)
 
   assert.match(runtime, /Manual save and autosave never call the configured provider API/)
   assert.match(runtime, /AI processing runs in idle background tasks/)
