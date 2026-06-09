@@ -196,12 +196,16 @@ test("current docs document the Phase 6 opt-in AI description workflow", async (
 })
 
 test("release workflow publishes only versioned archive assets with the SQL.js WASM companion inside", async () => {
-  const [releaseWorkflow, releaseDocs] = await Promise.all([
+  const [releaseWorkflow, releaseDocs, packageJsonText] = await Promise.all([
     readWorkspaceFile(".github/workflows/release.yml"),
     readWorkspaceFile("docs/workflow/releases.md"),
+    readWorkspaceFile("package.json"),
   ])
+  const packageJson = JSON.parse(packageJsonText) as { version: string }
+  const releaseTag = `v${packageJson.version}`
 
   assert.match(releaseWorkflow, /release_version:/)
+  assert.match(releaseWorkflow, new RegExp(`default:\\s*"${releaseTag}"`))
   assert.match(
     releaseWorkflow,
     /BLUENOTE_RELEASE_VERSION:\s*\$\{\{ startsWith\(github\.ref, 'refs\/tags\/'\) && github\.ref_name \|\| inputs\.release_version \}\}/,
