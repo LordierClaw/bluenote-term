@@ -2,18 +2,25 @@
 
 ## Runtime rules
 
+Phase 8 introduces the temporary monorepo/package split documented in `docs/phases/phase-8-temporary-monorepo.md`.
+
 - Use Bun `1.3+` as the preferred runtime for CLI/TUI work, local scripts, smoke checks, and the current repository entrypoint.
 - Preserve Node.js `20+` compatibility for shared core modules where feasible; current `bin/` commands and scripts are intentionally Bun-first.
 - Avoid native SQLite dependencies; use `sql.js` for rebuildable cache metadata.
-- Keep the TUI as a presentation/input layer over core services.
+- Keep headless business logic in the sibling `@lordierclaw/bluenote-core` package; it owns storage, search/indexing, domain helpers, and reusable AI services, and terminal code must consume only its public package root.
+- Keep `packages/term` client-only: it owns the Bun CLI entrypoint, TUI/OpenTUI rendering and input, terminal editor launch, clipboard helpers, and client orchestration, and consumes business logic through `@lordierclaw/bluenote-core` public exports.
+- Root `bin/bn.ts` and moved root `src/cli`, `src/tui`, `src/platform`, and editor-flow paths are compatibility shims to preserve existing root scripts/tests while the terminal package shape settles.
+- The current shared-testing dependency is the reproducible Git tag `"@lordierclaw/bluenote-core": "github:LordierClaw/bluenote-core#v0.4.0"`; active local core development may temporarily use `file:../bluenote-core`, and future npm releases should use a semver range such as `^0.4.0`. Do not depend on `#main` for normal releases.
+- Terminal code must never import from `@lordierclaw/bluenote-core/src/*` or relative paths into `../bluenote-core/src/*`; all core access goes through package exports.
 
 ## Current baseline dependencies
 
-- `@opentui/core` — terminal UI foundation for the workspace launched by `bn tui`
-- `sql.js` — rebuildable metadata cache engine
-- `minisearch` — rebuildable text index
-- `js-yaml` — legacy frontmatter parsing support for migration only; current note files remain plain Markdown plus sidecars
-- `clipboardy` — desktop clipboard bridge used for explicit whole-note clipboard commands before platform fallbacks
+- `@lordierclaw/bluenote-core` — public headless core package consumed by the terminal client
+- `@opentui/core` — terminal UI foundation owned by `packages/term` for the workspace launched by `bn tui`
+- `sql.js` — rebuildable metadata cache engine used by `@lordierclaw/bluenote-core`
+- `minisearch` — rebuildable text index used by `@lordierclaw/bluenote-core`
+- `js-yaml` — legacy frontmatter parsing support used by `@lordierclaw/bluenote-core` for migration only; current note files remain plain Markdown plus sidecars
+- `clipboardy` — desktop clipboard bridge owned by `packages/term` for explicit whole-note clipboard commands before platform fallbacks
 - `typescript` / `@types/node` — strict project typing
 - `@biomejs/biome` — linting
 

@@ -1,0 +1,831 @@
+import { collectContainsFieldMatches, scoreContainsMatch, type SearchNoteMatch } from "@lordierclaw/bluenote-core"
+import { buildManagerBrowserItems, buildManagerFolderPreviewLinesFromItems, type NoteManagerSummary } from "./note-manager-adapter"
+import { TUI_SHORTCUTS } from "../render-chrome"
+import type { ManagerItem } from "../state"
+import type { SearchEverythingState, TuiScreen } from "../state"
+
+export type SearchEverythingResultKind = "note" | "content" | "folder" | "command"
+export type SearchEverythingMatchedField = "filename" | "key" | "title" | "description" | "path"
+export type SearchEverythingTypeIcon = SearchEverythingResultKind
+
+export interface TuiCommandDefinition {
+  name: `/${string}`
+  description: string
+  usage: string
+  shortcut?: string
+  contexts?: readonly Exclude<TuiScreen, "search">[]
+}
+
+export type SearchEverythingManagerSelection = "note" | "folder" | "none"
+
+export interface SearchEverythingCommandContext {
+  screen: Exclude<TuiScreen, "search">
+  managerSelection?: SearchEverythingManagerSelection
+  managerCanCreateFolder?: boolean
+  activeEditorIsDraft?: boolean
+}
+
+export interface SearchEverythingResultOptions {
+  commandContext?: SearchEverythingCommandContext
+}
+
+export interface SearchEverythingDependencies {
+  noteSummaries: readonly NoteManagerSummary[]
+  userFolderPaths?: readonly string[]
+  searchNotes: (query: string) => readonly SearchNoteMatch[]
+}
+
+export interface SearchEverythingBaseResult {
+  kind: SearchEverythingResultKind
+  typeLabel?: SearchEverythingResultKind
+  typeIcon?: SearchEverythingTypeIcon
+  id: string
+  label: string
+  detail: string
+  score: number
+}
+
+export interface SearchEverythingNoteResult extends SearchEverythingBaseResult {
+  kind: "note"
+  key: string
+  filename: string
+  title: string
+  description: string
+  body?: string
+  relativePath: string
+  matchedFields: SearchEverythingMatchedField[]
+}
+
+export interface SearchEverythingContentResult extends SearchEverythingBaseResult {
+  kind: "content"
+  key: string
+  title: string
+  relativePath: string
+  matchIndex: number
+  lineNumber?: number
+  offset?: number
+  matchStart?: number
+  matchEnd?: number
+  matchLabel: string
+  excerpt: string
+  previewExcerpt?: string
+}
+
+export interface SearchEverythingFolderResult extends SearchEverythingBaseResult {
+  kind: "folder"
+  path: string
+  name: string
+  noteCount: number
+  previewLines?: string[]
+}
+
+export interface SearchEverythingCommandResult extends SearchEverythingBaseResult, TuiCommandDefinition {
+  kind: "command"
+}
+
+export type SearchEverythingResult =
+  | SearchEverythingNoteResult
+  | SearchEverythingContentResult
+  | SearchEverythingFolderResult
+  | SearchEverythingCommandResult
+
+export interface SearchEverythingHighlightRange {
+  start: number
+  end: number
+}
+
+export interface SearchEverythingPreviewText {
+  text: string
+  highlights?: SearchEverythingHighlightRange[]
+}
+
+export interface SearchEverythingPreview {
+  title: string
+  subtitle: string
+  lines: string[]
+  sections: Array<{ label: string; lines: string[] }>
+  titleText?: SearchEverythingPreviewText
+  subtitleText?: SearchEverythingPreviewText
+  linesText?: SearchEverythingPreviewText[]
+  sectionsText?: Array<{ label: string; lines: SearchEverythingPreviewText[] }>
+}
+
+export const TUI_COMMANDS: readonly TuiCommandDefinition[] = [
+  {
+    name: "/new",
+    description: "Create a new folder in the current note folder",
+    usage: "/new <folder-name>",
+    shortcut: TUI_SHORTCUTS.managerNew.key,
+    contexts: ["manager"],
+  },
+  {
+    name: "/delete",
+    description: "Delete the selected or active note after confirmation",
+    usage: "/delete [note-key]",
+    shortcut: "d",
+    contexts: ["manager"],
+  },
+  {
+    name: "/ai-describe",
+    description: "Generate and apply an AI description for the selected or active note in the background",
+    usage: "/ai-describe",
+    contexts: ["manager", "editor"],
+  },
+  {
+    name: "/ai-process-queue",
+    description: "Process pending AI description jobs in the background",
+    usage: "/ai-process-queue",
+    contexts: ["manager", "editor"],
+  },
+  {
+    name: "/ai-status",
+    description: "Show current AI connection or background job status",
+    usage: "/ai-status",
+    contexts: ["manager", "editor"],
+  },
+  {
+    name: "/find",
+    description: "Find text in the active editor buffer",
+    usage: "/find <query>",
+    shortcut: TUI_SHORTCUTS.editorFind.key,
+    contexts: ["editor"],
+  },
+  {
+    name: "/replace",
+    description: "Find and replace text in the active editor buffer",
+    usage: "/replace <query> <replacement>",
+    shortcut: TUI_SHORTCUTS.editorReplace.key,
+    contexts: ["editor"],
+  },
+  {
+    name: "/save",
+    description: "Save the active editor buffer",
+    usage: "/save",
+    shortcut: TUI_SHORTCUTS.editorSave.key,
+    contexts: ["editor"],
+  },
+  {
+    name: "/save-draft-as",
+    description: "Save the active draft as a normal note in an existing note folder",
+    usage: "/save-draft-as",
+    shortcut: "Alt+S",
+    contexts: ["editor"],
+  },
+  {
+    name: "/copy-all",
+    description: "Copy the full current note body to the desktop clipboard",
+    usage: "/copy-all",
+    contexts: ["editor"],
+  },
+  {
+    name: "/replace-all",
+    description: "Replace the full current note body from the desktop clipboard",
+    usage: "/replace-all",
+    contexts: ["editor"],
+  },
+  {
+    name: "/paste",
+    description: "Paste via terminal Ctrl+Shift+V/bracketed paste, or from the desktop provider/internal clipboard fallback",
+    usage: "/paste",
+    shortcut: TUI_SHORTCUTS.editorTerminalPaste.key,
+    contexts: ["editor"],
+  },
+]
+
+function normalizePath(path: string): string {
+  return path.replaceAll("\\", "/").replace(/\/+/gu, "/")
+}
+
+function filenameFor(path: string): string {
+  const normalized = normalizePath(path)
+  return normalized.split("/").filter(Boolean).at(-1) ?? normalized
+}
+
+function folderNameFor(path: string): string {
+  return filenameFor(path)
+}
+
+function containsScore(query: string, value: string): number {
+  return scoreContainsMatch(value, query)
+}
+
+const caseInsensitiveCollator = new Intl.Collator(undefined, { sensitivity: "base", usage: "search" })
+const combiningMarkPattern = /\p{Mark}/u
+const variationSelectorPattern = /[\u{fe00}-\u{fe0f}\u{e0100}-\u{e01ef}]/u
+const zeroWidthJoiner = "\u200d"
+
+type GraphemeSegmenter = {
+  segment(value: string): Iterable<{ index: number; segment: string }>
+}
+
+function getIntlSegmenter(): GraphemeSegmenter | undefined {
+  const segmenterConstructor = (
+    Intl as typeof Intl & { Segmenter?: new (locale?: string, options?: { granularity?: "grapheme" }) => GraphemeSegmenter }
+  ).Segmenter
+  return segmenterConstructor ? new segmenterConstructor(undefined, { granularity: "grapheme" }) : undefined
+}
+
+const graphemeSegmenter = getIntlSegmenter()
+
+function isGraphemeExtender(character: string): boolean {
+  return combiningMarkPattern.test(character) || variationSelectorPattern.test(character)
+}
+
+function graphemeBoundaryOffsets(text: string): number[] {
+  if (text.length === 0) {
+    return [0]
+  }
+
+  if (graphemeSegmenter) {
+    const boundaries = [0]
+    for (const segment of graphemeSegmenter.segment(text)) {
+      const end = segment.index + segment.segment.length
+      if (end > boundaries.at(-1)!) {
+        boundaries.push(end)
+      }
+    }
+    return boundaries.at(-1) === text.length ? boundaries : [...boundaries, text.length]
+  }
+
+  const boundaries = [0]
+  let previousCharacter = ""
+  for (let offset = 0; offset < text.length;) {
+    const character = text.slice(offset, offset + 2).codePointAt(0)!
+    const current = String.fromCodePoint(character)
+    if (offset > 0 && !isGraphemeExtender(current) && previousCharacter !== zeroWidthJoiner) {
+      boundaries.push(offset)
+    }
+    offset += current.length
+    previousCharacter = current
+  }
+  boundaries.push(text.length)
+  return boundaries
+}
+
+function findCaseInsensitiveRanges(text: string, needle: string): SearchEverythingHighlightRange[] {
+  if (needle.length === 0 || text.length === 0) {
+    return []
+  }
+
+  const boundaries = graphemeBoundaryOffsets(text)
+  const ranges: SearchEverythingHighlightRange[] = []
+  let startIndex = 0
+  while (startIndex < boundaries.length - 1) {
+    const start = boundaries[startIndex]!
+    let matchedEndIndex: number | undefined
+
+    for (let endIndex = startIndex + 1; endIndex < boundaries.length; endIndex += 1) {
+      const end = boundaries[endIndex]!
+      const candidate = text.slice(start, end)
+      if (caseInsensitiveCollator.compare(candidate, needle) === 0) {
+        matchedEndIndex = endIndex
+        ranges.push({ start, end })
+        break
+      }
+    }
+
+    startIndex = matchedEndIndex ?? startIndex + 1
+  }
+
+  return ranges
+}
+
+function normalizeNonOverlappingRanges(ranges: SearchEverythingHighlightRange[], textLength: number): SearchEverythingHighlightRange[] {
+  const normalized = ranges
+    .map((range) => {
+      const rawStart = Number.isFinite(range.start) ? Math.trunc(range.start) : 0
+      const rawEnd = Number.isFinite(range.end) ? Math.trunc(range.end) : 0
+      const start = Math.max(0, Math.min(rawStart, textLength))
+      const end = Math.max(0, Math.min(rawEnd, textLength))
+      return { start, end }
+    })
+    .filter((range) => range.end > range.start)
+    .sort((left, right) => left.start - right.start || (right.end - right.start) - (left.end - left.start) || left.end - right.end)
+
+  const nonOverlapping: SearchEverythingHighlightRange[] = []
+  for (const range of normalized) {
+    const previous = nonOverlapping.at(-1)
+    if (!previous || range.start >= previous.end) {
+      nonOverlapping.push(range)
+    }
+  }
+
+  return nonOverlapping
+}
+
+export function collectCaseInsensitiveContainsRanges(text: string, query: string): SearchEverythingHighlightRange[] {
+  const normalizedQuery = query.trim().replace(/\s+/gu, " ")
+  const needles = normalizedQuery.length > 0
+    ? findCaseInsensitiveRanges(text, normalizedQuery).length > 0
+      ? [normalizedQuery]
+      : normalizedQuery.split(/\s+/gu).filter((token) => token.length > 0)
+    : []
+  const ranges: SearchEverythingHighlightRange[] = []
+
+  for (const needle of needles) {
+    ranges.push(...findCaseInsensitiveRanges(text, needle))
+  }
+
+  return normalizeNonOverlappingRanges(ranges, text.length)
+}
+
+function previewText(text: string, query?: string): SearchEverythingPreviewText {
+  const highlights = query ? collectCaseInsensitiveContainsRanges(text, query) : []
+  return highlights.length > 0 ? { text, highlights } : { text }
+}
+
+function withHighlightedPreviewText(
+  preview: Omit<SearchEverythingPreview, "titleText" | "subtitleText" | "linesText" | "sectionsText">,
+  query?: string,
+): SearchEverythingPreview {
+  if (!query || query.trim().length === 0) {
+    return preview
+  }
+
+  return {
+    ...preview,
+    titleText: previewText(preview.title, query),
+    subtitleText: previewText(preview.subtitle, query),
+    linesText: preview.lines.map((line) => previewText(line, query)),
+    sectionsText: preview.sections.map((section) => ({
+      label: section.label,
+      lines: section.lines.map((line) => previewText(line, query)),
+    })),
+  }
+}
+
+function foldersFor(relativePath: string): string[] {
+  const parts = normalizePath(relativePath).split("/").filter(Boolean)
+
+  if (parts.length <= 2 || parts[0] !== "note") {
+    return []
+  }
+
+  return parts.slice(1, -1).map((_, index) => ["note", ...parts.slice(1, index + 2)].join("/"))
+}
+
+interface SearchEverythingFolderCandidate {
+  path: string
+  noteCount: number
+}
+
+function collectFolderCandidates(managerItems: readonly ManagerItem[]): SearchEverythingFolderCandidate[] {
+  const folderCounts = new Map<string, number>()
+
+  for (const item of managerItems) {
+    if (item.type === "folder") {
+      folderCounts.set(item.relativePath, folderCounts.get(item.relativePath) ?? 0)
+      continue
+    }
+
+    for (const folder of foldersFor(item.relativePath)) {
+      folderCounts.set(folder, (folderCounts.get(folder) ?? 0) + 1)
+    }
+  }
+
+  return Array.from(folderCounts.entries()).map(([path, noteCount]) => ({ path, noteCount }))
+}
+
+function buildFolderResult(path: string, noteCount: number, managerItems: readonly ManagerItem[]): SearchEverythingFolderResult {
+  const name = folderNameFor(path)
+
+  return {
+    kind: "folder",
+    typeLabel: "folder",
+    typeIcon: "folder",
+    id: `folder:${path}`,
+    path,
+    name,
+    label: `${name}/`,
+    detail: `${noteCount} ${noteCount === 1 ? "note" : "notes"} in ${path}`,
+    score: 0,
+    noteCount,
+    previewLines: buildManagerFolderPreviewLinesFromItems(managerItems, path),
+  }
+}
+
+function buildNoteResult(query: string, summary: NoteManagerSummary): SearchEverythingNoteResult | null {
+  const relativePath = normalizePath(summary.relativePath)
+  const filename = filenameFor(relativePath)
+  const filenameStem = filename.replace(/\.[^.]*$/u, "")
+  const queryStem = query.replace(/\.[^.\s/\\]*$/u, "")
+  const fieldScores = new Map<SearchEverythingMatchedField, number>()
+
+  for (const match of [
+    ...collectContainsFieldMatches(query, [
+      { field: "filename", value: filename },
+      { field: "key", value: summary.key },
+      { field: "key", value: filenameStem },
+      { field: "title", value: summary.title },
+      { field: "description", value: summary.description },
+      { field: "path", value: relativePath },
+    ]),
+    ...collectContainsFieldMatches(queryStem, [{ field: "key", value: summary.key }]),
+  ]) {
+    const field = match.field as SearchEverythingMatchedField
+    fieldScores.set(field, Math.max(fieldScores.get(field) ?? 0, match.score))
+  }
+
+  const orderedFields: readonly SearchEverythingMatchedField[] = ["filename", "key", "title", "description", "path"]
+  const fields: Array<{ field: SearchEverythingMatchedField; score: number }> = orderedFields.flatMap((field) => {
+    const score = fieldScores.get(field)
+    return score ? [{ field, score }] : []
+  })
+
+  if (fields.length === 0) {
+    return null
+  }
+
+  const score = Math.max(...fields.map((field) => field.score))
+
+  return {
+    kind: "note",
+    typeLabel: "note",
+    typeIcon: "note",
+    id: `note:${summary.key}`,
+    key: summary.key,
+    filename,
+    title: summary.title,
+    description: summary.description,
+    ...(summary.body !== undefined ? { body: summary.body } : {}),
+    relativePath,
+    label: summary.title,
+    detail: `${filename} — ${relativePath}`,
+    score,
+    matchedFields: fields.map((field) => field.field),
+  }
+}
+
+type ContentMatchContext = {
+  matchIndex?: number
+  lineNumber?: number
+  line?: number
+  offset?: number
+  start?: number
+  end?: number
+  matchStart?: number
+  matchEnd?: number
+}
+
+function finiteInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? Math.trunc(value) : undefined
+}
+
+function contentResultId(match: SearchNoteMatch, occurrenceIndex: number, context: ContentMatchContext): string {
+  const idParts = [
+    "content",
+    match.key,
+    encodeURIComponent(match.match.label),
+    finiteInteger(context.matchIndex) ?? occurrenceIndex,
+  ]
+
+  const lineNumber = finiteInteger(context.lineNumber) ?? finiteInteger(context.line)
+  const offset = finiteInteger(context.offset) ?? finiteInteger(context.start)
+  if (lineNumber !== undefined) {
+    idParts.push(`line${lineNumber}`)
+  }
+  if (offset !== undefined) {
+    idParts.push(`offset${offset}`)
+  }
+
+  return idParts.join(":")
+}
+
+const CONTENT_PREVIEW_CONTEXT_CHARS = 140
+
+function summaryForContentMatch(match: SearchNoteMatch, noteSummaries: readonly NoteManagerSummary[]): NoteManagerSummary | undefined {
+  const relativePath = normalizePath(match.relativePath)
+  return noteSummaries.find((summary) => summary.key === match.key || normalizePath(summary.relativePath) === relativePath)
+}
+
+function validatedBodyMatchRange(bodyLength: number, matchStart?: number, matchEnd?: number): SearchEverythingHighlightRange | undefined {
+  if (
+    matchStart === undefined
+    || matchEnd === undefined
+    || matchStart < 0
+    || matchStart >= bodyLength
+    || matchEnd <= matchStart
+    || matchEnd > bodyLength
+  ) {
+    return undefined
+  }
+
+  return { start: matchStart, end: matchEnd }
+}
+
+const GRAPHEME_CONTEXT_BOUNDARY_WINDOW = 64
+
+function closestGraphemeBoundaryAtOrBefore(text: string, offset: number): number {
+  const boundedOffset = Math.max(0, Math.min(Math.trunc(offset), text.length))
+  const windowStart = Math.max(0, boundedOffset - GRAPHEME_CONTEXT_BOUNDARY_WINDOW)
+  const windowEnd = Math.min(text.length, boundedOffset + GRAPHEME_CONTEXT_BOUNDARY_WINDOW)
+  let candidate = windowStart
+
+  for (const boundary of graphemeBoundaryOffsets(text.slice(windowStart, windowEnd))) {
+    const absoluteBoundary = windowStart + boundary
+    if (absoluteBoundary > boundedOffset) {
+      return candidate
+    }
+    candidate = absoluteBoundary
+  }
+
+  return candidate
+}
+
+function closestGraphemeBoundaryAtOrAfter(text: string, offset: number): number {
+  const boundedOffset = Math.max(0, Math.min(Math.trunc(offset), text.length))
+  const windowStart = Math.max(0, boundedOffset - GRAPHEME_CONTEXT_BOUNDARY_WINDOW)
+  const windowEnd = Math.min(text.length, boundedOffset + GRAPHEME_CONTEXT_BOUNDARY_WINDOW)
+
+  for (const boundary of graphemeBoundaryOffsets(text.slice(windowStart, windowEnd))) {
+    const absoluteBoundary = windowStart + boundary
+    if (absoluteBoundary >= boundedOffset) {
+      return absoluteBoundary
+    }
+  }
+
+  return windowEnd
+}
+
+function centeredBodyContext(
+  body: string | undefined,
+  query: string,
+  matchStart?: number,
+  matchEnd?: number,
+  options: { allowQuerySearch?: boolean } = {},
+): string | undefined {
+  if (!body || body.trim().length === 0) {
+    return undefined
+  }
+
+  const bodyLength = body.length
+  const suppliedRange = validatedBodyMatchRange(bodyLength, matchStart, matchEnd)
+  const queryRange = suppliedRange ? undefined : options.allowQuerySearch === false ? undefined : collectCaseInsensitiveContainsRanges(body, query)[0]
+  const range = suppliedRange ?? queryRange
+  if (!range) {
+    return undefined
+  }
+  const { start, end } = range
+
+  const lineStart = body.lastIndexOf("\n", start - 1) + 1
+  const nextLineBreak = body.indexOf("\n", end)
+  const lineEnd = nextLineBreak === -1 ? bodyLength : nextLineBreak
+  const matchedLine = body.slice(lineStart, lineEnd).trim()
+  if (matchedLine.length > 0 && matchedLine.length <= CONTENT_PREVIEW_CONTEXT_CHARS) {
+    return matchedLine
+  }
+
+  const desiredStart = Math.max(0, start - Math.floor((CONTENT_PREVIEW_CONTEXT_CHARS - (end - start)) / 2))
+  const desiredEnd = Math.min(bodyLength, desiredStart + CONTENT_PREVIEW_CONTEXT_CHARS)
+  const contextStart = closestGraphemeBoundaryAtOrBefore(body, Math.max(0, Math.min(desiredStart, Math.max(0, desiredEnd - CONTENT_PREVIEW_CONTEXT_CHARS))))
+  const contextEnd = closestGraphemeBoundaryAtOrAfter(body, desiredEnd)
+  const rawContext = body.slice(contextStart, contextEnd).replace(/\s+/gu, " ").trim()
+  if (rawContext.length === 0) {
+    return undefined
+  }
+
+  return `${contextStart > 0 ? "..." : ""}${rawContext}${contextEnd < bodyLength ? "..." : ""}`
+}
+
+function buildContentResults(query: string, deps: SearchEverythingDependencies): SearchEverythingContentResult[] {
+  if (query.trim().length === 0) {
+    return []
+  }
+
+  return deps
+    .searchNotes(query)
+    .filter((match) => match.match.source === "content")
+    .map((match, occurrenceIndex) => {
+      const context = match.match as typeof match.match & ContentMatchContext
+      const lineNumber = finiteInteger(context.lineNumber) ?? finiteInteger(context.line)
+      const offset = finiteInteger(context.offset) ?? finiteInteger(context.start)
+      const matchStart = finiteInteger(context.start) ?? finiteInteger(context.matchStart)
+      const matchEnd = finiteInteger(context.end) ?? finiteInteger(context.matchEnd)
+      const summary = summaryForContentMatch(match, deps.noteSummaries)
+      const bodyMatchRange = summary?.body ? validatedBodyMatchRange(summary.body.length, matchStart, matchEnd) : undefined
+      const previewExcerpt = bodyMatchRange
+        ? centeredBodyContext(summary?.body, query, matchStart, matchEnd, { allowQuerySearch: false })
+        : match.match.excerpt
+          ? undefined
+          : centeredBodyContext(summary?.body, query, undefined, undefined, { allowQuerySearch: true })
+
+      return {
+        kind: "content",
+        typeLabel: "content",
+        typeIcon: "content",
+        id: contentResultId(match, occurrenceIndex, context),
+        key: match.key,
+        title: match.title,
+        relativePath: normalizePath(match.relativePath),
+        label: match.title,
+        detail: `${match.match.label} — ${normalizePath(match.relativePath)}`,
+        score: 100,
+        matchIndex: finiteInteger(context.matchIndex) ?? occurrenceIndex,
+        ...(lineNumber !== undefined ? { lineNumber } : {}),
+        ...(offset !== undefined ? { offset } : {}),
+        ...(matchStart !== undefined ? { matchStart } : {}),
+        ...(matchEnd !== undefined ? { matchEnd } : {}),
+        matchLabel: match.match.label,
+        excerpt: match.match.excerpt ?? match.match.label,
+        ...(previewExcerpt ? { previewExcerpt } : {}),
+      }
+    })
+}
+
+function buildFolderResults(query: string, noteSummaries: readonly NoteManagerSummary[], userFolderPaths: readonly string[] = []): SearchEverythingFolderResult[] {
+  const managerItems = buildManagerBrowserItems(noteSummaries, userFolderPaths)
+  return collectFolderCandidates(managerItems)
+    .map((folder) => {
+      const name = folderNameFor(folder.path)
+      return {
+        ...folder,
+        name,
+        score: Math.max(containsScore(query, folder.path), containsScore(query, name)),
+      }
+    })
+    .filter((folder) => folder.score > 0)
+    .map((folder) => ({
+      ...buildFolderResult(folder.path, folder.noteCount, managerItems),
+      score: folder.score,
+    }))
+}
+
+function strictCommandScore(query: string, commandName: string): number {
+  return scoreContainsMatch(commandName, query)
+}
+
+function commandAvailableForContext(command: TuiCommandDefinition, context: SearchEverythingCommandContext | undefined): boolean {
+  if (!context) {
+    return true
+  }
+  if (command.contexts && !command.contexts.includes(context.screen)) {
+    return false
+  }
+  if (command.name === "/new") {
+    return context.screen === "manager" && context.managerCanCreateFolder === true
+  }
+  if (command.name === "/delete") {
+    return context.screen === "manager" && context.managerSelection === "note"
+  }
+  if (command.name === "/ai-describe") {
+    return context.screen === "editor" || (context.screen === "manager" && context.managerSelection === "note")
+  }
+  if (command.name === "/save-draft-as") {
+    return context.screen === "editor" && context.activeEditorIsDraft === true
+  }
+  return true
+}
+
+function buildCommandResults(query: string, context?: SearchEverythingCommandContext): SearchEverythingCommandResult[] {
+  const trimmedQuery = query.trim()
+  const commandQuery = trimmedQuery.split(/\s+/u)[0] ?? ""
+
+  if (!trimmedQuery.startsWith("/")) {
+    return []
+  }
+
+  return TUI_COMMANDS
+    .filter((command) => commandAvailableForContext(command, context))
+    .map<SearchEverythingCommandResult>((command, commandIndex) => ({
+      kind: "command",
+      typeLabel: "command",
+      typeIcon: "command",
+      id: `command:${command.name}`,
+      label: command.name,
+      detail: command.description,
+      score: strictCommandScore(commandQuery, command.name) * 100 - commandIndex,
+      ...command,
+    }))
+    .filter((command) => command.score > 0)
+}
+
+function kindPriority(kind: SearchEverythingResultKind): number {
+  switch (kind) {
+    case "folder":
+      return 0
+    case "note":
+      return 1
+    case "content":
+      return 2
+    case "command":
+      return 3
+  }
+}
+
+function commandPriority(result: SearchEverythingResult): number {
+  if (result.kind !== "command") {
+    return 0
+  }
+  const index = TUI_COMMANDS.findIndex((command) => command.name === result.name)
+  return index >= 0 ? index : TUI_COMMANDS.length
+}
+
+export function buildSearchEverythingResults(
+  query: string,
+  deps: SearchEverythingDependencies,
+  options: SearchEverythingResultOptions = {},
+): SearchEverythingResult[] {
+  const trimmedQuery = query.trim()
+
+  if (trimmedQuery.length === 0) {
+    return []
+  }
+
+  const results: SearchEverythingResult[] = [
+    ...buildFolderResults(trimmedQuery, deps.noteSummaries, deps.userFolderPaths),
+    ...deps.noteSummaries.flatMap((summary) => {
+      const result = buildNoteResult(trimmedQuery, summary)
+      return result ? [result] : []
+    }),
+    ...buildContentResults(trimmedQuery, deps),
+    ...buildCommandResults(trimmedQuery, options.commandContext),
+  ]
+
+  return results.sort((left, right) => {
+    if (left.kind === "command" && right.kind === "command") {
+      const commandPriorityDifference = commandPriority(left) - commandPriority(right)
+      if (commandPriorityDifference !== 0) {
+        return commandPriorityDifference
+      }
+    }
+
+    if (right.score !== left.score) {
+      return right.score - left.score
+    }
+
+    const priorityDifference = kindPriority(left.kind) - kindPriority(right.kind)
+    if (priorityDifference !== 0) {
+      return priorityDifference
+    }
+
+    return left.label.localeCompare(right.label)
+  })
+}
+
+export function buildSearchEverythingPreview(result: SearchEverythingResult | null | undefined, query?: string): SearchEverythingPreview | null {
+  if (!result) {
+    return null
+  }
+
+  if (result.kind === "command") {
+    return {
+      title: result.name,
+      subtitle: "",
+      lines: [result.description, result.usage, ...(result.shortcut ? [result.shortcut] : [])],
+      sections: [],
+    }
+  }
+
+  if (result.kind === "content") {
+    const excerpt = result.previewExcerpt ?? result.excerpt
+    const excerptLines = excerpt.trim().length > 0 ? [excerpt] : []
+    return withHighlightedPreviewText({
+      title: result.relativePath,
+      subtitle: "",
+      lines: excerptLines,
+      sections: [],
+    }, query)
+  }
+
+  if (result.kind === "folder") {
+    const lines = result.previewLines && result.previewLines.length > 0 ? result.previewLines : []
+    return withHighlightedPreviewText({
+      title: result.path,
+      subtitle: "",
+      lines,
+      sections: [],
+    }, query)
+  }
+
+  const noteLines = (result.body ?? "").split(/\r?\n/u)
+  if (noteLines.at(-1) === "") {
+    noteLines.pop()
+  }
+  return withHighlightedPreviewText({
+    title: result.relativePath,
+    subtitle: "",
+    lines: noteLines,
+    sections: [],
+  }, query)
+}
+
+export function buildHighlightedSearchEverythingPreview(
+  results: readonly SearchEverythingResult[],
+  selectedIndex: number,
+  query?: string,
+): SearchEverythingPreview | null {
+  const index = Math.max(0, Math.min(Math.trunc(selectedIndex), results.length - 1))
+  return buildSearchEverythingPreview(results[index], query)
+}
+
+export function createSearchEverythingSession(
+  invokingScreen: Exclude<TuiScreen, "search">,
+  query = "",
+  selectedIndex = 0,
+): SearchEverythingState {
+  return {
+    query,
+    selectedIndex,
+    previousScreen: invokingScreen,
+  }
+}

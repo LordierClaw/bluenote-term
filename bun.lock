@@ -4,10 +4,9 @@
   "workspaces": {
     "": {
       "dependencies": {
+        "@lordierclaw/bluenote-core": "github:LordierClaw/bluenote-core#v0.4.0",
         "@opentui/core": "0.2.14",
         "clipboardy": "5.3.1",
-        "js-yaml": "4.1.1",
-        "minisearch": "6.3.0",
         "sql.js": "1.10.3",
       },
       "devDependencies": {
@@ -15,6 +14,19 @@
         "@types/bun": "1.2.18",
         "@types/node": "20.19.0",
         "typescript": "5.8.3",
+      },
+    },
+    "packages/term": {
+      "name": "bluenote-term",
+      "version": "0.4.0",
+      "bin": {
+        "bn": "./bin/bn.ts",
+        "bluenote": "./bin/bn.ts",
+      },
+      "dependencies": {
+        "@lordierclaw/bluenote-core": "github:LordierClaw/bluenote-core#v0.4.0",
+        "@opentui/core": "0.2.14",
+        "clipboardy": "5.3.1",
       },
     },
   },
@@ -36,6 +48,8 @@
     "@biomejs/cli-win32-arm64": ["@biomejs/cli-win32-arm64@2.4.16", "", { "os": "win32", "cpu": "arm64" }, "sha512-0rgImMsNb5v/chhkIFe3wu7PEFClS6RBAYUijGL9UsYN3PanSaoK24HSSuSJb1pYbYYVjzAyZTl3gtjJ84BM8A=="],
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.4.16", "", { "os": "win32", "cpu": "x64" }, "sha512-Kp85jgoBHa05gix6UIRjfCDiUV3w/8VIdZ247VyyO2gEjaw12WEVhdIjlxp/AMzXxqxQwbxNTDVZ3Mwd2RG5rw=="],
+
+    "@lordierclaw/bluenote-core": ["@lordierclaw/bluenote-core@github:LordierClaw/bluenote-core#f97406d", { "dependencies": { "js-yaml": "4.1.1", "minisearch": "6.3.0", "sql.js": "1.10.3" } }, "LordierClaw-bluenote-core-f97406d", "sha512-6tV/1heclr2VurMGD53ywLEBzhMWG5gtCn3ezCZiRxaVYCkCF5EejrSuIUWbNmmRMOsfYG+Yca9iF8n7lj6CKA=="],
 
     "@opentui/core": ["@opentui/core@0.2.14", "", { "dependencies": { "bun-ffi-structs": "0.2.2", "diff": "9.0.0", "marked": "17.0.1", "string-width": "7.2.0", "strip-ansi": "7.1.2", "yoga-layout": "3.2.1" }, "optionalDependencies": { "@opentui/core-darwin-arm64": "0.2.14", "@opentui/core-darwin-x64": "0.2.14", "@opentui/core-linux-arm64": "0.2.14", "@opentui/core-linux-x64": "0.2.14", "@opentui/core-win32-arm64": "0.2.14", "@opentui/core-win32-x64": "0.2.14" }, "peerDependencies": { "web-tree-sitter": "0.25.10" } }, "sha512-17YCr3BqM9mhi/DdNVM+omgmrKQNIl0G5RzoaTFOHe4+OAhG+W3iooYi+WdsekJWSUOEwZqDRz0QBTZhOtgZsQ=="],
 
@@ -64,6 +78,8 @@
     "ansi-regex": ["ansi-regex@6.2.2", "", {}, "sha512-Bq3SmSpyFHaWjPk8If9yc6svM8c56dB5BAtW4Qbw5jHTwwXXcTLoRMkpDJp6VL0XzlWaCHTXrkFURMYmD0sLqg=="],
 
     "argparse": ["argparse@2.0.1", "", {}, "sha512-8+9WqebbFzpX9OR+Wa6O29asIogeRMzcGtAINdpMHHyAg10f05aSFVBbcEqGf/PXw1EjAZ+q2/bEBg3DvurK3Q=="],
+
+    "bluenote-term": ["bluenote-term@workspace:packages/term"],
 
     "bun-ffi-structs": ["bun-ffi-structs@0.2.2", "", { "peerDependencies": { "typescript": "^5" } }, "sha512-N/ZWtyN0piZlrXQT7TO0V+q952orYqkfhXRXM1Hcbb+R3QSiBH4vLnib187Mrs1H7pWIYECAmPeapGYDOMCl+w=="],
 

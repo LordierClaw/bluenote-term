@@ -28,6 +28,27 @@ bun install
 bun run check:env
 ```
 
+Phase 8.2 expects the headless core package in a sibling checkout for local development:
+
+```text
+../bluenote-core
+../bluenote-term
+```
+
+`package.json` currently uses the reproducible Git tag dependency `"@lordierclaw/bluenote-core": "github:LordierClaw/bluenote-core#v0.4.0"` for shared testing. For active local core development, temporarily switch to `"file:../bluenote-core"`, build the sibling core package after core changes, then reinstall/check the terminal client:
+
+```bash
+cd ../bluenote-core
+bun install
+bun run build
+
+cd ../bluenote-term
+bun install
+bun run check
+```
+
+See [Development](DEVELOPMENT.md) for local `file:`, reproducible Git tag, and future npm dependency modes. Do not import from `@lordierclaw/bluenote-core/src/*` or relative paths into `../bluenote-core/src/*`.
+
 Run the CLI directly from the repository with:
 
 ```bash
@@ -211,6 +232,13 @@ BlueNote leaves normal visible-text selection to the terminal. Use your terminal
 Editor commands include `/find`, `/replace`, `/save`, `/save-draft-as`, `/copy-all`, `/replace-all`, and `/paste`. Manager commands include `/new` and, when a note action is available, `/delete`.
 
 ## Development
+
+This repository is currently in the Phase 8 separated-core setup (see `docs/phases/phase-8-temporary-monorepo.md`) with:
+
+- `@lordierclaw/bluenote-core` from the sibling `../bluenote-core` repository: headless business logic, storage, search, indexing, domain helpers, and reusable AI services.
+- `packages/term` (`bluenote-term`): the Bun-first CLI/TUI client, including `bn`/`bluenote` entrypoints, OpenTUI screens, terminal editor launch, clipboard helpers, and client orchestration. It consumes business logic through `@lordierclaw/bluenote-core` public exports.
+
+The root `bin/bn.ts` and moved root `src/cli`, `src/tui`, `src/platform`, and editor-flow paths are compatibility shims so existing source imports, tests, and `bun run ./bin/bn.ts ...` usage keep working during the migration.
 
 Run the full local verification suite:
 

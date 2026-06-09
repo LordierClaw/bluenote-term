@@ -4,8 +4,7 @@ import path from "node:path"
 import { mkdtemp, rm } from "node:fs/promises"
 import { createCliRenderer } from "@opentui/core"
 
-import { createNote } from "../src/core/create-note"
-import { initRoot } from "../src/core/init-root"
+import { createNote, initRoot } from "@lordierclaw/bluenote-core"
 import { createDefaultWorkspaceController, getTuiBootstrapInfo, routeWorkspaceKey, startTuiWorkspace } from "../src/tui/app"
 import { createLatestOpenedNoteRepository } from "../src/tui/latest-opened-note"
 
