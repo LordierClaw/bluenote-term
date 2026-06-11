@@ -9,7 +9,9 @@ Phase 8.2 splits the headless core into a sibling repository. For local developm
 ../bluenote-term
 ```
 
-`bluenote-term` is the terminal client. It owns the `bn`/`bluenote` entrypoints, CLI presentation, OpenTUI workspace, terminal editor launch, clipboard helpers, and release packaging.
+`bluenote-term` is the terminal client. It currently owns the legacy `bn`/`bluenote` entrypoints, CLI presentation, OpenTUI workspace, terminal editor launch, clipboard helpers, and terminal release packaging.
+
+Long-term, the sibling `bluenote` distribution repo owns the official multi-command binary and top-level command routing. When that repo needs terminal behavior, expose a reusable public TUI command API here rather than moving OpenTUI implementation into `bluenote`.
 
 `bluenote-core` is the headless package. It owns note/domain logic, managed-root storage layout, sidecar metadata, search/indexing, and reusable AI config/queue/provider services. It must not depend on OpenTUI or terminal client code.
 
