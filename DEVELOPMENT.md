@@ -57,10 +57,10 @@ import "../bluenote-core/src/..."
 
 ## Shared testing before npm publishing
 
-For shared pre-release testing, prefer a Git tag dependency rather than a branch dependency:
+For shared pre-release testing before the next core tag is cut, prefer a pinned Git commit dependency rather than a branch dependency:
 
 ```json
-"@lordierclaw/bluenote-core": "github:LordierClaw/bluenote-core#v0.4.0"
+"@lordierclaw/bluenote-core": "github:LordierClaw/bluenote-core#26586e011e04"
 ```
 
 Do not use `github:LordierClaw/bluenote-core#main` as the default release dependency. Branch dependencies are not reproducible because the branch target can move.
@@ -83,7 +83,7 @@ Use semver discipline even while the package is pre-1.0:
 
 1. Make and verify the change in `../bluenote-core`.
 2. Update `bluenote-core/CHANGELOG.md` and tag the core release when sharing outside local file development.
-3. In `../bluenote-term`, update the dependency to either `file:../bluenote-core`, a Git tag such as `github:LordierClaw/bluenote-core#v0.4.0`, or a future npm range such as `^0.4.0`.
+3. In `../bluenote-term`, update the dependency to either `file:../bluenote-core`, a Git commit such as `github:LordierClaw/bluenote-core#26586e011e04`, or a future npm range such as `^0.4.0`.
 4. Run `bun install` in `bluenote-term` to update `bun.lock`.
 5. Run `bun run typecheck`, `bun run lint`, `bun test`, `bun run smoke:opentui`, `bun run smoke:cli`, and `bun run check` when practical.
 6. Keep imports stable through `@lordierclaw/bluenote-core`; do not copy core logic back into this repository.
