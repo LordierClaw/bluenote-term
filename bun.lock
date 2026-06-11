@@ -4,7 +4,7 @@
   "workspaces": {
     "": {
       "dependencies": {
-        "@lordierclaw/bluenote-core": "github:LordierClaw/bluenote-core#2ec3582",
+        "@lordierclaw/bluenote-core": "github:LordierClaw/bluenote-core#26586e011e04",
         "@opentui/core": "0.2.14",
         "clipboardy": "5.3.1",
         "sql.js": "1.10.3",
@@ -24,7 +24,7 @@
         "bluenote": "./bin/bn.ts",
       },
       "dependencies": {
-        "@lordierclaw/bluenote-core": "github:LordierClaw/bluenote-core#2ec3582",
+        "@lordierclaw/bluenote-core": "github:LordierClaw/bluenote-core#26586e011e04",
         "@opentui/core": "0.2.14",
         "clipboardy": "5.3.1",
       },
@@ -49,7 +49,7 @@
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.4.16", "", { "os": "win32", "cpu": "x64" }, "sha512-Kp85jgoBHa05gix6UIRjfCDiUV3w/8VIdZ247VyyO2gEjaw12WEVhdIjlxp/AMzXxqxQwbxNTDVZ3Mwd2RG5rw=="],
 
-    "@lordierclaw/bluenote-core": ["@lordierclaw/bluenote-core@github:LordierClaw/bluenote-core#2ec3582", { "dependencies": { "js-yaml": "4.1.1", "minisearch": "6.3.0", "node-fetch": "2.7.0", "sql.js": "1.10.3" } }, "LordierClaw-bluenote-core-2ec3582", "sha512-T2bg4AOL0eIIrP+vHK/+xc+5CofNtv8H5Ch21NS9EdDosIdaqDgmraznNoZF0U6BDLMj25LEWVCZSQ4qfX/E7A=="],
+    "@lordierclaw/bluenote-core": ["@lordierclaw/bluenote-core@github:LordierClaw/bluenote-core#26586e0", { "dependencies": { "js-yaml": "4.1.1", "minisearch": "6.3.0", "node-fetch": "2.7.0", "sql.js": "1.10.3" } }, "LordierClaw-bluenote-core-26586e0", "sha512-ziL/TjbSrjSIbPP/OhsOgpZIrDi/p4sPkidRX0YucLXZ2Yi/7oYk3G9aVpDpUOHgIabu+GEkavbhM/1C8b3TIg=="],
 
     "@opentui/core": ["@opentui/core@0.2.14", "", { "dependencies": { "bun-ffi-structs": "0.2.2", "diff": "9.0.0", "marked": "17.0.1", "string-width": "7.2.0", "strip-ansi": "7.1.2", "yoga-layout": "3.2.1" }, "optionalDependencies": { "@opentui/core-darwin-arm64": "0.2.14", "@opentui/core-darwin-x64": "0.2.14", "@opentui/core-linux-arm64": "0.2.14", "@opentui/core-linux-x64": "0.2.14", "@opentui/core-win32-arm64": "0.2.14", "@opentui/core-win32-x64": "0.2.14" }, "peerDependencies": { "web-tree-sitter": "0.25.10" } }, "sha512-17YCr3BqM9mhi/DdNVM+omgmrKQNIl0G5RzoaTFOHe4+OAhG+W3iooYi+WdsekJWSUOEwZqDRz0QBTZhOtgZsQ=="],
 

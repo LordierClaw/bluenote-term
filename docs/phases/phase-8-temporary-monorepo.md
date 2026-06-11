@@ -7,7 +7,7 @@ Phase 8 refactors the single-package BlueNote repository into a temporary Bun wo
 - `../bluenote-core` (`@lordierclaw/bluenote-core`): sibling headless BlueNote engine for domain types, workspace/root resolution, storage layout, note business logic, sidecar metadata, rebuildable search/index state, literal contains-style search, and reusable AI config/queue/provider services.
 - `packages/term` (`bluenote-term`): Bun-first terminal client for `bn`/`bluenote` entrypoints, CLI command presentation, OpenTUI rendering, keyboard/input handling, terminal editor launch, clipboard helpers, TUI state, and client orchestration.
 
-Phase 8.2 consumes the separated sibling `bluenote-core` repository through the reproducible Git tag dependency `github:LordierClaw/bluenote-core#v0.4.0` for shared testing. Local active core development may temporarily switch to `file:../bluenote-core`.
+Phase 8.2 consumes the separated sibling `bluenote-core` repository through the reproducible Git commit dependency `github:LordierClaw/bluenote-core#26586e011e04` for shared testing. Local active core development may temporarily switch to `file:../bluenote-core`.
 
 ## Compatibility
 
