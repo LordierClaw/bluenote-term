@@ -1,19 +1,7 @@
 #!/usr/bin/env bun
-import pkg from "../package.json"
-import { runCliAsync } from "../src/cli/entry"
-import { runTuiCliInteractive } from "../src/tui/app"
+import { runCommand } from "../src/command"
 
 const args = process.argv.slice(2)
-const result = args[0] === "tui"
-  ? await runTuiCliInteractive()
-  : await runCliAsync(args, pkg.version)
+const exitCode = await runCommand(args)
 
-if (result.stdout) {
-  process.stdout.write(result.stdout)
-}
-
-if (result.stderr) {
-  process.stderr.write(result.stderr)
-}
-
-process.exit(result.exitCode)
+process.exit(exitCode)
