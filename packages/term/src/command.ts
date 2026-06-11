@@ -1,8 +1,6 @@
 import type { CliResult } from "@lordierclaw/bluenote-core"
 
 import pkg from "../package.json"
-import { runCliAsync } from "./cli/entry"
-import { runTuiCliInteractive } from "./tui/app"
 
 export interface TuiCommandWriter {
   write(chunk: string): unknown
@@ -19,6 +17,16 @@ export interface RunTuiCommandOptions {
   cliRunner?: (args: string[], version: string) => Promise<CliResult>
   tuiRunner?: () => Promise<CliResult>
   env?: Record<string, string | undefined>
+}
+
+async function runDefaultCli(args: string[], version: string): Promise<CliResult> {
+  const module = await import("./cli/entry")
+  return module.runCliAsync(args, version)
+}
+
+async function runDefaultTui(): Promise<CliResult> {
+  const module = await import("./tui/app")
+  return module.runTuiCliInteractive()
 }
 
 interface DaemonCommandOptions {
@@ -152,15 +160,15 @@ export async function runTuiCommand(args: string[] = [], options: RunTuiCommandO
     }
   }
 
-  return runAndWrite((options.tuiRunner ?? runTuiCliInteractive)(), io)
+  return runAndWrite((options.tuiRunner ?? runDefaultTui)(), io)
 }
 
 export async function runCommand(args: string[], options: RunTuiCommandOptions = {}): Promise<number> {
   const io = options.io ?? process
   const version = options.version ?? pkg.version
   const result = args[0] === "tui"
-    ? (options.tuiRunner ?? runTuiCliInteractive)()
-    : (options.cliRunner ?? runCliAsync)(args, version)
+    ? (options.tuiRunner ?? runDefaultTui)()
+    : (options.cliRunner ?? runDefaultCli)(args, version)
 
   return runAndWrite(result, io)
 }
