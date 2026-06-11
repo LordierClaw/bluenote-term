@@ -15,7 +15,8 @@
   },
   "bin": {
     "bn": "./bin/bn.ts",
-    "bluenote": "./bin/bn.ts"
+    "bluenote": "./bin/bn.ts",
+    "bluenote-term": "./bin/bluenote-term.ts"
   },
   "engines": {
     "bun": ">=1.3.0",
