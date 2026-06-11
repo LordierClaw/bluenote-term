@@ -32,8 +32,8 @@ test("bluenote-term package metadata exposes the reusable command API", () => {
     import: "./src/command.ts",
   })
   assert.equal(termPackage.bin["bluenote-term"], "./bin/bluenote-term.ts")
-  assert.equal(termPackage.bin.bn, "./bin/bn.ts")
-  assert.equal(termPackage.bin.bluenote, "./bin/bn.ts")
+  assert.equal(Object.hasOwn(termPackage.bin, "bn"), false)
+  assert.equal(Object.hasOwn(termPackage.bin, "bluenote"), false)
 })
 
 test("runCommand exposes the full reusable terminal command API", async () => {

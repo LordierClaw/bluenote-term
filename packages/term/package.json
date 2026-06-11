@@ -14,8 +14,6 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "bn": "./bin/bn.ts",
-    "bluenote": "./bin/bn.ts",
     "bluenote-term": "./bin/bluenote-term.ts"
   },
   "engines": {
