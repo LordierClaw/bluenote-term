@@ -49,6 +49,25 @@ test("runCommand exposes the full reusable terminal command API", async () => {
   assert.equal(bufferedIO.stderr, "")
 })
 
+test("runTuiCommand prints version without launching the full-screen TUI", async () => {
+  const bufferedIO = createBufferedIO()
+  let calls = 0
+
+  const exitCode = await runTuiCommand(["--version"], {
+    io: bufferedIO.io,
+    version: "1.2.3-test",
+    tuiRunner: async () => {
+      calls += 1
+      return { exitCode: 1, stdout: "", stderr: "" }
+    },
+  })
+
+  assert.equal(calls, 0)
+  assert.equal(exitCode, 0)
+  assert.equal(bufferedIO.stdout, "1.2.3-test\n")
+  assert.equal(bufferedIO.stderr, "")
+})
+
 test("runTuiCommand launches the TUI provider for distribution callers", async () => {
   const bufferedIO = createBufferedIO()
   let calls = 0

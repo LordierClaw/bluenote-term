@@ -149,6 +149,11 @@ function formatDaemonCheckResult(result: DaemonCheckResult): CliResult {
 
 export async function runTuiCommand(args: string[] = [], options: RunTuiCommandOptions = {}): Promise<number> {
   const io = options.io ?? process
+  if (args.includes("--version") || args.includes("-v")) {
+    io.stdout.write(`${options.version ?? pkg.version}\n`)
+    return 0
+  }
+
   const daemonOptions = readDaemonCommandOptions(args, options.env ?? process.env)
 
   if (daemonOptions.checkDaemon || daemonOptions.daemonUrl || daemonOptions.daemonToken) {
