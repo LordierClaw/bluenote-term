@@ -21,6 +21,34 @@ BlueNote keeps normal note bodies as plain `.md` files under `note/` and drafts 
 
 ## Install from source
 
+For the full BlueNote app, install/run the distribution CLI (`@lordierclaw/bluenote`) and use this package as the optional terminal client discovered on `PATH` as `bluenote-term`. End users normally install the app and clients like this:
+
+```bash
+npm install -g @lordierclaw/bluenote
+npm install -g bluenote-term
+bluenote doctor
+```
+
+When working from sibling source checkouts, build/check the core library first, then this client, then the distribution CLI last:
+
+```bash
+cd ../bluenote-core
+npm ci --include=dev
+npm run check
+
+cd ../bluenote-term
+bun install
+bun run check
+bun link
+
+cd ../bluenote
+npm ci --include=dev
+npm run check
+npm link
+
+bluenote doctor
+```
+
 After cloning the repository, install dependencies and check the local runtime:
 
 ```bash
@@ -28,23 +56,25 @@ bun install
 bun run check:env
 ```
 
-Phase 8.2 expects the headless core package in a sibling checkout for local development:
+Local development expects sibling checkouts:
 
 ```text
 ../bluenote-core
 ../bluenote-term
+../bluenote
 ```
 
-`package.json` currently uses the reproducible Git commit dependency `"@lordierclaw/bluenote-core": "github:LordierClaw/bluenote-core#26586e011e04"` for shared testing. For active local core development, temporarily switch to `"file:../bluenote-core"`, build the sibling core package after core changes, then reinstall/check the terminal client:
+`package.json` uses a reproducible pinned Git dependency for `@lordierclaw/bluenote-core`. For active local core development, build/check the sibling core package first, then reinstall/check the terminal client and relink it if you need `bluenote-term` on `PATH`:
 
 ```bash
 cd ../bluenote-core
-bun install
-bun run build
+npm ci --include=dev
+npm run check
 
 cd ../bluenote-term
 bun install
 bun run check
+bun link
 ```
 
 See [Development](DEVELOPMENT.md) for local `file:`, reproducible Git tag, and future npm dependency modes. Do not import from `@lordierclaw/bluenote-core/src/*` or relative paths into `../bluenote-core/src/*`.
