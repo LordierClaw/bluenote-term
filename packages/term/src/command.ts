@@ -156,7 +156,7 @@ export async function runTuiCommand(args: string[] = [], options: RunTuiCommandO
 
   const daemonOptions = readDaemonCommandOptions(args, options.env ?? process.env)
 
-  if (daemonOptions.checkDaemon || daemonOptions.daemonUrl || daemonOptions.daemonToken) {
+  if (daemonOptions.checkDaemon || daemonOptions.daemonUrl) {
     const daemonCheckResult = await performDaemonCheck(daemonOptions)
 
     if (daemonOptions.checkDaemon || !daemonCheckResult.ok) {

@@ -4,7 +4,7 @@
   "workspaces": {
     "": {
       "dependencies": {
-        "@lordierclaw/bluenote-core": "git+https://github.com/LordierClaw/bluenote-core.git#826914e2ef865aafa0c9cdcabfb362a0e43850d1",
+        "@lordierclaw/bluenote-core": "git+https://github.com/LordierClaw/bluenote-core.git#920f5c1030604a5be98d8d70d87d06ec0a57fb28",
         "@opentui/core": "0.2.14",
         "clipboardy": "5.3.1",
         "sql.js": "1.10.3",
@@ -23,7 +23,7 @@
         "bluenote-term": "./bin/bluenote-term.ts",
       },
       "dependencies": {
-        "@lordierclaw/bluenote-core": "git+https://github.com/LordierClaw/bluenote-core.git#826914e2ef865aafa0c9cdcabfb362a0e43850d1",
+        "@lordierclaw/bluenote-core": "git+https://github.com/LordierClaw/bluenote-core.git#920f5c1030604a5be98d8d70d87d06ec0a57fb28",
         "@opentui/core": "0.2.14",
         "clipboardy": "5.3.1",
       },
@@ -48,7 +48,7 @@
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.4.16", "", { "os": "win32", "cpu": "x64" }, "sha512-Kp85jgoBHa05gix6UIRjfCDiUV3w/8VIdZ247VyyO2gEjaw12WEVhdIjlxp/AMzXxqxQwbxNTDVZ3Mwd2RG5rw=="],
 
-    "@lordierclaw/bluenote-core": ["@lordierclaw/bluenote-core@github:LordierClaw/bluenote-core#826914e", { "dependencies": { "@types/node": "16.18.126", "@types/node-fetch": "2.6.13", "js-yaml": "4.1.1", "minisearch": "6.3.0", "node-fetch": "2.7.0", "sql.js": "1.10.3", "typescript": "5.8.3" } }, "LordierClaw-bluenote-core-826914e", "sha512-ptOJKehI+/cOtmNytcNXJ1GPBnY2HC27tZFeKN9YEj6zf16XwkBlfbAwC7h8bOkY59RKyPiB7Vk6/FlnYlfLSw=="],
+    "@lordierclaw/bluenote-core": ["@lordierclaw/bluenote-core@github:LordierClaw/bluenote-core#920f5c1", { "dependencies": { "@types/node": "16.18.126", "@types/node-fetch": "2.6.13", "js-yaml": "4.1.1", "minisearch": "6.3.0", "node-fetch": "2.7.0", "sql.js": "1.10.3" } }, "LordierClaw-bluenote-core-920f5c1", "sha512-AtnICDfa4xk+9m5JLKXZ4YdYv+IZBHEsFilOjsS2RRYQpk1621mvDqBWMhED5FamMs/b+Hen9k9JrLsG1/gQ6Q=="],
 
     "@opentui/core": ["@opentui/core@0.2.14", "", { "dependencies": { "bun-ffi-structs": "0.2.2", "diff": "9.0.0", "marked": "17.0.1", "string-width": "7.2.0", "strip-ansi": "7.1.2", "yoga-layout": "3.2.1" }, "optionalDependencies": { "@opentui/core-darwin-arm64": "0.2.14", "@opentui/core-darwin-x64": "0.2.14", "@opentui/core-linux-arm64": "0.2.14", "@opentui/core-linux-x64": "0.2.14", "@opentui/core-win32-arm64": "0.2.14", "@opentui/core-win32-x64": "0.2.14" }, "peerDependencies": { "web-tree-sitter": "0.25.10" } }, "sha512-17YCr3BqM9mhi/DdNVM+omgmrKQNIl0G5RzoaTFOHe4+OAhG+W3iooYi+WdsekJWSUOEwZqDRz0QBTZhOtgZsQ=="],
 

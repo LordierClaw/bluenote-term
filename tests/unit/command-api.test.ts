@@ -220,6 +220,27 @@ test("runTuiCommand can read daemon check connection details from the environmen
   }
 })
 
+test("runTuiCommand ignores a token-only environment for normal launches", async () => {
+  const bufferedIO = createBufferedIO()
+  let calls = 0
+
+  const exitCode = await runTuiCommand([], {
+    env: {
+      BLUENOTE_DAEMON_TOKEN: "partial-env-token",
+    },
+    io: bufferedIO.io,
+    tuiRunner: async () => {
+      calls += 1
+      return { exitCode: 0, stdout: "launched\n", stderr: "" }
+    },
+  })
+
+  assert.equal(calls, 1)
+  assert.equal(exitCode, 0)
+  assert.equal(bufferedIO.stdout, "launched\n")
+  assert.equal(bufferedIO.stderr, "")
+})
+
 test("runTuiCommand reports daemon check failures without printing the token", async () => {
   const bufferedIO = createBufferedIO()
   let calls = 0
