@@ -4,14 +4,12 @@
   "description": "Terminal-native, local-first Markdown notes.",
   "license": "Apache-2.0",
   "type": "module",
+  "private": true,
   "packageManager": "bun@1.3.14",
   "workspaces": [
     "packages/term"
   ],
-  "bin": {
-    "bn": "./bin/bn.ts",
-    "bluenote": "./bin/bn.ts"
-  },
+
   "keywords": [
     "markdown",
     "notes",
@@ -39,7 +37,7 @@
     "check": "bun run lint && bun run typecheck && bun run test && bun run smoke:opentui && bun run smoke:cli"
   },
   "dependencies": {
-    "@lordierclaw/bluenote-core": "github:LordierClaw/bluenote-core#26586e011e04",
+    "@lordierclaw/bluenote-core": "git+https://github.com/LordierClaw/bluenote-core.git#920f5c1030604a5be98d8d70d87d06ec0a57fb28",
     "@opentui/core": "0.2.14",
     "clipboardy": "5.3.1",
     "sql.js": "1.10.3"

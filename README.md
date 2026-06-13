@@ -21,6 +21,35 @@ BlueNote keeps normal note bodies as plain `.md` files under `note/` and drafts 
 
 ## Install from source
 
+For the full BlueNote app, install/run the distribution CLI (`@lordierclaw/bluenote`) and use this package as the optional terminal client discovered on `PATH` as `bluenote-term`. End users normally install the app and clients like this:
+
+```bash
+npm install -g @lordierclaw/bluenote
+npm install -g bluenote-term
+bluenote doctor
+```
+
+When working from sibling source checkouts, link the distribution CLI first, then link this optional terminal client from its public package workspace so `bluenote doctor` can discover `bluenote-term` on `PATH`:
+
+```bash
+cd ../bluenote
+npm ci --include=dev
+npm run check
+npm link
+bluenote doctor
+
+cd ../bluenote-term
+bun install
+bun run check
+cd packages/term
+bun link
+cd ../..
+
+bluenote doctor
+```
+
+If your shell cannot find `bluenote-term` after `bun link`, make sure Bun's link directory is on `PATH` (`~/.bun/bin` on Linux/macOS). See the distribution README for bash, fish, cmd.exe, and PowerShell PATH examples.
+
 After cloning the repository, install dependencies and check the local runtime:
 
 ```bash
@@ -28,23 +57,27 @@ bun install
 bun run check:env
 ```
 
-Phase 8.2 expects the headless core package in a sibling checkout for local development:
+Local development expects sibling checkouts:
 
 ```text
 ../bluenote-core
 ../bluenote-term
+../bluenote
 ```
 
-`package.json` currently uses the reproducible Git commit dependency `"@lordierclaw/bluenote-core": "github:LordierClaw/bluenote-core#26586e011e04"` for shared testing. For active local core development, temporarily switch to `"file:../bluenote-core"`, build the sibling core package after core changes, then reinstall/check the terminal client:
+`package.json` uses a reproducible pinned Git dependency for `@lordierclaw/bluenote-core`. For active local core development, build/check the sibling core package first, then reinstall/check the terminal client and relink it if you need `bluenote-term` on `PATH`:
 
 ```bash
 cd ../bluenote-core
-bun install
-bun run build
+npm ci --include=dev
+npm run check
 
 cd ../bluenote-term
 bun install
 bun run check
+cd packages/term
+bun link
+cd ../..
 ```
 
 See [Development](DEVELOPMENT.md) for local `file:`, reproducible Git tag, and future npm dependency modes. Do not import from `@lordierclaw/bluenote-core/src/*` or relative paths into `../bluenote-core/src/*`.

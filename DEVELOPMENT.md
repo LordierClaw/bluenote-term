@@ -13,6 +13,16 @@ Phase 8.2 splits the headless core into a sibling repository. For local developm
 
 Long-term, the sibling `bluenote` distribution repo owns the official multi-command binary and top-level command routing. When that repo needs terminal behavior, expose a reusable public TUI command API here rather than moving OpenTUI implementation into `bluenote`.
 
+The nested `bluenote-term` package exports that command API from both `bluenote-term` and `bluenote-term/command`:
+
+```ts
+import { runTuiCommand } from "bluenote-term"
+
+const exitCode = await runTuiCommand(process.argv.slice(2))
+```
+
+`runTuiCommand(args)` preserves the existing terminal command behavior and runtime expectations. It requires the same Bun/OpenTUI-capable environment as the TUI bin and returns the command exit code after writing command output to the provided streams or the current process streams.
+
 `bluenote-core` is the headless package. It owns note/domain logic, managed-root storage layout, sidecar metadata, search/indexing, and reusable AI config/queue/provider services. It must not depend on OpenTUI or terminal client code.
 
 ## Local dependency mode
