@@ -74,7 +74,17 @@ export interface EditorOverflowViewModel {
   above: boolean
   below: boolean
   indicator: "" | "↑" | "↓" | "↕"
+  vertical?: EditorVerticalOverflowViewModel
   horizontal?: EditorHorizontalOverflowViewModel
+}
+
+export interface EditorVerticalOverflowViewModel {
+  indicatorIntent: TuiColorIntent
+  lineCount: number
+  viewportLines: number
+  scrollTop: number
+  thumbTop: number
+  thumbHeight: number
 }
 
 export interface EditorHorizontalOverflowViewModel {
@@ -196,7 +206,7 @@ function renderControlledBodyValue(value: string, cursorOffset = Array.from(valu
   const normalizedCursorOffset = Math.max(0, Math.min(Math.trunc(Number.isFinite(cursorOffset) ? cursorOffset : bodyChars.length), bodyChars.length))
   const cursorDisplayOffset = value.length > 0 ? normalizedCursorOffset : 0
   const plainBefore = displayChars.slice(0, cursorDisplayOffset).join("")
-  const cursorCharacter = value.length > 0 && cursorDisplayOffset < displayChars.length ? displayChars[cursorDisplayOffset]! : " "
+  const cursorCharacter = value.length > 0 && cursorDisplayOffset < displayChars.length ? displayChars[cursorDisplayOffset]! : "\u00A0"
   const cursorIsOnNewline = cursorCharacter === "\n"
   const cursorText = cursorIsOnNewline ? " " : cursorCharacter
   const afterStart = value.length > 0 && cursorDisplayOffset < displayChars.length && !cursorIsOnNewline ? cursorDisplayOffset + 1 : cursorDisplayOffset
@@ -345,10 +355,34 @@ function editorOverflowFor(lineCount: number, cursorLine: number, bodyViewportLi
   }
 
   const scrollTop = editorScrollTopFor(lineCount, cursorLine, bodyViewportLines)
+  const viewportLines = Math.max(1, Math.trunc(bodyViewportLines))
   const above = scrollTop > 0
-  const below = scrollTop + bodyViewportLines < lineCount
+  const below = scrollTop + viewportLines < lineCount
   const indicator = above && below ? "↕" : above ? "↑" : below ? "↓" : ""
-  return { above, below, indicator }
+  const thumbHeight = Math.max(1, Math.min(viewportLines, Math.floor((viewportLines / lineCount) * viewportLines)))
+  const thumbTrack = Math.max(0, viewportLines - thumbHeight)
+  const scrollRange = Math.max(1, lineCount - viewportLines)
+  const thumbTop = Math.max(0, Math.min(thumbTrack, Math.round((scrollTop / scrollRange) * thumbTrack)))
+  return {
+    above,
+    below,
+    indicator,
+    vertical: {
+      indicatorIntent: "info",
+      lineCount,
+      viewportLines,
+      scrollTop,
+      thumbTop,
+      thumbHeight,
+    },
+  }
+}
+
+function verticalScrollbarContent(scrollbar: EditorVerticalOverflowViewModel): string {
+  return Array.from({ length: scrollbar.viewportLines }, (_, index) => {
+    const inThumb = index >= scrollbar.thumbTop && index < scrollbar.thumbTop + scrollbar.thumbHeight
+    return inThumb ? "█" : "│"
+  }).join("\n")
 }
 
 function lineRangeForCursor(body: string, cursorOffset: number): { start: number; end: number } {
@@ -716,15 +750,17 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
     fg: tuiTheme[vm.body.placeholderIntent],
   })
   const hasHorizontalOverflow = Boolean(vm.body.overflow.horizontal)
-  const bodyDisplayWidth = hasHorizontalOverflow
-    ? Math.max(1, screenWidth - vm.body.margin.x - 4)
+  const hasVerticalOverflow = Boolean(vm.body.overflow.vertical)
+  const hasSideIndicator = hasHorizontalOverflow || hasVerticalOverflow
+  const bodyDisplayWidth = hasSideIndicator
+    ? Math.max(1, screenWidth - vm.body.margin.x - (hasHorizontalOverflow ? 4 : 3))
     : "100%"
   const bodyDisplay = new TextRenderable(options.renderer, {
     id: "bluenote-editor-body",
     content: renderControlledBodyValue(vm.body.value, editorState ? editorCursorOffset(editorState) : 0, vm.body.focused, vm.body.activeSelectionRange ?? vm.body.activeFindRange),
     width: bodyDisplayWidth,
     height: "100%",
-    flexGrow: hasHorizontalOverflow ? 0 : 1,
+    flexGrow: hasSideIndicator ? 0 : 1,
     flexShrink: 1,
     wrapMode: vm.body.wrapMode,
     fg: vm.body.value.length > 0 ? undefined : tuiTheme[vm.body.placeholderIntent],
@@ -738,6 +774,15 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
       width: 1,
       height: "100%",
       fg: tuiTheme[vm.body.overflow.horizontal.indicatorIntent],
+    }))
+  }
+  if (vm.body.overflow.vertical) {
+    bodyContentRow.add(new TextRenderable(options.renderer, {
+      id: "bluenote-editor-body-vertical-scrollbar",
+      content: verticalScrollbarContent(vm.body.overflow.vertical),
+      width: 1,
+      height: "100%",
+      fg: tuiTheme[vm.body.overflow.vertical.indicatorIntent],
     }))
   }
   bodyPanel.add(bodyTopMargin)

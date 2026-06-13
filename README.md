@@ -249,7 +249,7 @@ Common controls:
 
 ### Editor
 
-The Editor supports inline body editing, Unicode-safe cursor movement, newline, backspace, delete, undo/redo, wrap mode, `Ctrl+F` find, `Ctrl+R` replace, and `Ctrl+S` save. `Alt+S` saves an open draft as a normal note by choosing an existing `note/` folder and destination title. `Ctrl+PageDown` and `Ctrl+PageUp` switch to the next or previous note in the same folder; after switching, the topbar shows a temporary blue index label such as `03/10` before the title.
+The Editor supports inline body editing, Unicode-safe cursor movement, newline, backspace, delete, undo/redo, wrap mode, `Ctrl+F` find, `Ctrl+R` replace, and `Ctrl+S` save. `Alt+S` saves an open draft as a normal note by choosing an existing `note/` folder and destination title. `Ctrl+PageDown` and `Ctrl+PageUp` switch to the next or previous note in the same folder; after switching, the topbar shows a temporary blue index label such as `03/10` before the title. Long notes show a slim vertical position indicator beside the editor body, and temporary action statuses in the bottombar clear after a few seconds so shortcut hints return.
 
 Autosave runs after 750 ms. Autosave and manual save use the same safe note-body write path. If a save fails, BlueNote keeps the buffer dirty and retries later.
 
