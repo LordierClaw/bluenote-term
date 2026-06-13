@@ -29,25 +29,26 @@ npm install -g bluenote-term
 bluenote doctor
 ```
 
-When working from sibling source checkouts, build/check the core library first, then this client, then the distribution CLI last:
+When working from sibling source checkouts, link the distribution CLI first, then link this optional terminal client from its public package workspace so `bluenote doctor` can discover `bluenote-term` on `PATH`:
 
 ```bash
-cd ../bluenote-core
-npm ci --include=dev
-npm run check
-
-cd ../bluenote-term
-bun install
-bun run check
-bun link
-
 cd ../bluenote
 npm ci --include=dev
 npm run check
 npm link
+bluenote doctor
+
+cd ../bluenote-term
+bun install
+bun run check
+cd packages/term
+bun link
+cd ../..
 
 bluenote doctor
 ```
+
+If your shell cannot find `bluenote-term` after `bun link`, make sure Bun's link directory is on `PATH` (`~/.bun/bin` on Linux/macOS). See the distribution README for bash, fish, cmd.exe, and PowerShell PATH examples.
 
 After cloning the repository, install dependencies and check the local runtime:
 
@@ -74,7 +75,9 @@ npm run check
 cd ../bluenote-term
 bun install
 bun run check
+cd packages/term
 bun link
+cd ../..
 ```
 
 See [Development](DEVELOPMENT.md) for local `file:`, reproducible Git tag, and future npm dependency modes. Do not import from `@lordierclaw/bluenote-core/src/*` or relative paths into `../bluenote-core/src/*`.
