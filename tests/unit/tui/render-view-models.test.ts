@@ -985,7 +985,22 @@ describe("TUI render view models", () => {
     ])
     assert.equal(narrowVm.bottombar.row2.hiddenShortcutCount, 7)
     assert.doesNotMatch(narrowVm.bottombar.row2.shortcuts.join(" "), /\[\?\] More/u)
-    assert.deepEqual(narrowVm.body.overflow, { above: false, below: true, indicator: "↓" })
+    assert.deepEqual(
+      {
+        above: narrowVm.body.overflow.above,
+        below: narrowVm.body.overflow.below,
+        indicator: narrowVm.body.overflow.indicator,
+      },
+      { above: false, below: true, indicator: "↓" },
+    )
+    assert.deepEqual(narrowVm.body.overflow.vertical, {
+      indicatorIntent: "info",
+      lineCount: 30,
+      viewportLines: 8,
+      scrollTop: 0,
+      thumbTop: 0,
+      thumbHeight: 2,
+    })
 
     const bodyLength = Array.from(longBody).length
     const bottomCursorVm = buildEditorViewModel({
@@ -1001,7 +1016,16 @@ describe("TUI render view models", () => {
       },
     }, { width: 80, bodyViewportLines: 8 })
 
-    assert.deepEqual(bottomCursorVm.body.overflow, { above: true, below: false, indicator: "↑" })
+    assert.deepEqual(
+      {
+        above: bottomCursorVm.body.overflow.above,
+        below: bottomCursorVm.body.overflow.below,
+        indicator: bottomCursorVm.body.overflow.indicator,
+      },
+      { above: true, below: false, indicator: "↑" },
+    )
+    assert.equal(bottomCursorVm.body.overflow.vertical?.scrollTop, 22)
+    assert.equal(bottomCursorVm.body.overflow.vertical?.thumbTop, 6)
   })
 
   test("editor unwrap mode reports horizontal overflow and cursor-driven pan without changing body value", () => {
