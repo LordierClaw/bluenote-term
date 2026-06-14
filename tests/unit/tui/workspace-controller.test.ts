@@ -2404,6 +2404,24 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().editor?.dirty, false)
   })
 
+  test("toggling editor wrap mode clears stale preferred cursor columns", () => {
+    const { deps } = createDeps()
+    const controller = createWorkspaceController(deps)
+    openInboxDaily(controller)
+    controller.updateEditorBody("abcdefghijklmno\npqrstuvwxyz")
+    controller.setEditorSelection(15, 15)
+
+    controller.toggleEditorWrapMode()
+    assert.equal(controller.getState().editor?.wrapMode, "none")
+    controller.moveEditorCursor("down")
+    assert.equal(controller.getState().editor?.preferredColumn, 15)
+
+    controller.toggleEditorWrapMode()
+    assert.equal(controller.getState().editor?.wrapMode, "word")
+    assert.equal(controller.getState().editor?.preferredColumn, null)
+    assert.equal(controller.getState().editor?.dirty, true)
+  })
+
   test("moves across a long unwrapped editor line and returns to normal wrapping without mutating text", () => {
     const { deps } = createDeps()
     const controller = createWorkspaceController(deps)

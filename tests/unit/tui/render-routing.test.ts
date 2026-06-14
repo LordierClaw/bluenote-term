@@ -111,7 +111,7 @@ function createController(screen: TuiState["screen"]): { controller: WorkspaceCo
     },
     backspaceEditor: () => calls.push("backspaceEditor"),
     deleteEditor: () => calls.push("deleteEditor"),
-    moveEditorCursor: (direction) => calls.push(`moveEditorCursor:${direction}`),
+    moveEditorCursor: (direction, options) => calls.push(`moveEditorCursor:${direction}:${options?.viewportColumns ?? ""}`),
     toggleEditorWrapMode: () => calls.push("toggleEditorWrapMode"),
     saveEditor: async () => {
       calls.push("saveEditor")
@@ -338,6 +338,21 @@ describe("TUI render keyboard routing", () => {
     assert.equal(routeControlledEditorBodyInput(controller, "\b"), true)
     assert.equal(routeControlledEditorBodyInput(controller, "\u007f"), true)
     assert.deepEqual(calls, ["backspaceEditor", "backspaceEditor"])
+  })
+
+  test("editor body routes wrapped vertical arrows with viewport columns", () => {
+    const { controller, calls } = createController("editor")
+    controller.getState().mode = "editor.body"
+    controller.getState().editor = {
+      note: { key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "abcdefghij klmnopqrs" },
+      body: "abcdefghij klmnopqrs",
+      savedBody: "abcdefghij klmnopqrs",
+      dirty: false,
+      wrapMode: "word",
+    }
+
+    assert.equal(routeControlledEditorBodyInput(controller, "\u001b[B", { bodyViewportColumns: 10 }), true)
+    assert.deepEqual(calls, ["moveEditorCursor:down:10"])
   })
 
   test("editor Alt+Z toggles wrap mode from the body", () => {
@@ -1056,6 +1071,81 @@ describe("TUI render keyboard routing", () => {
       assert.equal(controller.getState().editor?.dirty, false)
     } finally {
       renderer.destroy()
+    }
+  })
+
+  test("runtime workspace routes wrapped vertical arrows with scrollbar-reduced body width", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      ;(renderer as typeof renderer & { width?: number; height?: number }).width = 20
+      ;(renderer as typeof renderer & { width?: number; height?: number }).height = 6
+      const longBody = "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz"
+      const controller = createWorkspaceController({
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: longBody }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: longBody }),
+        searchNotes: () => [],
+      })
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+      controller.setEditorSelection(0, 0)
+      let inputHandler: (sequence: string) => boolean = () => false
+      const inputRegistration = renderer as unknown as {
+        prependInputHandler?: (handler: (sequence: string) => boolean) => void
+        removeInputHandler?: (handler: (sequence: string) => boolean) => void
+      }
+      inputRegistration.prependInputHandler = (handler) => {
+        inputHandler = handler
+      }
+      inputRegistration.removeInputHandler = () => {}
+
+      const running = await startTuiWorkspace({ renderer, controller })
+      assert.equal((inputHandler as (sequence: string) => boolean)("\u001b[B"), true)
+      await new Promise((resolve) => setTimeout(resolve, 0))
+
+      assert.equal(controller.getState().editor?.cursorOffset, 17)
+      running.destroy()
+    } finally {
+      if (!renderer.isDestroyed) {
+        renderer.destroy()
+      }
+    }
+  })
+
+  test("runtime workspace does not measure wrapped viewport columns for ordinary typing", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      ;(renderer as typeof renderer & { width?: number; height?: number }).width = 20
+      ;(renderer as typeof renderer & { width?: number; height?: number }).height = 6
+      const controller = createWorkspaceController({
+        listNotes: () => [{ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "" }],
+        showNote: () => ({ key: "daily", title: "Daily", description: "", relativePath: "note/daily.md", body: "" }),
+        searchNotes: () => [],
+      })
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+      let inputHandler: (sequence: string) => boolean = () => false
+      const inputRegistration = renderer as unknown as {
+        prependInputHandler?: (handler: (sequence: string) => boolean) => void
+        removeInputHandler?: (handler: (sequence: string) => boolean) => void
+      }
+      inputRegistration.prependInputHandler = (handler) => {
+        inputHandler = handler
+      }
+      inputRegistration.removeInputHandler = () => {}
+
+      const running = await startTuiWorkspace({ renderer, controller })
+      Object.defineProperty(renderer, "width", {
+        configurable: true,
+        get() {
+          throw new Error("typing should not measure renderer width")
+        },
+      })
+
+      assert.equal((inputHandler as (sequence: string) => boolean)("x"), true)
+      assert.equal(controller.getState().editor?.body, "x")
+      running.destroy()
+    } finally {
+      if (!renderer.isDestroyed) {
+        renderer.destroy()
+      }
     }
   })
 
