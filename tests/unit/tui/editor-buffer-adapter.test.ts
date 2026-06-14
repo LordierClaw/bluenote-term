@@ -107,6 +107,54 @@ describe("TUI editor buffer adapter", () => {
     assert.equal(moveEditorCursor(editor, "down").cursorOffset, 3)
   })
 
+  test("wrapped line navigation moves by visual rows when viewport columns are provided", () => {
+    const body = "abcdefghij klmnopqrs tuvwxyz"
+    let editor: EditorBufferState = { ...createEditor(body), wrapMode: "word", cursorOffset: 0, selectionStart: 0, selectionEnd: 0 }
+
+    editor = moveEditorCursor(editor, "down", { viewportColumns: 10 })
+    assert.equal(editor.cursorOffset, 11)
+    assert.equal(editor.preferredColumn, 0)
+    editor = moveEditorCursor(editor, "down", { viewportColumns: 10 })
+    assert.equal(editor.cursorOffset, 21)
+
+    editor = moveEditorCursor(editor, "right")
+    editor = moveEditorCursor(editor, "right")
+    assert.equal(editor.cursorOffset, 23)
+    editor = moveEditorCursor(editor, "up", { viewportColumns: 10 })
+    assert.equal(editor.cursorOffset, 13)
+    assert.equal(editor.preferredColumn, 2)
+  })
+
+  test("wrapped line navigation treats logical line ends as their current visual row", () => {
+    const body = "abc\ndef\nghi"
+    let editor: EditorBufferState = { ...createEditor(body), wrapMode: "word", cursorOffset: 3, selectionStart: 3, selectionEnd: 3 }
+
+    editor = moveEditorCursor(editor, "down", { viewportColumns: 10 })
+    assert.equal(editor.cursorOffset, 7)
+    assert.equal(editor.preferredColumn, 3)
+
+    editor = moveEditorCursor(editor, "up", { viewportColumns: 10 })
+    assert.equal(editor.cursorOffset, 3)
+  })
+
+  test("wrapped line navigation moves down from exact-width line-end cursor sentinels", () => {
+    const body = "abcdefghij\nklmnopqrst"
+    let editor: EditorBufferState = { ...createEditor(body), wrapMode: "word", cursorOffset: 10, selectionStart: 10, selectionEnd: 10 }
+
+    editor = moveEditorCursor(editor, "down", { viewportColumns: 10 })
+    assert.equal(editor.cursorOffset, 11)
+    assert.equal(editor.preferredColumn, 0)
+  })
+
+  test("unwrapped line navigation ignores viewport columns and stays logical", () => {
+    const body = "abcdefghij klmnopqrs"
+    let editor: EditorBufferState = { ...createEditor(body), wrapMode: "none", cursorOffset: 0, selectionStart: 0, selectionEnd: 0 }
+
+    editor = moveEditorCursor(editor, "down", { viewportColumns: 10 })
+    assert.equal(editor.cursorOffset, 0)
+    assert.equal(editor.preferredColumn, 0)
+  })
+
   test("long-line navigation in unwrap mode reaches line boundaries without changing body text", () => {
     const longLine = "abcdefghi日本語"
     let editor: EditorBufferState = { ...createEditor(longLine), wrapMode: "none", cursorOffset: 0, selectionStart: 0, selectionEnd: 0 }

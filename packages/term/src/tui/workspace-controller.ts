@@ -1,4 +1,4 @@
-import type { ClipboardModel, ClipboardOperationResult, EditorCursorDirection, EditorSelection, SaveEditorBufferDependencies } from "./adapters/editor-buffer-adapter"
+import type { ClipboardModel, ClipboardOperationResult, EditorCursorDirection, EditorCursorMoveOptions, EditorSelection, SaveEditorBufferDependencies } from "./adapters/editor-buffer-adapter"
 import { advanceEditorFindState, backspaceAtEditorCursor, deleteAtEditorCursor, findInEditorBody, insertTextAtEditorCursor, moveEditorCursor, pasteText, replaceAllMatches, replaceCurrentMatch, replaceEditorBody } from "./adapters/editor-buffer-adapter"
 import {
   buildManagerBrowserModel,
@@ -156,7 +156,7 @@ export interface WorkspaceController {
   pasteEditorClipboard: (text?: string) => void
   backspaceEditor: () => void
   deleteEditor: () => void
-  moveEditorCursor: (direction: EditorCursorDirection) => void
+  moveEditorCursor: (direction: EditorCursorDirection, options?: EditorCursorMoveOptions) => void
   toggleEditorWrapMode: () => void
   saveEditor: () => Promise<WorkspaceActionResult>
   openSearch: (query?: string) => void
@@ -2637,9 +2637,9 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       applyEditorChange(nextEditor)
     },
 
-    moveEditorCursor: (direction) => {
+    moveEditorCursor: (direction, options) => {
       if (!state.editor) return
-      const nextEditor = moveEditorCursor(state.editor, direction)
+      const nextEditor = moveEditorCursor(state.editor, direction, options)
       state = {
         ...state,
         editor: nextEditor,
@@ -2653,6 +2653,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         editor: {
           ...state.editor,
           wrapMode: state.editor.wrapMode === "none" ? "word" : "none",
+          preferredColumn: null,
         },
       }
     },
