@@ -5340,6 +5340,59 @@ describe("TUI workspace controller", () => {
     assert.equal(editor?.redoStack?.length, 0)
   })
 
+  test("contiguous plain typing coalesces into one undo snapshot", () => {
+    const scheduler = createFakeScheduler()
+    const { deps } = createDeps({ autosaveScheduler: scheduler })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    for (const character of Array.from("abcdefghijklmnopqrstuvwxyz")) {
+      controller.insertEditorText(character)
+    }
+
+    assert.equal(controller.getState().editor?.undoStack?.length, 1)
+    assert.equal(controller.getState().editor?.body, "Original daily bodyabcdefghijklmnopqrstuvwxyz")
+    controller.undoEditor()
+    assert.equal(controller.getState().editor?.body, "Original daily body")
+  })
+
+  test("cursor movement breaks contiguous typing undo grouping", () => {
+    const scheduler = createFakeScheduler()
+    const { deps } = createDeps({ autosaveScheduler: scheduler })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText("a")
+    controller.insertEditorText("b")
+    controller.moveEditorCursor("left")
+    controller.insertEditorText("c")
+
+    assert.equal(controller.getState().editor?.undoStack?.length, 2)
+    controller.undoEditor()
+    assert.equal(controller.getState().editor?.body, "Original daily bodyab")
+    controller.undoEditor()
+    assert.equal(controller.getState().editor?.body, "Original daily body")
+  })
+
+  test("render state omits heavy undo redo history while full state preserves it", () => {
+    const scheduler = createFakeScheduler()
+    const { deps } = createDeps({ autosaveScheduler: scheduler })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    for (let index = 0; index < 60; index += 1) {
+      controller.insertEditorText(String(index % 10))
+      controller.moveEditorCursor("left")
+      controller.moveEditorCursor("right")
+    }
+
+    assert.equal(controller.getState().editor?.undoStack?.length, 50)
+    const renderState = controller.getRenderState?.()
+    assert.equal(renderState?.editor?.body, controller.getState().editor?.body)
+    assert.deepEqual(renderState?.editor?.undoStack, [])
+    assert.deepEqual(renderState?.editor?.redoStack, [])
+  })
+
   test("editor undo history is bounded and empty undo redo are safe", () => {
     const scheduler = createFakeScheduler()
     const { deps } = createDeps({ autosaveScheduler: scheduler })

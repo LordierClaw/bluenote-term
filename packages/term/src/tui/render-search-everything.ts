@@ -11,6 +11,10 @@ import type { TuiScreen, TuiState } from "./state"
 import { tuiTheme, type TuiColorIntent } from "./theme"
 import type { WorkspaceController } from "./workspace-controller"
 
+function renderStateFor(controller: WorkspaceController): TuiState {
+  return controller.getRenderState?.() ?? controller.getState()
+}
+
 export interface SearchEverythingStyleIntents {
   panel: TuiColorIntent
   input: TuiColorIntent
@@ -435,7 +439,7 @@ export function renderPreviewText(text: SearchEverythingPreviewText | string, in
 }
 
 export function renderSearchEverythingScreen(options: RenderSearchEverythingScreenOptions): BoxRenderable {
-  const vm = buildSearchEverythingViewModel(options.controller.getState(), options.controller.getSearchResults(), { height: options.height })
+  const vm = buildSearchEverythingViewModel(renderStateFor(options.controller), options.controller.getSearchResults(), { height: options.height })
   const root = new BoxRenderable(options.renderer, {
     id: "bluenote-search-everything-screen",
     flexDirection: "column",
@@ -546,7 +550,7 @@ export function renderSearchEverythingScreen(options: RenderSearchEverythingScre
 }
 
 export function routeSearchEverythingKey(sequence: string, controller: WorkspaceController): boolean {
-  const state = controller.getState()
+  const state = renderStateFor(controller)
   const selectedIndex = state.search?.selectedIndex ?? 0
 
   switch (sequence) {

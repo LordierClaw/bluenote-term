@@ -571,13 +571,17 @@ export interface RoutedWorkspaceKey {
   exit?: boolean
 }
 
+function renderStateFor(controller: WorkspaceController) {
+  return controller.getRenderState?.() ?? controller.getState()
+}
+
 export function routeWorkspaceKey(
   sequence: string,
   controller: WorkspaceController,
   onExit: () => void,
   onInvalidate: () => void = () => {},
 ): RoutedWorkspaceKey {
-  const state = controller.getState()
+  const state = renderStateFor(controller)
 
   if (sequence === "\u0010") {
     if (state.screen === "search") {
@@ -651,7 +655,7 @@ function effectiveWorkspaceHeight(renderer: CliRenderer): number | undefined {
 }
 
 function renderWorkspace(renderer: CliRenderer, controller: WorkspaceController, onExit: () => void, onInvalidate: () => void): BoxRenderable {
-  const state = controller.getState()
+  const state = renderStateFor(controller)
   if (state.screen === "search") {
     return renderSearchEverythingScreen({ renderer, controller, onInvalidate, height: effectiveWorkspaceHeight(renderer) })
   }
@@ -668,7 +672,7 @@ function renderableDescendants(node: Renderable): Renderable[] {
 }
 
 export function routeControlledEditorBodyInput(controller: WorkspaceController, sequence: string): boolean {
-  const state = controller.getState()
+  const state = renderStateFor(controller)
   if (state.screen !== "editor" || state.mode !== "editor.body" || !state.editor) return false
 
   const bracketedPasteStart = "\u001b[200~"

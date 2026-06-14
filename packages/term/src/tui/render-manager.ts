@@ -7,6 +7,10 @@ import type { AiStatusState, ManagerItem, TuiState } from "./state"
 import { tuiTheme, type TuiColorIntent } from "./theme"
 import type { WorkspaceController } from "./workspace-controller"
 
+function renderStateFor(controller: WorkspaceController): TuiState {
+  return controller.getRenderState?.() ?? controller.getState()
+}
+
 export interface ManagerRowViewModel {
   key: string
   filename: string
@@ -724,7 +728,7 @@ function rowRenderable(options: RenderManagerScreenOptions, row: ManagerRowViewM
 }
 
 export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRenderable {
-  const state = options.controller.getState()
+  const state = renderStateFor(options.controller)
   const screenWidth = effectiveRendererWidth(options)
   const responsivePreviewHidden = typeof screenWidth === "number" && screenWidth < MANAGER_PREVIEW_NARROW_WIDTH
   const browserModel = responsivePreviewHidden ? undefined : options.controller.getManagerBrowserModel()
@@ -810,7 +814,7 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     panels.add(layout2)
   }
   root.add(panels)
-  if (options.controller.getState().mode === "manager.filter") {
+  if (state.mode === "manager.filter") {
     const filterBar = new BoxRenderable(options.renderer, {
       id: "bluenote-manager-filter-bar",
       flexDirection: "column",
@@ -840,7 +844,7 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
     }))
     const filterInput = new InputRenderable(options.renderer, {
       id: "bluenote-manager-filter-query",
-      value: options.controller.getState().manager.filterQuery ?? "",
+      value: state.manager.filterQuery ?? "",
       placeholder: "Type to filter…",
       width: "70%",
     })
@@ -1049,7 +1053,8 @@ export function renderManagerScreen(options: RenderManagerScreenOptions): BoxRen
 }
 
 export function routeManagerKey(sequence: string, controller: WorkspaceController, onExit?: () => void): boolean {
-  if (controller.getState().mode === "manager.deleteConfirm") {
+  const state = renderStateFor(controller)
+  if (state.mode === "manager.deleteConfirm") {
     if (sequence === "\u001b" || sequence === "\u001b[" || sequence === "n") {
       controller.cancelManagerDelete()
       return true
@@ -1064,8 +1069,8 @@ export function routeManagerKey(sequence: string, controller: WorkspaceControlle
     return true
   }
 
-  if (controller.getState().mode === "manager.create") {
-    const currentTitle = controller.getState().manager.createDraft?.title ?? ""
+  if (state.mode === "manager.create") {
+    const currentTitle = state.manager.createDraft?.title ?? ""
     if (sequence === "\u001b" || sequence === "\u001b[") {
       controller.cancelManagerCreate()
       return true
@@ -1088,9 +1093,9 @@ export function routeManagerKey(sequence: string, controller: WorkspaceControlle
     }
   }
 
-  if (controller.getState().mode === "manager.rename" || controller.getState().mode === "manager.move" || controller.getState().mode === "manager.saveDraftAs") {
-    const mode = controller.getState().mode
-    const currentInput = controller.getState().manager.actionDraft?.input ?? ""
+  if (state.mode === "manager.rename" || state.mode === "manager.move" || state.mode === "manager.saveDraftAs") {
+    const mode = state.mode
+    const currentInput = state.manager.actionDraft?.input ?? ""
     if (sequence === "\u001b" || sequence === "\u001b[") {
       controller.cancelManagerAction()
       return true
@@ -1128,8 +1133,8 @@ export function routeManagerKey(sequence: string, controller: WorkspaceControlle
     }
   }
 
-  if (controller.getState().mode === "manager.filter") {
-    const currentQuery = controller.getState().manager.filterQuery ?? ""
+  if (state.mode === "manager.filter") {
+    const currentQuery = state.manager.filterQuery ?? ""
     if (sequence === "\u001b[A") {
       controller.moveManagerSelection("up")
       return true

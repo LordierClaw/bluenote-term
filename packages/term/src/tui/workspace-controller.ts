@@ -138,6 +138,7 @@ export interface WorkspaceControllerDependencies {
 
 export interface WorkspaceController {
   getState: () => TuiState
+  getRenderState?: () => TuiState
   getManagerBrowserModel: () => ManagerBrowserModel
   getSearchResults: () => readonly SearchEverythingResult[]
   refreshManager: () => void
@@ -252,7 +253,8 @@ function isDraftRelativePath(relativePath: string | undefined): boolean {
   return (relativePath ?? "").replaceAll("\\", "/").startsWith("draft/")
 }
 
-function cloneStateSnapshot(source: TuiState): TuiState {
+function cloneStateSnapshot(source: TuiState, options: { includeHistory?: boolean } = {}): TuiState {
+  const includeHistory = options.includeHistory ?? true
   return {
     ...source,
     manager: {
@@ -267,8 +269,8 @@ function cloneStateSnapshot(source: TuiState): TuiState {
           ...source.editor,
           note: toTuiNote(source.editor.note),
           noteSwitchIndicator: source.editor.noteSwitchIndicator ? { ...source.editor.noteSwitchIndicator } : null,
-          undoStack: source.editor.undoStack?.map((snapshot) => ({ ...snapshot })) ?? [],
-          redoStack: source.editor.redoStack?.map((snapshot) => ({ ...snapshot })) ?? [],
+          undoStack: includeHistory ? source.editor.undoStack?.map((snapshot) => ({ ...snapshot })) ?? [] : [],
+          redoStack: includeHistory ? source.editor.redoStack?.map((snapshot) => ({ ...snapshot })) ?? [] : [],
         }
       : null,
     search: source.search
@@ -396,6 +398,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   let inFlightSave: { noteKey: string; body: string; promise: Promise<TuiNote> } | null = null
   const saveQueuesByNote = new Map<string, Promise<void>>()
   let autosaveStateChangeHandler: (() => void) | null = deps.onAutosaveStateChange ?? null
+  let editorHistoryGroup: string | null = null
   const previewBodyCache = new Map<string, string>()
   const autosaveScheduler: WorkspaceDebounceScheduler = deps.autosaveScheduler ?? {
     setTimeout: (callback, delay) => globalThis.setTimeout(callback, delay),
@@ -1194,6 +1197,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
   function setEditorNote(note: TuiNote): void {
     clearEditorStatusTimer()
+    resetEditorHistoryGroup()
     const openedNote = toTuiNote(note)
     state = openEditorForNote({
       ...state,
@@ -1215,6 +1219,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     }
 
     clearEditorStatusTimer()
+    resetEditorHistoryGroup()
 
     const openedNote = toTuiNote(note)
     state = {
@@ -1371,7 +1376,11 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     applyManagerBrowserModel()
   }
 
-  function applyEditorChange(nextEditor: EditorBufferState, options: { recordHistory?: boolean } = {}): void {
+  function resetEditorHistoryGroup(): void {
+    editorHistoryGroup = null
+  }
+
+  function applyEditorChange(nextEditor: EditorBufferState, options: { recordHistory?: boolean; historyGroup?: string } = {}): void {
     const previousEditor = state.editor
     let editorToApply = nextEditor
     if (options.recordHistory !== false && previousEditor) {
@@ -1380,7 +1389,10 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       if (!editorHistorySnapshotsEqual(previousSnapshot, nextSnapshot)) {
         const previousUndoStack = previousEditor.undoStack ?? []
         const lastUndoSnapshot = previousUndoStack.at(-1)
-        const nextUndoStack = lastUndoSnapshot && editorHistorySnapshotsEqual(lastUndoSnapshot, previousSnapshot)
+        const shouldContinueHistoryGroup = Boolean(options.historyGroup && editorHistoryGroup === options.historyGroup && previousUndoStack.length > 0)
+        const nextUndoStack = shouldContinueHistoryGroup
+          ? previousUndoStack
+          : lastUndoSnapshot && editorHistorySnapshotsEqual(lastUndoSnapshot, previousSnapshot)
           ? previousUndoStack
           : [...previousUndoStack, previousSnapshot].slice(-EDITOR_HISTORY_LIMIT)
         editorToApply = {
@@ -1390,6 +1402,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         }
       }
     }
+    editorHistoryGroup = options.recordHistory === false ? null : options.historyGroup ?? null
     state = {
       ...state,
       editor: editorToApply,
@@ -1537,6 +1550,8 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
   const controller: WorkspaceController = {
     getState: () => cloneStateSnapshot(state),
+
+    getRenderState: () => cloneStateSnapshot(state, { includeHistory: false }),
 
     getManagerBrowserModel: () => buildManagerBrowserModel(noteSummaries, state.manager, {
       previewVisible: state.manager.previewVisible ?? true,
@@ -2515,6 +2530,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     },
 
     updateEditorBody: (body) => {
+      resetEditorHistoryGroup()
       const previousEditor = state.editor
       const nextState = markEditorBodyChanged(state, body)
       if (!nextState.editor) {
@@ -2531,11 +2547,12 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
     insertEditorText: (text) => {
       if (!state.editor || text.length === 0) return
-      applyEditorChange(insertTextAtEditorCursor(state.editor, text))
+      applyEditorChange(insertTextAtEditorCursor(state.editor, text), { historyGroup: Array.from(text).length === 1 && text !== "\n" ? "typing" : undefined })
     },
 
     setEditorSelection: (start, end) => {
       if (!state.editor) return
+      resetEditorHistoryGroup()
       const normalizedStart = normalizeEditorOffset(start, state.editor.body)
       const normalizedEnd = normalizeEditorOffset(end, state.editor.body)
       state = {
@@ -2584,6 +2601,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         return
       }
       const replaced = replaceEditorBody(state.editor, text)
+      resetEditorHistoryGroup()
       applyEditorChange(replaced)
       setEditorStatus(clipboardReplaceAllStatus(text, readResult))
     },
@@ -2605,6 +2623,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       if (result.editor.body === state.editor.body && result.selection.start === selection.start && result.selection.end === selection.end) {
         return
       }
+      resetEditorHistoryGroup()
       applyEditorEditResult(result)
       setEditorStatus(text === undefined ? clipboardReadStatus(pastedText, readResult) : `Pasted ${charCountLabel(pastedText)}`)
     },
@@ -2614,12 +2633,14 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       const previousEditor = state.editor
       const nextEditor = backspaceAtEditorCursor(previousEditor)
       if (nextEditor.body === previousEditor.body) {
+        resetEditorHistoryGroup()
         state = {
           ...state,
           editor: nextEditor,
         }
         return
       }
+      resetEditorHistoryGroup()
       applyEditorChange(nextEditor)
     },
 
@@ -2628,17 +2649,20 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       const previousEditor = state.editor
       const nextEditor = deleteAtEditorCursor(previousEditor)
       if (nextEditor.body === previousEditor.body) {
+        resetEditorHistoryGroup()
         state = {
           ...state,
           editor: nextEditor,
         }
         return
       }
+      resetEditorHistoryGroup()
       applyEditorChange(nextEditor)
     },
 
     moveEditorCursor: (direction) => {
       if (!state.editor) return
+      resetEditorHistoryGroup()
       const nextEditor = moveEditorCursor(state.editor, direction)
       state = {
         ...state,
@@ -2648,6 +2672,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
 
     toggleEditorWrapMode: () => {
       if (!state.editor) return
+      resetEditorHistoryGroup()
       state = {
         ...state,
         editor: {

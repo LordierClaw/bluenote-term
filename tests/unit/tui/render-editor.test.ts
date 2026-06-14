@@ -123,6 +123,97 @@ describe("editor rendering", () => {
     }
   })
 
+  test("wrapped long lines scroll vertically to keep the cursor visible", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      ;(renderer as typeof renderer & { width?: number; height?: number }).width = 40
+      ;(renderer as typeof renderer & { width?: number; height?: number }).height = 12
+      const before = Array.from({ length: 14 }, (_, index) => `Line ${index + 1}`).join("\n")
+      const longLine = `${"wrapped ".repeat(26)}cursor-here ${"tail ".repeat(12)}`
+      const body = `${before}\n${longLine}\nlast line`
+      const cursorOffset = Array.from(`${before}\n${"wrapped ".repeat(24)}`).length
+      const state: TuiState = {
+        ...editorState(),
+        editor: {
+          ...editorState().editor!,
+          body,
+          savedBody: body,
+          note: { ...editorState().editor!.note, body },
+          cursorOffset,
+          selectionStart: cursorOffset,
+          selectionEnd: cursorOffset,
+          wrapMode: "word",
+        },
+      }
+      const controller = { getState: () => state } as any
+      const screen = renderEditorScreen({ renderer, controller })
+      renderer.root.add(screen)
+      const bodyDisplay = findById(screen, "bluenote-editor-body") as { scrollY?: number; content?: unknown } | undefined
+
+      assert.equal(bodyDisplay?.scrollY ?? 0, 0)
+      const text = renderedText(bodyDisplay) ?? ""
+      assert.doesNotMatch(text, /Line 1\n/u)
+      assert.match(text, /\u00A0|cursor-here/u)
+    } finally {
+      renderer.destroy()
+    }
+  })
+
+  test("wrapped long line exposes vertical overflow even with few logical lines", () => {
+    const longLine = "word ".repeat(160)
+    const body = `Short\n${longLine}`
+    const cursorOffset = Array.from(body).length
+    const vm = buildEditorViewModel({
+      ...editorState(),
+      editor: {
+        ...editorState().editor!,
+        body,
+        savedBody: body,
+        note: { ...editorState().editor!.note, body },
+        cursorOffset,
+        selectionStart: cursorOffset,
+        selectionEnd: cursorOffset,
+        wrapMode: "word",
+      },
+    }, { bodyViewportColumns: 24, bodyViewportLines: 8 })
+
+    assert.ok((vm.body.overflow.vertical?.lineCount ?? 0) > 8)
+    assert.equal(vm.body.overflow.below, false)
+    assert.equal(vm.body.overflow.above, true)
+  })
+
+  test("long editor body renders only the visible text window near the cursor", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      ;(renderer as typeof renderer & { width?: number; height?: number }).width = 80
+      ;(renderer as typeof renderer & { width?: number; height?: number }).height = 10
+      const longBody = Array.from({ length: 80 }, (_, index) => `Line ${String(index + 1).padStart(2, "0")}`).join("\n")
+      const state: TuiState = {
+        ...editorState(),
+        editor: {
+          ...editorState().editor!,
+          body: longBody,
+          savedBody: longBody,
+          note: { ...editorState().editor!.note, body: longBody },
+          cursorOffset: Array.from(longBody).length,
+          selectionStart: Array.from(longBody).length,
+          selectionEnd: Array.from(longBody).length,
+          wrapMode: "none",
+        },
+      }
+      const controller = { getState: () => state } as any
+      const screen = renderEditorScreen({ renderer, controller })
+      renderer.root.add(screen)
+      const body = findById(screen, "bluenote-editor-body")
+      const text = renderedText(body) ?? ""
+
+      assert.doesNotMatch(text, /Line 01/u)
+      assert.match(text, /Line 80/u)
+    } finally {
+      renderer.destroy()
+    }
+  })
+
   test("cursor at end of note renders as a non-trimmable styled cell on first open", async () => {
     const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
     try {
