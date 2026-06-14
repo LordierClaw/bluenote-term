@@ -177,8 +177,9 @@ function countLines(value: string): number {
   return value.split("\n").length
 }
 
-function renderControlledBodyValue(value: string, cursorOffset = Array.from(value).length, focused = true, activeRange?: { start: number; end: number; intent: TuiColorIntent }): string | StyledText {
-  const displayValue = value.length > 0 ? value : "Write your note…"
+function renderControlledBodyValue(value: string, cursorOffset = Array.from(value).length, focused = true, activeRange?: { start: number; end: number; intent: TuiColorIntent }, renderPlaceholder = value.length === 0): string | StyledText {
+  const showPlaceholder = value.length === 0 && renderPlaceholder
+  const displayValue = showPlaceholder ? "Write your note…" : value
   if (!focused && (!activeRange || activeRange.start === activeRange.end)) {
     return displayValue
   }
@@ -187,7 +188,7 @@ function renderControlledBodyValue(value: string, cursorOffset = Array.from(valu
   const displayChars = Array.from(displayValue)
   const chunks: TextChunk[] = []
   const pushPlain = (text: string): void => {
-    if (text.length > 0) chunks.push(fg(value.length > 0 ? "#ffffff" : tuiTheme.mutedText)(text) as TextChunk)
+    if (text.length > 0) chunks.push(fg(showPlaceholder ? tuiTheme.mutedText : "#ffffff")(text) as TextChunk)
   }
   const normalizedActiveRange = activeRange && value.length > 0
     ? {
@@ -216,6 +217,146 @@ function renderControlledBodyValue(value: string, cursorOffset = Array.from(valu
   pushPlain(displayChars.slice(afterStart).join(""))
 
   return new StyledText(chunks)
+}
+
+interface EditorBodyRenderWindow {
+  value: string
+  cursorOffset: number
+  activeRange?: { start: number; end: number; intent: TuiColorIntent }
+  scrollY: number
+}
+
+function intersectRangeWithSlice(activeRange: { start: number; end: number; intent: TuiColorIntent } | undefined, sliceStart: number, sliceEnd: number): { start: number; end: number; intent: TuiColorIntent } | undefined {
+  if (!activeRange) return undefined
+  const start = Math.max(activeRange.start, sliceStart)
+  const end = Math.min(activeRange.end, sliceEnd)
+  if (end <= start) return undefined
+  return { start: start - sliceStart, end: end - sliceStart, intent: activeRange.intent }
+}
+
+function editorBodyCursorIsRendered(focused: boolean, activeRange?: { start: number; end: number }): boolean {
+  return focused && (!activeRange || activeRange.end <= activeRange.start)
+}
+
+function logicalLineWindowForBody(body: string, cursorOffset: number, scrollTop: number, viewportLines: number, activeRange?: { start: number; end: number; intent: TuiColorIntent }): EditorBodyRenderWindow {
+  const chars = Array.from(body)
+  const lineStarts = [0]
+  for (let index = 0; index < chars.length; index += 1) {
+    if (chars[index] === "\n") lineStarts.push(index + 1)
+  }
+  const lineCount = lineStarts.length
+  const firstLine = Math.max(0, Math.min(Math.trunc(scrollTop), Math.max(0, lineCount - 1)))
+  const endLineExclusive = Math.max(firstLine + 1, Math.min(lineCount, firstLine + Math.max(1, Math.trunc(viewportLines)) + 1))
+  const sliceStart = lineStarts[firstLine] ?? 0
+  const sliceEnd = endLineExclusive >= lineCount ? chars.length : Math.max(sliceStart, (lineStarts[endLineExclusive] ?? chars.length) - 1)
+  const normalizedCursor = Math.max(0, Math.min(Math.trunc(Number.isFinite(cursorOffset) ? cursorOffset : chars.length), chars.length))
+  const clampedCursor = Math.max(sliceStart, Math.min(normalizedCursor, sliceEnd))
+  return {
+    value: chars.slice(sliceStart, sliceEnd).join(""),
+    cursorOffset: clampedCursor - sliceStart,
+    activeRange: intersectRangeWithSlice(activeRange, sliceStart, sliceEnd),
+    scrollY: 0,
+  }
+}
+
+function wrappedLineRowsAndOffsets(lineChars: string[], viewportColumns: number): Array<{ row: number; offset: number }> {
+  const columns = Math.max(1, Math.trunc(viewportColumns))
+  const rows: Array<{ row: number; offset: number }> = [{ row: 0, offset: 0 }]
+  let rowStart = 0
+
+  while (rowStart < lineChars.length) {
+    let width = 0
+    let index = rowStart
+    let lastBreakOffset: number | null = null
+
+    while (index < lineChars.length) {
+      const char = lineChars[index] ?? ""
+      const charWidth = Math.max(0, displayCellWidth(char))
+      if (width > 0 && width + charWidth > columns) break
+      width += charWidth
+      index += 1
+      if (/\s/u.test(char)) {
+        lastBreakOffset = index
+      }
+    }
+
+    if (index >= lineChars.length) break
+
+    let nextRowStart = lastBreakOffset !== null && lastBreakOffset > rowStart
+      ? lastBreakOffset
+      : Math.max(index, rowStart + 1)
+    while (nextRowStart < lineChars.length && /\s/u.test(lineChars[nextRowStart] ?? "")) {
+      nextRowStart += 1
+    }
+    if (nextRowStart >= lineChars.length) break
+    rows.push({ row: rows.length, offset: nextRowStart })
+    rowStart = nextRowStart
+  }
+  return rows
+}
+
+function wrappedLineWindowForBody(body: string, cursorOffset: number, scrollTop: number, viewportLines: number, viewportColumns: number, renderCursor: boolean, activeRange?: { start: number; end: number; intent: TuiColorIntent }): EditorBodyRenderWindow {
+  const chars = Array.from(body)
+  const normalizedCursor = Math.max(0, Math.min(Math.trunc(Number.isFinite(cursorOffset) ? cursorOffset : chars.length), chars.length))
+  const targetStartRow = Math.max(0, Math.trunc(scrollTop))
+  const targetEndRow = targetStartRow + Math.max(1, Math.trunc(viewportLines)) + 2
+  let virtualRow = 0
+  let lineStart = 0
+  let sliceStart = 0
+  let sliceEnd = chars.length
+  let firstSliceRow = 0
+  let foundStart = false
+
+  for (let index = 0; index <= chars.length; index += 1) {
+    if (index < chars.length && chars[index] !== "\n") continue
+    const lineChars = chars.slice(lineStart, index)
+    const cursorWithinLine = normalizedCursor - lineStart
+    const measuredLineChars = renderCursor && normalizedCursor >= lineStart && normalizedCursor <= index && cursorWithinLine >= lineChars.length
+      ? [...lineChars, "█"]
+      : lineChars
+    const rows = wrappedLineRowsAndOffsets(measuredLineChars, viewportColumns)
+    const rowCount = Math.max(1, rows.length)
+    const lineEndRow = virtualRow + rowCount
+    if (!foundStart && lineEndRow > targetStartRow) {
+      const rowWithinLine = Math.max(0, targetStartRow - virtualRow)
+      const rowOffset = rows[rowWithinLine]?.offset ?? 0
+      if (rowOffset >= lineChars.length && rowWithinLine > 0) {
+        sliceStart = lineStart + (rows[rowWithinLine - 1]?.offset ?? 0)
+        firstSliceRow = targetStartRow - 1
+      } else {
+        sliceStart = lineStart + rowOffset
+        firstSliceRow = targetStartRow
+      }
+      foundStart = true
+    }
+    if (foundStart && lineEndRow >= targetEndRow) {
+      const rowWithinLine = Math.max(0, Math.min(rowCount, targetEndRow - virtualRow))
+      sliceEnd = rowWithinLine >= rowCount ? index : lineStart + Math.min(rows[rowWithinLine]?.offset ?? lineChars.length, lineChars.length)
+      break
+    }
+    virtualRow += rowCount
+    lineStart = index + 1
+  }
+
+  const clampedCursor = Math.max(sliceStart, Math.min(normalizedCursor, sliceEnd))
+  return {
+    value: chars.slice(sliceStart, sliceEnd).join(""),
+    cursorOffset: clampedCursor - sliceStart,
+    activeRange: intersectRangeWithSlice(activeRange, sliceStart, sliceEnd),
+    scrollY: Math.max(0, targetStartRow - firstSliceRow),
+  }
+}
+
+function editorBodyRenderWindow(vm: EditorViewModel, cursorOffset: number, bodyViewportLines: number, bodyViewportColumns: number): EditorBodyRenderWindow {
+  const activeRange = vm.body.activeSelectionRange ?? vm.body.activeFindRange
+  const scrollTop = vm.body.overflow.vertical?.scrollTop ?? editorScrollTopFor(vm.body.lineCount, vm.body.cursor.line, bodyViewportLines)
+  if (!Number.isFinite(bodyViewportLines) || bodyViewportLines <= 0 || vm.body.value.length === 0) {
+    return { value: vm.body.value, cursorOffset, activeRange, scrollY: scrollTop }
+  }
+  if (vm.body.wrapMode === "word" && Number.isFinite(bodyViewportColumns) && bodyViewportColumns > 0) {
+    return wrappedLineWindowForBody(vm.body.value, cursorOffset, scrollTop, bodyViewportLines, bodyViewportColumns, editorBodyCursorIsRendered(vm.body.focused, activeRange), activeRange)
+  }
+  return logicalLineWindowForBody(vm.body.value, cursorOffset, scrollTop, bodyViewportLines, activeRange)
 }
 
 function statusIntentForEditor(editor: EditorBufferWithAutosave | null): TuiColorIntent {
@@ -378,6 +519,59 @@ function editorOverflowFor(lineCount: number, cursorLine: number, bodyViewportLi
   }
 }
 
+function wrappedLineRowCount(line: string, viewportColumns: number): number {
+  return Math.max(1, wrappedLineRowsAndOffsets(Array.from(line), viewportColumns).length)
+}
+
+function wrappedEditorRowsFor(body: string, cursorOffset: number, viewportColumns: number, renderCursor: boolean): { rowCount: number; cursorRow: number } {
+  const columns = Math.max(1, Math.trunc(viewportColumns))
+  const chars = Array.from(body)
+  const cursor = Math.max(0, Math.min(Math.trunc(Number.isFinite(cursorOffset) ? cursorOffset : chars.length), chars.length))
+  let rowCount = 0
+  let cursorRow = 0
+  let lineStart = 0
+
+  for (let index = 0; index <= chars.length; index += 1) {
+    if (index < chars.length && chars[index] !== "\n") {
+      continue
+    }
+    const lineChars = chars.slice(lineStart, index)
+    const cursorWithinLine = cursor - lineStart
+    const measuredLineChars = renderCursor && cursor >= lineStart && cursor <= index && cursorWithinLine >= lineChars.length
+      // The rendered EOF cursor is a styled NBSP cell. Measure it as a
+      // non-whitespace one-cell sentinel so word-wrap row breaks cannot drop it
+      // as trailing whitespace.
+      ? [...lineChars, "█"]
+      : lineChars
+    const lineRowsAndOffsets = wrappedLineRowsAndOffsets(measuredLineChars, columns)
+    const lineRows = Math.max(1, lineRowsAndOffsets.length)
+    if (cursor >= lineStart && cursor <= index) {
+      let rowWithinLine = 0
+      for (let rowIndex = 0; rowIndex < lineRowsAndOffsets.length; rowIndex += 1) {
+        if ((lineRowsAndOffsets[rowIndex]?.offset ?? 0) <= cursorWithinLine) {
+          rowWithinLine = rowIndex
+        } else {
+          break
+        }
+      }
+      cursorRow = rowCount + rowWithinLine
+    }
+    rowCount += lineRows
+    lineStart = index + 1
+  }
+
+  return { rowCount: Math.max(1, rowCount), cursorRow }
+}
+
+function editorVerticalOverflowFor(body: string, lineCount: number, cursorLine: number, cursorOffset: number, wrapMode: "word" | "none", bodyViewportLines: number, bodyViewportColumns: number, renderCursor: boolean): EditorOverflowViewModel {
+  if (wrapMode !== "word" || !Number.isFinite(bodyViewportColumns) || bodyViewportColumns <= 0) {
+    return editorOverflowFor(lineCount, cursorLine, bodyViewportLines)
+  }
+
+  const wrappedRows = wrappedEditorRowsFor(body, cursorOffset, bodyViewportColumns, renderCursor)
+  return editorOverflowFor(wrappedRows.rowCount, wrappedRows.cursorRow + 1, bodyViewportLines)
+}
+
 function verticalScrollbarContent(scrollbar: EditorVerticalOverflowViewModel): string {
   return Array.from({ length: scrollbar.viewportLines }, (_, index) => {
     const inThumb = index >= scrollbar.thumbTop && index < scrollbar.thumbTop + scrollbar.thumbHeight
@@ -464,11 +658,21 @@ export function buildEditorViewModel(state: TuiState, responsive: EditorResponsi
     ? { start: Math.min(selectionStart, selectionEnd), end: Math.max(selectionStart, selectionEnd), intent: "selection" as const }
     : undefined
 
-  const cursor = editor ? editorCursorPosition(editor, editorCursorOffset(editor)) : { line: 1, column: 1 }
+  const cursorOffset = editor ? editorCursorOffset(editor) : 0
+  const cursor = editor ? editorCursorPosition(editor, cursorOffset) : { line: 1, column: 1 }
   const baseWrapLabel = (editor?.wrapMode ?? "word") === "word" ? "Wrap on" : "Wrap off"
   const shortcuts = editorShortcuts()
   const lineCount = countLines(body)
-  const overflow = editorOverflowFor(lineCount, cursor.line, responsive.bodyViewportLines ?? Number.POSITIVE_INFINITY)
+  const overflow = editorVerticalOverflowFor(
+    body,
+    lineCount,
+    cursor.line,
+    cursorOffset,
+    editor?.wrapMode ?? "word",
+    responsive.bodyViewportLines ?? Number.POSITIVE_INFINITY,
+    responsive.bodyViewportColumns ?? Number.POSITIVE_INFINITY,
+    editorBodyCursorIsRendered(!findMode, activeSelectionRange ?? activeFindRange),
+  )
   const horizontalOverflow = editorHorizontalOverflowFor(
     editor,
     responsive.bodyViewportColumns ?? Number.POSITIVE_INFINITY,
@@ -596,8 +800,15 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   const bodyTopMarginRows = 1
   const bodyBottomSeparatorRows = 1
   const bodyViewportLines = Math.max(1, screenHeight - topbarRows - findBarRows - shortcutRows - bodyTopMarginRows - bodyBottomSeparatorRows)
-  const bodyViewportColumns = Math.max(1, screenWidth - 4)
-  const vm = buildEditorViewModel(state, { width: Math.max(0, screenWidth - 4), bodyViewportLines, bodyViewportColumns })
+  let bodyViewportColumns = Math.max(1, screenWidth - ((state.editor?.wrapMode ?? "word") === "none" ? 4 : 0))
+  let vm = buildEditorViewModel(state, { width: Math.max(0, screenWidth - 4), bodyViewportLines, bodyViewportColumns })
+  if ((state.editor?.wrapMode ?? "word") === "word" && vm.body.overflow.vertical) {
+    const verticalBodyViewportColumns = Math.max(1, screenWidth - vm.body.margin.x - 3)
+    if (verticalBodyViewportColumns !== bodyViewportColumns) {
+      bodyViewportColumns = verticalBodyViewportColumns
+      vm = buildEditorViewModel(state, { width: Math.max(0, screenWidth - 4), bodyViewportLines, bodyViewportColumns })
+    }
+  }
   const editorState = state.editor
   const root = new BoxRenderable(options.renderer, {
     id: "bluenote-editor-screen",
@@ -755,9 +966,11 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   const bodyDisplayWidth = hasSideIndicator
     ? Math.max(1, screenWidth - vm.body.margin.x - (hasHorizontalOverflow ? 4 : 3))
     : "100%"
+  const bodyCursorOffset = editorState ? editorCursorOffset(editorState) : 0
+  const bodyWindow = editorBodyRenderWindow(vm, bodyCursorOffset, bodyViewportLines, bodyViewportColumns)
   const bodyDisplay = new TextRenderable(options.renderer, {
     id: "bluenote-editor-body",
-    content: renderControlledBodyValue(vm.body.value, editorState ? editorCursorOffset(editorState) : 0, vm.body.focused, vm.body.activeSelectionRange ?? vm.body.activeFindRange),
+    content: renderControlledBodyValue(bodyWindow.value, bodyWindow.cursorOffset, vm.body.focused, bodyWindow.activeRange, vm.body.value.length === 0),
     width: bodyDisplayWidth,
     height: "100%",
     flexGrow: hasSideIndicator ? 0 : 1,
@@ -787,7 +1000,7 @@ export function renderEditorScreen(options: RenderEditorScreenOptions): BoxRende
   }
   bodyPanel.add(bodyTopMargin)
   bodyPanel.add(bodyContentRow)
-  bodyDisplay.scrollY = editorScrollTopFor(vm.body.lineCount, vm.body.cursor.line, bodyViewportLines)
+  bodyDisplay.scrollY = bodyWindow.scrollY
   bodyDisplay.scrollX = vm.body.overflow.horizontal?.scrollLeft ?? 0
 
   root.onPaste = handleEditorPaste

@@ -886,8 +886,11 @@ describe("TUI render keyboard routing", () => {
       const screen = renderEditorScreen({ renderer, controller })
       renderer.root.add(screen)
 
-      const bodyDisplay = findById(screen, "bluenote-editor-body") as { scrollY?: number } | undefined
-      assert.equal(bodyDisplay?.scrollY, 1)
+      const bodyDisplay = findById(screen, "bluenote-editor-body") as { content?: any; scrollY?: number } | undefined
+      const bodyText = bodyDisplay?.content?.chunks?.map?.((chunk: { text?: string }) => chunk.text ?? "").join("") ?? bodyDisplay?.content ?? ""
+      assert.equal(bodyDisplay?.scrollY, 0)
+      assert.doesNotMatch(bodyText, /^line 1\n/u)
+      assert.match(bodyText, /line 21/u)
     } finally {
       renderer.destroy()
     }
