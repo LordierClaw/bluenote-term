@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "@lordierclaw/bluenote-core": "git+https://github.com/LordierClaw/bluenote-core.git#920f5c1030604a5be98d8d70d87d06ec0a57fb28",
-    "@opentui/core": "0.2.14",
+    "@opentui/core": "0.4.1",
     "clipboardy": "5.3.1"
   }
 }
