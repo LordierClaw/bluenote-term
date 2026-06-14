@@ -867,7 +867,7 @@ export async function startTuiWorkspace(options: StartTuiWorkspaceOptions = {}):
     }
   }
 
-  controller.setAutosaveStateChangeHandler(rerender)
+  controller.setAutosaveStateChangeHandler(scheduleRerender)
 
   const workspaceInputHandler = (sequence: string): boolean => {
     if (destroyed || renderer.isDestroyed) {

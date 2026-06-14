@@ -993,9 +993,9 @@ describe("TUI render keyboard routing", () => {
       const plainText = chunks.map((chunk) => chunk.text ?? "").join("")
       const cursorChunk = chunks.find((chunk) => chunk.bg?.toInts?.().join(",") === "56,189,248,255")
 
-      assert.equal(plainText, "body ")
+      assert.equal(plainText, "body\u00A0")
       assert.doesNotMatch(plainText, /[|▌█]/u)
-      assert.equal(cursorChunk?.text, " ")
+      assert.equal(cursorChunk?.text, "\u00A0")
       assert.deepEqual(cursorChunk?.fg?.toInts?.(), [0, 0, 0, 255])
     } finally {
       renderer.destroy()
@@ -1080,6 +1080,48 @@ describe("TUI render keyboard routing", () => {
       const cleanupPaste = new PasteEvent(new TextEncoder().encode("after cleanup"))
       keyInput.emit("paste", cleanupPaste)
       assert.equal(controller.getState().editor?.body, "Runtime paste\nfrom terminal")
+    } finally {
+      if (!renderer.isDestroyed) {
+        renderer.destroy()
+      }
+    }
+  })
+
+  test("runtime workspace coalesces multiple status invalidations into one rerender tick", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const notes = [
+        { key: "first", title: "First", description: "", relativePath: "note/first.md", body: "first body" },
+        { key: "second", title: "Second", description: "", relativePath: "note/second.md", body: "second body" },
+      ]
+      const controller = createWorkspaceController({
+        listNotes: () => notes,
+        showNote: (selector) => notes.find((note) => note.key === selector) ?? notes[0]!,
+        searchNotes: () => [],
+        transientIndicatorScheduler: {
+          setTimeout: () => ({}),
+          clearTimeout: () => {},
+        },
+      })
+      assert.equal(controller.openFocusedManagerItem().blocked, false)
+
+      const root = renderer.root as typeof renderer.root & { add: (child: unknown) => unknown }
+      const originalAdd = root.add.bind(root)
+      let renderAdds = 0
+      root.add = (child: unknown) => {
+        renderAdds += 1
+        return originalAdd(child as never)
+      }
+
+      const running = await startTuiWorkspace({ renderer, controller })
+      renderAdds = 0
+
+      controller.switchEditorNote("next")
+      controller.switchEditorNote("previous")
+      await new Promise((resolve) => setTimeout(resolve, 0))
+
+      assert.equal(renderAdds, 1)
+      running.destroy()
     } finally {
       if (!renderer.isDestroyed) {
         renderer.destroy()

@@ -21,6 +21,10 @@ function renderedText(node: any): string | undefined {
   return undefined
 }
 
+function styledTextChunks(node: any): any[] {
+  return Array.isArray(node?.content?.chunks) ? node.content.chunks : []
+}
+
 function colorInts(value: unknown): number[] | undefined {
   return (value as { toInts?: () => number[] } | undefined)?.toInts?.()
 }
@@ -87,6 +91,51 @@ describe("editor rendering", () => {
       assert.deepEqual(colorInts(indicator?.fg), hexToRgba(tuiTheme.info))
       assert.ok(topbarChildren.indexOf(indicator) > -1)
       assert.ok(topbarChildren.indexOf(title) > topbarChildren.indexOf(indicator))
+    } finally {
+      renderer.destroy()
+    }
+  })
+
+  test("long editor body renders a vertical position indicator", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const longBody = Array.from({ length: 80 }, (_, index) => `Line ${String(index + 1).padStart(2, "0")}`).join("\n")
+      const state: TuiState = {
+        ...editorState(),
+        editor: {
+          ...editorState().editor!,
+          body: longBody,
+          savedBody: longBody,
+          note: { ...editorState().editor!.note, body: longBody },
+          cursorOffset: Array.from(longBody).length,
+        },
+      }
+      const controller = { getState: () => state } as any
+      const screen = renderEditorScreen({ renderer, controller })
+      renderer.root.add(screen)
+
+      const scrollbar = findById(screen, "bluenote-editor-body-vertical-scrollbar")
+
+      assert.equal(scrollbar?.id, "bluenote-editor-body-vertical-scrollbar")
+      assert.match(renderedText(scrollbar) ?? "", /█/u)
+    } finally {
+      renderer.destroy()
+    }
+  })
+
+  test("cursor at end of note renders as a non-trimmable styled cell on first open", async () => {
+    const renderer = await createCliRenderer({ testing: true, consoleMode: "disabled", exitOnCtrlC: false })
+    try {
+      const state = editorState()
+      const controller = { getState: () => state } as any
+      const screen = renderEditorScreen({ renderer, controller })
+      renderer.root.add(screen)
+      const body = findById(screen, "bluenote-editor-body")
+      const chunks = styledTextChunks(body)
+
+      assert.equal(renderedText(body), "Alpha body\u00A0")
+      assert.equal(chunks.at(-1)?.text, "\u00A0")
+      assert.deepEqual(colorInts(chunks.at(-1)?.bg), hexToRgba(tuiTheme.primaryAccent))
     } finally {
       renderer.destroy()
     }
