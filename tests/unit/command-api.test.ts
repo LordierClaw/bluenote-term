@@ -24,16 +24,35 @@ function createBufferedIO(): { stdout: string; stderr: string; io: NonNullable<R
 
 test("bluenote-term package metadata exposes the reusable command API", () => {
   assert.deepEqual(termPackage.exports["."], {
-    types: "./src/command.ts",
-    import: "./src/command.ts",
+    types: "./src/command.d.ts",
+    import: "./src/command.js",
   })
   assert.deepEqual(termPackage.exports["./command"], {
-    types: "./src/command.ts",
-    import: "./src/command.ts",
+    types: "./src/command.d.ts",
+    import: "./src/command.js",
   })
   assert.equal(termPackage.bin["bluenote-term"], "./bin/bluenote-term.ts")
   assert.equal(Object.hasOwn(termPackage.bin, "bn"), false)
   assert.equal(Object.hasOwn(termPackage.bin, "bluenote"), false)
+})
+
+test("bluenote-term command API entrypoint is importable from Node", () => {
+  const script = `
+    import { runTuiCommand } from "./packages/term/src/command.js";
+    let stdout = "";
+    const exitCode = await runTuiCommand(["--version"], {
+      version: "node-loadable-test",
+      io: { stdout: { write: (chunk) => { stdout += chunk; } }, stderr: { write: () => {} } },
+    });
+    if (exitCode !== 0 || stdout !== "node-loadable-test\\n") process.exit(1);
+  `
+  const result = Bun.spawnSync(["node", "--input-type=module", "--eval", script], {
+    cwd: process.cwd(),
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+
+  assert.equal(result.exitCode, 0, new TextDecoder().decode(result.stderr))
 })
 
 test("runCommand exposes the full reusable terminal command API", async () => {

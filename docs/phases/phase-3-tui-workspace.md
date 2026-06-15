@@ -24,7 +24,7 @@ The Manager is the workspace home screen. It presents a minimal file-browser-lik
 
 ### Editor
 
-The Editor is a focused note-body surface with topbar, editor body, and minimal bottombar/status chrome. Current wired behavior covers real editor body input, inline body editing, cursor-aware movement and edit operations, Unicode-safe changes, newline/backspace/delete, explicit `Ctrl+S` save, `Ctrl+F` find mode, `Ctrl+R` replace mode, `Ctrl+Z`/`Ctrl+Y` undo/redo, wrap mode, and 750 ms autosave.
+The Editor is a focused note-body surface with topbar, editor body, and minimal bottombar/status chrome. Current wired behavior covers real editor body input, inline body editing, cursor-aware movement and edit operations, Unicode-safe changes, newline/backspace/delete, explicit `Ctrl+S` save, `Ctrl+F` find mode, `Ctrl+R` replace mode, `Ctrl+Z`/`Ctrl+Y` undo/redo, wrap mode, long-note vertical position indication, transient bottombar action statuses that restore shortcut hints after a few seconds, and 750 ms autosave.
 
 Autosave and manual save use the same safe note-body write path. Failed saves keep the buffer dirty and retry later. The current save contract does not create recovery-copy, draft, startup prompt, or recovery-list workflows.
 

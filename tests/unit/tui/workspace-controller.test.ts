@@ -1589,6 +1589,64 @@ describe("TUI workspace controller", () => {
     assert.match(controller.getState().editor?.statusMessage ?? "", /replace-all skipped/i)
   })
 
+  test("editor bottom-bar action status clears after a transient delay so shortcuts can return", () => {
+    let clipboardText = "Replacement from clipboard"
+    const transientScheduler = createFakeScheduler()
+    const invalidations: string[] = []
+    const { deps } = createDeps({
+      transientIndicatorScheduler: transientScheduler,
+      onAutosaveStateChange: () => invalidations.push(controller.getState().editor?.statusMessage ?? "none"),
+      clipboard: {
+        name: "test desktop clipboard",
+        canRead: true,
+        canWrite: true,
+        readText: () => clipboardText,
+        writeText: (text) => {
+          clipboardText = text
+          return {
+            ok: true,
+            providerName: "test desktop clipboard",
+            category: "desktop",
+          }
+        },
+      },
+    })
+    const controller = createWorkspaceController(deps)
+    openInboxDaily(controller)
+
+    controller.copyAllEditorBody()
+
+    assert.match(controller.getState().editor?.statusMessage ?? "", /Copied 19 chars to desktop clipboard/i)
+    assert.deepEqual(transientScheduler.activeTasks().map((task) => task.delay), [3_000])
+
+    transientScheduler.runNext()
+
+    assert.equal(controller.getState().editor?.statusMessage, null)
+    assert.deepEqual(invalidations.at(-1), "none")
+  })
+
+  test("newer editor bottom-bar status is not cleared by an older transient timer", () => {
+    const transientScheduler = createFakeScheduler()
+    const { deps } = createDeps({ transientIndicatorScheduler: transientScheduler })
+    const controller = createWorkspaceController(deps)
+    openInboxDaily(controller)
+
+    controller.undoEditor()
+    const firstTimer = transientScheduler.activeTasks()[0]
+    assert.equal(controller.getState().editor?.statusMessage, "Nothing to undo")
+
+    controller.redoEditor()
+    assert.equal(firstTimer?.cleared, true)
+    assert.equal(controller.getState().editor?.statusMessage, "Nothing to redo")
+    assert.deepEqual(transientScheduler.activeTasks().map((task) => task.delay), [3_000])
+
+    firstTimer?.callback()
+
+    assert.equal(controller.getState().editor?.statusMessage, "Nothing to redo")
+    transientScheduler.runNext()
+    assert.equal(controller.getState().editor?.statusMessage, null)
+  })
+
   test("replace-all refuses internal clipboard fallback so unavailable desktop read cannot overwrite the note", () => {
     const { deps } = createDeps({
       clipboard: {
@@ -2344,6 +2402,24 @@ describe("TUI workspace controller", () => {
     controller.toggleEditorWrapMode()
     assert.equal(controller.getState().editor?.wrapMode, "word")
     assert.equal(controller.getState().editor?.dirty, false)
+  })
+
+  test("toggling editor wrap mode clears stale preferred cursor columns", () => {
+    const { deps } = createDeps()
+    const controller = createWorkspaceController(deps)
+    openInboxDaily(controller)
+    controller.updateEditorBody("abcdefghijklmno\npqrstuvwxyz")
+    controller.setEditorSelection(15, 15)
+
+    controller.toggleEditorWrapMode()
+    assert.equal(controller.getState().editor?.wrapMode, "none")
+    controller.moveEditorCursor("down")
+    assert.equal(controller.getState().editor?.preferredColumn, 15)
+
+    controller.toggleEditorWrapMode()
+    assert.equal(controller.getState().editor?.wrapMode, "word")
+    assert.equal(controller.getState().editor?.preferredColumn, null)
+    assert.equal(controller.getState().editor?.dirty, true)
   })
 
   test("moves across a long unwrapped editor line and returns to normal wrapping without mutating text", () => {
@@ -3927,6 +4003,25 @@ describe("TUI workspace controller", () => {
     assert.equal(controller.getState().editor?.savedBody, "Draft two")
     assert.equal(controller.getState().editor?.dirty, false)
     assert.equal(controller.getState().editor?.autosaveStatus, "saved")
+  })
+
+  test("continued typing while autosave is already pending does not emit duplicate render notifications", () => {
+    const scheduler = createFakeScheduler()
+    const invalidations: string[] = []
+    const { deps } = createDeps({
+      autosaveScheduler: scheduler,
+      onAutosaveStateChange: () => invalidations.push(controller.getState().editor?.autosaveStatus ?? "none"),
+    })
+    const controller = createWorkspaceController(deps)
+
+    openInboxDaily(controller)
+    controller.insertEditorText(" first")
+    controller.insertEditorText(" second")
+    controller.insertEditorText(" third")
+
+    assert.equal(controller.getState().editor?.autosaveStatus, "pending")
+    assert.deepEqual(scheduler.activeTasks().map((task) => task.delay), [750])
+    assert.deepEqual(invalidations, ["pending"])
   })
 
   test("successful autosave after controlled typing saves the submitted snapshot without error", async () => {

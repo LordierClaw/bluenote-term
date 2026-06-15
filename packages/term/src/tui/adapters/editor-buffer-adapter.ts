@@ -1,4 +1,5 @@
 import type { EditorBufferState, TuiNote } from "../state"
+import { displayCellWidth } from "../display-width"
 
 /**
  * EditorSelection offsets are Unicode code-point offsets, not UTF-16 code-unit
@@ -69,6 +70,10 @@ export interface EditorEditResult {
 }
 
 export type EditorCursorDirection = "left" | "right" | "up" | "down" | "home" | "end"
+
+export interface EditorCursorMoveOptions {
+  viewportColumns?: number
+}
 
 export interface ReplaceCurrentMatchResult {
   editor: EditorBufferState
@@ -204,6 +209,90 @@ function lineIndexForOffset(ranges: Array<{ start: number; end: number }>, offse
   return Math.max(0, ranges.length - 1)
 }
 
+function wrappedLineRowsAndOffsets(lineChars: string[], viewportColumns: number): Array<{ row: number; offset: number }> {
+  const columns = Math.max(1, Math.trunc(viewportColumns))
+  const rows: Array<{ row: number; offset: number }> = [{ row: 0, offset: 0 }]
+  let rowStart = 0
+
+  while (rowStart < lineChars.length) {
+    let width = 0
+    let index = rowStart
+    let lastBreakOffset: number | null = null
+
+    while (index < lineChars.length) {
+      const char = lineChars[index] ?? ""
+      const charWidth = Math.max(0, displayCellWidth(char))
+      if (width > 0 && width + charWidth > columns) break
+      width += charWidth
+      index += 1
+      if (/\s/u.test(char)) {
+        lastBreakOffset = index
+      }
+    }
+
+    if (index >= lineChars.length) break
+
+    let nextRowStart = lastBreakOffset !== null && lastBreakOffset > rowStart
+      ? lastBreakOffset
+      : Math.max(index, rowStart + 1)
+    while (nextRowStart < lineChars.length && /\s/u.test(lineChars[nextRowStart] ?? "")) {
+      nextRowStart += 1
+    }
+    if (nextRowStart >= lineChars.length) break
+    rows.push({ row: rows.length, offset: nextRowStart })
+    rowStart = nextRowStart
+  }
+  return rows
+}
+
+function displayColumnForOffset(chars: string[], start: number, offset: number): number {
+  return displayCellWidth(chars.slice(start, Math.max(start, Math.min(offset, chars.length))).join(""))
+}
+
+function offsetForDisplayColumn(chars: string[], start: number, end: number, targetColumn: number): number {
+  const normalizedStart = Math.max(0, Math.min(start, chars.length))
+  const normalizedEnd = Math.max(normalizedStart, Math.min(end, chars.length))
+  let width = 0
+  for (let index = normalizedStart; index < normalizedEnd; index += 1) {
+    const nextWidth = width + Math.max(0, displayCellWidth(chars[index] ?? ""))
+    if (nextWidth > targetColumn) return index
+    width = nextWidth
+  }
+  return normalizedEnd
+}
+
+function moveWrappedEditorCursor(editor: EditorBufferState, direction: "up" | "down", viewportColumns: number): EditorBufferState {
+  const chars = codePoints(editor.body)
+  const cursor = normalizeOffset(editorCursorOffset(editor), chars.length)
+  const ranges = lineRanges(editor.body)
+  const visualRows: Array<{ start: number; end: number; lineEnd: boolean }> = []
+
+  for (const range of ranges) {
+    const lineChars = chars.slice(range.start, range.end)
+    const cursorWithinLine = cursor - range.start
+    const measuredLineChars = cursor >= range.start && cursor <= range.end && cursorWithinLine >= lineChars.length
+      ? [...lineChars, "█"]
+      : lineChars
+    const rows = wrappedLineRowsAndOffsets(measuredLineChars, viewportColumns)
+    for (let index = 0; index < rows.length; index += 1) {
+      const rowStart = range.start + Math.min(rows[index]?.offset ?? 0, lineChars.length)
+      const rowEnd = index + 1 < rows.length
+        ? range.start + Math.min(rows[index + 1]?.offset ?? lineChars.length, lineChars.length)
+        : range.end
+      visualRows.push({ start: rowStart, end: rowEnd, lineEnd: rowEnd === range.end && index + 1 >= rows.length })
+    }
+  }
+
+  const foundRowIndex = visualRows.findIndex((row) => cursor >= row.start && (cursor < row.end || (row.lineEnd && cursor === row.end)))
+  const rowIndex = foundRowIndex >= 0 ? foundRowIndex : Math.max(0, visualRows.length - 1)
+  const currentRow = visualRows[rowIndex] ?? { start: 0, end: chars.length }
+  const preferredColumn = editor.preferredColumn ?? displayColumnForOffset(chars, currentRow.start, cursor)
+  const targetIndex = direction === "up" ? Math.max(0, rowIndex - 1) : Math.min(visualRows.length - 1, rowIndex + 1)
+  const targetRow = visualRows[targetIndex] ?? currentRow
+  const targetOffset = offsetForDisplayColumn(chars, targetRow.start, targetRow.end, preferredColumn)
+  return withCursor(editor, targetOffset, preferredColumn)
+}
+
 export function insertTextAtEditorCursor(editor: EditorBufferState, text: string): EditorBufferState {
   const result = pasteText(editor, currentSelection(editor), text)
   return withCursor(result.editor, result.selection.end)
@@ -232,11 +321,14 @@ export function deleteAtEditorCursor(editor: EditorBufferState): EditorBufferSta
   return withCursor(replaceEditorBody(editor, body), selection.start)
 }
 
-export function moveEditorCursor(editor: EditorBufferState, direction: EditorCursorDirection): EditorBufferState {
+export function moveEditorCursor(editor: EditorBufferState, direction: EditorCursorDirection, options: EditorCursorMoveOptions = {}): EditorBufferState {
   const length = codePointLength(editor.body)
   const cursor = normalizeOffset(editorCursorOffset(editor), length)
   if (direction === "left") return withCursor(editor, cursor - 1)
   if (direction === "right") return withCursor(editor, cursor + 1)
+  if ((direction === "up" || direction === "down") && (editor.wrapMode ?? "word") === "word" && Number.isFinite(options.viewportColumns) && (options.viewportColumns ?? 0) > 0) {
+    return moveWrappedEditorCursor(editor, direction, options.viewportColumns!)
+  }
   const ranges = lineRanges(editor.body)
   const lineIndex = lineIndexForOffset(ranges, cursor)
   const range = ranges[lineIndex]!

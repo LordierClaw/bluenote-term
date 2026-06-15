@@ -1,4 +1,4 @@
-import type { ClipboardModel, ClipboardOperationResult, EditorCursorDirection, EditorSelection, SaveEditorBufferDependencies } from "./adapters/editor-buffer-adapter"
+import type { ClipboardModel, ClipboardOperationResult, EditorCursorDirection, EditorCursorMoveOptions, EditorSelection, SaveEditorBufferDependencies } from "./adapters/editor-buffer-adapter"
 import { advanceEditorFindState, backspaceAtEditorCursor, deleteAtEditorCursor, findInEditorBody, insertTextAtEditorCursor, moveEditorCursor, pasteText, replaceAllMatches, replaceCurrentMatch, replaceEditorBody } from "./adapters/editor-buffer-adapter"
 import {
   buildManagerBrowserModel,
@@ -156,7 +156,7 @@ export interface WorkspaceController {
   pasteEditorClipboard: (text?: string) => void
   backspaceEditor: () => void
   deleteEditor: () => void
-  moveEditorCursor: (direction: EditorCursorDirection) => void
+  moveEditorCursor: (direction: EditorCursorDirection, options?: EditorCursorMoveOptions) => void
   toggleEditorWrapMode: () => void
   saveEditor: () => Promise<WorkspaceActionResult>
   openSearch: (query?: string) => void
@@ -389,6 +389,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   let autosaveTimer: unknown = null
   let aiIdleTimer: unknown = null
   let noteSwitchIndicatorTimer: unknown = null
+  let editorStatusTimer: unknown = null
   let aiIdleGeneration = 0
   let aiIdlePendingSelector: string | null = null
   let disposed = false
@@ -457,8 +458,16 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     return `${count} ${count === 1 ? "char" : "chars"}`
   }
 
+  function clearEditorStatusTimer(): void {
+    if (editorStatusTimer !== null) {
+      transientIndicatorScheduler.clearTimeout(editorStatusTimer)
+      editorStatusTimer = null
+    }
+  }
+
   function setEditorStatus(statusMessage: string): void {
     if (!state.editor) return
+    clearEditorStatusTimer()
     state = {
       ...state,
       editor: {
@@ -466,6 +475,21 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         statusMessage,
       },
     }
+    notifyAutosaveStateChange()
+    editorStatusTimer = transientIndicatorScheduler.setTimeout(() => {
+      editorStatusTimer = null
+      if (disposed || state.editor?.statusMessage !== statusMessage) {
+        return
+      }
+      state = {
+        ...state,
+        editor: {
+          ...state.editor,
+          statusMessage: null,
+        },
+      }
+      notifyAutosaveStateChange()
+    }, 3_000)
   }
 
   function clearAutosaveTimer(): void {
@@ -1169,6 +1193,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
   }
 
   function setEditorNote(note: TuiNote): void {
+    clearEditorStatusTimer()
     const openedNote = toTuiNote(note)
     state = openEditorForNote({
       ...state,
@@ -1188,6 +1213,8 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     if (!state.editor) {
       return
     }
+
+    clearEditorStatusTimer()
 
     const openedNote = toTuiNote(note)
     state = {
@@ -1374,6 +1401,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
     if (!editor.dirty && !hasConflictingInFlightSave) {
       clearAutosaveTimer()
       clearAiIdleTimer()
+      clearEditorStatusTimer()
       state = {
         ...state,
         editor: {
@@ -1386,6 +1414,8 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       return
     }
     const editorBeforePending = state.editor
+    const previousAutosaveStatus = editorBeforePending?.autosaveStatus ?? "idle"
+    clearEditorStatusTimer()
     state = markAutosavePending(state)
     if (state.editor) {
       state = {
@@ -1397,7 +1427,9 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         },
       }
     }
-    notifyAutosaveStateChange()
+    if (previousAutosaveStatus !== state.editor?.autosaveStatus) {
+      notifyAutosaveStateChange()
+    }
     scheduleAutosave()
   }
 
@@ -1725,7 +1757,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       if (editorRequiresDestructiveConfirmation(state.editor)) {
         const status = "Save or discard current changes before creating a new draft"
         if (state.editor) {
-          state = { ...state, editor: { ...state.editor, statusMessage: status } }
+          setEditorStatus(status)
           setManagerStatus(status)
         } else {
           setManagerStatus(status)
@@ -1747,7 +1779,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       } catch (error) {
         const status = error instanceof Error ? error.message : "Create draft failed"
         if (state.editor) {
-          state = { ...state, editor: { ...state.editor, statusMessage: status } }
+          setEditorStatus(status)
         } else {
           setManagerStatus(status)
           applyManagerBrowserModel()
@@ -1909,8 +1941,8 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
           ...state,
           screen: "editor",
           mode: "editor.body",
-          editor: state.editor ? { ...state.editor, statusMessage: "Save the current draft before Save As" } : state.editor,
         }
+        setEditorStatus("Save the current draft before Save As")
         return dirtyBlocked()
       }
       if (!draft || !isDraftRelativePath(draft.relativePath)) {
@@ -1922,8 +1954,8 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
             ...state,
             screen: "editor",
             mode: "editor.body",
-            editor: { ...state.editor, statusMessage: "Save draft as is only available for drafts" },
           }
+          setEditorStatus("Save draft as is only available for drafts")
         } else {
           setManagerStatus("Save draft as is only available for drafts")
           applyManagerBrowserModel()
@@ -2391,13 +2423,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       const undoStack = editor?.undoStack ?? []
       if (!editor || undoStack.length === 0) {
         if (editor) {
-          state = {
-            ...state,
-            editor: {
-              ...editor,
-              statusMessage: "Nothing to undo",
-            },
-          }
+          setEditorStatus("Nothing to undo")
         }
         return
       }
@@ -2415,13 +2441,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       const redoStack = editor?.redoStack ?? []
       if (!editor || redoStack.length === 0) {
         if (editor) {
-          state = {
-            ...state,
-            editor: {
-              ...editor,
-              statusMessage: "Nothing to redo",
-            },
-          }
+          setEditorStatus("Nothing to redo")
         }
         return
       }
@@ -2617,9 +2637,9 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       applyEditorChange(nextEditor)
     },
 
-    moveEditorCursor: (direction) => {
+    moveEditorCursor: (direction, options) => {
       if (!state.editor) return
-      const nextEditor = moveEditorCursor(state.editor, direction)
+      const nextEditor = moveEditorCursor(state.editor, direction, options)
       state = {
         ...state,
         editor: nextEditor,
@@ -2633,6 +2653,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
         editor: {
           ...state.editor,
           wrapMode: state.editor.wrapMode === "none" ? "word" : "none",
+          preferredColumn: null,
         },
       }
     },
@@ -2742,6 +2763,7 @@ export function createWorkspaceController(deps: WorkspaceControllerDependencies)
       clearAutosaveTimer()
       clearAiIdleTimer()
       clearNoteSwitchIndicatorTimer()
+      clearEditorStatusTimer()
       autosaveStateChangeHandler = null
     },
 

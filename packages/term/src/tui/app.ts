@@ -39,7 +39,7 @@ import {
   type CliResult,
   type Clock,
 } from "@lordierclaw/bluenote-core"
-import { renderEditorScreen, routeEditorKey } from "./render-editor"
+import { buildEditorViewModel, renderEditorScreen, routeEditorKey } from "./render-editor"
 import { sanitizePastedEditorText } from "./paste"
 import { renderManagerScreen, routeManagerKey } from "./render-manager"
 import { renderSearchEverythingScreen, routeSearchEverythingKey } from "./render-search-everything"
@@ -571,11 +571,16 @@ export interface RoutedWorkspaceKey {
   exit?: boolean
 }
 
+export interface EditorBodyInputRoutingOptions {
+  bodyViewportColumns?: number
+}
+
 export function routeWorkspaceKey(
   sequence: string,
   controller: WorkspaceController,
   onExit: () => void,
   onInvalidate: () => void = () => {},
+  inputOptions: EditorBodyInputRoutingOptions = {},
 ): RoutedWorkspaceKey {
   const state = controller.getState()
 
@@ -610,7 +615,7 @@ export function routeWorkspaceKey(
       }
       return { handled: true, exit: !quit.blocked || undefined }
     }
-    return { handled: routeControlledEditorBodyInput(controller, sequence) }
+    return { handled: routeControlledEditorBodyInput(controller, sequence, inputOptions) }
   }
 
   if (sequence === "\u0003") {
@@ -645,6 +650,32 @@ function effectiveWorkspaceWidth(renderer: CliRenderer): number | undefined {
   return (process.stdout.isTTY ? process.stdout.columns : undefined) ?? rendererSize.width ?? rendererSize.terminalWidth
 }
 
+function isVerticalEditorBodyNavigationSequence(sequence: string): boolean {
+  return sequence === "\u001b[A" || sequence === "\u001bOA" || sequence === "\u001b[B" || sequence === "\u001bOB"
+}
+
+function editorBodyInputRoutingOptions(renderer: CliRenderer, controller: WorkspaceController, sequence: string): EditorBodyInputRoutingOptions {
+  if (!isVerticalEditorBodyNavigationSequence(sequence)) return {}
+  const state = controller.getState()
+  const width = effectiveWorkspaceWidth(renderer)
+  if (width === undefined || state.screen !== "editor" || !state.editor) return {}
+  const height = effectiveWorkspaceHeight(renderer) ?? 24
+  const findBarRows = state.mode === "editor.replace" ? 7 : state.mode === "editor.find" ? 5 : 0
+  const topbarRows = 1
+  const shortcutRows = 1
+  const bodyTopMarginRows = 1
+  const bodyBottomSeparatorRows = 1
+  const bodyViewportLines = Math.max(1, height - topbarRows - findBarRows - shortcutRows - bodyTopMarginRows - bodyBottomSeparatorRows)
+  let bodyViewportColumns = Math.max(1, width - ((state.editor.wrapMode ?? "word") === "none" ? 4 : 0))
+  const vm = buildEditorViewModel(state, { width: Math.max(0, width - 4), bodyViewportLines, bodyViewportColumns })
+  if ((state.editor.wrapMode ?? "word") === "word" && vm.body.overflow.vertical) {
+    bodyViewportColumns = Math.max(1, width - vm.body.margin.x - 3)
+  }
+  return {
+    bodyViewportColumns,
+  }
+}
+
 function effectiveWorkspaceHeight(renderer: CliRenderer): number | undefined {
   const rendererSize = renderer as CliRenderer & { height?: number; terminalHeight?: number }
   return (process.stdout.isTTY ? process.stdout.rows : undefined) ?? rendererSize.height ?? rendererSize.terminalHeight
@@ -667,7 +698,7 @@ function renderableDescendants(node: Renderable): Renderable[] {
   return [node, ...node.getChildren().flatMap((child) => renderableDescendants(child))]
 }
 
-export function routeControlledEditorBodyInput(controller: WorkspaceController, sequence: string): boolean {
+export function routeControlledEditorBodyInput(controller: WorkspaceController, sequence: string, options: EditorBodyInputRoutingOptions = {}): boolean {
   const state = controller.getState()
   if (state.screen !== "editor" || state.mode !== "editor.body" || !state.editor) return false
 
@@ -704,11 +735,11 @@ export function routeControlledEditorBodyInput(controller: WorkspaceController, 
       return true
     case "\u001b[A":
     case "\u001bOA":
-      controller.moveEditorCursor("up")
+      controller.moveEditorCursor("up", { viewportColumns: options.bodyViewportColumns })
       return true
     case "\u001b[B":
     case "\u001bOB":
-      controller.moveEditorCursor("down")
+      controller.moveEditorCursor("down", { viewportColumns: options.bodyViewportColumns })
       return true
     case "\u001b[H":
     case "\u001b[1~":
@@ -867,15 +898,16 @@ export async function startTuiWorkspace(options: StartTuiWorkspaceOptions = {}):
     }
   }
 
-  controller.setAutosaveStateChangeHandler(rerender)
+  controller.setAutosaveStateChangeHandler(scheduleRerender)
 
   const workspaceInputHandler = (sequence: string): boolean => {
     if (destroyed || renderer.isDestroyed) {
       return false
     }
 
-    let routed = routeWorkspaceKey(sequence, controller, destroy, rerender)
-    if (!routed.handled && routeControlledEditorBodyInput(controller, sequence)) {
+    const inputOptions = editorBodyInputRoutingOptions(renderer, controller, sequence)
+    let routed = routeWorkspaceKey(sequence, controller, destroy, rerender, inputOptions)
+    if (!routed.handled && routeControlledEditorBodyInput(controller, sequence, inputOptions)) {
       routed = { handled: true }
     }
 
