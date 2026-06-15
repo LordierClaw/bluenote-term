@@ -9,9 +9,9 @@ Phase 8.2 splits the headless core into a sibling repository. For local developm
 ../bluenote-term
 ```
 
-`bluenote-term` is the terminal client. It currently owns the legacy `bn`/`bluenote` entrypoints, CLI presentation, OpenTUI workspace, terminal editor launch, clipboard helpers, and terminal release packaging.
+`bluenote-term` is the terminal client. It owns the public `bluenote-term` executable, reusable TUI command API, OpenTUI workspace, CLI presentation for terminal-owned commands, terminal editor launch, clipboard helpers, and terminal release packaging.
 
-Long-term, the sibling `bluenote` distribution repo owns the official multi-command binary and top-level command routing. When that repo needs terminal behavior, expose a reusable public TUI command API here rather than moving OpenTUI implementation into `bluenote`.
+The sibling `bluenote` distribution repo owns the official `bluenote`/`bn` multi-command binary and top-level command routing. When that repo needs terminal behavior, expose or preserve a reusable public TUI command API here rather than moving OpenTUI implementation into `bluenote`.
 
 The nested `bluenote-term` package exports that command API from both `bluenote-term` and `bluenote-term/command`:
 
@@ -27,13 +27,19 @@ const exitCode = await runTuiCommand(process.argv.slice(2))
 
 ## Local dependency mode
 
-During local development, `bluenote-term` consumes the sibling package with a reproducible local file dependency:
+Current shared-testing builds consume core through a pinned Git commit dependency so source checkouts are reproducible without a moving branch dependency:
+
+```json
+"@lordierclaw/bluenote-core": "git+https://github.com/LordierClaw/bluenote-core.git#<pinned-commit-sha>"
+```
+
+For active local core development, you may temporarily switch the root package to a local file dependency:
 
 ```json
 "@lordierclaw/bluenote-core": "file:../bluenote-core"
 ```
 
-The nested `packages/term` package uses the equivalent relative path from its own package directory:
+The nested `packages/term` package uses the equivalent relative path from its own package directory when using local file mode:
 
 ```json
 "@lordierclaw/bluenote-core": "file:../../../bluenote-core"
@@ -43,10 +49,8 @@ After changing core source, rebuild and verify core before reinstalling or check
 
 ```bash
 cd ../bluenote-core
-bun install
-bun run typecheck
-bun run build
-bun test
+npm ci --include=dev
+npm run check
 
 cd ../bluenote-term
 bun install
@@ -95,7 +99,7 @@ Use semver discipline even while the package is pre-1.0:
 
 1. Make and verify the change in `../bluenote-core`.
 2. Update `bluenote-core/CHANGELOG.md` and tag the core release when sharing outside local file development.
-3. In `../bluenote-term`, update the dependency to either `file:../bluenote-core`, a Git commit such as `github:LordierClaw/bluenote-core#26586e011e04`, or a future npm range such as `^0.4.0`.
+3. In `../bluenote-term`, update the dependency to either temporary local file mode (`file:../bluenote-core` / `file:../../../bluenote-core`), a pinned Git commit such as `git+https://github.com/LordierClaw/bluenote-core.git#<pinned-commit-sha>`, or a future npm range such as `^0.4.0`.
 4. Run `bun install` in `bluenote-term` to update `bun.lock`.
 5. Run `bun run typecheck`, `bun run lint`, `bun test`, `bun run smoke:opentui`, `bun run smoke:cli`, and `bun run check` when practical.
 6. Keep imports stable through `@lordierclaw/bluenote-core`; do not copy core logic back into this repository.

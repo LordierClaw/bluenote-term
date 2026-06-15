@@ -48,7 +48,7 @@ cd ../..
 bluenote doctor
 ```
 
-If your shell cannot find `bluenote-term` after `bun link`, make sure Bun's link directory is on `PATH` (`~/.bun/bin` on Linux/macOS). See the distribution README for bash, fish, cmd.exe, and PowerShell PATH examples.
+If your shell cannot find `bluenote-term` after `bun link`, make sure Bun's link directory is on `PATH` (`~/.bun/bin` on Linux/macOS). For a persistent setup, add it to your shell profile or user PATH. See the distribution README for bash, fish, cmd.exe, and PowerShell PATH examples.
 
 After cloning the repository, install dependencies and check the local runtime:
 
