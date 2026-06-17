@@ -13,10 +13,10 @@ Phase 8.2 splits the headless core into a sibling repository. For local developm
 
 The sibling `bluenote` distribution repo owns the official `bluenote`/`bn` multi-command binary and top-level command routing. When that repo needs terminal behavior, expose or preserve a reusable public TUI command API here rather than moving OpenTUI implementation into `bluenote`.
 
-The nested `bluenote-term` package exports that command API from both `bluenote-term` and `bluenote-term/command`:
+The nested `bluenote-term` package exports that command API from both `@lordierclaw/bluenote-term` and `@lordierclaw/bluenote-term/command`:
 
 ```ts
-import { runTuiCommand } from "bluenote-term"
+import { runTuiCommand } from "@lordierclaw/bluenote-term"
 
 const exitCode = await runTuiCommand(process.argv.slice(2))
 ```
@@ -86,7 +86,7 @@ Do not use `github:LordierClaw/bluenote-core#main` as the default release depend
 Once `@lordierclaw/bluenote-core` is published to npm, switch the terminal dependency to a semver range appropriate for the release:
 
 ```json
-"@lordierclaw/bluenote-core": "^0.4.0"
+"@lordierclaw/bluenote-core": "^0.1.0"
 ```
 
 Use semver discipline even while the package is pre-1.0:
@@ -99,7 +99,7 @@ Use semver discipline even while the package is pre-1.0:
 
 1. Make and verify the change in `../bluenote-core`.
 2. Update `bluenote-core/CHANGELOG.md` and tag the core release when sharing outside local file development.
-3. In `../bluenote-term`, update the dependency to either temporary local file mode (`file:../bluenote-core` / `file:../../../bluenote-core`), a pinned Git commit such as `git+https://github.com/LordierClaw/bluenote-core.git#<pinned-commit-sha>`, or a future npm range such as `^0.4.0`.
+3. In `../bluenote-term`, update the dependency to either temporary local file mode (`file:../bluenote-core` / `file:../../../bluenote-core`), a pinned Git commit such as `git+https://github.com/LordierClaw/bluenote-core.git#<pinned-commit-sha>`, or a future npm range such as `^0.1.0`.
 4. Run `bun install` in `bluenote-term` to update `bun.lock`.
 5. Run `bun run typecheck`, `bun run lint`, `bun test`, `bun run smoke:opentui`, `bun run smoke:cli`, and `bun run check` when practical.
 6. Keep imports stable through `@lordierclaw/bluenote-core`; do not copy core logic back into this repository.

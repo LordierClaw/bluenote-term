@@ -25,7 +25,7 @@ For the full BlueNote app, install/run the distribution CLI (`@lordierclaw/bluen
 
 ```bash
 npm install -g @lordierclaw/bluenote
-npm install -g bluenote-term
+npm install -g @lordierclaw/bluenote-term
 bluenote doctor
 ```
 

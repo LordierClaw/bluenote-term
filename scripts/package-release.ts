@@ -34,7 +34,7 @@ function deriveReleaseVersion(): string {
 
 function validateReleaseVersion(version: string, packageVersion: string): string {
   if (!releaseVersionPattern.test(version)) {
-    throw new Error(`Invalid release version '${version}'. Expected a semver tag like v0.4.0.`)
+    throw new Error(`Invalid release version '${version}'. Expected a semver tag like v0.1.0.`)
   }
 
   if (version !== packageVersion) {
