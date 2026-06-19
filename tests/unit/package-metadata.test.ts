@@ -12,10 +12,11 @@ const developmentGuide = readFileSync(path.resolve("DEVELOPMENT.md"), "utf8")
 
 test("terminal package uses the approved public package name and stable bin", () => {
   assert.equal(termPackage.name, "@lordierclaw/bluenote-term")
-  assert.equal(termPackage.version, "0.1.0")
+  assert.equal(termPackage.version, "0.4.2")
   assert.equal(termPackage.license, "Apache-2.0")
-  assert.equal(rootPackage.version, termPackage.version)
-  assert.equal(termPackage.bin["bluenote-term"], "./bin/bluenote-term.ts")
+  assert.equal(rootPackage.version, "0.1.0")
+  assert.equal(termPackage.bin["bluenote-term"], "./bin/bluenote-term.js")
+  assert.equal(termPackage.dependencies["@lordierclaw/bluenote-core"], "0.4.2")
 })
 
 test("terminal docs use the approved scoped package name for install and imports", () => {
@@ -27,9 +28,16 @@ test("terminal docs use the approved scoped package name for install and imports
 })
 
 test("terminal package artifact is restricted to runtime package contents", () => {
-  assert.deepEqual(termPackage.files, ["bin", "src"])
-  assert.equal(termPackage.exports["."].import, "./src/command.js")
-  assert.equal(termPackage.exports["./command"].import, "./src/command.js")
+  assert.deepEqual(termPackage.files, ["bin", "dist", "src/command.d.ts"])
+  assert.equal(termPackage.exports["."].import, "./dist/command.js")
+  assert.equal(termPackage.exports["./command"].import, "./dist/command.js")
+})
+
+test("published terminal bin is a Node wrapper over the built runtime package", () => {
+  const publicBin = readFileSync(path.resolve("packages", "term", "bin", "bluenote-term.js"), "utf8")
+
+  assert.match(publicBin, /^#!\/usr\/bin\/env node/m)
+  assert.match(publicBin, /from "\.\.\/dist\/command\.js"/)
 })
 
 test("release packaging keeps built no-Bun runtime artifacts for non-technical installs", () => {

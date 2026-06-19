@@ -19,12 +19,43 @@ export interface RunTuiCommandOptions {
   env?: Record<string, string | undefined>
 }
 
+function formatTuiHelp(): string {
+  return [
+    "Usage: bluenote tui [options]",
+    "",
+    "Launch the BlueNote terminal UI workspace.",
+    "",
+    "Options:",
+    "  --daemon-url <url>     BlueNote daemon URL (default: BLUENOTE_DAEMON_URL)",
+    "  --daemon-token <token> BlueNote daemon token (default: BLUENOTE_DAEMON_TOKEN)",
+    "  --check-daemon         Check daemon health/capabilities without launching the TUI",
+    "  --help, -h             Show this help",
+    "  --version, -v          Show the version",
+  ].join("\n") + "\n"
+}
+
+function bunRequiredResult(surface: "CLI" | "TUI"): CliResult {
+  return {
+    exitCode: 1,
+    stdout: "",
+    stderr: `The default bluenote-term ${surface} runner requires Bun. Pass ${surface === "CLI" ? "cliRunner" : "tuiRunner"} when using run${surface === "CLI" ? "Command" : "TuiCommand"} from Node.\n`,
+  }
+}
+
 async function runDefaultCli(args: string[], version: string): Promise<CliResult> {
+  if (!("Bun" in globalThis)) {
+    return bunRequiredResult("CLI")
+  }
+
   const module = await import("./cli/entry")
   return module.runCliAsync(args, version)
 }
 
 async function runDefaultTui(): Promise<CliResult> {
+  if (!("Bun" in globalThis)) {
+    return bunRequiredResult("TUI")
+  }
+
   const module = await import("./tui/app")
   return module.runTuiCliInteractive()
 }
@@ -149,6 +180,11 @@ function formatDaemonCheckResult(result: DaemonCheckResult): CliResult {
 
 export async function runTuiCommand(args: string[] = [], options: RunTuiCommandOptions = {}): Promise<number> {
   const io = options.io ?? process
+  if (args.includes("--help") || args.includes("-h")) {
+    io.stdout.write(formatTuiHelp())
+    return 0
+  }
+
   if (args.includes("--version") || args.includes("-v")) {
     io.stdout.write(`${options.version ?? pkg.version}\n`)
     return 0

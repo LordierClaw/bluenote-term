@@ -1,32 +1,37 @@
 {
   "name": "@lordierclaw/bluenote-term",
-  "version": "0.1.0",
+  "version": "0.4.2",
   "license": "Apache-2.0",
   "type": "module",
   "files": [
     "bin",
-    "src"
+    "dist",
+    "src/command.d.ts"
   ],
   "exports": {
     ".": {
       "types": "./src/command.d.ts",
-      "import": "./src/command.js"
+      "import": "./dist/command.js"
     },
     "./command": {
       "types": "./src/command.d.ts",
-      "import": "./src/command.js"
+      "import": "./dist/command.js"
     },
     "./package.json": "./package.json"
   },
   "bin": {
-    "bluenote-term": "./bin/bluenote-term.ts"
+    "bluenote-term": "./bin/bluenote-term.js"
+  },
+  "scripts": {
+    "build:package-runtime": "bun ../../scripts/build-package-runtime.ts",
+    "prepack": "bun run build:package-runtime"
   },
   "engines": {
     "bun": ">=1.3.0",
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "@lordierclaw/bluenote-core": "git+https://github.com/LordierClaw/bluenote-core.git#920f5c1030604a5be98d8d70d87d06ec0a57fb28",
+    "@lordierclaw/bluenote-core": "0.4.2",
     "@opentui/core": "0.2.14",
     "clipboardy": "5.3.1"
   }

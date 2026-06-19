@@ -25,13 +25,13 @@ function createBufferedIO(): { stdout: string; stderr: string; io: NonNullable<R
 test("bluenote-term package metadata exposes the reusable command API", () => {
   assert.deepEqual(termPackage.exports["."], {
     types: "./src/command.d.ts",
-    import: "./src/command.js",
+    import: "./dist/command.js",
   })
   assert.deepEqual(termPackage.exports["./command"], {
     types: "./src/command.d.ts",
-    import: "./src/command.js",
+    import: "./dist/command.js",
   })
-  assert.equal(termPackage.bin["bluenote-term"], "./bin/bluenote-term.ts")
+  assert.equal(termPackage.bin["bluenote-term"], "./bin/bluenote-term.js")
   assert.equal(Object.hasOwn(termPackage.bin, "bn"), false)
   assert.equal(Object.hasOwn(termPackage.bin, "bluenote"), false)
 })
@@ -84,6 +84,25 @@ test("runTuiCommand prints version without launching the full-screen TUI", async
   assert.equal(calls, 0)
   assert.equal(exitCode, 0)
   assert.equal(bufferedIO.stdout, "1.2.3-test\n")
+  assert.equal(bufferedIO.stderr, "")
+})
+
+test("runTuiCommand prints help without launching the full-screen TUI", async () => {
+  const bufferedIO = createBufferedIO()
+  let calls = 0
+
+  const exitCode = await runTuiCommand(["--help"], {
+    io: bufferedIO.io,
+    tuiRunner: async () => {
+      calls += 1
+      return { exitCode: 1, stdout: "", stderr: "" }
+    },
+  })
+
+  assert.equal(calls, 0)
+  assert.equal(exitCode, 0)
+  assert.match(bufferedIO.stdout, /Usage: bluenote tui \[options\]/)
+  assert.match(bufferedIO.stdout, /--check-daemon/)
   assert.equal(bufferedIO.stderr, "")
 })
 
@@ -258,6 +277,54 @@ test("runTuiCommand ignores a token-only environment for normal launches", async
   assert.equal(exitCode, 0)
   assert.equal(bufferedIO.stdout, "launched\n")
   assert.equal(bufferedIO.stderr, "")
+})
+
+test("bluenote-term command API entrypoint is importable from Node for TUI help", () => {
+  const script = `
+    import { runTuiCommand } from "./packages/term/src/command.js";
+    let stdout = "";
+    let stderr = "";
+    const exitCode = await runTuiCommand(["--help"], {
+      io: {
+        stdout: { write: (chunk) => { stdout += chunk; } },
+        stderr: { write: (chunk) => { stderr += chunk; } },
+      },
+    });
+    if (exitCode !== 0) process.exit(1);
+    if (!stdout.includes("Usage: bluenote tui [options]")) process.exit(1);
+    if (stderr !== "") process.exit(1);
+  `
+  const result = Bun.spawnSync(["node", "--input-type=module", "--eval", script], {
+    cwd: process.cwd(),
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+
+  assert.equal(result.exitCode, 0, new TextDecoder().decode(result.stderr))
+})
+
+test("bluenote-term command API entrypoint reports a Bun requirement instead of crashing under Node", () => {
+  const script = `
+    import { runTuiCommand } from "./packages/term/src/command.js";
+    let stdout = "";
+    let stderr = "";
+    const exitCode = await runTuiCommand([], {
+      io: {
+        stdout: { write: (chunk) => { stdout += chunk; } },
+        stderr: { write: (chunk) => { stderr += chunk; } },
+      },
+    });
+    if (exitCode !== 1) process.exit(1);
+    if (stdout !== "") process.exit(1);
+    if (!stderr.includes("requires Bun")) process.exit(1);
+  `
+  const result = Bun.spawnSync(["node", "--input-type=module", "--eval", script], {
+    cwd: process.cwd(),
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+
+  assert.equal(result.exitCode, 0, new TextDecoder().decode(result.stderr))
 })
 
 test("runTuiCommand reports daemon check failures without printing the token", async () => {

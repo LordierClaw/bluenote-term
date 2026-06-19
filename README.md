@@ -33,6 +33,8 @@ bluenote tui
 
 The distribution README is the canonical guide for full app install, uninstall, PATH setup, and optional client verification.
 
+The published `@lordierclaw/bluenote-term` npm package ships a Node-runnable terminal client wrapper for distribution-driven installs. Bun is still required for source execution, local development, and direct repo scripts.
+
 ## Local development
 
 Expected sibling checkout layout:
@@ -145,7 +147,7 @@ All TUI AI work runs in the background; provider calls and queue processing do n
 
 The public npm package is `@lordierclaw/bluenote-term`. The public executable discovered on `PATH` is `bluenote-term`.
 
-Portable GitHub Release archives are available for Windows and Linux users as ready-to-run packages. See [Release Workflow](docs/workflow/releases.md) for artifact names, extraction steps, checksum verification, and the maintainer tag flow.
+Release automation for this repo publishes the `packages/term` npm package and creates a matching GitHub Release for the pushed `v*` tag.
 
 The package consumes `@lordierclaw/bluenote-core` through public exports. Distribution packages should call the public executable or public command API instead of importing terminal internals:
 
@@ -156,7 +158,7 @@ import { runTuiCommand } from "@lordierclaw/bluenote-term"
 ## Cross-platform notes
 
 - Bun 1.3 or newer is required for terminal development and source execution.
-- Node.js compatibility depends on the shared core/runtime package and the build mode being exercised.
+- The published optional terminal client runs through Node.js; source execution and development still require Bun.
 - Terminal UI behavior depends on a terminal with standard keyboard input.
 - If your shell cannot find `bluenote-term` after `bun link`, ensure Bun's link directory is on `PATH` (`~/.bun/bin` on Linux/macOS).
 - Core note workflows stay local-first. Optional AI provider calls require explicit configuration and network access.

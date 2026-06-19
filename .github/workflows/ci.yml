@@ -54,3 +54,7 @@ jobs:
 
       - name: Smoke check CLI
         run: bun run smoke:cli
+
+      - name: Verify npm package publish shape
+        run: npm pack --dry-run --json
+        working-directory: packages/term

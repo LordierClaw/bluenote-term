@@ -195,35 +195,31 @@ test("current docs document the Phase 6 opt-in AI description workflow", async (
   assert.match(phaseDoc, /TUI startup recovery scans sidecar `updatedAt` against `ai\.description\.lastProcessedAt`/)
 })
 
-test("release workflow publishes only versioned archive assets with the SQL.js WASM companion inside", async () => {
-  const [releaseWorkflow, releaseDocs, packageJsonText] = await Promise.all([
+test("release workflow publishes the packages/term npm package and creates a matching GitHub Release", async () => {
+  const [releaseWorkflow, termPackageText] = await Promise.all([
     readWorkspaceFile(".github/workflows/release.yml"),
-    readWorkspaceFile("docs/workflow/releases.md"),
-    readWorkspaceFile("package.json"),
+    readWorkspaceFile("packages/term/package.json"),
   ])
-  const packageJson = JSON.parse(packageJsonText) as { version: string }
-  const releaseTag = `v${packageJson.version}`
+  const termPackage = JSON.parse(termPackageText) as {
+    version: string
+    dependencies: Record<string, string>
+  }
+  const releaseTag = `v${termPackage.version}`
 
-  assert.match(releaseWorkflow, /release_version:/)
-  assert.match(releaseWorkflow, new RegExp(`default:\\s*"${releaseTag}"`))
+  assert.match(releaseWorkflow, /tags:\s*\n\s*-\s*"v\*"/)
+  assert.match(releaseWorkflow, /working-directory:\s*packages\/term/)
+  assert.match(releaseWorkflow, /npm pack --dry-run --json/)
+  assert.match(releaseWorkflow, /npm publish --access public/)
+  assert.match(releaseWorkflow, /require\('\.\/packages\/term\/package\.json'\)\.version/)
+  assert.match(releaseWorkflow, /RELEASE_TAG=\"v\$\{PACKAGE_VERSION\}\"/)
+  assert.match(releaseWorkflow, new RegExp(`tag_name:\\s*\\$\\{\\{ steps\\.meta\\.outputs\\.release_tag \\}\\}`))
+  assert.match(releaseWorkflow, /Tag \$\{GITHUB_REF_NAME\} does not match packages\/term\/package\.json version/)
+  assert.match(releaseWorkflow, /Published `@lordierclaw\/bluenote-term@\$\{\{ steps\.meta\.outputs\.package_version \}\}` from `packages\/term`\./)
   assert.match(
     releaseWorkflow,
-    /BLUENOTE_RELEASE_VERSION:\s*\$\{\{ startsWith\(github\.ref, 'refs\/tags\/'\) && github\.ref_name \|\| inputs\.release_version \}\}/,
+    /@lordierclaw\/bluenote-core@\$\{\{ steps\.meta\.outputs\.package_version \}\}/,
   )
-  assert.match(releaseWorkflow, /dist\/release\/bluenote-\$\{\{ env\.BLUENOTE_RELEASE_VERSION \}\}-windows-x64\.zip/)
-  assert.match(releaseWorkflow, /dist\/release\/bluenote-\$\{\{ env\.BLUENOTE_RELEASE_VERSION \}\}-linux-x64\.tar\.gz/)
-  assert.match(releaseWorkflow, /dist\/release-assets\/bluenote-windows-x64\/bluenote-\$\{\{ env\.BLUENOTE_RELEASE_VERSION \}\}-windows-x64\.zip/)
-  assert.match(releaseWorkflow, /dist\/release-assets\/bluenote-linux-x64\/bluenote-\$\{\{ env\.BLUENOTE_RELEASE_VERSION \}\}-linux-x64\.tar\.gz/)
-  assert.doesNotMatch(releaseWorkflow, /dist\/release-assets\/bluenote-windows-x64\/bn\.exe/)
-  assert.doesNotMatch(releaseWorkflow, /dist\/release-assets\/bluenote-windows-x64\/sql-wasm\.wasm/)
-  assert.doesNotMatch(releaseWorkflow, /dist\/release\/bn\.exe/)
-  assert.doesNotMatch(releaseWorkflow, /dist\/release\/sql-wasm\.wasm/)
-
-  assert.match(releaseDocs, new RegExp("`bluenote-" + releaseTag + "-windows-x64\\.zip`"))
-  assert.match(releaseDocs, new RegExp("`bluenote-" + releaseTag + "-linux-x64\\.tar\\.gz`"))
-  assert.match(releaseDocs, /sql-wasm\.wasm.*next to.*bn\.exe.*bn/s)
-  assert.doesNotMatch(releaseDocs, /directly downloaded `bn\.exe`/)
-  assert.doesNotMatch(releaseDocs, /Get-FileHash \.\\sql-wasm\.wasm -Algorithm SHA256/)
+  assert.equal(termPackage.dependencies["@lordierclaw/bluenote-core"], "0.4.2")
 })
 
 test("package version matches the current release asset version", async () => {

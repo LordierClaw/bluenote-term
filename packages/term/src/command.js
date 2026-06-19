@@ -2,9 +2,32 @@ import { readFileSync } from "node:fs"
 
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"))
 
+function formatTuiHelp() {
+  return [
+    "Usage: bluenote tui [options]",
+    "",
+    "Launch the BlueNote terminal UI workspace.",
+    "",
+    "Options:",
+    "  --daemon-url <url>     BlueNote daemon URL (default: BLUENOTE_DAEMON_URL)",
+    "  --daemon-token <token> BlueNote daemon token (default: BLUENOTE_DAEMON_TOKEN)",
+    "  --check-daemon         Check daemon health/capabilities without launching the TUI",
+    "  --help, -h             Show this help",
+    "  --version, -v          Show the version",
+  ].join("\n") + "\n"
+}
+
+function bunRequiredResult(surface) {
+  return {
+    exitCode: 1,
+    stdout: "",
+    stderr: `The default bluenote-term ${surface} runner requires Bun. Pass ${surface === "CLI" ? "cliRunner" : "tuiRunner"} when using run${surface === "CLI" ? "Command" : "TuiCommand"} from Node.\n`,
+  }
+}
+
 async function runDefaultCli(args, version) {
   if (!("Bun" in globalThis)) {
-    throw new Error("The default bluenote-term CLI runner requires Bun. Pass cliRunner when using runCommand from Node.")
+    return bunRequiredResult("CLI")
   }
 
   const module = await import("./cli/entry.ts")
@@ -13,7 +36,7 @@ async function runDefaultCli(args, version) {
 
 async function runDefaultTui() {
   if (!("Bun" in globalThis)) {
-    throw new Error("The default bluenote-term TUI runner requires Bun. Pass tuiRunner when using runTuiCommand from Node.")
+    return bunRequiredResult("TUI")
   }
 
   const module = await import("./tui/app.ts")
@@ -129,6 +152,11 @@ function formatDaemonCheckResult(result) {
 
 export async function runTuiCommand(args = [], options = {}) {
   const io = options.io ?? process
+  if (args.includes("--help") || args.includes("-h")) {
+    io.stdout.write(formatTuiHelp())
+    return 0
+  }
+
   if (args.includes("--version") || args.includes("-v")) {
     io.stdout.write(`${options.version ?? pkg.version}\n`)
     return 0
