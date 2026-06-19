@@ -1,6 +1,6 @@
 {
   "name": "@lordierclaw/bluenote-term",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -35,7 +35,7 @@
     "node": ">=20.0.0"
   },
   "dependencies": {
-    "@lordierclaw/bluenote-core": "0.4.3",
+    "@lordierclaw/bluenote-core": "latest",
     "@opentui/core": "0.2.14",
     "clipboardy": "5.3.1"
   }

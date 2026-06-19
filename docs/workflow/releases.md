@@ -60,14 +60,15 @@ Get-FileHash .\bluenote-v0.1.0-windows-x64.zip -Algorithm SHA256
 
 ## Maintainer release flow
 
-From a clean main branch, run the public gate and push a version tag:
+From a clean main branch, run the public gate, push the version tag, then publish a GitHub Release for that tag:
 
 ```bash
 bun run check
 git tag v0.1.0
 git push origin v0.1.0
+# Then publish the GitHub Release for v0.1.0 in the GitHub UI or with gh.
 ```
 
-The GitHub Actions release workflow builds Windows and Linux archives on matching runners, prints checksums in the GitHub Release notes, and attaches only the versioned archives to a real GitHub Release for the pushed tag.
+Publishing the GitHub Release is what triggers the npm release workflow. The workflow verifies the package first and only then publishes `@lordierclaw/bluenote-term` to npm.
 
-For a manual dry run from GitHub, use the `workflow_dispatch` trigger on the release workflow and leave `release_version` at the current package version (for example `v0.1.0`). A dispatch run builds and uploads workflow artifacts using the same versioned archive names; publishing a GitHub Release still requires pushing a `v*` tag.
+For a manual dry run from GitHub, use the `workflow_dispatch` trigger on the release workflow. A dispatch run exercises the verification steps without publishing to npm.

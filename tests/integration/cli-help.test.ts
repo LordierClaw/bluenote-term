@@ -195,7 +195,7 @@ test("current docs document the Phase 6 opt-in AI description workflow", async (
   assert.match(phaseDoc, /TUI startup recovery scans sidecar `updatedAt` against `ai\.description\.lastProcessedAt`/)
 })
 
-test("release workflow publishes the packages/term npm package and creates a matching GitHub Release", async () => {
+test("release workflow publishes the packages/term npm package from a published GitHub Release", async () => {
   const [releaseWorkflow, termPackageText] = await Promise.all([
     readWorkspaceFile(".github/workflows/release.yml"),
     readWorkspaceFile("packages/term/package.json"),
@@ -206,20 +206,15 @@ test("release workflow publishes the packages/term npm package and creates a mat
   }
   const releaseTag = `v${termPackage.version}`
 
-  assert.match(releaseWorkflow, /tags:\s*\n\s*-\s*"v\*"/)
+  assert.match(releaseWorkflow, /release:\s*\n\s*types:\s*\[published\]/)
   assert.match(releaseWorkflow, /working-directory:\s*packages\/term/)
   assert.match(releaseWorkflow, /npm pack --dry-run --json/)
   assert.match(releaseWorkflow, /npm publish --access public/)
   assert.match(releaseWorkflow, /require\('\.\/packages\/term\/package\.json'\)\.version/)
   assert.match(releaseWorkflow, /RELEASE_TAG=\"v\$\{PACKAGE_VERSION\}\"/)
-  assert.match(releaseWorkflow, new RegExp(`tag_name:\\s*\\$\\{\\{ steps\\.meta\\.outputs\\.release_tag \\}\\}`))
-  assert.match(releaseWorkflow, /Tag \$\{GITHUB_REF_NAME\} does not match packages\/term\/package\.json version/)
-  assert.match(releaseWorkflow, /Published `@lordierclaw\/bluenote-term@\$\{\{ steps\.meta\.outputs\.package_version \}\}` from `packages\/term`\./)
-  assert.match(
-    releaseWorkflow,
-    /@lordierclaw\/bluenote-core@\$\{\{ steps\.meta\.outputs\.package_version \}\}/,
-  )
-  assert.equal(termPackage.dependencies["@lordierclaw/bluenote-core"], termPackage.version)
+  assert.match(releaseWorkflow, /Release tag \$\{RELEASE_TAG_NAME\} does not match packages\/term\/package\.json version/)
+  assert.match(releaseWorkflow, /if: github\.event_name == 'release' && github\.event\.action == 'published'/)
+  assert.equal(termPackage.dependencies["@lordierclaw/bluenote-core"], "latest")
 })
 
 test("package version matches the current release asset version", async () => {

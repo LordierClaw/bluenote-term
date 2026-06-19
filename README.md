@@ -147,9 +147,9 @@ All TUI AI work runs in the background; provider calls and queue processing do n
 
 The public npm package is `@lordierclaw/bluenote-term`. The public executable discovered on `PATH` is `bluenote-term`.
 
-Release automation for this repo publishes the `packages/term` npm package and creates a matching GitHub Release for the pushed `v*` tag.
+Release automation for this repo runs when a maintainer publishes a GitHub Release for the matching `v*` tag. The workflow verifies `packages/term` first and only then publishes the npm package.
 
-The package consumes `@lordierclaw/bluenote-core` through public exports. Distribution packages should call the public executable or public command API instead of importing terminal internals:
+The package consumes the latest published `@lordierclaw/bluenote-core` through public exports by default. Distribution packages should call the public executable or public command API instead of importing terminal internals:
 
 ```ts
 import { runTuiCommand } from "@lordierclaw/bluenote-term"

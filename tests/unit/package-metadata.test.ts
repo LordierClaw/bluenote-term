@@ -20,7 +20,7 @@ test("terminal package uses the approved public package name and stable bin", ()
   })
   assert.equal(rootPackage.version, "0.1.0")
   assert.equal(termPackage.bin["bluenote-term"], "./bin/bluenote-term.js")
-  assert.equal(termPackage.dependencies["@lordierclaw/bluenote-core"], termPackage.version)
+  assert.equal(termPackage.dependencies["@lordierclaw/bluenote-core"], "latest")
 })
 
 test("terminal docs use the approved scoped package name for install and imports", () => {
