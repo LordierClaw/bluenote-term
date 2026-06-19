@@ -219,7 +219,7 @@ test("release workflow publishes the packages/term npm package and creates a mat
     releaseWorkflow,
     /@lordierclaw\/bluenote-core@\$\{\{ steps\.meta\.outputs\.package_version \}\}/,
   )
-  assert.equal(termPackage.dependencies["@lordierclaw/bluenote-core"], "0.4.2")
+  assert.equal(termPackage.dependencies["@lordierclaw/bluenote-core"], termPackage.version)
 })
 
 test("package version matches the current release asset version", async () => {

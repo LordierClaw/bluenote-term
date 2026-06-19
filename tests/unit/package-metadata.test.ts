@@ -12,11 +12,11 @@ const developmentGuide = readFileSync(path.resolve("DEVELOPMENT.md"), "utf8")
 
 test("terminal package uses the approved public package name and stable bin", () => {
   assert.equal(termPackage.name, "@lordierclaw/bluenote-term")
-  assert.equal(termPackage.version, "0.4.2")
+  assert.match(termPackage.version, /^\d+\.\d+\.\d+$/)
   assert.equal(termPackage.license, "Apache-2.0")
   assert.equal(rootPackage.version, "0.1.0")
   assert.equal(termPackage.bin["bluenote-term"], "./bin/bluenote-term.js")
-  assert.equal(termPackage.dependencies["@lordierclaw/bluenote-core"], "0.4.2")
+  assert.equal(termPackage.dependencies["@lordierclaw/bluenote-core"], termPackage.version)
 })
 
 test("terminal docs use the approved scoped package name for install and imports", () => {
