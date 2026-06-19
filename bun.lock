@@ -4,7 +4,7 @@
   "workspaces": {
     "": {
       "dependencies": {
-        "@lordierclaw/bluenote-core": "0.4.2",
+        "@lordierclaw/bluenote-core": "0.4.3",
         "@opentui/core": "0.2.14",
         "clipboardy": "5.3.1",
         "sql.js": "1.10.3",
@@ -18,12 +18,12 @@
     },
     "packages/term": {
       "name": "@lordierclaw/bluenote-term",
-      "version": "0.4.2",
+      "version": "0.4.3",
       "bin": {
         "bluenote-term": "./bin/bluenote-term.js",
       },
       "dependencies": {
-        "@lordierclaw/bluenote-core": "0.4.2",
+        "@lordierclaw/bluenote-core": "0.4.3",
         "@opentui/core": "0.2.14",
         "clipboardy": "5.3.1",
       },
@@ -48,7 +48,7 @@
 
     "@biomejs/cli-win32-x64": ["@biomejs/cli-win32-x64@2.4.16", "", { "os": "win32", "cpu": "x64" }, "sha512-Kp85jgoBHa05gix6UIRjfCDiUV3w/8VIdZ247VyyO2gEjaw12WEVhdIjlxp/AMzXxqxQwbxNTDVZ3Mwd2RG5rw=="],
 
-    "@lordierclaw/bluenote-core": ["@lordierclaw/bluenote-core@0.4.2", "", { "dependencies": { "@types/node": "16.18.126", "@types/node-fetch": "2.6.13", "js-yaml": "4.1.1", "minisearch": "6.3.0", "node-fetch": "2.7.0", "sql.js": "1.10.3" } }, "sha512-Twurj1FE1uouBU39ztl6LS9/TF6/tKZ7PNNhYh74TsAjWfZBdfDPRU93Ic0I35JTUeZ/1xQADkiP33NwbDeOFA=="],
+    "@lordierclaw/bluenote-core": ["@lordierclaw/bluenote-core@0.4.3", "", { "dependencies": { "@types/node": "16.18.126", "@types/node-fetch": "2.6.13", "js-yaml": "4.1.1", "minisearch": "6.3.0", "node-fetch": "2.7.0", "sql.js": "1.10.3" } }, "sha512-0MlQatuhfQYNLPTE2lNDXwfErovHv85mduV87J+CU6bSqR1KsedgL3JqVWfmmRs4X23jRlV1+TEXuIlw/B7N4A=="],
 
     "@lordierclaw/bluenote-term": ["@lordierclaw/bluenote-term@workspace:packages/term"],
 
