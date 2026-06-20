@@ -14,6 +14,7 @@ export interface RunTuiCommandOptions {
   version?: string
   cliRunner?: (args: string[], version: string) => Promise<CliResult>
   tuiRunner?: () => Promise<CliResult>
+  probeTuiRuntime?: () => Promise<CliResult>
   env?: Record<string, string | undefined>
 }
 

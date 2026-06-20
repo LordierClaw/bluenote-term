@@ -24,7 +24,7 @@ test("terminal package uses the approved public package name and stable bin", ()
 })
 
 test("terminal docs use the approved scoped package name for install and imports", () => {
-  assert.match(readme, /npm install -g @lordierclaw\/bluenote-term/)
+  assert.match(readme, /built terminal artifact managed by the distribution installer/)
   assert.doesNotMatch(readme, /npm install -g bluenote-term\b/)
   assert.match(developmentGuide, /from "@lordierclaw\/bluenote-term"/)
   assert.match(developmentGuide, /`@lordierclaw\/bluenote-term` and `@lordierclaw\/bluenote-term\/command`/)
@@ -42,6 +42,9 @@ test("published terminal bin is a Node wrapper over the built runtime package", 
 
   assert.match(publicBin, /^#!\/usr\/bin\/env node/m)
   assert.match(publicBin, /from "\.\.\/dist\/command\.js"/)
+  assert.match(publicBin, /readdirSync/)
+  assert.match(publicBin, /probeTuiRuntime: probeBuiltTuiRuntime/)
+  assert.match(publicBin, /cannot launch the full TUI on plain Node\.js/)
 })
 
 test("release packaging keeps built no-Bun runtime artifacts for non-technical installs", () => {

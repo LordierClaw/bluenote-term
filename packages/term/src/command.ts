@@ -16,6 +16,7 @@ export interface RunTuiCommandOptions {
   version?: string
   cliRunner?: (args: string[], version: string) => Promise<CliResult>
   tuiRunner?: () => Promise<CliResult>
+  probeTuiRuntime?: () => Promise<CliResult>
   env?: Record<string, string | undefined>
 }
 
@@ -29,6 +30,7 @@ function formatTuiHelp(): string {
     "  --daemon-url <url>     BlueNote daemon URL (default: BLUENOTE_DAEMON_URL)",
     "  --daemon-token <token> BlueNote daemon token (default: BLUENOTE_DAEMON_TOKEN)",
     "  --check-daemon         Check daemon health/capabilities without launching the TUI",
+    "  --probe-tui-runtime    Check whether the packaged TUI runtime can launch on this machine",
     "  --help, -h             Show this help",
     "  --version, -v          Show the version",
   ].join("\n") + "\n"
@@ -58,6 +60,10 @@ async function runDefaultTui(): Promise<CliResult> {
 
   const module = await import("./tui/app")
   return module.runTuiCliInteractive()
+}
+
+async function defaultProbeTuiRuntime(): Promise<CliResult> {
+  return runDefaultTui()
 }
 
 interface DaemonCommandOptions {
@@ -188,6 +194,10 @@ export async function runTuiCommand(args: string[] = [], options: RunTuiCommandO
   if (args.includes("--version") || args.includes("-v")) {
     io.stdout.write(`${options.version ?? pkg.version}\n`)
     return 0
+  }
+
+  if (args.includes("--probe-tui-runtime")) {
+    return runAndWrite((options.probeTuiRuntime ?? defaultProbeTuiRuntime)(), io)
   }
 
   const daemonOptions = readDaemonCommandOptions(args, options.env ?? process.env)

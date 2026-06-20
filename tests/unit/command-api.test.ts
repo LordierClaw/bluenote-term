@@ -327,6 +327,28 @@ test("bluenote-term command API entrypoint reports a Bun requirement instead of 
   assert.equal(result.exitCode, 0, new TextDecoder().decode(result.stderr))
 })
 
+test("published bluenote-term bin reports actionable packaged-runtime guidance instead of a Bun requirement", () => {
+  const buildResult = Bun.spawnSync(["bun", "run", "./scripts/build-package-runtime.ts"], {
+    cwd: process.cwd(),
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+
+  assert.equal(buildResult.exitCode, 0, new TextDecoder().decode(buildResult.stderr))
+
+  const result = Bun.spawnSync(["npx", "-y", "node@24", "./packages/term/bin/bluenote-term.js", "--probe-tui-runtime"], {
+    cwd: process.cwd(),
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+
+  const stderr = new TextDecoder().decode(result.stderr)
+  assert.equal(result.exitCode, 1)
+  assert.equal(new TextDecoder().decode(result.stdout), "")
+  assert.match(stderr, /cannot launch the full TUI on plain Node\.js/i)
+  assert.doesNotMatch(stderr, /requires Bun/i)
+})
+
 test("runTuiCommand reports daemon check failures without printing the token", async () => {
   const bufferedIO = createBufferedIO()
   let calls = 0

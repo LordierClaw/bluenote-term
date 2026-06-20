@@ -20,7 +20,6 @@ For the full BlueNote app, install the distribution CLI first, then install this
 
 ```sh
 npm install -g @lordierclaw/bluenote
-npm install -g @lordierclaw/bluenote-term
 bluenote doctor
 ```
 
@@ -33,7 +32,7 @@ bluenote tui
 
 The distribution README is the canonical guide for full app install, uninstall, PATH setup, and optional client verification.
 
-The published `@lordierclaw/bluenote-term` npm package ships a Node-runnable terminal client wrapper for distribution-driven installs. Bun is still required for source execution, local development, and direct repo scripts.
+The published `@lordierclaw/bluenote-term` npm package exposes the public command API plus daemon/runtime probing helpers. For end-user full-screen TUI usage, prefer the built terminal artifact managed by the distribution installer. Bun is still required for source execution, local development, and direct repo scripts.
 
 ## Local development
 
