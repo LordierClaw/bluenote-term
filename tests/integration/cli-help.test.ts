@@ -9,21 +9,19 @@ const workspaceRoot = path.resolve(import.meta.dir, "../..")
 const packageJsonPath = path.join(workspaceRoot, "package.json")
 const readWorkspaceFile = (relativePath: string) => readFile(path.join(workspaceRoot, relativePath), "utf8")
 
-test("bn --help prints the TUI-only terminal command surface", () => {
+test("bn --help prints the full CLI surface", () => {
   const result = runBinCli(["--help"])
 
   assert.equal(result.exitCode, 0)
   assert.equal(result.stderr.toString(), "")
 
   const output = result.stdout.toString()
-  assert.match(output, /Usage: bluenote-term \[options\]/)
-  assert.match(output, /Launch the BlueNote terminal UI workspace/)
-  assert.match(output, /bluenote <command>/)
-  assert.match(output, /--check-daemon/)
-  assert.match(output, /--probe-tui-runtime/)
+  assert.match(output, /BlueNote v0\.1\.0/)
+  assert.match(output, /Usage:/)
+  assert.match(output, /bn <command> \[options\]/)
 
-  for (const command of ["new", "list", "archive", "delete", "rebuild", "ai"]) {
-    assert.doesNotMatch(output, new RegExp(`(^|\\n)\\s*${command}(\\s|$)`, "m"))
+  for (const command of ["init", "new", "list", "show", "search", "edit", "archive", "delete", "rebuild", "tui", "ai"]) {
+    assert.match(output, new RegExp(`(^|\\n)\\s*${command}(\\s|$)`, "m"))
   }
   assert.doesNotMatch(output, /(^|\n)\s*migrate(\s|$)/m)
 })
@@ -250,15 +248,19 @@ test("project verification commands cover CLI plus import-only OpenTUI checks", 
   assert.doesNotMatch(packageJson.scripts?.check ?? "", /smoke:opentui:interactive|qa:visual:tui/)
 })
 
-test("bin rejects legacy note commands with migration guidance", async () => {
+test("bin still runs the legacy full CLI note commands used by local release builds", async () => {
   const harness = await createManagedRootHarness("bluenote-smoke-cli-")
 
   try {
-    const result = harness.runBin(["new"])
+    const initResult = harness.runBin(["init"])
+    assert.equal(initResult.exitCode, 0)
+    assert.equal(initResult.stderr, "")
+    assert.match(initResult.stdout, /Initialized BlueNote root:/)
 
-    assert.equal(result.exitCode, 1)
-    assert.equal(result.stdout, "")
-    assert.equal(result.stderr, "Use bluenote new; bluenote-term is TUI-only.\n")
+    const result = harness.runBin(["new", "Release build note body"])
+    assert.equal(result.exitCode, 0)
+    assert.equal(result.stderr, "")
+    assert.match(result.stdout, /^Created note\nKey: .+\nPath: draft\/.+\.md\n$/)
   } finally {
     await harness.cleanup()
   }

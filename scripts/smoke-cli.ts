@@ -12,21 +12,22 @@ try {
   const helpResult = runBinCli(["--help"], { rootPath: managedRoot })
   assert.equal(helpResult.exitCode, 0)
   assert.equal(helpResult.stderr, "")
-  assert.match(helpResult.stdout, /Usage: bluenote-term \[options\]/)
-  assert.match(helpResult.stdout, /Launch the BlueNote terminal UI workspace/)
-  assert.match(helpResult.stdout, /bluenote <command>/)
-  assert.match(helpResult.stdout, /--check-daemon/)
-  assert.match(helpResult.stdout, /--probe-tui-runtime/)
-  assert.doesNotMatch(helpResult.stdout, /(^|\n)\s*(new|list|archive|delete|rebuild|ai)(\s|$)/m)
+  assert.match(helpResult.stdout, /BlueNote v0\.1\.0/)
+  assert.match(helpResult.stdout, /bn <command> \[options\]/)
+  assert.match(helpResult.stdout, /\n  init\s+Initialize the managed BlueNote root/)
+  assert.match(helpResult.stdout, /\n  new\s+\[--title <title>\] \[--path note\/<folder>\] \[--clipboard\] <body>/)
 
-  for (const command of ["init", "new", "list", "show", "search", "edit", "archive", "delete", "rebuild", "ai"]) {
-    const result = runBinCli([command], { rootPath: managedRoot })
-    assert.equal(result.exitCode, 1)
-    assert.equal(result.stdout, "")
-    assert.equal(result.stderr, `Use bluenote ${command}; bluenote-term is TUI-only.\n`)
-  }
+  const initResult = runBinCli(["init"], { rootPath: managedRoot })
+  assert.equal(initResult.exitCode, 0)
+  assert.equal(initResult.stderr, "")
+  assert.match(initResult.stdout, /Initialized BlueNote root:/)
 
-  console.log("TUI-only CLI smoke check passed.")
+  const newResult = runBinCli(["new", "Smoke CLI body"], { rootPath: managedRoot })
+  assert.equal(newResult.exitCode, 0)
+  assert.equal(newResult.stderr, "")
+  assert.match(newResult.stdout, /^Created note\nKey: .+\nPath: draft\/.+\.md\n$/)
+
+  console.log("Full CLI smoke check passed.")
 } finally {
   if (shouldCleanup) {
     await rm(managedRoot, { recursive: true, force: true })

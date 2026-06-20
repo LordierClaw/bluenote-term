@@ -68,6 +68,30 @@ test("internal bin command rejects legacy note commands with migration guidance"
   assert.equal(bufferedIO.stderr, "Use bluenote new; bluenote-term is TUI-only.\n")
 })
 
+test("internal bin probe uses the probe handler without launching the TUI", async () => {
+  const bufferedIO = createBufferedIO()
+  let tuiCalls = 0
+  let probeCalls = 0
+
+  const exitCode = await runInternalCommand(["--probe-tui-runtime"], {
+    io: bufferedIO.io,
+    tuiRunner: async () => {
+      tuiCalls += 1
+      return { exitCode: 1, stdout: "", stderr: "should not launch\n" }
+    },
+    probeTuiRuntime: async () => {
+      probeCalls += 1
+      return { exitCode: 0, stdout: "probe ok\n", stderr: "" }
+    },
+  })
+
+  assert.equal(exitCode, 0)
+  assert.equal(tuiCalls, 0)
+  assert.equal(probeCalls, 1)
+  assert.equal(bufferedIO.stdout, "probe ok\n")
+  assert.equal(bufferedIO.stderr, "")
+})
+
 test("public command typings advertise only the TUI command API", async () => {
   const typings = await Bun.file("packages/term/src/command.d.ts").text()
 

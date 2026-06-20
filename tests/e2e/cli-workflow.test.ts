@@ -15,20 +15,20 @@ test("CLI help describes the Phase 7 note layout for new notes", () => {
   assert.match(result.stdout, /Create a draft from body text or clipboard/)
 })
 
-test("real bin is TUI-only and rejects legacy note commands", async () => {
+test("real bin keeps the full CLI help and note command flow", async () => {
   const harness = await createManagedRootHarness("bluenote-cli-bin-phase7-")
 
   try {
     const help = harness.runBin(["--help"])
     assert.equal(help.exitCode, 0)
     assert.equal(help.stderr, "")
-    assert.match(help.stdout, /Usage: bluenote-term \[options\]/)
-    assert.doesNotMatch(help.stdout, /(^|\n)\s*new(\s|$)/m)
+    assert.match(help.stdout, /BlueNote v0\.1\.0/)
+    assert.match(help.stdout, /\n  new\s+\[--title <title>\]/)
 
-    const legacy = harness.runBin(["new"])
-    assert.equal(legacy.exitCode, 1)
-    assert.equal(legacy.stdout, "")
-    assert.equal(legacy.stderr, "Use bluenote new; bluenote-term is TUI-only.\n")
+    const created = harness.runBin(["new", "Root bin draft body"])
+    assert.equal(created.exitCode, 0)
+    assert.equal(created.stderr, "")
+    assert.match(created.stdout, /^Created note\nKey: .+\nPath: draft\/.+\.md\n$/)
   } finally {
     await harness.cleanup()
   }

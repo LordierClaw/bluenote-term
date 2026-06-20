@@ -61,7 +61,6 @@ const termOwnedFiles = [
 ]
 
 const rootCompatibilityShims = [
-  "bin/bn.ts",
   "src/cli/entry.ts",
   "src/cli/ai.ts",
   "src/core/edit-note.ts",
@@ -82,6 +81,10 @@ const rootCompatibilityShims = [
   "src/tui/adapters/editor-buffer-adapter.ts",
   "src/tui/adapters/note-manager-adapter.ts",
   "src/tui/adapters/search-everything-adapter.ts",
+]
+
+const rootCliBridgeFiles = [
+  "bin/bn.ts",
 ]
 
 const termBusinessIntegrationFiles = [
@@ -161,6 +164,22 @@ describe("package boundary enforcement", () => {
       const source = await read(file)
       if (!source.includes("packages/term")) {
         violations.push(`${file}: does not shim to packages/term`)
+      }
+    }
+
+    assert.deepEqual(violations, [])
+  })
+
+  test("root CLI bridge files stay on the repository-owned full CLI entrypoint", async () => {
+    const violations: string[] = []
+
+    for (const file of rootCliBridgeFiles) {
+      const source = await read(file)
+      if (!source.includes("src/cli/entry") || !source.includes("package.json")) {
+        violations.push(`${file}: does not route through the root CLI entrypoint`)
+      }
+      if (source.includes("packages/term/bin/bn")) {
+        violations.push(`${file}: still routes through the TUI-only package bin`)
       }
     }
 
