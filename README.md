@@ -72,8 +72,8 @@ npm run check
 cd ../bluenote-term
 bun install
 bun run check
-bun run ./bin/bn.ts --help
-bun run ./bin/bn.ts
+bun run ./packages/term/bin/bn.ts --help
+bun run ./packages/term/bin/bn.ts
 
 cd ../bluenote
 BLUENOTE_ROOT=/tmp/bluenote-dev node dist/bin.js init
@@ -100,9 +100,9 @@ bun run build:release
 Common local TUI command examples:
 
 ```sh
-bun run ./bin/bn.ts --help
-bun run ./bin/bn.ts
-bun run ./bin/bn.ts --check-daemon --daemon-url http://127.0.0.1:12345
+bun run ./packages/term/bin/bn.ts --help
+bun run ./packages/term/bin/bn.ts
+bun run ./packages/term/bin/bn.ts --check-daemon --daemon-url http://127.0.0.1:12345
 ```
 
 TUI launcher surface:

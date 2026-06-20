@@ -1,6 +1,7 @@
 import { test } from "bun:test"
 import assert from "node:assert/strict"
 
+import termPackage from "../../packages/term/package.json"
 import { createManagedRootHarness } from "../helpers/cli"
 
 test("real bin/bn.ts entrypoint keeps the full CLI surface for release artifacts", async () => {
@@ -10,7 +11,7 @@ test("real bin/bn.ts entrypoint keeps the full CLI surface for release artifacts
     const helpResult = harness.runBin(["--help"])
     assert.equal(helpResult.exitCode, 0)
     assert.equal(helpResult.stderr, "")
-    assert.match(helpResult.stdout, /BlueNote v0\.1\.0/)
+    assert.match(helpResult.stdout, new RegExp(`BlueNote v${termPackage.version.replace(/\./g, "\\.")}`))
     assert.match(helpResult.stdout, /Usage:/)
     assert.match(helpResult.stdout, /bn <command> \[options\]/)
     assert.match(helpResult.stdout, /init\s+Initialize the managed BlueNote root/)

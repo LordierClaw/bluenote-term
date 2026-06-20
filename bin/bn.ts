@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-import pkg from "../package.json"
+import pkg from "../packages/term/package.json"
 import { runCliAsync } from "../src/cli/entry"
 
 const result = await runCliAsync(process.argv.slice(2), pkg.version)

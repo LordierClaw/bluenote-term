@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 import path from "node:path"
 import { readFile } from "node:fs/promises"
 
+import termPackage from "../../packages/term/package.json"
 import { createManagedRootHarness, runBinCli } from "../helpers/cli"
 
 const workspaceRoot = path.resolve(import.meta.dir, "../..")
@@ -16,7 +17,7 @@ test("bn --help prints the full CLI surface", () => {
   assert.equal(result.stderr.toString(), "")
 
   const output = result.stdout.toString()
-  assert.match(output, /BlueNote v0\.1\.0/)
+  assert.match(output, new RegExp(`BlueNote v${termPackage.version.replace(/\./g, "\\.")}`))
   assert.match(output, /Usage:/)
   assert.match(output, /bn <command> \[options\]/)
 

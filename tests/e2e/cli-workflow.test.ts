@@ -3,6 +3,7 @@ import assert from "node:assert/strict"
 import path from "node:path"
 import { access, readFile } from "node:fs/promises"
 
+import termPackage from "../../packages/term/package.json"
 import { createManagedRootHarness, runCli, type CliRunResult } from "../helpers/cli"
 import { noteMarkdown, timestampFieldPattern } from "../helpers/note-fixtures"
 
@@ -22,7 +23,7 @@ test("real bin keeps the full CLI help and note command flow", async () => {
     const help = harness.runBin(["--help"])
     assert.equal(help.exitCode, 0)
     assert.equal(help.stderr, "")
-    assert.match(help.stdout, /BlueNote v0\.1\.0/)
+    assert.match(help.stdout, new RegExp(`BlueNote v${termPackage.version.replace(/\./g, "\\.")}`))
     assert.match(help.stdout, /\n  new\s+\[--title <title>\]/)
 
     const created = harness.runBin(["new", "Root bin draft body"])
