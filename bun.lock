@@ -18,7 +18,7 @@
     },
     "packages/term": {
       "name": "@lordierclaw/bluenote-term",
-      "version": "0.4.4",
+      "version": "0.4.5",
       "bin": {
         "bluenote-term": "./bin/bluenote-term.js",
       },
