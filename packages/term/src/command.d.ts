@@ -12,12 +12,9 @@ export interface TuiCommandIO {
 export interface RunTuiCommandOptions {
   io?: TuiCommandIO
   version?: string
-  cliRunner?: (args: string[], version: string) => Promise<CliResult>
   tuiRunner?: () => Promise<CliResult>
   probeTuiRuntime?: () => Promise<CliResult>
   env?: Record<string, string | undefined>
 }
 
 export declare function runTuiCommand(args?: string[], options?: RunTuiCommandOptions): Promise<number>
-
-export declare function runCommand(args: string[], options?: RunTuiCommandOptions): Promise<number>

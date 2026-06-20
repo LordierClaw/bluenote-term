@@ -5,6 +5,8 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 
 import { runTuiCommand } from "../dist/command.js"
 
+const NOTE_COMMANDS = new Set(["init", "new", "list", "show", "search", "edit", "archive", "delete", "rebuild", "ai"])
+
 function resolveBuiltTuiEntrypoint() {
   const binDir = path.dirname(fileURLToPath(import.meta.url))
   const distDir = path.resolve(binDir, "..", "dist")
@@ -49,6 +51,11 @@ async function probeBuiltTuiRuntime() {
 }
 
 const args = process.argv.slice(2)
+if (NOTE_COMMANDS.has(args[0])) {
+  process.stderr.write(`Use bluenote ${args[0]}; bluenote-term is TUI-only.\n`)
+  process.exit(1)
+}
+
 const exitCode = await runTuiCommand(args, {
   tuiRunner: runBuiltTui,
   probeTuiRuntime: probeBuiltTuiRuntime,

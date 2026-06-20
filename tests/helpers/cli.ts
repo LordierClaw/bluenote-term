@@ -3,6 +3,7 @@ import path from "node:path"
 import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises"
 
 import { MANAGED_ROOT_LAYOUT } from "../../src/storage/root-layout"
+import { escapeRegExp } from "./regexp"
 
 const workspaceRoot = path.resolve(import.meta.dir, "../..")
 const cliPath = path.join(workspaceRoot, "tests", "helpers", "run-cli.ts")
@@ -166,7 +167,7 @@ export async function createManagedRootHarness(prefix = "bluenote-test-"): Promi
       return rm(rootPath, { recursive: true, force: true })
     },
     escapeForRegExp(value) {
-      return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      return escapeRegExp(value)
     },
   }
 }

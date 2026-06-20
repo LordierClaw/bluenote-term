@@ -14,7 +14,6 @@ export interface TuiCommandIO {
 export interface RunTuiCommandOptions {
   io?: TuiCommandIO
   version?: string
-  cliRunner?: (args: string[], version: string) => Promise<CliResult>
   tuiRunner?: () => Promise<CliResult>
   probeTuiRuntime?: () => Promise<CliResult>
   env?: Record<string, string | undefined>
@@ -22,9 +21,10 @@ export interface RunTuiCommandOptions {
 
 function formatTuiHelp(): string {
   return [
-    "Usage: bluenote tui [options]",
+    "Usage: bluenote-term [options]",
     "",
     "Launch the BlueNote terminal UI workspace.",
+    "Note-management commands are available from the distribution CLI: bluenote <command>.",
     "",
     "Options:",
     "  --daemon-url <url>     BlueNote daemon URL (default: BLUENOTE_DAEMON_URL)",
@@ -36,26 +36,17 @@ function formatTuiHelp(): string {
   ].join("\n") + "\n"
 }
 
-function bunRequiredResult(surface: "CLI" | "TUI"): CliResult {
+function bunRequiredResult(): CliResult {
   return {
     exitCode: 1,
     stdout: "",
-    stderr: `The default bluenote-term ${surface} runner requires Bun. Pass ${surface === "CLI" ? "cliRunner" : "tuiRunner"} when using run${surface === "CLI" ? "Command" : "TuiCommand"} from Node.\n`,
+    stderr: "The default bluenote-term TUI runner requires Bun. Pass tuiRunner when using runTuiCommand from Node.\n",
   }
-}
-
-async function runDefaultCli(args: string[], version: string): Promise<CliResult> {
-  if (!("Bun" in globalThis)) {
-    return bunRequiredResult("CLI")
-  }
-
-  const module = await import("./cli/entry")
-  return module.runCliAsync(args, version)
 }
 
 async function runDefaultTui(): Promise<CliResult> {
   if (!("Bun" in globalThis)) {
-    return bunRequiredResult("TUI")
+    return bunRequiredResult()
   }
 
   const module = await import("./tui/app")
@@ -214,12 +205,4 @@ export async function runTuiCommand(args: string[] = [], options: RunTuiCommandO
   return runAndWrite((options.tuiRunner ?? runDefaultTui)(), io)
 }
 
-export async function runCommand(args: string[], options: RunTuiCommandOptions = {}): Promise<number> {
-  const io = options.io ?? process
-  const version = options.version ?? pkg.version
-  const result = args[0] === "tui"
-    ? (options.tuiRunner ?? runDefaultTui)()
-    : (options.cliRunner ?? runDefaultCli)(args, version)
 
-  return runAndWrite(result, io)
-}

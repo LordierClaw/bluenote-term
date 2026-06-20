@@ -9,6 +9,7 @@ import termPackage from "../../packages/term/package.json"
 const releaseScript = readFileSync(path.resolve("scripts", "package-release.ts"), "utf8")
 const readme = readFileSync(path.resolve("README.md"), "utf8")
 const developmentGuide = readFileSync(path.resolve("DEVELOPMENT.md"), "utf8")
+const rootBin = readFileSync(path.resolve("bin", "bn.ts"), "utf8")
 
 test("terminal package uses the approved public package name and stable bin", () => {
   assert.equal(termPackage.name, "@lordierclaw/bluenote-term")
@@ -25,6 +26,9 @@ test("terminal package uses the approved public package name and stable bin", ()
 
 test("terminal docs use the approved scoped package name for install and imports", () => {
   assert.match(readme, /built terminal artifact managed by the distribution installer/)
+  assert.match(readme, /bun run \.\/packages\/term\/bin\/bn\.ts --help/)
+  assert.match(readme, /bun run \.\/packages\/term\/bin\/bn\.ts --check-daemon --daemon-url http:\/\/127\.0\.0\.1:12345/)
+  assert.doesNotMatch(readme, /bun run \.\/bin\/bn\.ts --check-daemon/)
   assert.doesNotMatch(readme, /npm install -g bluenote-term\b/)
   assert.match(developmentGuide, /from "@lordierclaw\/bluenote-term"/)
   assert.match(developmentGuide, /`@lordierclaw\/bluenote-term` and `@lordierclaw\/bluenote-term\/command`/)
@@ -32,7 +36,7 @@ test("terminal docs use the approved scoped package name for install and imports
 })
 
 test("terminal package artifact is restricted to runtime package contents", () => {
-  assert.deepEqual(termPackage.files, ["bin", "dist", "src/command.d.ts"])
+  assert.deepEqual(termPackage.files, ["bin/bluenote-term.js", "dist", "src/command.d.ts"])
   assert.equal(termPackage.exports["."].import, "./dist/command.js")
   assert.equal(termPackage.exports["./command"].import, "./dist/command.js")
 })
@@ -49,6 +53,11 @@ test("published terminal bin is a Node wrapper over the built runtime package", 
 
 test("release packaging keeps built no-Bun runtime artifacts for non-technical installs", () => {
   assert.equal(rootPackage.scripts["build:release"], "bun run ./scripts/package-release.ts")
+  assert.match(rootBin, /from "\.\.\/packages\/term\/package\.json"/)
+  assert.match(rootBin, /from "\.\.\/src\/cli\/entry"/)
+  assert.match(rootBin, /from "\.\.\/src\/tui\/app"/)
+  assert.match(rootBin, /args\[0\] === "tui"/)
+  assert.match(rootBin, /await runTuiCliInteractive\(\)/)
   assert.match(releaseScript, /platformId: "windows-x64" \| "linux-x64"/)
   assert.match(releaseScript, /executableName: "bn\.exe" \| "bn"/)
   assert.match(releaseScript, /bun", \["build", "\.\/bin\/bn\.ts", "--compile"/)
