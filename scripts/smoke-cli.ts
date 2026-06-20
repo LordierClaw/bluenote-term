@@ -4,6 +4,7 @@ import path from "node:path"
 import { mkdtemp, rm } from "node:fs/promises"
 
 import termPackage from "../packages/term/package.json"
+import { escapeRegExp } from "../tests/helpers/regexp"
 import { runBinCli } from "../tests/helpers/cli"
 
 const managedRoot = process.env.BLUENOTE_ROOT ?? (await mkdtemp(path.join(os.tmpdir(), "bluenote-smoke-cli-")))
@@ -13,7 +14,7 @@ try {
   const helpResult = runBinCli(["--help"], { rootPath: managedRoot })
   assert.equal(helpResult.exitCode, 0)
   assert.equal(helpResult.stderr, "")
-  assert.match(helpResult.stdout, new RegExp(`BlueNote v${termPackage.version.replace(/\./g, "\\.")}`))
+  assert.match(helpResult.stdout, new RegExp(`BlueNote v${escapeRegExp(termPackage.version)}`))
   assert.match(helpResult.stdout, /bn <command> \[options\]/)
   assert.match(helpResult.stdout, /\n  init\s+Initialize the managed BlueNote root/)
   assert.match(helpResult.stdout, /\n  new\s+\[--title <title>\] \[--path note\/<folder>\] \[--clipboard\] <body>/)

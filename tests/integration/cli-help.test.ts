@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises"
 
 import termPackage from "../../packages/term/package.json"
 import { createManagedRootHarness, runBinCli } from "../helpers/cli"
+import { escapeRegExp } from "../helpers/regexp"
 
 const workspaceRoot = path.resolve(import.meta.dir, "../..")
 const packageJsonPath = path.join(workspaceRoot, "package.json")
@@ -17,7 +18,7 @@ test("bn --help prints the full CLI surface", () => {
   assert.equal(result.stderr.toString(), "")
 
   const output = result.stdout.toString()
-  assert.match(output, new RegExp(`BlueNote v${termPackage.version.replace(/\./g, "\\.")}`))
+  assert.match(output, new RegExp(`BlueNote v${escapeRegExp(termPackage.version)}`))
   assert.match(output, /Usage:/)
   assert.match(output, /bn <command> \[options\]/)
 
