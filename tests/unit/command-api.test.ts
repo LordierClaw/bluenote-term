@@ -2,7 +2,8 @@ import { test } from "bun:test"
 import assert from "node:assert/strict"
 
 import termPackage from "../../packages/term/package.json"
-import { runCommand, runTuiCommand, type RunTuiCommandOptions } from "../../packages/term/src/command"
+import { runTuiCommand, type RunTuiCommandOptions } from "../../packages/term/src/command"
+import { runInternalCommand } from "../../packages/term/src/internal-command"
 
 function createBufferedIO(): { stdout: string; stderr: string; io: NonNullable<RunTuiCommandOptions["io"]> } {
   const buffer = { stdout: "", stderr: "" }
@@ -55,17 +56,24 @@ test("bluenote-term command API entrypoint is importable from Node", () => {
   assert.equal(result.exitCode, 0, new TextDecoder().decode(result.stderr))
 })
 
-test("runCommand exposes the full reusable terminal command API", async () => {
+test("internal bin command rejects legacy note commands with migration guidance", async () => {
   const bufferedIO = createBufferedIO()
 
-  const exitCode = await runCommand(["--version"], {
+  const exitCode = await runInternalCommand(["new"], {
     io: bufferedIO.io,
-    version: "9.8.7-test",
   })
 
-  assert.equal(exitCode, 0)
-  assert.equal(bufferedIO.stdout, "9.8.7-test\n")
-  assert.equal(bufferedIO.stderr, "")
+  assert.equal(exitCode, 1)
+  assert.equal(bufferedIO.stdout, "")
+  assert.equal(bufferedIO.stderr, "Use bluenote new; bluenote-term is TUI-only.\n")
+})
+
+test("public command typings advertise only the TUI command API", async () => {
+  const typings = await Bun.file("packages/term/src/command.d.ts").text()
+
+  assert.match(typings, /runTuiCommand/)
+  assert.doesNotMatch(typings, /runCommand/)
+  assert.doesNotMatch(typings, /cliRunner/)
 })
 
 test("runTuiCommand prints version without launching the full-screen TUI", async () => {
@@ -101,8 +109,11 @@ test("runTuiCommand prints help without launching the full-screen TUI", async ()
 
   assert.equal(calls, 0)
   assert.equal(exitCode, 0)
-  assert.match(bufferedIO.stdout, /Usage: bluenote tui \[options\]/)
+  assert.match(bufferedIO.stdout, /Usage: bluenote-term \[options\]/)
   assert.match(bufferedIO.stdout, /--check-daemon/)
+  for (const command of ["new", "list", "archive", "delete", "rebuild", "ai"]) {
+    assert.doesNotMatch(bufferedIO.stdout, new RegExp(`(^|\\n)\\s*${command}(\\s|$)`, "m"))
+  }
   assert.equal(bufferedIO.stderr, "")
 })
 
@@ -280,8 +291,15 @@ test("runTuiCommand ignores a token-only environment for normal launches", async
 })
 
 test("bluenote-term command API entrypoint is importable from Node for TUI help", () => {
+  const buildResult = Bun.spawnSync(["bun", "run", "./scripts/build-package-runtime.ts"], {
+    cwd: process.cwd(),
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  assert.equal(buildResult.exitCode, 0, new TextDecoder().decode(buildResult.stderr))
+
   const script = `
-    import { runTuiCommand } from "./packages/term/src/command.js";
+    import { runTuiCommand } from "./packages/term/dist/command.js";
     let stdout = "";
     let stderr = "";
     const exitCode = await runTuiCommand(["--help"], {
@@ -291,7 +309,7 @@ test("bluenote-term command API entrypoint is importable from Node for TUI help"
       },
     });
     if (exitCode !== 0) process.exit(1);
-    if (!stdout.includes("Usage: bluenote tui [options]")) process.exit(1);
+    if (!stdout.includes("Usage: bluenote-term [options]")) process.exit(1);
     if (stderr !== "") process.exit(1);
   `
   const result = Bun.spawnSync(["node", "--input-type=module", "--eval", script], {
@@ -373,11 +391,11 @@ test("runTuiCommand reports daemon check failures without printing the token", a
   assert.doesNotMatch(bufferedIO.stderr, /secret-token/)
 })
 
-test("runCommand preserves the existing bin tui subcommand path", async () => {
+test("internal bin command preserves the existing bin tui subcommand path", async () => {
   const bufferedIO = createBufferedIO()
   let calls = 0
 
-  const exitCode = await runCommand(["tui"], {
+  const exitCode = await runInternalCommand(["tui"], {
     io: bufferedIO.io,
     tuiRunner: async () => {
       calls += 1

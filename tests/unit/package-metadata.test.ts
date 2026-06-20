@@ -32,7 +32,7 @@ test("terminal docs use the approved scoped package name for install and imports
 })
 
 test("terminal package artifact is restricted to runtime package contents", () => {
-  assert.deepEqual(termPackage.files, ["bin", "dist", "src/command.d.ts"])
+  assert.deepEqual(termPackage.files, ["bin/bluenote-term.js", "dist", "src/command.d.ts"])
   assert.equal(termPackage.exports["."].import, "./dist/command.js")
   assert.equal(termPackage.exports["./command"].import, "./dist/command.js")
 })

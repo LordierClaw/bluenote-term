@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
-import { runCommand } from "../src/command"
+import { runInternalCommand } from "../src/internal-command"
 
 const args = process.argv.slice(2)
-const exitCode = await runCommand(args)
+const exitCode = await runInternalCommand(args)
 
 process.exit(exitCode)

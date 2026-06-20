@@ -3,27 +3,29 @@ import assert from "node:assert/strict"
 import path from "node:path"
 import { readFile } from "node:fs/promises"
 
-import { assertManagedRootLayout, createManagedRootHarness, runCli } from "../helpers/cli"
+import { createManagedRootHarness, runBinCli } from "../helpers/cli"
 
 const workspaceRoot = path.resolve(import.meta.dir, "../..")
 const packageJsonPath = path.join(workspaceRoot, "package.json")
 const readWorkspaceFile = (relativePath: string) => readFile(path.join(workspaceRoot, relativePath), "utf8")
 
-test("bn --help prints the visible command surface without removed command or release-stage wording", () => {
-  const result = runCli(["--help"])
+test("bn --help prints the TUI-only terminal command surface", () => {
+  const result = runBinCli(["--help"])
 
   assert.equal(result.exitCode, 0)
   assert.equal(result.stderr.toString(), "")
 
   const output = result.stdout.toString()
-  for (const command of ["init", "new", "list", "show", "search", "edit", "archive", "delete", "rebuild", "tui", "ai"]) {
-    assert.match(output, new RegExp(`(^|\\n)  ${command}(\\s|$)`, "m"))
-  }
-  assert.doesNotMatch(output, /(^|\n)  migrate(\s|$)/m)
+  assert.match(output, /Usage: bluenote-term \[options\]/)
+  assert.match(output, /Launch the BlueNote terminal UI workspace/)
+  assert.match(output, /bluenote <command>/)
+  assert.match(output, /--check-daemon/)
+  assert.match(output, /--probe-tui-runtime/)
 
-  assert.match(output, /tui\s+Launch the terminal UI workspace/)
-  assert.match(output, /ai\s+Configure and run opt-in AI description generation/)
-  assert.doesNotMatch(output, new RegExp("completion|Pha" + "se\\s+[0-9]", "i"))
+  for (const command of ["new", "list", "archive", "delete", "rebuild", "ai"]) {
+    assert.doesNotMatch(output, new RegExp(`(^|\\n)\\s*${command}(\\s|$)`, "m"))
+  }
+  assert.doesNotMatch(output, /(^|\n)\s*migrate(\s|$)/m)
 })
 
 test("bn ai help and config commands describe opt-in provider behavior without network calls", async () => {
@@ -71,14 +73,14 @@ test("current docs document the Phase 6 opt-in AI description workflow", async (
     readWorkspaceFile("docs/plans/2026-06-05-phase-6-ai-suggestion-consolidated-plan.md"),
   ])
 
-  assert.match(readme, /`ai config set --base-url <url> --api-key <key> --model <model>`/)
-  assert.match(readme, /`ai config set --provider codex --model <model>`/)
-  assert.match(readme, /`ai codex auth login`/)
-  assert.match(readme, /`ai codex auth status`/)
-  assert.match(readme, /`ai codex auth logout`/)
-  assert.match(readme, /`ai describe <key\|path>`/)
-  assert.match(readme, /`ai queue`/)
-  assert.match(readme, /`ai process-queue \[--limit <n>\]`/)
+  assert.match(readme, /`bluenote ai config set --base-url <url> --api-key <key> --model <model>`/)
+  assert.match(readme, /`bluenote ai config set --provider codex --model <model>`/)
+  assert.match(readme, /`bluenote ai codex auth login`/)
+  assert.match(readme, /`bluenote ai codex auth status`/)
+  assert.match(readme, /`bluenote ai codex auth logout`/)
+  assert.match(readme, /`bluenote ai describe <key\|path>`/)
+  assert.match(readme, /`bluenote ai queue`/)
+  assert.match(readme, /`bluenote ai process-queue \[--limit <n>\]`/)
   assert.match(readme, /API key is stored in plaintext under `\.data\/ai\/config\.json`/)
   assert.match(readme, /Codex auth state is stored root-locally at `\.data\/ai\/codex-auth\.json` and is sensitive app state/)
   assert.match(readme, /Core CLI, storage, search, and TUI workflows continue to work offline/)
@@ -86,26 +88,26 @@ test("current docs document the Phase 6 opt-in AI description workflow", async (
   assert.match(readme, /Manual save and autosave never call the configured provider API/)
   assert.match(readme, /All TUI AI work runs in the background/)
   assert.match(readme, /do not block startup, rendering, typing, editing, navigation, note switching, saves, autosave, or quit/)
-  assert.match(readme, /The TUI never starts `bn ai codex auth login` automatically/)
-  assert.match(readme, /CLI AI commands such as `bn ai describe` and `bn ai process-queue` remain foreground command executions/)
+  assert.match(readme, /The TUI never starts `bluenote ai codex auth login` automatically/)
+  assert.match(readme, /CLI AI commands such as `bluenote ai describe` and `bluenote ai process-queue` remain foreground command executions/)
   assert.match(readme, /OpenAI-compatible API-key providers remain supported/)
-  assert.match(readme, /Codex provider now supports root-local `bn ai codex auth login`, `bn ai codex auth status`, and `bn ai codex auth logout`/)
+  assert.match(readme, /Codex provider now supports root-local `bluenote ai codex auth login`, `bluenote ai codex auth status`, and `bluenote ai codex auth logout`/)
   assert.doesNotMatch(readme, /Codex generation is intentionally setup-required|auth\/manual validation are separate setup steps|prepared for later manual setup|Show Codex auth setup status without running real auth/)
   assert.match(readme, /Pending AI work is durable in `\.data\/ai\/queue\.json` and is recovered on TUI startup/)
   assert.match(readme, /Freshness is tracked with `ai\.description\.lastProcessedAt` timestamp metadata in the note sidecar/)
   assert.match(readme, /Generated descriptions must be one short sentence under 10 words/)
   assert.match(readme, /10-second editor idle timer/)
   assert.match(readme, /5-second manager idle timer/)
-  assert.match(readme, /Create a draft, or pass --path note\/<folder> with --title to create a normal note/)
-  assert.match(readme, /in an existing folder under note\//)
-  assert.match(readme, /mkdir -p note\/work/)
-  assert.match(readme, /bun run \.\/bin\/bn\.ts new --path note\/work --title "Project notes" "Initial content"/)
-  assert.match(readme, /`new \[--title <title>\] \[--path note\/<folder>\] \[--clipboard\] <body>`/)
+  assert.match(readme, /Normal note-management and foreground AI CLI commands now live in the distribution CLI/)
+  assert.match(readme, /`bluenote new`/)
+  assert.match(readme, /`bluenote list`/)
+  assert.match(readme, /`bluenote ai queue`/)
+  assert.match(readme, /`bluenote ai process-queue`/)
   assert.doesNotMatch(readme, /--content <text>/)
-  assert.match(readme, /`show \[--drafts\|--all\] <key\|path>`/)
-  assert.match(readme, /`edit \[--drafts\|--all\] <key\|path>`/)
-  assert.match(readme, /`archive \[--drafts\|--all\] <key\|path>`/)
-  assert.match(readme, /`delete \[--drafts\|--all\] <key\|path> --force`/)
+  assert.doesNotMatch(readme, /bun run \.\/bin\/bn\.ts (init|new|list|search|show|edit|archive|delete|rebuild|ai)/)
+  assert.doesNotMatch(readme, /`new \[--title <title>\] \[--path note\/<folder>\] \[--clipboard\] <body>`/)
+  assert.doesNotMatch(readme, /`show \[--drafts\|--all\] <key\|path>`/)
+  assert.doesNotMatch(readme, /`edit \[--drafts\|--all\] <key\|path>`/)
   assert.match(readme, /`Ctrl\+PageDown` and `Ctrl\+PageUp` switch to the next or previous note in the same folder/)
   assert.match(readme, /shows a temporary blue index label such as `03\/10` before the title/)
 
@@ -248,17 +250,15 @@ test("project verification commands cover CLI plus import-only OpenTUI checks", 
   assert.doesNotMatch(packageJson.scripts?.check ?? "", /smoke:opentui:interactive|qa:visual:tui/)
 })
 
-test("smoke-cli script exercises --help and init against a temporary root", async () => {
+test("bin rejects legacy note commands with migration guidance", async () => {
   const harness = await createManagedRootHarness("bluenote-smoke-cli-")
 
   try {
-    const result = harness.runScript("scripts/smoke-cli.ts")
+    const result = harness.runBin(["new"])
 
-    assert.equal(result.exitCode, 0)
-    assert.equal(result.stderr, "")
-    assert.match(result.stdout, /CLI smoke check passed\./)
-
-    await assertManagedRootLayout(harness.rootPath)
+    assert.equal(result.exitCode, 1)
+    assert.equal(result.stdout, "")
+    assert.equal(result.stderr, "Use bluenote new; bluenote-term is TUI-only.\n")
   } finally {
     await harness.cleanup()
   }
