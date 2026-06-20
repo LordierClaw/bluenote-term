@@ -12,7 +12,7 @@ const releaseVersionPattern = /^v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/
 
 interface PlatformRelease {
   platformId: "windows-x64" | "linux-x64"
-  executableName: "bn.exe" | "bn"
+  executableName: "bluenote-term.exe" | "bluenote-term"
   archiveNames: readonly [string, ...string[]]
 }
 
@@ -50,7 +50,7 @@ function getPlatformRelease(version: string): PlatformRelease {
   if (platform === "win32" && arch === "x64") {
     return {
       platformId: "windows-x64",
-      executableName: "bn.exe",
+      executableName: "bluenote-term.exe",
       archiveNames: [`bluenote-${version}-windows-x64.zip`],
     }
   }
@@ -58,7 +58,7 @@ function getPlatformRelease(version: string): PlatformRelease {
   if (platform === "linux" && arch === "x64") {
     return {
       platformId: "linux-x64",
-      executableName: "bn",
+      executableName: "bluenote-term",
       archiveNames: [`bluenote-${version}-linux-x64.tar.gz`],
     }
   }
@@ -93,14 +93,14 @@ function writeReleaseReadme(): void {
     `BlueNote portable release
 
 Windows:
-  bn.exe --help
-  bn.exe init
-  bn.exe tui
+  bluenote-term.exe --help
+  bluenote-term.exe --check-daemon --daemon-url http://127.0.0.1:12345
+  bluenote-term.exe
 
 Linux:
-  ./bn --help
-  ./bn init
-  ./bn tui
+  ./bluenote-term --help
+  ./bluenote-term --check-daemon --daemon-url http://127.0.0.1:12345
+  ./bluenote-term
 
 Keep ${sqlWasmFilename} next to the executable. Notes are local files.
 No network install is required after extraction.
