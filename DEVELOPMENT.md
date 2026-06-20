@@ -81,25 +81,21 @@ For shared pre-release testing before the next core tag is cut, prefer a pinned 
 
 Do not use `github:LordierClaw/bluenote-core#main` as the default release dependency. Branch dependencies are not reproducible because the branch target can move.
 
-## Future npm dependency mode
+## Published npm dependency mode
 
-Once `@lordierclaw/bluenote-core` is published to npm, switch the terminal dependency to a semver range appropriate for the release:
+For published packages, default to the latest published `@lordierclaw/bluenote-core` instead of coordinating exact sibling versions:
 
 ```json
-"@lordierclaw/bluenote-core": "^0.1.0"
+"@lordierclaw/bluenote-core": "latest"
 ```
 
-Use semver discipline even while the package is pre-1.0:
-
-- patch: compatible bugfix
-- minor: new backward-compatible API, or breaking API while still in `0.x` if explicitly documented
-- major: stable post-1.0 breaking API
+The terminal package now releases independently. A terminal release does not require synchronized version bumps across `bluenote`, `bluenote-webui`, or `bluenote-core`.
 
 ## Updating the terminal client after core changes
 
 1. Make and verify the change in `../bluenote-core`.
 2. Update `bluenote-core/CHANGELOG.md` and tag the core release when sharing outside local file development.
-3. In `../bluenote-term`, update the dependency to either temporary local file mode (`file:../bluenote-core` / `file:../../../bluenote-core`), a pinned Git commit such as `git+https://github.com/LordierClaw/bluenote-core.git#<pinned-commit-sha>`, or a future npm range such as `^0.1.0`.
+3. In `../bluenote-term`, update the dependency to either temporary local file mode (`file:../bluenote-core` / `file:../../../bluenote-core`), a pinned Git commit such as `git+https://github.com/LordierClaw/bluenote-core.git#<pinned-commit-sha>`, or the published default npm specifier `latest`.
 4. Run `bun install` in `bluenote-term` to update `bun.lock`.
 5. Run `bun run typecheck`, `bun run lint`, `bun test`, `bun run smoke:opentui`, `bun run smoke:cli`, and `bun run check` when practical.
 6. Keep imports stable through `@lordierclaw/bluenote-core`; do not copy core logic back into this repository.
