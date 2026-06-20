@@ -17,7 +17,7 @@ interface PlatformRelease {
 }
 
 function deriveReleaseVersion(): string {
-  const packageJson = JSON.parse(readFileSync(path.resolve("package.json"), "utf8")) as { version: string }
+  const packageJson = JSON.parse(readFileSync(path.resolve("packages", "term", "package.json"), "utf8")) as { version: string }
   const packageVersion = `v${packageJson.version}`
   const explicitVersion = process.env.BLUENOTE_RELEASE_VERSION?.trim()
   if (explicitVersion) {

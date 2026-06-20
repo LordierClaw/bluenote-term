@@ -210,7 +210,13 @@ test("release workflow publishes the packages/term npm package from a published 
   assert.match(releaseWorkflow, /working-directory:\s*packages\/term/)
   assert.match(releaseWorkflow, /npm pack --dry-run --json/)
   assert.match(releaseWorkflow, /npm publish --access public/)
-  assert.match(releaseWorkflow, /permissions:\s*\n\s*actions:\s*read\s*\n\s*contents:\s*read\s*\n\s*id-token:\s*write/)
+  assert.match(releaseWorkflow, /bun run package:release/)
+  assert.match(releaseWorkflow, /gh release upload .*linux-x64\.tar\.gz --clobber/)
+  assert.match(releaseWorkflow, /gh release upload .*windows-x64\.zip --clobber/)
+  assert.match(releaseWorkflow, /build-release-linux/)
+  assert.match(releaseWorkflow, /build-release-windows/)
+  assert.match(releaseWorkflow, /needs:\s*[\r\n\s-]*verify[\r\n\s-]*build-release-linux[\r\n\s-]*build-release-windows/)
+  assert.match(releaseWorkflow, /permissions:\s*\n\s*actions:\s*read\s*\n\s*contents:\s*write\s*\n\s*id-token:\s*write/)
   assert.match(releaseWorkflow, /require\('\.\/packages\/term\/package\.json'\)\.version/)
   assert.match(releaseWorkflow, /RELEASE_TAG=\"v\$\{PACKAGE_VERSION\}\"/)
   assert.match(releaseWorkflow, /Release tag \$\{RELEASE_TAG_NAME\} does not match packages\/term\/package\.json version/)
@@ -221,11 +227,14 @@ test("release workflow publishes the packages/term npm package from a published 
 })
 
 test("package version matches the current release asset version", async () => {
-  const packageJson = JSON.parse(await readFile(packageJsonPath, "utf8")) as {
+  const packageJson = JSON.parse(await readWorkspaceFile("packages/term/package.json")) as {
     version?: string
   }
+  const releaseDocs = await readWorkspaceFile("docs/workflow/releases.md")
 
-  assert.equal(packageJson.version, "0.1.0")
+  assert.match(packageJson.version ?? "", /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/)
+  assert.match(releaseDocs, /bluenote-v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?-windows-x64\.zip/)
+  assert.match(releaseDocs, /bluenote-v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?-linux-x64\.tar\.gz/)
 })
 
 test("project verification commands cover CLI plus import-only OpenTUI checks", async () => {
