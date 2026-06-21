@@ -102,6 +102,16 @@ test("compiled portable launcher help stays TUI-only", () => {
     assert.match(stdout, /Launch the BlueNote terminal UI workspace\./)
     assert.doesNotMatch(stdout, /Usage:\n  bn <command> \[options\]/)
     assert.doesNotMatch(stdout, /init\s+Initialize the managed BlueNote root/)
+
+    const probeResult = Bun.spawnSync([executablePath, "--probe-tui-runtime"], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const probeStdout = new TextDecoder().decode(probeResult.stdout)
+    const probeStderr = new TextDecoder().decode(probeResult.stderr)
+    assert.equal(probeResult.exitCode, 0, probeStderr)
+    assert.match(probeStdout, /BlueNote TUI runtime available\./)
   } finally {
     rmSync(tempRoot, { recursive: true, force: true })
   }

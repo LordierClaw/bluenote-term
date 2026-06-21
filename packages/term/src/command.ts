@@ -54,7 +54,17 @@ async function runDefaultTui(): Promise<CliResult> {
 }
 
 async function defaultProbeTuiRuntime(): Promise<CliResult> {
-  return runDefaultTui()
+  if (!("Bun" in globalThis)) {
+    return bunRequiredResult()
+  }
+
+  try {
+    await import("./tui/app")
+    return { exitCode: 0, stdout: "BlueNote TUI runtime available.\n", stderr: "" }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    return { exitCode: 1, stdout: "", stderr: `Unable to load the BlueNote TUI runtime: ${message}\n` }
+  }
 }
 
 interface DaemonCommandOptions {
