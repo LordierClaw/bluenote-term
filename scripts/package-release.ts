@@ -140,6 +140,7 @@ function validateArchive(release: PlatformRelease, archiveName: string): void {
   const extractedReadme = path.join(extractedPackageRoot, "README.txt")
   const extractedSqlWasm = path.join(extractedPackageRoot, sqlWasmFilename)
 
+
   rmSync(extractedRoot, { recursive: true, force: true })
   mkdirSync(extractedRoot, { recursive: true })
 
@@ -168,8 +169,12 @@ function validateArchive(release: PlatformRelease, archiveName: string): void {
   }
 
   const helpOutput = run(extractedExecutable, ["--help"], { capture: true, cwd: extractedRoot })
-  if (!helpOutput.includes("BlueNote v")) {
-    throw new Error("Release archive validation failed: extracted executable --help output did not contain 'BlueNote v'.")
+  if (!helpOutput.includes("Usage: bluenote-term [options]")) {
+    throw new Error("Release archive validation failed: extracted executable --help output did not contain the TUI-only launcher usage.")
+  }
+
+  if (helpOutput.includes("Usage:\n  bn <command> [options]")) {
+    throw new Error("Release archive validation failed: extracted executable --help output still exposed the legacy note-management CLI.")
   }
 }
 
@@ -184,7 +189,7 @@ function main(): void {
   rmSync(releaseRoot, { recursive: true, force: true })
   mkdirSync(packageRoot, { recursive: true })
 
-  run("bun", ["build", "./bin/bn.ts", "--compile", "--outfile", executablePath])
+  run("bun", ["build", "./packages/term/bin/bluenote-term.ts", "--compile", "--outfile", executablePath])
   copyFileSync(sqlWasmSourcePath, path.join(packageRoot, sqlWasmFilename))
 
   if (process.platform !== "win32") {
@@ -195,8 +200,12 @@ function main(): void {
 
   const helpOutput = run(executablePath, ["--help"], { capture: true })
   process.stdout.write(helpOutput)
-  if (!helpOutput.includes("BlueNote v")) {
-    throw new Error("Packaged executable smoke check failed: --help output did not contain 'BlueNote v'.")
+  if (!helpOutput.includes("Usage: bluenote-term [options]")) {
+    throw new Error("Packaged executable smoke check failed: --help output did not contain the TUI-only launcher usage.")
+  }
+
+  if (helpOutput.includes("Usage:\n  bn <command> [options]")) {
+    throw new Error("Packaged executable smoke check failed: --help output still exposed the legacy note-management CLI.")
   }
 
   archivePackage(release)

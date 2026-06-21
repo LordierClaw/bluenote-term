@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
+import os from "node:os"
 import path from "node:path"
 import { test } from "bun:test"
 import assert from "node:assert/strict"
@@ -60,9 +61,48 @@ test("release packaging keeps built no-Bun runtime artifacts for non-technical i
   assert.match(rootBin, /await runTuiCliInteractive\(\)/)
   assert.match(releaseScript, /platformId: "windows-x64" \| "linux-x64"/)
   assert.match(releaseScript, /executableName: "bluenote-term\.exe" \| "bluenote-term"/)
-  assert.match(releaseScript, /bun", \["build", "\.\/bin\/bn\.ts", "--compile"/)
+  assert.match(releaseScript, /bun", \["build", "\.\/packages\/term\/bin\/bluenote-term\.ts", "--compile"/)
   assert.match(releaseScript, /Expected a semver tag like v0\.1\.0\./)
   assert.match(releaseScript, /No network install is required after extraction\./)
   assert.match(releaseScript, /bluenote-term\.exe --help/)
   assert.match(releaseScript, /\.\/bluenote-term --help/)
+  assert.match(releaseScript, /Usage: bluenote-term \[options\]/)
+  assert.match(releaseScript, /legacy note-management CLI/)
+})
+
+test("compiled portable launcher help stays TUI-only", () => {
+  const tempRoot = mkdtempSync(path.join(os.tmpdir(), "bluenote-term-release-test-"))
+  const executablePath = path.join(tempRoot, process.platform === "win32" ? "bluenote-term.exe" : "bluenote-term")
+
+  try {
+    const buildResult = Bun.spawnSync([
+      "bun",
+      "build",
+      "./packages/term/bin/bluenote-term.ts",
+      "--compile",
+      "--outfile",
+      executablePath,
+    ], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    assert.equal(buildResult.exitCode, 0, new TextDecoder().decode(buildResult.stderr))
+
+    const helpResult = Bun.spawnSync([executablePath, "--help"], {
+      cwd: process.cwd(),
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+
+    const stdout = new TextDecoder().decode(helpResult.stdout)
+    const stderr = new TextDecoder().decode(helpResult.stderr)
+    assert.equal(helpResult.exitCode, 0, stderr)
+    assert.match(stdout, /Usage: bluenote-term \[options\]/)
+    assert.match(stdout, /Launch the BlueNote terminal UI workspace\./)
+    assert.doesNotMatch(stdout, /Usage:\n  bn <command> \[options\]/)
+    assert.doesNotMatch(stdout, /init\s+Initialize the managed BlueNote root/)
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true })
+  }
 })
