@@ -36,7 +36,7 @@
   },
   "dependencies": {
     "@lordierclaw/bluenote-core": "latest",
-    "@opentui/core": "0.2.14",
+    "@opentui/core": "0.4.1",
     "clipboardy": "5.3.1"
   }
 }
