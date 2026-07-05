@@ -5,6 +5,7 @@ import path from "node:path"
 import { mkdtemp, rm, readFile, access, readdir, writeFile, mkdir } from "node:fs/promises"
 import { existsSync, mkdirSync } from "node:fs"
 import { createCliRenderer } from "@opentui/core"
+import * as BlueNoteCoreApi from "@lordierclaw/bluenote-core"
 
 import { createAiConfigRepository } from "../../src/ai/config-repository"
 import { createCodexAuthRepository } from "../../src/ai/codex-auth-repository"
@@ -29,6 +30,15 @@ function fixedClock(iso: string) {
 }
 
 type DefaultWorkspaceController = ReturnType<typeof createDefaultWorkspaceController>
+
+const syncMutationTestApi = BlueNoteCoreApi as any as {
+  createSidecarRepository: typeof BlueNoteCoreApi.createSidecarRepository
+  createBlueNoteCore: (config: { rootPath: string }) => { sync: { link: (input: { mode: string; serverUrl: string; workspaceId: string }) => unknown } }
+  createDirtyRecordRepository?: (rootPath: string, identity: { role: "client"; workspaceId: string }) => { listDirtyRecords: () => Array<{ entityType: string; entityId: string; dirtyType: string; metadata: Record<string, any> | null }> }
+  readStateManifest: (rootPath: string) => ReturnType<typeof BlueNoteCoreApi.readStateManifest> & { workspaceId?: string }
+}
+
+const syncMutationHelpersAvailable = typeof syncMutationTestApi.createDirtyRecordRepository === "function" && typeof (BlueNoteCoreApi as any).recordSyncMutationBestEffort === "function"
 
 function openManagerNoteByKey(controller: DefaultWorkspaceController, key: string): void {
   assert.deepEqual(controller.showManager(), { blocked: false })
@@ -75,6 +85,22 @@ function openManagerNoteByKey(controller: DefaultWorkspaceController, key: strin
 async function countNoteSidecars(rootPath: string): Promise<number> {
   const entries = await readdir(path.join(rootPath, ".data", "notes"), { withFileTypes: true })
   return entries.filter((entry) => entry.isFile() && entry.name.endsWith(".json")).length
+}
+
+function linkSyncClient(rootPath: string): void {
+  syncMutationTestApi.createBlueNoteCore({ rootPath }).sync.link({
+    mode: "seed-empty-server-from-local",
+    serverUrl: "https://sync.example.test/api",
+    workspaceId: "workspace-term-test",
+  })
+}
+
+function dirtyRecords(rootPath: string) {
+  const manifest = syncMutationTestApi.readStateManifest(rootPath)
+  assert.ok(manifest.workspaceId)
+  const dirtyRepository = syncMutationTestApi.createDirtyRecordRepository?.(rootPath, { role: "client", workspaceId: manifest.workspaceId })
+  assert.ok(dirtyRepository)
+  return dirtyRepository.listDirtyRecords()
 }
 
 async function waitForAutosave(): Promise<void> {
@@ -2156,6 +2182,32 @@ describe("TUI workspace workflows", () => {
     assert.equal(await readFile(path.join(rootPath, first.relativePath), "utf8"), changedBody)
   })
 
+  test("manual save marks TUI-edited notes dirty for sync clients", async () => {
+    if (!syncMutationHelpersAvailable) return
+    linkSyncClient(rootPath)
+    const first = createNote({
+      override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
+      title: "TUI Sync Save",
+      body: "Original sync body",
+      clock: fixedClock("2026-05-26T10:00:00.000Z"),
+    })
+    const syncEntityId = (syncMutationTestApi.createSidecarRepository(rootPath).read(first.key) as { noteId?: string }).noteId
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath, clock: fixedClock("2026-05-26T10:03:00.000Z") })
+
+    openManagerNoteByKey(controller, first.key)
+    controller.updateEditorBody("Edited from TUI sync body")
+    assert.deepEqual(await controller.saveEditor(), { blocked: false })
+
+    const noteRecord = dirtyRecords(rootPath).find((record) => record.entityType === "note" && record.metadata?.key === first.key)
+    assert.equal(noteRecord?.entityId, syncEntityId)
+    assert.equal(noteRecord?.dirtyType, "upsert")
+    assert.equal(noteRecord?.metadata?.relativePath, first.relativePath)
+    assert.equal(noteRecord?.metadata?.description, "Edited from TUI sync body")
+  })
+
   test("manual save refreshes search indexes for the saved note without requiring a full rebuild", async () => {
     const first = createNote({
       override: rootPath,
@@ -2242,6 +2294,46 @@ describe("TUI workspace workflows", () => {
     assert.equal(controller.getState().manager.items.some((item) => item.type === "folder" && item.relativePath === "note/TUI Created Folder"), true)
     await access(path.join(rootPath, "note", "TUI Created Folder"))
     assert.equal(await countNoteSidecars(rootPath), sidecarCountBefore)
+  })
+
+  test("manager folder create and rename mark folders and contained notes dirty for sync clients", async () => {
+    if (!syncMutationHelpersAvailable) return
+    linkSyncClient(rootPath)
+    const created = createNote({
+      override: rootPath,
+      type: "normal",
+      destinationFolder: "note",
+      title: "TUI Folder Sync Note",
+      body: "folder sync body",
+      clock: fixedClock("2026-05-26T10:02:00.000Z"),
+    })
+    rebuildIndexes({ override: rootPath })
+    const controller = createDefaultWorkspaceController({ rootPath, clock: fixedClock("2026-05-26T10:04:00.000Z") })
+
+    assert.deepEqual(controller.showManager(), { blocked: false })
+    if (controller.getState().manager.currentFolderPath !== "") controller.goBack()
+    openManagerFolderPath(controller, "note")
+    controller.openManagerCreate()
+    controller.toggleManagerCreateKind()
+    controller.updateManagerCreateTitle("Sync Folder")
+    assert.equal((await controller.submitManagerCreate()).blocked, false)
+
+    const createdFolderRecord = dirtyRecords(rootPath).find((record) => record.entityType === "folder" && record.entityId === "note/Sync Folder")
+    assert.equal(createdFolderRecord?.dirtyType, "upsert")
+
+    controller.focusManagerItem(controller.getState().manager.items.findIndex((item) => item.type === "note" && item.key === created.key))
+    assert.equal(controller.moveFocusedManagerNote("note/Sync Folder").blocked, false)
+    const renamedNote = showNote({ override: rootPath, selector: created.key })
+    const syncEntityId = (syncMutationTestApi.createSidecarRepository(rootPath).read(created.key) as { noteId?: string }).noteId
+    controller.focusManagerItem(controller.getState().manager.items.findIndex((item) => item.type === "folder" && item.relativePath === "note/Sync Folder"))
+    assert.equal(controller.renameFocusedManagerItem("Renamed Sync Folder").blocked, false)
+
+    const records = dirtyRecords(rootPath)
+    assert.equal(records.find((record) => record.entityType === "folder" && record.entityId === "note/Sync Folder")?.dirtyType, "delete")
+    assert.equal(records.find((record) => record.entityType === "folder" && record.entityId === "note/Renamed Sync Folder")?.dirtyType, "upsert")
+    const renamedNoteRecord = records.find((record) => record.entityType === "note" && record.metadata?.key === created.key && record.metadata.previousRelativePath === renamedNote.relativePath)
+    assert.equal(renamedNoteRecord?.entityId, syncEntityId)
+    assert.equal(renamedNoteRecord?.metadata?.relativePath, `note/Renamed Sync Folder/${path.basename(renamedNote.relativePath)}`)
   })
 
   test("manager folder create preserves a dirty editor and creates no note sidecar", async () => {

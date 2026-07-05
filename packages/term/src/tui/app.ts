@@ -1,6 +1,7 @@
 import path from "node:path"
 import { existsSync, mkdirSync, readdirSync, type Dirent } from "node:fs"
 import { createCliRenderer, BoxRenderable, type CliRenderer, type PasteEvent, type Renderable } from "@opentui/core"
+import * as BlueNoteCoreApi from "@lordierclaw/bluenote-core"
 
 import {
   cleanupStaleAtomicNoteWriterTemps,
@@ -11,6 +12,7 @@ import {
   createAiTextGenerationClient,
   createCodexAuthClient,
   createCodexAuthRepository,
+  createNoteDescription,
   createNote,
   createNoteRepository,
   createSidecarRepository,
@@ -73,6 +75,24 @@ type WorkspaceInputRenderer = {
   removeInputHandler?: (handler: (sequence: string) => boolean) => void
 }
 
+type SyncMutationApi = {
+  getNoteSyncEntityId?: (rootPath: string, note: { frontmatter: { id: string }; sourcePath: string; body: string }) => string
+  recordSyncMutationBestEffort?: (rootPath: string, input: {
+    notes?: Array<{ entityId: string; markedAt: string; metadata?: Record<string, unknown> }>
+    folders?: Array<{ relativePath: string; markedAt: string; dirtyType?: "upsert" | "delete" }>
+  }) => void
+}
+
+const syncMutationApi = BlueNoteCoreApi as SyncMutationApi
+
+function getTuiNoteSyncEntityId(rootPath: string, note: { frontmatter: { id: string }; sourcePath: string; body: string }): string {
+  return syncMutationApi.getNoteSyncEntityId?.(rootPath, note) ?? note.frontmatter.id
+}
+
+function recordTuiSyncMutationBestEffort(rootPath: string, input: Parameters<NonNullable<SyncMutationApi["recordSyncMutationBestEffort"]>>[1]): void {
+  syncMutationApi.recordSyncMutationBestEffort?.(rootPath, input)
+}
+
 
 export interface DefaultWorkspaceControllerOptions {
   rootPath?: string
@@ -112,6 +132,7 @@ function enqueueAiDescriptionAfterTuiSave(rootPath: string, note: TuiNote, body:
 
 function persistTuiEditorBody(rootPath: string, note: TuiNote, body: string, clock: Clock, warn?: (message: string) => void): TuiNote {
   const repository = createNoteRepository(rootPath)
+  const selected = repository.read(path.join(rootPath, note.relativePath))
   repository.syncEditedNote(path.join(rootPath, note.relativePath), {
     title: note.title,
     body,
@@ -119,6 +140,18 @@ function persistTuiEditorBody(rootPath: string, note: TuiNote, body: string, clo
   })
 
   const savedNote = showTuiNote(rootPath, note.key)
+  recordTuiSyncMutationBestEffort(rootPath, {
+    notes: [{
+      entityId: getTuiNoteSyncEntityId(rootPath, selected),
+      markedAt: savedNote.updatedAt ?? clock.now().toISOString(),
+      metadata: {
+        key: savedNote.key,
+        relativePath: savedNote.relativePath,
+        title: savedNote.title,
+        description: savedNote.description,
+      },
+    }],
+  })
   try {
     updateIndexedNote(rootPath, {
       key: savedNote.key,
@@ -188,6 +221,7 @@ function createTuiNoteFolder(rootPath: string, folderRelativePath: string): void
   }
 
   mkdirSync(path.join(getNotesPath(rootPath), ...parts.slice(1)), { recursive: true })
+  recordTuiSyncMutationBestEffort(rootPath, { folders: [{ relativePath: normalizedPath, markedAt: new Date().toISOString() }] })
 }
 
 function renameTuiNote(rootPath: string, selector: string, title: string, clock: Clock): TuiNote {
@@ -205,7 +239,33 @@ function renameTuiNote(rootPath: string, selector: string, title: string, clock:
 }
 
 function renameTuiNoteFolder(rootPath: string, folderRelativePath: string, nextName: string): void {
-  createNoteRepository(rootPath).renameFolder(folderRelativePath, nextName)
+  const repository = createNoteRepository(rootPath)
+  const markedAt = new Date().toISOString()
+  const notesBeforeRename = repository
+    .list()
+    .filter((note) => note.sourcePath === folderRelativePath || note.sourcePath.startsWith(`${folderRelativePath}/`))
+    .map((note) => ({ note, entityId: getTuiNoteSyncEntityId(rootPath, note) }))
+  const result = repository.renameFolder(folderRelativePath, nextName)
+  recordTuiSyncMutationBestEffort(rootPath, {
+    folders: [
+      { relativePath: result.previousRelativePath, markedAt, dirtyType: "delete" },
+      { relativePath: result.relativePath, markedAt },
+    ],
+    notes: notesBeforeRename.map(({ note, entityId }) => {
+      const nextRelativePath = `${result.relativePath}${note.sourcePath.slice(result.previousRelativePath.length)}`
+      return {
+        entityId,
+        markedAt,
+        metadata: {
+          key: note.frontmatter.id,
+          previousRelativePath: note.sourcePath,
+          relativePath: nextRelativePath,
+          title: note.frontmatter.title,
+          description: createNoteDescription(note.body),
+        },
+      }
+    }),
+  })
 }
 
 function moveTuiNote(rootPath: string, selector: string, destinationFolder: string): TuiNote {
