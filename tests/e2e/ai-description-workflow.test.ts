@@ -4,6 +4,7 @@ import path from "node:path"
 import { access, readFile } from "node:fs/promises"
 
 import { createManagedRootHarness, type CliRunResult } from "../helpers/cli"
+import { readSidecarByKey } from "../helpers/sidecar"
 
 function extractCreatedKey(stdout: string): string {
   const match = stdout.match(/^Created note\nKey: (.+)\n/m)
@@ -111,7 +112,7 @@ test("AI description workflow runs end to end against a mock OpenAI-compatible p
     assert.equal((providerRequests[0]?.body as { model?: string }).model, "test-model")
     assert.match(JSON.stringify(providerRequests[0]?.body), new RegExp(key))
 
-    const sidecar = JSON.parse(await readFile(path.join(harness.rootPath, ".data", "notes", `${key}.json`), "utf8"))
+    const sidecar = await readSidecarByKey(harness.rootPath, key)
     assert.equal(sidecar.description, mockDescription)
 
     const markdown = await readFile(path.join(harness.rootPath, "draft", `${key}.md`), "utf8")

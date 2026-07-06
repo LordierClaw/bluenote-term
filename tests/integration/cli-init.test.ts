@@ -20,7 +20,9 @@ test("bn init exits 0 and reports the initialized root", async () => {
     await access(path.join(harness.rootPath, ".data", "manifest.json"))
 
     const manifestJson = await readFile(path.join(harness.rootPath, ".data", "manifest.json"), "utf8")
-    assert.deepEqual(JSON.parse(manifestJson), { schemaVersion: STORAGE_SCHEMA_VERSION })
+    const manifest = JSON.parse(manifestJson)
+    assert.equal(manifest.schemaVersion, STORAGE_SCHEMA_VERSION)
+    assert.match(manifest.workspaceId, /^workspace_[0-9a-f-]+$/u)
     await assert.rejects(access(path.join(harness.rootPath, ".state")))
     await assert.rejects(access(path.join(harness.rootPath, ".bluenote")))
   } finally {

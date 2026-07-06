@@ -4,6 +4,7 @@ import path from "node:path"
 import { readFile } from "node:fs/promises"
 
 import { createManagedRootHarness } from "../helpers/cli"
+import { readSidecarByKey } from "../helpers/sidecar"
 import { createAiConfigRepository } from "../../src/ai/config-repository"
 import { enqueueDescribeNoteJob, markDescribeNoteJobFailedIfContentHashMatches } from "../../src/ai/queue-service"
 import { readDescribeNotePrompt } from "../../src/ai/prompt-repository"
@@ -134,9 +135,9 @@ test("bn ai process-queue --limit 2 processes only two jobs and prints a summary
     assert.equal(result.stderr, "")
     assert.match(result.stdout, /Processed AI queue: 2 applied, 0 failed, 1 remaining\./)
 
-    const firstSidecar = JSON.parse(await readFile(path.join(harness.rootPath, ".data", "notes", `${keys[0]}.json`), "utf8"))
-    const secondSidecar = JSON.parse(await readFile(path.join(harness.rootPath, ".data", "notes", `${keys[1]}.json`), "utf8"))
-    const thirdSidecar = JSON.parse(await readFile(path.join(harness.rootPath, ".data", "notes", `${keys[2]}.json`), "utf8"))
+    const firstSidecar = await readSidecarByKey(harness.rootPath, keys[0])
+    const secondSidecar = await readSidecarByKey(harness.rootPath, keys[1])
+    const thirdSidecar = await readSidecarByKey(harness.rootPath, keys[2])
     assert.equal(firstSidecar.description, "AI summary 1.")
     assert.equal(secondSidecar.description, "AI summary 2.")
     assert.equal(thirdSidecar.description, "Third Process Note body.")
@@ -183,7 +184,7 @@ test("bn ai process-queue cleans up deleted-note jobs without provider calls", a
 
     const queue = JSON.parse(await readFile(path.join(harness.rootPath, ".data", "ai", "queue.json"), "utf8"))
     assert.deepEqual(queue.jobs, [])
-    const existingSidecar = JSON.parse(await readFile(path.join(harness.rootPath, ".data", "notes", `${existingKey}.json`), "utf8"))
+    const existingSidecar = await readSidecarByKey(harness.rootPath, existingKey)
     assert.equal(existingSidecar.description, "Existing summary.")
   } finally {
     await harness.cleanup()

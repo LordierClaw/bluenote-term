@@ -83,7 +83,7 @@ type SyncMutationApi = {
   }) => void
 }
 
-const syncMutationApi = BlueNoteCoreApi as SyncMutationApi
+const syncMutationApi = BlueNoteCoreApi as unknown as SyncMutationApi
 
 function getTuiNoteSyncEntityId(rootPath: string, note: { frontmatter: { id: string }; sourcePath: string; body: string }): string {
   return syncMutationApi.getNoteSyncEntityId?.(rootPath, note) ?? note.frontmatter.id

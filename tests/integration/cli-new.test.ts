@@ -4,6 +4,7 @@ import path from "node:path"
 import { readdir, readFile } from "node:fs/promises"
 
 import { assertManagedRootLayout, createBlockedRootFixture, createManagedRootHarness, runCli } from "../helpers/cli"
+import { readSidecarByKey } from "../helpers/sidecar"
 
 const FIXED_TIMESTAMP = "2026-05-24T12:00:00.000Z"
 
@@ -38,8 +39,10 @@ test("bn new --path note --title \"Example\" creates a normal plain note plus si
     const markdown = await readFile(notePath, "utf8")
     assert.equal(markdown, "Example body")
 
-    const sidecar = JSON.parse(await readFile(path.join(harness.rootPath, ".data", "notes", "example-51u7i0.json"), "utf8"))
-    assert.deepEqual(sidecar, {
+    const sidecar = await readSidecarByKey(harness.rootPath, "example-51u7i0")
+    assert.equal(typeof sidecar.noteId, "string")
+    assert.deepEqual({ ...sidecar, noteId: undefined }, {
+      noteId: undefined,
       type: "normal",
       key: "example-51u7i0",
       title: "Example",
@@ -101,9 +104,7 @@ test("bn new reports auto-rebuild validation failures after creating the note", 
     const createdNotePath = path.join(harness.rootPath, "note", "fresh-note-51u7i0.md")
     assert.equal(await readFile(createdNotePath, "utf8"), "Fresh body")
 
-    const createdSidecar = JSON.parse(
-      await readFile(path.join(harness.rootPath, ".data", "notes", "fresh-note-51u7i0.json"), "utf8"),
-    )
+    const createdSidecar = await readSidecarByKey(harness.rootPath, "fresh-note-51u7i0")
     assert.equal(createdSidecar.key, "fresh-note-51u7i0")
 
     const metadataDatabasePath = path.join(harness.rootPath, ".state", "metadata.sqlite")
@@ -175,11 +176,11 @@ test("bn new retries when an orphaned sidecar collides with the first generated 
     const noteFiles = await readdir(path.join(harness.rootPath, "note"))
     assert.deepEqual(noteFiles, ["example-wtycr4.md"])
     assert.equal(
-      JSON.parse(await readFile(path.join(harness.rootPath, ".data", "notes", "example-51u7i0.json"), "utf8")).key,
+      (await readSidecarByKey(harness.rootPath, "example-51u7i0")).key,
       "example-51u7i0",
     )
     assert.equal(
-      JSON.parse(await readFile(path.join(harness.rootPath, ".data", "notes", "example-wtycr4.json"), "utf8")).key,
+      (await readSidecarByKey(harness.rootPath, "example-wtycr4")).key,
       "example-wtycr4",
     )
   } finally {

@@ -215,8 +215,17 @@ async function readAiQueue(rootPath: string) {
   return JSON.parse(await readFile(path.join(rootPath, ".data", "ai", "queue.json"), "utf8"))
 }
 
+function getSidecarPathByKey(rootPath: string, key: string): string {
+  const sidecar = readSidecarByKey(rootPath, key) as { noteId?: string }
+  return path.join(rootPath, ".data", "notes", `${sidecar.noteId ?? key}.json`)
+}
+
+function readSidecarByKey(rootPath: string, key: string): Record<string, any> {
+  return syncMutationTestApi.createSidecarRepository(rootPath).read(key) as unknown as Record<string, any>
+}
+
 async function markDescriptionProcessedAt(rootPath: string, key: string, lastProcessedAt: string): Promise<void> {
-  const sidecarPath = path.join(rootPath, ".data", "notes", `${key}.json`)
+  const sidecarPath = getSidecarPathByKey(rootPath, key)
   const sidecar = JSON.parse(await readFile(sidecarPath, "utf8"))
   sidecar.ai = { description: { lastProcessedAt } }
   await writeFile(sidecarPath, JSON.stringify(sidecar, null, 2) + "\n", "utf8")
@@ -580,9 +589,9 @@ describe("TUI workspace workflows", () => {
     assert.equal(promoted.relativePath, `note/work/${promoted.key}.md`)
     assert.equal(await readFile(path.join(rootPath, promoted.relativePath), "utf8"), "draft body to promote")
     await assert.rejects(readFile(path.join(rootPath, draft.relativePath), "utf8"))
-    await assert.rejects(readFile(path.join(rootPath, ".data", "notes", `${draft.key}.json`), "utf8"))
+    assert.throws(() => readSidecarByKey(rootPath, draft.key))
 
-    const sidecar = JSON.parse(await readFile(path.join(rootPath, ".data", "notes", `${promoted.key}.json`), "utf8"))
+    const sidecar = readSidecarByKey(rootPath, promoted.key)
     assert.equal(sidecar.type, "normal")
     assert.equal(sidecar.title, "Saved Draft")
     assert.equal(sidecar.relativePath, promoted.relativePath)
@@ -1286,7 +1295,7 @@ describe("TUI workspace workflows", () => {
       })
     }
     await rm(path.join(rootPath, deletedNote.relativePath), { force: true })
-    await rm(path.join(rootPath, ".data", "notes", `${deletedNote.key}.json`), { force: true })
+    await rm(getSidecarPathByKey(rootPath, deletedNote.key), { force: true })
     rebuildIndexes({ override: rootPath })
 
     let providerCalls = 0
@@ -1341,7 +1350,7 @@ describe("TUI workspace workflows", () => {
       promptHash: "sha256:4545454545454545454545454545454545454545454545454545454545454545",
     })
     await rm(path.join(rootPath, deletedNote.relativePath), { force: true })
-    await rm(path.join(rootPath, ".data", "notes", `${deletedNote.key}.json`), { force: true })
+    await rm(getSidecarPathByKey(rootPath, deletedNote.key), { force: true })
     rebuildIndexes({ override: rootPath })
 
     const controller = createDefaultWorkspaceController({
@@ -1389,7 +1398,7 @@ describe("TUI workspace workflows", () => {
       })
     }
     await rm(path.join(rootPath, deletedNote.relativePath), { force: true })
-    await rm(path.join(rootPath, ".data", "notes", `${deletedNote.key}.json`), { force: true })
+    await rm(getSidecarPathByKey(rootPath, deletedNote.key), { force: true })
     rebuildIndexes({ override: rootPath })
 
     const controller = createDefaultWorkspaceController({
@@ -2380,7 +2389,7 @@ describe("TUI workspace workflows", () => {
     rebuildIndexes({ override: rootPath })
     const controller = createDefaultWorkspaceController({ rootPath })
     const notePath = path.join(rootPath, created.relativePath)
-    const sidecarPath = path.join(rootPath, ".data", "notes", `${created.key}.json`)
+    const sidecarPath = getSidecarPathByKey(rootPath, created.key)
 
     assert.equal(await readFile(notePath, "utf8"), "Delete me")
     await access(sidecarPath)

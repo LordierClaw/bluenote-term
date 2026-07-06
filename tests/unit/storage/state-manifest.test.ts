@@ -14,9 +14,12 @@ import {
 } from "../../../src/storage/state-manifest"
 
 test("createDefaultStateManifest returns the current storage schema version", () => {
-  assert.deepEqual(createDefaultStateManifest(), {
+  const manifest = createDefaultStateManifest() as ReturnType<typeof createDefaultStateManifest> & { workspaceId: string }
+  assert.deepEqual(manifest, {
     schemaVersion: STORAGE_SCHEMA_VERSION,
+    workspaceId: manifest.workspaceId,
   })
+  assert.match(manifest.workspaceId, /^workspace_[0-9a-f-]+$/u)
 })
 
 test("writeStateManifest stores manifest.json under .data and readStateManifest loads it", async () => {
@@ -27,13 +30,11 @@ test("writeStateManifest stores manifest.json under .data and readStateManifest 
     assert.equal(manifestPath, path.join(rootPath, ".data", "manifest.json"))
 
     const manifestJson = await readFile(manifestPath, "utf8")
-    assert.deepEqual(JSON.parse(manifestJson), {
-      schemaVersion: STORAGE_SCHEMA_VERSION,
-    })
+    const manifest = JSON.parse(manifestJson) as ReturnType<typeof readStateManifest> & { workspaceId: string }
+    assert.equal(manifest.schemaVersion, STORAGE_SCHEMA_VERSION)
+    assert.match(manifest.workspaceId, /^workspace_[0-9a-f-]+$/u)
 
-    assert.deepEqual(await readStateManifest(rootPath), {
-      schemaVersion: STORAGE_SCHEMA_VERSION,
-    })
+    assert.deepEqual(await readStateManifest(rootPath), manifest)
   } finally {
     await rm(rootPath, { recursive: true, force: true })
   }

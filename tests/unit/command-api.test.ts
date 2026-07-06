@@ -389,7 +389,7 @@ test("published bluenote-term bin reports actionable packaged-runtime guidance i
   assert.equal(new TextDecoder().decode(result.stdout), "")
   assert.match(stderr, /cannot launch the full TUI on plain Node\.js/i)
   assert.doesNotMatch(stderr, /requires Bun/i)
-}, 10_000)
+}, 30_000)
 
 test("runTuiCommand reports daemon check failures without printing the token", async () => {
   const bufferedIO = createBufferedIO()

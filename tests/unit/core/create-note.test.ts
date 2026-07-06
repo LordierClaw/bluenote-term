@@ -7,7 +7,7 @@ import path from "node:path"
 import { UsageError } from "../../../src/core/errors"
 import { createNote } from "../../../src/core/create-note"
 import type { Clock } from "../../../src/platform/clock"
-import { getStateNotesPath } from "../../../src/storage/root-layout"
+import { readSidecarByKey } from "../../helpers/sidecar"
 
 function fixedClock(isoTimestamp: string): Clock {
   return {
@@ -34,7 +34,7 @@ test("createNote creates an untitled draft with generated draft key and title", 
     assert.equal(created.description, "Draft body.")
     assert.equal(await readFile(created.notePath, "utf8"), "Draft body.\n")
 
-    const sidecar = JSON.parse(await readFile(path.join(getStateNotesPath(rootPath), "draft-000zzz.json"), "utf8"))
+    const sidecar = await readSidecarByKey(rootPath, "draft-000zzz")
     assert.equal(sidecar.type, "draft")
     assert.equal(sidecar.key, "draft-000zzz")
     assert.equal(sidecar.title, "draft-000zzz")
@@ -60,7 +60,7 @@ test("createNote creates a titled draft under draft", async () => {
     assert.equal(created.title, "Idea")
     assert.equal(created.relativePath, "draft/idea-000zzz.md")
 
-    const sidecar = JSON.parse(await readFile(path.join(getStateNotesPath(rootPath), "idea-000zzz.json"), "utf8"))
+    const sidecar = await readSidecarByKey(rootPath, "idea-000zzz")
     assert.equal(sidecar.type, "draft")
     assert.equal(sidecar.relativePath, "draft/idea-000zzz.md")
   } finally {
@@ -89,7 +89,7 @@ test("createNote creates a normal note in an existing note destination folder", 
     assert.equal(created.relativePath, "note/work/meeting-000zzz.md")
     assert.equal(await readFile(created.notePath, "utf8"), "Meeting body.\n")
 
-    const sidecar = JSON.parse(await readFile(path.join(getStateNotesPath(rootPath), "meeting-000zzz.json"), "utf8"))
+    const sidecar = await readSidecarByKey(rootPath, "meeting-000zzz")
     assert.equal(sidecar.type, "normal")
     assert.equal(sidecar.relativePath, "note/work/meeting-000zzz.md")
   } finally {
@@ -114,7 +114,7 @@ test("createNote defaults titled notes to drafts unless normal creation is expli
     assert.equal(created.relativePath, "draft/default-destination-000zzz.md")
     assert.equal(await readFile(created.notePath, "utf8"), "Default note body.")
 
-    const sidecar = JSON.parse(await readFile(path.join(getStateNotesPath(rootPath), "default-destination-000zzz.json"), "utf8"))
+    const sidecar = await readSidecarByKey(rootPath, "default-destination-000zzz")
     assert.equal(sidecar.type, "draft")
     assert.equal(sidecar.relativePath, "draft/default-destination-000zzz.md")
   } finally {

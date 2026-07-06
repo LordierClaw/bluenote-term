@@ -4,8 +4,10 @@ import {
   createNoteDescription,
   createNoteRepository,
   enqueueDescribeNoteIfAiEnabled,
+  getNoteSyncEntityId,
   parsePlainNote,
   rebuildIndexes,
+  recordSyncMutationBestEffort,
   renameNote,
   resolveBlueNoteRoot,
   selectNote,
@@ -105,10 +107,23 @@ export function editNote(options: EditNoteOptions): EditNoteSummary {
     }
   }
 
+  const syncEntityId = getNoteSyncEntityId(rootPath, selected)
   const synced = repository.syncEditedNote(notePath, {
     title,
     body: edited.body,
     updatedAt,
+  })
+  recordSyncMutationBestEffort(rootPath, {
+    notes: [{
+      entityId: syncEntityId,
+      markedAt: updatedAt,
+      metadata: {
+        key: selected.frontmatter.id,
+        relativePath: synced.relativePath,
+        title,
+        description: createNoteDescription(edited.body),
+      },
+    }],
   })
 
   rebuildIndexes({ override: rootPath })

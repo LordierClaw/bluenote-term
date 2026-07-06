@@ -4,6 +4,7 @@ import path from "node:path"
 import { readFile } from "node:fs/promises"
 
 import { createManagedRootHarness } from "../helpers/cli"
+import { readSidecarByKey } from "../helpers/sidecar"
 import { enqueueDescribeNoteJob } from "../../src/ai/queue-service"
 import { readDescribeNotePrompt } from "../../src/ai/prompt-repository"
 import { runCliAsync } from "../../src/cli/entry"
@@ -99,7 +100,7 @@ test("bn ai describe auto-applies a mock provider description and updates list/s
       assert.match(describeResult.stdout, new RegExp(`Updated AI description for ${key}`))
       assert.match(describeResult.stdout, /Description: Concise AI project summary\./)
 
-      const sidecar = JSON.parse(await readFile(path.join(harness.rootPath, ".data", "notes", `${key}.json`), "utf8"))
+      const sidecar = await readSidecarByKey(harness.rootPath, key)
       assert.equal(sidecar.description, "Concise AI project summary.")
       assert.equal(sidecar.updatedAt, "2026-06-01T00:00:00.000Z")
       assert.match(sidecar.ai.description.lastProcessedAt, /^\d{4}-\d{2}-\d{2}T/)
