@@ -69,6 +69,12 @@ export interface RunningTuiWorkspace {
   destroy: () => void
 }
 
+export interface RunTuiCliInteractiveOptions {
+  startWorkspace?: () => Promise<RunningTuiWorkspace>
+  stdin?: Pick<typeof process.stdin, "isTTY">
+  stdout?: Pick<typeof process.stdout, "isTTY">
+}
+
 type WorkspaceInputRenderer = {
   prependInputHandler?: (handler: (sequence: string) => boolean) => void
   addInputHandler?: (handler: (sequence: string) => boolean) => void
@@ -1082,8 +1088,23 @@ export function runTuiCli(): CliResult {
   }
 }
 
-export async function runTuiCliInteractive(): Promise<CliResult> {
-  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+function formatTuiLaunchError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  if (/setRawMode failed/iu.test(message)) {
+    return [
+      "BlueNote TUI failed to start because the terminal rejected raw keyboard mode.",
+      "Run `bluenote tui` from a real interactive terminal, or retry after restarting the terminal session.",
+      `Details: ${message}`,
+      "",
+    ].join("\n")
+  }
+  return `BlueNote TUI failed to start: ${message}\n`
+}
+
+export async function runTuiCliInteractive(options: RunTuiCliInteractiveOptions = {}): Promise<CliResult> {
+  const stdin = options.stdin ?? process.stdin
+  const stdout = options.stdout ?? process.stdout
+  if (!stdin.isTTY || !stdout.isTTY) {
     return {
       exitCode: 1,
       stdout: "",
@@ -1091,7 +1112,16 @@ export async function runTuiCliInteractive(): Promise<CliResult> {
     }
   }
 
-  const running = await startTuiWorkspace()
+  let running: RunningTuiWorkspace
+  try {
+    running = await (options.startWorkspace ?? startTuiWorkspace)()
+  } catch (error) {
+    return {
+      exitCode: 1,
+      stdout: "",
+      stderr: formatTuiLaunchError(error),
+    }
+  }
   const exitCode = await waitForInteractiveTuiExit(running)
 
   return {

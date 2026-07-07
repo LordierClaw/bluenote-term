@@ -3,7 +3,7 @@ import assert from "node:assert/strict"
 import { EventEmitter } from "node:events"
 import { createCliRenderer, PasteEvent } from "@opentui/core"
 
-import { blurWorkspaceInputs, defaultTuiRendererConfig, focusActiveWorkspaceInput, routeControlledEditorBodyInput, routeWorkspaceKey, startTuiWorkspace, waitForInteractiveTuiExit } from "../../../src/tui/app"
+import { blurWorkspaceInputs, defaultTuiRendererConfig, focusActiveWorkspaceInput, routeControlledEditorBodyInput, routeWorkspaceKey, runTuiCliInteractive, startTuiWorkspace, waitForInteractiveTuiExit } from "../../../src/tui/app"
 import { buildEditorViewModel, renderEditorScreen, routeEditorKey } from "../../../src/tui/render-editor"
 import { buildManagerViewModel, renderManagerScreen, routeManagerKey } from "../../../src/tui/render-manager"
 import { renderSearchEverythingScreen, routeSearchEverythingKey } from "../../../src/tui/render-search-everything"
@@ -244,6 +244,22 @@ describe("TUI render keyboard routing", () => {
     renderer.emit("destroy")
 
     assert.equal(await exitPromise, 1)
+  })
+
+  test("interactive TUI launch reports raw-mode startup failures without leaking a stack trace", async () => {
+    const result = await runTuiCliInteractive({
+      stdin: { isTTY: true },
+      stdout: { isTTY: true },
+      async startWorkspace() {
+        throw new Error("setRawMode failed with errno: 5")
+      },
+    })
+
+    assert.equal(result.exitCode, 1)
+    assert.equal(result.stdout, "")
+    assert.match(result.stderr, /terminal rejected raw keyboard mode/)
+    assert.match(result.stderr, /setRawMode failed with errno: 5/)
+    assert.doesNotMatch(result.stderr, /at .*startTuiWorkspace/)
   })
 
   test("editor route does not consume printable editing characters", () => {
